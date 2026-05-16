@@ -22,12 +22,10 @@ export class AppError extends Error {
   }: AppErrorParams) {
     super(message, { cause });
     this.name = this.constructor.name;
-
     this.statusCode = statusCode;
     this.cause = cause;
     this.action = action;
     this.code = code;
-
     Error.captureStackTrace(this, this.constructor);
   }
 
@@ -36,7 +34,6 @@ export class AppError extends Error {
       name: this.name,
       message: this.message,
       statusCode: this.statusCode,
-      cause: this.cause,
       action: this.action,
       code: this.code,
     };

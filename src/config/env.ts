@@ -8,6 +8,13 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),
+
+  DATABASE_URL: z.url(),
+
+  JWT_SECRET: z.string().min(32),
+  JWT_EXPIRES_IN: z.string().default("15m"),
+
+  PEPPER: z.string().min(32),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

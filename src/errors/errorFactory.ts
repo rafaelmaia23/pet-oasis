@@ -1,10 +1,47 @@
-import { AppError } from "./AppError";
+import type { AppErrorParams } from "./AppError";
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  InternalServerError,
+  MethodNotAllowedError,
+  NotFoundError,
+  ServiceUnavailableError,
+  UnauthorizedError,
+  ValidationError,
+  type ValidationErrorFields,
+} from "./AppErrors";
 
-export const badRequest = (message: string) =>
-  new AppError({ message, statusCode: 400, code: "BAD_REQUEST" });
+type OmitFixed<T> = Omit<T, "statusCode" | "code">;
 
-export const notFound = (message: string) =>
-  new AppError({ message, statusCode: 404, code: "NOT_FOUND" });
+export const createBadRequestError = (params: OmitFixed<AppErrorParams> = {}) =>
+  new BadRequestError(params);
 
-export const unauthorized = (message: string) =>
-  new AppError({ message, statusCode: 401, code: "UNAUTHORIZED" });
+export const createUnauthorizedError = (
+  params: OmitFixed<AppErrorParams> = {},
+) => new UnauthorizedError(params);
+
+export const createForbiddenError = (params: OmitFixed<AppErrorParams> = {}) =>
+  new ForbiddenError(params);
+
+export const createNotFoundError = (params: OmitFixed<AppErrorParams> = {}) =>
+  new NotFoundError(params);
+
+export const createMethodNotAllowedError = (
+  params: OmitFixed<AppErrorParams> = {},
+) => new MethodNotAllowedError(params);
+
+export const createConflictError = (params: OmitFixed<AppErrorParams> = {}) =>
+  new ConflictError(params);
+
+export const createValidationError = (
+  params: { errors?: ValidationErrorFields } & OmitFixed<AppErrorParams> = {},
+) => new ValidationError(params);
+
+export const createInternalServerError = (
+  params: OmitFixed<AppErrorParams> = {},
+) => new InternalServerError(params);
+
+export const createServiceUnavailableError = (
+  params: OmitFixed<AppErrorParams> = {},
+) => new ServiceUnavailableError(params);

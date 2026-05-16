@@ -11,9 +11,6 @@ const getHandler = async (_req: Request, res: Response) => {
   });
 };
 
-healthRouter.get(
-  "/",
-  asyncHandler(async () => getHandler),
-);
+healthRouter.get("/", asyncHandler(getHandler));
 
 export default healthRouter;

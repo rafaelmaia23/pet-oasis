@@ -6,6 +6,7 @@ import {
   InternalServerError,
   MethodNotAllowedError,
   NotFoundError,
+  PresentationError,
   ServiceUnavailableError,
   UnauthorizedError,
   ValidationError,
@@ -45,3 +46,10 @@ export const createInternalServerError = (
 export const createServiceUnavailableError = (
   params: OmitFixed<AppErrorParams> = {},
 ) => new ServiceUnavailableError(params);
+
+export const createPresentationError = (
+  params: OmitFixed<AppErrorParams> & {
+    context?: Record<string, unknown>;
+    cause?: unknown;
+  } = {},
+) => new PresentationError(params);

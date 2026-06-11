@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import { env } from "@/config/env";
 
-const SALT_ROUNDS = 12;
+const SALT_ROUNDS = process.env.NODE_ENV === "test" ? 4 : 12;
 
 function applyPepper(password: string): string {
   return `${password}${env.PEPPER}`;

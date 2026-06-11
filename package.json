@@ -10,10 +10,16 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsup",
     "start": "node dist/server.js",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check . --write",
     "format": "biome format . --write",
+    "db:test:up": "docker compose up db_test -d",
+    "db:test:down": "docker compose down db_test",
+    "db:test:migrate": "DATABASE_URL=postgresql://postgres:postgres@localhost:5433/pet_oasis_test prisma migrate deploy",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:reset": "docker compose down -v && docker compose up -d",
@@ -24,14 +30,19 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
+    "@faker-js/faker": "^10.4.0",
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.8.0",
     "@types/pg": "^8.20.0",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.7",
+    "supertest": "^7.2.2",
     "tsup": "^8.5.1",
     "tsx": "^4.22.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
@@ -42,6 +53,7 @@
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
     "prisma": "^7.8.0",
+    "uuid": "^14.0.0",
     "zod": "^4.4.3"
   }
 }

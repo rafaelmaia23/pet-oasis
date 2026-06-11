@@ -147,3 +147,25 @@ export class ServiceUnavailableError extends AppError {
     });
   }
 }
+
+// ─── 500 Presentation Error (violação de contrato de saída) ─────────────────
+export class PresentationError extends AppError {
+  public readonly context?: Record<string, unknown> | undefined;
+
+  constructor(
+    params: OmitFixed<AppErrorParams> & {
+      context?: Record<string, unknown> | undefined;
+    } = {},
+  ) {
+    const { context, ...rest } = params;
+    super({
+      message: "Erro ao processar resposta do servidor",
+      action:
+        "Tente novamente mais tarde. Se o problema persistir, entre em contato com o suporte",
+      ...rest,
+      statusCode: 500,
+      code: "PRESENTATION_ERROR",
+    });
+    this.context = context;
+  }
+}

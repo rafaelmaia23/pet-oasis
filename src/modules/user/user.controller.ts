@@ -1,34 +1,41 @@
 import type { Request, Response } from "express";
 import { asyncHandler } from "@/utils/asyncHandler";
+import { getAuthUser } from "@/utils/getAuthUser";
+import { userPresenter } from "./user.presenter";
 import {
   createUserSchema,
   updateUserSchema,
   userParamsSchema,
 } from "./user.schema";
 import * as userService from "./user.service";
+import { resolveUserView } from "./user.view-resolver";
 
 export const createUser = asyncHandler(async (req: Request, res: Response) => {
   const { body } = createUserSchema.parse({ body: req.body });
 
   const user = await userService.createUser(body);
 
-  res.status(201).json(user);
+  return res
+    .status(201)
+    .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
 });
 
-export const getAllUsers = asyncHandler(
-  async (_req: Request, res: Response) => {
-    const users = await userService.getAllUsers();
+export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
+  const users = await userService.getAllUsers();
 
-    res.status(200).json(users);
-  },
-);
+  return res.status(200).json(userPresenter.presentMany(users, "admin"));
+});
 
 export const getUserById = asyncHandler(async (req: Request, res: Response) => {
   const { params } = userParamsSchema.parse({ params: req.params });
 
-  const user = await userService.getUserById(params.id);
+  const authUser = getAuthUser(req);
 
-  res.status(200).json(user);
+  const user = await userService.getUserById(authUser, params.id);
+
+  return res
+    .status(200)
+    .json(userPresenter.present(user, resolveUserView(authUser)));
 });
 
 export const updateUser = asyncHandler(async (req: Request, res: Response) => {
@@ -37,19 +44,17 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     body: req.body,
   });
 
-  // TODO: verificar autorização (own/any) via módulo authorization antes de chamar o service
+  const user = await userService.updateUser(getAuthUser(req), params.id, body);
 
-  const updatedUser = await userService.updateUser(params.id, body);
-
-  res.status(200).json(updatedUser);
+  return res
+    .status(200)
+    .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
 });
 
 export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
   const { params } = userParamsSchema.parse({ params: req.params });
 
-  // TODO: verificar autorização (own/any) via módulo authorization antes de chamar o service
+  await userService.deleteUser(getAuthUser(req), params.id);
 
-  await userService.deleteUser(params.id);
-
-  res.status(204).send();
+  return res.status(204).send();
 });

@@ -10,11 +10,11 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "target": "es2022",
-    "types": [],
     // For nodejs:
     // "lib": ["esnext"],
-    // "types": ["node"],
+    "types": ["node"],
     // and npm install -D @types/node
+    "typeRoots": ["./src/@types", "./node_modules/@types"],
 
     // Other Outputs
     "sourceMap": true,
@@ -51,5 +51,5 @@
     }
   },
 
-  "include": ["src"]
+  "include": ["src/**/*"]
 }

@@ -1,15 +1,13 @@
 import { Router } from "express";
+import { canAccess } from "@/middlewares/canAccess.middleware";
 import * as userController from "./user.controller";
 
 const userRouter = Router();
 
-// rotas públicas
-userRouter.post("/", userController.createUser);
-
-// TODO proteger com authenticate + canAccess (own/any) do módulo authorization
-userRouter.get("/", userController.getAllUsers);
-userRouter.get("/:id", userController.getUserById);
-userRouter.patch("/:id", userController.updateUser);
-userRouter.delete("/:id", userController.deleteUser);
+userRouter.post("/", canAccess("create:user"), userController.createUser);
+userRouter.get("/", canAccess("read:user:others"), userController.getAllUsers);
+userRouter.get("/:id", canAccess("read:user"), userController.getUserById);
+userRouter.patch("/:id", canAccess("update:user"), userController.updateUser);
+userRouter.delete("/:id", canAccess("delete:user"), userController.deleteUser);
 
 export default userRouter;

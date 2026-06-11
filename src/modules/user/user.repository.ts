@@ -57,6 +57,13 @@ export async function createUser(data: CreateUserData) {
       email: data.email,
       passwordHash: data.passwordHash,
     },
+    include: {
+      features: {
+        include: {
+          feature: true,
+        },
+      },
+    },
   });
 }
 
@@ -66,7 +73,13 @@ export async function updateUser(id: string, data: UpdateUserData) {
     data: {
       ...(data.name && { name: data.name }),
       ...(data.email && { email: data.email }),
-      ...(data.passwordHash && { passwordHash: data.passwordHash }),
+    },
+    include: {
+      features: {
+        include: {
+          feature: true,
+        },
+      },
     },
   });
 }

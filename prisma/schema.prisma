@@ -7,80 +7,142 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── Usuário base ────────────────────────────────────────────────────────────
+
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  passwordHash  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  name         String
+  cpf          String   @unique
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
 
-  
-  employee  Employee?
-  customer  Customer?
+  // perfis 1:1 (presença define o tipo)
+  employee Employee?
+  customer Customer?
 
-  
-  roles     UserRole[]
-  features  UserFeature[]   // overrides por usuário (concede/nega)
+  // autorização
+  roles    UserRole[]
+  features UserFeature[]
+
+  // autenticação
+  sessions Session[]
+
+  @@map("users")
 }
 
+// ─── Perfis ─────────────────────────────────────────────────────────────────────
+
 model Employee {
-  id      String   @id @default(uuid())
-  userId  String   @unique
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  salary  Decimal?
-  hiredAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String   @unique @map("user_id")
+  hiringDate DateTime @default(now()) @map("hiring_date")
+  createdAt  DateTime @default(now()) @map("created_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("employees")
 }
 
 model Customer {
-  id     String @id @default(uuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(uuid())
+  userId    String    @unique @map("user_id")
+  phone     String    @unique
+  address   String?
+  birthDate DateTime? @map("birth_date")
+  createdAt DateTime @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("customers")
+}
+
+// ─── Autorização ─────────────────────────────────────────────────────────────
+
+model Feature {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  roles RoleFeature[]
+  users UserFeature[]
+
+  @@map("features")
 }
 
 model Role {
-  id          String        @id @default(uuid())
-  name        String        @unique   
+  id          String       @id @default(uuid())
+  name        String       @unique
   description String?
   appliesTo   ProfileKind?
-  features    RoleFeature[]
-  users       UserRole[]
-}
+  createdAt   DateTime     @default(now()) @map("created_at")
 
+  features RoleFeature[]
+  users    UserRole[]
 
-model Feature {
-  id          String        @id @default(uuid())
-  name        String        @unique   
-  description String?
-  roles       RoleFeature[]
-  users       UserFeature[]
+  @@map("roles")
 }
 
 model RoleFeature {
-  roleId    String
-  featureId String
-  role      Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  feature   Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  roleId    String @map("role_id")
+  featureId String @map("feature_id")
+
+  role    Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
   @@id([roleId, featureId])
+  @@map("role_features")
 }
 
 model UserRole {
-  userId String
-  roleId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  @@id([userId, roleId])
+  id     String   @id @default(uuid())
+  userId String @map("user_id")
+  roleId String @map("role_id")
+  deletedAt DateTime? @map("deleted_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@map("user_roles")
 }
 
 model UserFeature {
-  userId    String
-  featureId String
-  granted   Boolean @default(true)   // true = concede · false = nega
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  feature   Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
-  @@id([userId, featureId])
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  featureId String   @map("feature_id")
+  granted   Boolean  @default(true) // true = concede · false = nega explicitamente
+  grantedAt DateTime @default(now()) @map("granted_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@map("user_features")
 }
 
 enum ProfileKind {
   EMPLOYEE
   CUSTOMER
+}
+
+// ─── Autenticação ────────────────────────────────────────────────────────────────
+
+model Session {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  token         String    @unique
+  expiresAt     DateTime  @map("expires_at")
+  invalidatedAt DateTime? @map("invalidated_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
 }

@@ -6,18 +6,20 @@ const permissionRouter = Router({ mergeParams: true });
 
 permissionRouter.get(
   "/features",
-  canAccess("read:feature"),
+  canAccess("read:permission"),
   permissionController.getUserFeatures,
 );
-permissionRouter.post(
+
+permissionRouter.put(
   "/features/:featureId",
-  canAccess("manage:feature"),
-  permissionController.assignFeatureToUser,
+  canAccess("manage:permission"),
+  permissionController.upsertUserFeature,
 );
+
 permissionRouter.delete(
   "/features/:featureId",
-  canAccess("manage:feature"),
-  permissionController.removeFeatureFromUser,
+  canAccess("manage:permission"),
+  permissionController.removeUserFeature,
 );
 
 export default permissionRouter;

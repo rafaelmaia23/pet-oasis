@@ -1,40 +1,43 @@
 import { prisma } from "@/lib/prisma";
 
-export async function findUserFeatures(userId: string) {
+export async function getUserFeatures(userId: string) {
   return prisma.userFeature.findMany({
-    where: { userId },
+    where: { userId, deletedAt: null },
     include: {
       feature: true,
     },
   });
 }
 
-export async function assignFeatureToUser(userId: string, featureId: string) {
-  return prisma.userFeature.create({
-    data: {
-      userId,
-      featureId,
-    },
-  });
-}
-
-export async function removeFeatureFromUser(userId: string, featureId: string) {
-  return prisma.userFeature.delete({
-    where: {
-      userId_featureId: {
-        userId,
-        featureId,
-      },
-    },
-  });
-}
-
-export async function assignManyFeaturesToUser(
+export async function upsertUserFeature(
   userId: string,
-  featureIds: string[],
+  featureId: string,
+  granted: boolean,
 ) {
-  return prisma.userFeature.createMany({
-    data: featureIds.map((featureId) => ({ userId, featureId })),
-    skipDuplicates: true,
+  const existingUserFeature = await prisma.userFeature.findFirst({
+    where: { userId, featureId, deletedAt: null },
+  });
+
+  if (existingUserFeature) {
+    return prisma.userFeature.update({
+      where: { id: existingUserFeature.id },
+      data: { granted },
+      include: { feature: true },
+    });
+  }
+
+  return prisma.userFeature.create({
+    data: { userId, featureId, granted },
+    include: { feature: true },
+  });
+}
+
+export async function removeUserFeature(userFeatureId: string) {
+  return prisma.userFeature.update({
+    where: {
+      id: userFeatureId,
+      deletedAt: null,
+    },
+    data: { deletedAt: new Date() },
   });
 }

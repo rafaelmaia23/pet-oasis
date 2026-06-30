@@ -1,14 +1,16 @@
 import { faker } from "@faker-js/faker";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  buildUserWithFeatures,
-  makeUserData,
-} from "@/__tests__/factories/user.factory";
+import z from "zod";
+import { buildEmployee } from "@/__tests__/factories/user.factory";
+import { expectValidationError } from "@/__tests__/helpers/assertions";
 import { loginAs } from "@/__tests__/helpers/auth";
 import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
+import { createNotFoundError } from "@/errors/errorFactory";
 import { DEFAULT_FEATURES } from "@/modules/feature/feature.constants";
+import { featureViews } from "@/modules/feature/feature.presenter";
+import { getFeatureByName } from "@/modules/feature/feature.repository";
 
 afterEach(async () => {
   await clearDatabase();
@@ -28,11 +30,12 @@ describe("GET /api/v1/features", () => {
   });
 
   it("should return 403 if user does not have feature: `read:feature`", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["read:feature"],
+    });
 
-    await buildUserWithFeatures(["read:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .get("/api/v1/features")
@@ -48,11 +51,11 @@ describe("GET /api/v1/features", () => {
   });
 
   it("should return 200 and list of features if user has feature: `read:feature`", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
 
-    await buildUserWithFeatures(["read:feature"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .get("/api/v1/features")
@@ -60,16 +63,9 @@ describe("GET /api/v1/features", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toBeInstanceOf(Array);
-
     expect(response.body.length).toBe(DEFAULT_FEATURES.length);
 
-    expect(response.body[0]).toMatchObject({
-      id: expect.any(String),
-      name: expect.any(String),
-      createdAt: expect.any(String),
-      description: expect.any(String),
-    });
+    expect(response.body).toMatchView(z.array(featureViews.default));
   });
 });
 
@@ -87,11 +83,11 @@ describe("GET /api/v1/features/:id", () => {
   });
 
   it("should return 403 if user does not have feature: `read:feature`", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+    });
 
-    await buildUserWithFeatures(["read:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .get("/api/v1/features/some-id")
@@ -106,33 +102,48 @@ describe("GET /api/v1/features/:id", () => {
     });
   });
 
-  it("should return 400 if id is not a valid uuid", async () => {
-    const userData = makeUserData();
+  it("should return 403 if user does not have feature and tries to access a non existent feature", async () => {
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+    });
 
-    await buildUserWithFeatures(["read:feature"], userData);
+    const token = await loginAs(user.email, user.password);
 
-    const token = await loginAs(userData.email, userData.password);
+    const response = await request(app)
+      .get(`/api/v1/features/${faker.string.uuid()}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      message: "Você não tem permissão para acessar este recurso",
+      code: "FORBIDDEN",
+      action: `Verifique se você tem acesso a feature "read:feature"`,
+    });
+  });
+
+  it("should return 422 if id is not a valid uuid", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .get("/api/v1/features/non-valid-id")
       .set("Authorization", `Bearer ${token}`);
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
 
-    expect(response.body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      message: "Validation error",
-    });
-    expect(response.body.errors).toBeInstanceOf(Array);
-    expect(response.body.errors.length).toBeGreaterThan(0);
+    expectValidationError(response, ["id"]);
   });
 
   it("should return 404 if user with given id does not exist", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
 
-    await buildUserWithFeatures(["read:feature"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .get(`/api/v1/features/${faker.string.uuid()}`)
@@ -148,29 +159,32 @@ describe("GET /api/v1/features/:id", () => {
   });
 
   it("should return 200 and a feature object if user has feature: `read:feature`", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
 
-    await buildUserWithFeatures(["read:feature"], userData);
+    const token = await loginAs(user.email, user.password);
 
-    const token = await loginAs(userData.email, userData.password);
+    const feature = await getFeatureByName("read:feature");
 
-    const featuresList = await request(app)
-      .get("/api/v1/features")
-      .set("Authorization", `Bearer ${token}`);
-
-    const validFeatureId = featuresList.body[0].id;
+    if (!feature) {
+      throw createNotFoundError({
+        message: "Feature não encontrada",
+      });
+    }
 
     const response = await request(app)
-      .get(`/api/v1/features/${validFeatureId}`)
+      .get(`/api/v1/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(200);
 
+    expect(response.body).toMatchView(featureViews.default);
+
     expect(response.body).toMatchObject({
-      name: featuresList.body[0].name,
-      id: validFeatureId,
-      createdAt: featuresList.body[0].createdAt,
-      description: featuresList.body[0].description,
+      name: feature.name,
+      id: feature.id,
+      description: feature.description,
     });
   });
 });

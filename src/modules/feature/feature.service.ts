@@ -2,11 +2,11 @@ import { createNotFoundError } from "@/errors";
 import * as featureRepository from "./feature.repository";
 
 export async function getAllFeatures() {
-  return featureRepository.findAllFeatures();
+  return featureRepository.getAllFeatures();
 }
 
 export async function getFeatureById(id: string) {
-  const feature = await featureRepository.findFeatureById(id);
+  const feature = await featureRepository.getFeatureById(id);
 
   if (!feature) {
     throw createNotFoundError({

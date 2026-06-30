@@ -10,12 +10,25 @@ export const DEFAULT_FEATURES = [
   { name: "update:user:others", description: "Atualizar qualquer usuário" },
   { name: "delete:user:others", description: "Deletar qualquer usuário" },
 
+  // User profile administration features
+  { name: "create:profile", description: "Criar um perfil de usuário" },
+  { name: "delete:profile", description: "Deletar um perfil de usuário" },
+
   // Session features
   { name: "logout:session", description: "Encerrar a própria sessão" },
 
-  // Permission management features
+  // Feature management features
   { name: "read:feature", description: "Ler features do sistema" },
-  { name: "manage:feature", description: "Gerenciar features" },
+
+  // Role management features
+  { name: "read:role", description: "Ler papéis do sistema" },
+
+  // Permission management features
+  { name: "read:permission", description: "Ler permissões de usuários" },
+  { name: "manage:permission", description: "Gerenciar permissões" },
+
+  // Wildcard feature
+  { name: "*", description: "Acesso total a todas as funcionalidades" },
 ] as const;
 
 export type FeatureName = (typeof DEFAULT_FEATURES)[number]["name"];

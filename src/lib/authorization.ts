@@ -1,22 +1,23 @@
-import { createInternalServerError } from "@/errors/index";
-
 export type AuthUser = {
   id: string;
-  features: { name: string }[];
+  features: Set<string>;
+};
+
+type FeatureRef = { feature: { name: string } };
+
+type UserForFeatureComputation = {
+  roles: { role: { features: FeatureRef[] } }[];
+  features: { granted: boolean; feature: { name: string } }[];
 };
 
 export function hasFeature(user: AuthUser, feature: string): boolean {
-  validateUser(user);
-
-  return user.features.some((f) => f.name === feature);
+  return user.features.has("*") || user.features.has(feature);
 }
 
 export function can(user: AuthUser, requiredFeature: string): boolean {
-  validateUser(user);
-
   return (
-    hasFeature(user, requiredFeature) ||
-    hasFeature(user, `${requiredFeature}:others`)
+    hasFeature(user, `${requiredFeature}:others`) ||
+    hasFeature(user, requiredFeature)
   );
 }
 
@@ -25,8 +26,6 @@ export function canActOnResource(
   requiredFeature: string,
   resourceOwnerId: string,
 ): boolean {
-  validateUser(user);
-
   if (hasFeature(user, `${requiredFeature}:others`)) {
     return true;
   }
@@ -38,11 +37,22 @@ export function canActOnResource(
   return false;
 }
 
-function validateUser(user: AuthUser): void {
-  if (!user || typeof user.id !== "string" || !Array.isArray(user.features)) {
-    throw createInternalServerError({
-      message: "Invalid user data",
-      cause: "User data in Authorization functions must be valid",
-    });
+export function computeEffectiveFeatures(
+  user: UserForFeatureComputation,
+): Set<string> {
+  const effectiveFeatures = new Set<string>();
+
+  for (const role of user.roles) {
+    for (const feature of role.role.features) {
+      effectiveFeatures.add(feature.feature.name);
+    }
   }
+
+  for (const userFeature of user.features) {
+    userFeature.granted
+      ? effectiveFeatures.add(userFeature.feature.name)
+      : effectiveFeatures.delete(userFeature.feature.name);
+  }
+
+  return effectiveFeatures;
 }

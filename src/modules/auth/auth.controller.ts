@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { asyncHandler } from "@/utils/asyncHandler";
+import { userPresenter } from "../user/user.presenter";
 import { loginSchema, signupSchema } from "./auth.schema";
 import * as authService from "./auth.service";
 
@@ -8,7 +9,7 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
 
   const result = await authService.signup(body);
 
-  res.status(201).json(result);
+  res.status(201).json(userPresenter.present(result, "owner"));
 });
 
 export const login = asyncHandler(async (req: Request, res: Response) => {

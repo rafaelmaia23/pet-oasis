@@ -3,24 +3,26 @@ import { asyncHandler } from "@/utils/asyncHandler";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "./user.presenter";
 import {
-  createUserSchema,
+  createEmployeeSchema,
   updateUserSchema,
   userParamsSchema,
 } from "./user.schema";
 import * as userService from "./user.service";
 import { resolveUserView } from "./user.view-resolver";
 
-export const createUser = asyncHandler(async (req: Request, res: Response) => {
-  const { body } = createUserSchema.parse({ body: req.body });
+export const createEmployee = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { body } = createEmployeeSchema.parse({ body: req.body });
 
-  const user = await userService.createUser(body);
+    const user = await userService.createEmployee(body);
 
-  return res
-    .status(201)
-    .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
-});
+    return res
+      .status(201)
+      .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
+  },
+);
 
-export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
+export const getAllUsers = asyncHandler(async (_: Request, res: Response) => {
   const users = await userService.getAllUsers();
 
   return res.status(200).json(userPresenter.presentMany(users, "admin"));

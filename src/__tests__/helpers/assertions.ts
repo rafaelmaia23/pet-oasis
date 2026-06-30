@@ -1,6 +1,5 @@
 import { validate as uuidValidate, version as uuidVersion } from "uuid";
 import { expect } from "vitest";
-import type z from "zod";
 
 export function expectValidDate(value: unknown) {
   expect(typeof value).toBe("string");
@@ -13,11 +12,29 @@ export function expectValidUuid(value: unknown) {
   expect(uuidVersion(value as string)).toBe(4);
 }
 
-export function expectMatchesView(body: unknown, view: z.ZodType) {
-  const result = view.safeParse(body);
-  if (!result.success) {
-    throw new Error(
-      `Response não bate com a view: ${JSON.stringify(result.error.issues, null, 2)}`,
-    );
+export function expectValidationError(
+  response: { status: number; body: unknown },
+  expectedFields?: string[],
+) {
+  const body = response.body as {
+    code: string;
+    errors: Record<string, string[]>;
+  };
+
+  expect(body.code).toBe("VALIDATION_ERROR");
+
+  expect(body.errors).toBeTypeOf("object");
+  expect(Array.isArray(body.errors)).toBe(false);
+  expect(Object.keys(body.errors).length).toBeGreaterThan(0);
+
+  for (const messages of Object.values(body.errors)) {
+    expect(Array.isArray(messages)).toBe(true);
+    expect(messages.length).toBeGreaterThan(0);
+  }
+
+  if (expectedFields) {
+    for (const field of expectedFields) {
+      expect(body.errors).toHaveProperty(field);
+    }
   }
 }

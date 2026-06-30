@@ -4,7 +4,7 @@ import * as userController from "./user.controller";
 
 const userRouter = Router();
 
-userRouter.post("/", canAccess("create:user"), userController.createUser);
+userRouter.post("/", canAccess("create:user"), userController.createEmployee);
 userRouter.get("/", canAccess("read:user:others"), userController.getAllUsers);
 userRouter.get("/:id", canAccess("read:user"), userController.getUserById);
 userRouter.patch("/:id", canAccess("update:user"), userController.updateUser);

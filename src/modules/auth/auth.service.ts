@@ -3,19 +3,11 @@ import type { StringValue } from "ms";
 import { env } from "@/config/env";
 import { createNotFoundError, createUnauthorizedError } from "@/errors";
 import { verifyPassword } from "@/lib/password";
-import { findFeatureByName } from "@/modules/feature/feature.repository";
-import { assignManyFeaturesToUser } from "@/modules/permission/permission.repository";
 import * as userService from "@/modules/user/user.service";
 import * as userRepository from "../user/user.repository";
+import type { CreateCustomerInput } from "../user/user.schema";
 import * as authRepository from "./auth.repository";
-import type { LoginInput, SignupInput } from "./auth.schema";
-
-const CLIENT_DEFAULT_FEATURES = [
-  "read:user",
-  "update:user",
-  "delete:user",
-  "logout:session",
-];
+import type { LoginInput } from "./auth.schema";
 
 function generateToken(userId: string): string {
   return jwt.sign({ sub: userId }, env.JWT_SECRET, {
@@ -29,18 +21,8 @@ function getExpiresAt(): Date {
   return expiresAt;
 }
 
-export async function signup(data: SignupInput) {
-  const user = await userService.createUser(data);
-
-  const features = await Promise.all(
-    CLIENT_DEFAULT_FEATURES.map((featureName) =>
-      findFeatureByName(featureName),
-    ),
-  );
-
-  const featuresIds = features.filter((f) => f !== null).map((f) => f.id);
-
-  await assignManyFeaturesToUser(user.id, featuresIds);
+export async function signup(data: CreateCustomerInput) {
+  const user = await userService.createCustomer(data);
 
   return user;
 }

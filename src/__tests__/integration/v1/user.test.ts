@@ -1,14 +1,13 @@
 import { faker } from "@faker-js/faker";
 import request from "supertest";
 import { afterEach, assert, describe, expect, it } from "vitest";
+import z from "zod";
 import {
-  buildUser,
-  buildUserWithFeatures,
-  makeUserData,
+  buildEmployee,
+  makeEmployeeData,
 } from "@/__tests__/factories/user.factory";
 import {
-  expectMatchesView,
-  expectValidDate,
+  expectValidationError,
   expectValidUuid,
 } from "@/__tests__/helpers/assertions";
 import { loginAs } from "@/__tests__/helpers/auth";
@@ -16,115 +15,154 @@ import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
 import { verifyPassword } from "@/lib/password";
 import { userViews } from "@/modules/user/user.presenter";
-import { findUserById } from "@/modules/user/user.repository";
+import {
+  findDeletedUserById,
+  findUserById,
+} from "@/modules/user/user.repository";
 
 afterEach(async () => {
   await clearDatabase();
 });
 
 describe("POST /api/v1/users", () => {
-  it("should return 400 if required fields are missing", async () => {
-    const userData = makeUserData();
+  it("should return 422 if required fields are missing", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
 
-    await buildUserWithFeatures(["create:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .post("/api/v1/users")
       .set("Authorization", `Bearer ${token}`)
       .send({});
 
-    expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      message: "Validation error",
-    });
-    expect(response.body.errors).toBeInstanceOf(Array);
-    expect(response.body.errors.length).toBeGreaterThan(0);
+    expect(response.status).toBe(422);
+
+    expectValidationError(response);
   });
 
-  it("should return 400 if password does not meet requirements", async () => {
-    const userData = makeUserData();
+  it("should return 422 if password does not meet requirements", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
 
-    await buildUserWithFeatures(["create:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .post("/api/v1/users")
       .set("Authorization", `Bearer ${token}`)
-      .send(makeUserData({ password: "weak" }));
+      .send(makeEmployeeData({ password: "short" }));
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["password"]);
   });
 
-  it("should return 400 if email is invalid", async () => {
-    const userData = makeUserData();
+  it("should return 422 if email is invalid", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
 
-    await buildUserWithFeatures(["create:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .post("/api/v1/users")
       .set("Authorization", `Bearer ${token}`)
-      .send(makeUserData({ email: "invalid-email" }));
+      .send(makeEmployeeData({ email: "invalid-email" }));
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["email"]);
+  });
+
+  it("should return 422 if cpf is invalid", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeEmployeeData({ cpf: "1a5,6ff.qwe-4t" }));
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["cpf"]);
+  });
+
+  it("should return 422 if roles provided are invalid", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeEmployeeData({ roleNames: ["customer"] }));
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["roleNames"]);
   });
 
   it("should return 409 if email is already in use", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({ roleNames: ["manager"] });
 
-    await buildUserWithFeatures(["create:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .post("/api/v1/users")
-      .send(userData)
-      .set("Authorization", `Bearer ${token}`);
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeEmployeeData({ email: user.email }));
 
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
       code: "CONFLICT",
-      message: "Email já está em uso",
-      action: "Tente outro email",
+      message: "O email informado já está em uso",
+      action: "Tente outro valor para o campo email",
+    });
+  });
+
+  it("should return 409 if cpf is already in use", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeEmployeeData({ cpf: user.cpf }));
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: "CONFLICT",
+      message: "O cpf informado já está em uso",
+      action: "Tente outro valor para o campo cpf",
     });
   });
 
   it("should return 401 if no token is provided", async () => {
     const response = await request(app)
       .post("/api/v1/users")
-      .send(makeUserData());
+      .send(makeEmployeeData());
 
     expect(response.status).toBe(401);
   });
 
-  it("should return 403 if user does not have feature: `create:user`", async () => {
-    const userData = makeUserData();
+  it("should return 403 if user does not have feature: `create: user`", async () => {
+    const user = await buildEmployee({ roleNames: ["attendant"] });
 
-    await buildUserWithFeatures(["read:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .post("/api/v1/users")
       .set("Authorization", `Bearer ${token}`)
-      .send(makeUserData());
+      .send(makeEmployeeData());
 
     expect(response.status).toBe(403);
   });
 
-  it("should return 201 and create a new user when provided valid data and user has feature: `create:user`", async () => {
-    const userData = makeUserData();
+  it("should return 201 and create a new user when provided valid data and user has feature: `create: user`", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
 
-    await buildUserWithFeatures(["create:user"], userData);
+    const token = await loginAs(user.email, user.password);
 
-    const token = await loginAs(userData.email, userData.password);
-
-    const newUserData = makeUserData();
+    const newUserData = makeEmployeeData();
 
     const response = await request(app)
       .post("/api/v1/users")
@@ -140,7 +178,7 @@ describe("POST /api/v1/users", () => {
       email: newUserData.email,
     });
 
-    expect(response.body).toMatchView(userViews.owner);
+    expect(response.body).toMatchView(userViews.admin);
 
     expect(response.body.id).toBeDefined();
     expectValidUuid(response.body.id);
@@ -158,7 +196,7 @@ describe("POST /api/v1/users", () => {
   });
 });
 
-+describe("GET /api/v1/users", () => {
+describe("GET /api/v1/users", () => {
   it("should return 401 if no token is provided", async () => {
     const response = await request(app).get("/api/v1/users");
 
@@ -172,11 +210,12 @@ describe("POST /api/v1/users", () => {
   });
 
   it("should return 403 if user does not have feature: `read:user:others`", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["read:user:others"],
+    });
 
-    await buildUserWithFeatures(["create:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .get("/api/v1/users")
@@ -191,12 +230,13 @@ describe("POST /api/v1/users", () => {
     });
   });
 
-  it("should not authorize if user has only feature: `read:user`", async () => {
-    const userData = makeUserData();
+  it("should return 403 if user have base feature but not the privilege", async () => {
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["read:user:others"],
+    });
 
-    await buildUserWithFeatures(["read:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .get("/api/v1/users")
@@ -211,37 +251,29 @@ describe("POST /api/v1/users", () => {
     });
   });
 
-  it("should return 200 and list of users if user has feature: `read:user:others`", async () => {
-    const userData = makeUserData();
+  it("should return 200 and list of users if user has feature: `read: user: others`", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
 
-    await buildUserWithFeatures(["read:user:others"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .get("/api/v1/users")
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(200);
-    expect(response.body).toBeInstanceOf(Array);
+
+    expect(response.body).toMatchView(z.array(userViews.admin));
   });
 
-  it("should return 200 with all users if user has feature: `read:user:others`", async () => {
-    const userData1 = makeUserData();
-    const userData2 = makeUserData();
-    const userData3 = makeUserData();
+  it("should return 200 with all users if user has feature: `read: user: others`", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+    await buildEmployee({ roleNames: ["attendant"] });
+    await buildEmployee({ roleNames: ["admin"] });
 
-    await buildUserWithFeatures(["read:user:others"], userData1);
-    await buildUserWithFeatures([], userData2);
-    await buildUserWithFeatures([], userData3);
-
-    const token = await loginAs(userData1.email, userData1.password);
-
+    const token = await loginAs(user.email, user.password);
     const response = await request(app)
       .get("/api/v1/users")
       .set("Authorization", `Bearer ${token}`);
-
-    console.log(response.body); // temporário
 
     expect(response.status).toBe(200);
     expect(response.body).toBeInstanceOf(Array);
@@ -263,14 +295,15 @@ describe("GET /api/v1/users/:id", () => {
   });
 
   it("should return 403 if user does not have feature: `read:user`", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["read:user"],
+    });
 
-    await buildUserWithFeatures(["create:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .get("/api/v1/users/some-id")
+      .get(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(403);
@@ -282,33 +315,26 @@ describe("GET /api/v1/users/:id", () => {
     });
   });
 
-  it("should return 400 if id is not a valid uuid", async () => {
-    const userData = makeUserData();
+  it("should return 422 if id is not a valid uuid", async () => {
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+    });
 
-    await buildUserWithFeatures(["read:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .get("/api/v1/users/non-existing-id")
+      .get("/api/v1/users/invalid-id")
       .set("Authorization", `Bearer ${token}`);
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
 
-    expect(response.body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      message: "Validation error",
-    });
-    expect(response.body.errors).toBeInstanceOf(Array);
-    expect(response.body.errors.length).toBeGreaterThan(0);
+    expectValidationError(response, ["id"]);
   });
 
   it("should return 404 if user with given id does not exist", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({ roleNames: ["attendant"] });
 
-    await buildUserWithFeatures(["read:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .get(`/api/v1/users/${faker.string.uuid()}`)
@@ -323,80 +349,60 @@ describe("GET /api/v1/users/:id", () => {
     });
   });
 
-  it("should return 200 and user data if user has feature: `read:user`", async () => {
-    const userData = makeUserData();
+  it("should return 200 and user data if user has feature: `read: user`", async () => {
+    const user = await buildEmployee({ roleNames: ["attendant"] });
 
-    const createdUser = await buildUserWithFeatures(["read:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .get(`/api/v1/users/${createdUser.id}`)
+      .get(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(200);
 
-    expectMatchesView(response.body, userViews.default);
+    expect(response.body).toMatchView(userViews.owner);
 
     expect(response.body).not.toHaveProperty("passwordHash");
 
-    expect(response.body.name).toBe(userData.name);
-    expect(response.body.email).toBe(userData.email);
+    expect(response.body.id).toBe(user.id);
+    expect(response.body.name).toBe(user.name);
+    expect(response.body.email).toBe(user.email);
+    expect(response.body.cpf).toBe(user.cpf);
   });
 
   it("should return 200 and user data if user has feature: `read:user:others`", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+      denies: ["read:user"],
+    });
 
-    const createdUser = await buildUserWithFeatures(
-      ["read:user:others"],
-      userData,
-    );
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .get(`/api/v1/users/${createdUser.id}`)
+      .get(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toEqual({
-      id: createdUser.id,
-      name: createdUser.name,
-      email: createdUser.email,
-      createdAt: createdUser.createdAt.toISOString(),
-      updatedAt: createdUser.updatedAt.toISOString(),
-      passwordHash: createdUser.passwordHash,
-      features: expect.arrayContaining([
-        expect.objectContaining({
-          userId: createdUser.id,
-          featureId: expect.any(String),
-          grantedAt: expect.any(String),
-          feature: expect.objectContaining({
-            id: expect.any(String),
-            name: expect.any(String),
-            createdAt: expect.any(String),
-            description: expect.toBeOneOf([expect.any(String), null]),
-          }),
-        }),
-      ]),
-    });
+    expect(response.body).toMatchView(userViews.admin);
 
-    // TODO: assert passwordHash do not appear in the response body
-    // expect(response.body).not.toHaveProperty("passwordHash");
+    expect(response.body).not.toHaveProperty("passwordHash");
   });
 
   it("should return 403 if user tries to access another user's data without `read:user:others` feature", async () => {
-    const userData1 = makeUserData();
-    const userData2 = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["read:user:others"],
+    });
 
-    await buildUserWithFeatures(["read:user"], userData1);
-    const createdUser2 = await buildUser(userData2);
+    const user2 = await buildEmployee({
+      roleNames: ["attendant"],
+    });
 
-    const tokenUser1 = await loginAs(userData1.email, userData1.password);
+    const tokenUser1 = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .get(`/api/v1/users/${createdUser2.id}`)
+      .get(`/api/v1/users/${user2.id}`)
       .set("Authorization", `Bearer ${tokenUser1}`);
 
     expect(response.status).toBe(403);
@@ -407,104 +413,131 @@ describe("GET /api/v1/users/:id", () => {
       action: 'Verifique se você tem acesso a feature "read:user:others"',
     });
   });
+
+  it("should return 200 and user data if user has feature: `read:user:others` and isn't the owner", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+      denies: ["read:user"],
+    });
+
+    const user2 = await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get(`/api/v1/users/${user2.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    expect(response.body).toMatchView(userViews.admin);
+
+    expect(response.body).not.toHaveProperty("passwordHash");
+  });
 });
 
 describe("PATCH /api/v1/users/:id", () => {
-  it("should return 200 and update user data if user has feature: `update:user` and is the owner of the user", async () => {
-    const userData = makeUserData();
+  it("should return 200 and update user data if user has feature: `update: user` and is the owner of the user", async () => {
+    const user = await buildEmployee();
 
-    const createdUser = await buildUserWithFeatures(["update:user"], userData);
+    const token = await loginAs(user.email, user.password);
 
-    const token = await loginAs(userData.email, userData.password);
-
-    const newName = "New Name";
+    const newName = faker.person.fullName();
 
     const response = await request(app)
-      .patch(`/api/v1/users/${createdUser.id}`)
+      .patch(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ name: newName });
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toEqual({
-      id: createdUser.id,
-      name: newName,
-      email: createdUser.email,
-      createdAt: createdUser.createdAt.toISOString(),
-      updatedAt: expect.any(String),
-      passwordHash: createdUser.passwordHash,
-    });
+    expect(response.body).toMatchView(userViews.owner);
 
-    //TODO assert passwordHash do not appear in the response body
-    // expect(response.body).not.toHaveProperty("passwordHash");
+    expect(response.body).not.toHaveProperty("passwordHash");
 
-    const updatedUserInDb = await findUserById(createdUser.id);
+    const updatedUserInDb = await findUserById(user.id);
 
     assert(updatedUserInDb !== null, "User should be found in the database");
 
     expect(updatedUserInDb.name).toBe(newName);
 
     expect(updatedUserInDb.updatedAt.getTime()).toBeGreaterThan(
-      createdUser.updatedAt.getTime(),
+      user.updatedAt.getTime(),
     );
 
-    expect(updatedUserInDb.email).toBe(createdUser.email);
+    expect(updatedUserInDb.email).toBe(user.email);
   });
 
   it("should return 200 and update user data if user has feature: `update:user:others`", async () => {
-    const userData1 = makeUserData();
-    const userData2 = makeUserData();
+    const user1 = await buildEmployee({
+      roleNames: ["manager"],
+      denies: ["update:user"],
+    });
 
-    await buildUserWithFeatures(["update:user:others"], userData1);
-    const createdUser2 = await buildUser(userData2);
+    const user2 = await buildEmployee();
 
-    const tokenUser1 = await loginAs(userData1.email, userData1.password);
+    const tokenUser1 = await loginAs(user1.email, user1.password);
 
-    const newName = "New Name";
+    const newName = faker.person.fullName();
 
     const response = await request(app)
-      .patch(`/api/v1/users/${createdUser2.id}`)
+      .patch(`/api/v1/users/${user2.id}`)
       .set("Authorization", `Bearer ${tokenUser1}`)
       .send({ name: newName });
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toEqual({
-      id: createdUser2.id,
-      name: newName,
-      email: createdUser2.email,
-      createdAt: createdUser2.createdAt.toISOString(),
-      updatedAt: expect.any(String),
-      passwordHash: createdUser2.passwordHash,
-    });
+    expect(response.body).toMatchView(userViews.admin);
 
-    //TODO assert passwordHash do not appear in the response body
-    // expect(response.body).not.toHaveProperty("passwordHash");
+    expect(response.body).not.toHaveProperty("passwordHash");
 
-    const updatedUserInDb = await findUserById(createdUser2.id);
+    const updatedUserInDb = await findUserById(user2.id);
 
     assert(updatedUserInDb !== null, "User should be found in the database");
 
     expect(updatedUserInDb.name).toBe(newName);
 
     expect(updatedUserInDb.updatedAt.getTime()).toBeGreaterThan(
-      createdUser2.updatedAt.getTime(),
+      user2.updatedAt.getTime(),
     );
 
-    expect(updatedUserInDb.email).toBe(createdUser2.email);
+    expect(updatedUserInDb.email).toBe(user2.email);
   });
 
   it("should return 403 if user tries to update another user's data without `update:user:others` feature", async () => {
-    const userData1 = makeUserData();
-    const userData2 = makeUserData();
+    const user1 = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["update:user:others"],
+    });
 
-    await buildUserWithFeatures(["update:user"], userData1);
-    const createdUser2 = await buildUser(userData2);
+    const user2 = await buildEmployee();
 
-    const tokenUser1 = await loginAs(userData1.email, userData1.password);
+    const tokenUser1 = await loginAs(user1.email, user1.password);
 
     const response = await request(app)
-      .patch(`/api/v1/users/${createdUser2.id}`)
+      .patch(`/api/v1/users/${user2.id}`)
+      .set("Authorization", `Bearer ${tokenUser1}`)
+      .send({ name: "New Name" });
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Você não tem permissão para acessar este recurso",
+      action: 'Verifique se você tem acesso a feature "update:user:others"',
+    });
+  });
+
+  it("should return 403 if user tries to update a non-existent user's data with `update:user` feature", async () => {
+    const user1 = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["update:user:others"],
+    });
+
+    const tokenUser1 = await loginAs(user1.email, user1.password);
+
+    const response = await request(app)
+      .patch(`/api/v1/users/${faker.string.uuid()}`)
       .set("Authorization", `Bearer ${tokenUser1}`)
       .send({ name: "New Name" });
 
@@ -518,83 +551,63 @@ describe("PATCH /api/v1/users/:id", () => {
   });
 
   it("should return 200 if user with update:user:others updates their own data", async () => {
-    const userData = makeUserData();
-    const createdUser = await buildUserWithFeatures(
-      ["update:user:others"],
-      userData,
-    );
-    const token = await loginAs(userData.email, userData.password);
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+      denies: ["update:user"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const newName = faker.person.fullName();
 
     const response = await request(app)
-      .patch(`/api/v1/users/${createdUser.id}`)
+      .patch(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "New Name" });
+      .send({ name: newName });
 
     expect(response.status).toBe(200);
+
+    const updatedUserInDb = await findUserById(user.id);
+
+    assert(updatedUserInDb !== null, "User should be found in the database");
+
+    expect(updatedUserInDb.name).toBe(newName);
   });
 
-  it("should return 200 if user updates email to the same email", async () => {
-    const userData = makeUserData();
+  it("should return 422 if no fields to update are provided", async () => {
+    const user = await buildEmployee();
 
-    const createdUser = await buildUserWithFeatures(["update:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .patch(`/api/v1/users/${createdUser.id}`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ email: userData.email }); // mesmo email atual
-
-    expect(response.status).toBe(200);
-  });
-
-  it("should return 400 if no fields to update are provided", async () => {
-    const userData = makeUserData();
-
-    const createdUser = await buildUserWithFeatures(["update:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
-
-    const response = await request(app)
-      .patch(`/api/v1/users/${createdUser.id}`)
+      .patch(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({});
 
-    expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      message: "Validation error",
-    });
-    expect(response.body.errors).toBeInstanceOf(Array);
-    expect(response.body.errors.length).toBeGreaterThan(0);
+    expect(response.status).toBe(422);
+
+    expectValidationError(response);
   });
 
-  it("should return 400 if id is not a valid uuid", async () => {
-    const userData = makeUserData();
+  it("should return 422 if id is not a valid uuid", async () => {
+    const user = await buildEmployee();
 
-    await buildUserWithFeatures(["update:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .patch("/api/v1/users/non-existing-id")
+      .patch(`/api/v1/users/invalid-id`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "New Name" });
+      .send({ name: faker.person.fullName() });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
 
-    expect(response.body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      message: "Validation error",
-    });
-    expect(response.body.errors).toBeInstanceOf(Array);
-    expect(response.body.errors.length).toBeGreaterThan(0);
+    expectValidationError(response, ["id"]);
   });
 
   it("should return 401 if no auth token is provided", async () => {
     const response = await request(app)
       .patch("/api/v1/users/some-id")
-      .send({ name: "New Name" });
+      .send({ name: faker.person.fullName() });
 
     expect(response.status).toBe(401);
 
@@ -606,16 +619,16 @@ describe("PATCH /api/v1/users/:id", () => {
   });
 
   it("should return 403 if user does not have feature: `update:user`", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      denies: ["update:user", "update:user:others"],
+    });
 
-    await buildUserWithFeatures(["create:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .patch("/api/v1/users/some-id")
+      .patch(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "New Name" });
+      .send({ name: faker.person.fullName() });
 
     expect(response.status).toBe(403);
 
@@ -626,71 +639,137 @@ describe("PATCH /api/v1/users/:id", () => {
     });
   });
 
-  it("should return 400 if user tries to update password by this endpoint even if they have `update:user` feature", async () => {
-    const userData = makeUserData();
+  it("should return 422 and denies update any forbidden fields by this endpoint even if they have `update:user` feature", async () => {
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+    });
 
-    const createdUser = await buildUserWithFeatures(["update:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .patch(`/api/v1/users/${createdUser.id}`)
+      .patch(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ password: "NewPassword123!" });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
 
-    expect(response.body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      message: "Validation error",
-    });
-    expect(response.body.errors).toBeInstanceOf(Array);
-    expect(response.body.errors.length).toBeGreaterThan(0);
-    expect(response.body.errors[0]).toMatchObject({
-      field: "body.password",
-      message: "Password cannot be updated through this endpoint",
-    });
+    expectValidationError(response, ["password"]);
+
+    const response2 = await request(app)
+      .patch(`/api/v1/users/${user.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ email: "newemail@example.com" });
+
+    expect(response2.status).toBe(422);
+
+    expectValidationError(response2, ["email"]);
+
+    const response3 = await request(app)
+      .patch(`/api/v1/users/${user.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ cpf: "147987526-89" });
+
+    expect(response3.status).toBe(422);
+
+    expectValidationError(response3, ["cpf"]);
+
+    const response4 = await request(app)
+      .patch(`/api/v1/users/${user.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ roleNames: ["manager"] });
+
+    expect(response4.status).toBe(422);
+
+    expectValidationError(response4, ["roleNames"]);
   });
 
-  it("should return 400 if user tries to update password by this endpoint even if they have `update:user:others` feature", async () => {
-    const userData = makeUserData();
-    const userData2 = makeUserData();
+  it("should return 422 and denies update any forbidden fields by this endpoint even if they have `update:user:others` feature", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+      denies: ["update:user"],
+    });
 
-    await buildUserWithFeatures(["update:user:others"], userData);
-    const createdUser2 = await buildUser(userData2);
+    const user2 = await buildEmployee();
 
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .patch(`/api/v1/users/${createdUser2.id}`)
+      .patch(`/api/v1/users/${user2.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ password: "NewPassword123!" });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
 
-    expect(response.body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      message: "Validation error",
+    expectValidationError(response, ["password"]);
+
+    const response2 = await request(app)
+      .patch(`/api/v1/users/${user2.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ email: "newemail@example.com" });
+
+    expect(response2.status).toBe(422);
+
+    expectValidationError(response2, ["email"]);
+
+    const response3 = await request(app)
+      .patch(`/api/v1/users/${user2.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ cpf: "147987526-89" });
+
+    expect(response3.status).toBe(422);
+
+    expectValidationError(response3, ["cpf"]);
+
+    const response4 = await request(app)
+      .patch(`/api/v1/users/${user2.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ roleNames: ["manager"] });
+
+    expect(response4.status).toBe(422);
+
+    expectValidationError(response4, ["roleNames"]);
+  });
+
+  it("should return 422 if user tries to update invalid fields with valid fiels in the same body", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
     });
-    expect(response.body.errors).toBeInstanceOf(Array);
-    expect(response.body.errors.length).toBeGreaterThan(0);
-    expect(response.body.errors[0]).toMatchObject({
-      field: "body.password",
-      message: "Password cannot be updated through this endpoint",
-    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .patch(`/api/v1/users/${user.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        name: faker.person.fullName(),
+        password: "NewPassword123!",
+        email: faker.internet.email(),
+        cpf: "147987526-89",
+        roleNames: ["manager"],
+      });
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["password", "email", "cpf", "roleNames"]);
+
+    const updatedUserInDb = await findUserById(user.id);
+
+    assert(updatedUserInDb !== null, "User should be found in the database");
+
+    expect(updatedUserInDb.name).toBe(user.name);
   });
 
   it("should return 404 if user with given id does not exist", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
 
-    await buildUserWithFeatures(["update:user:others"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .patch(`/api/v1/users/${faker.string.uuid()}`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "New Name" });
+      .send({ name: faker.person.fullName() });
 
     expect(response.status).toBe(404);
 
@@ -701,71 +780,34 @@ describe("PATCH /api/v1/users/:id", () => {
     });
   });
 
-  it("should return 409 if email is already in use by another user", async () => {
-    const userData1 = makeUserData();
-    const userData2 = makeUserData();
+  it("should return 200 and update all permited properties of the user correctly", async () => {
+    const user = await buildEmployee({ roleNames: ["attendant"] });
 
-    const createdUser1 = await buildUserWithFeatures(
-      ["update:user"],
-      userData1,
-    );
-    await buildUser(userData2);
+    const token = await loginAs(user.email, user.password);
 
-    const tokenUser1 = await loginAs(userData1.email, userData1.password);
+    const newName = faker.person.fullName();
 
     const response = await request(app)
-      .patch(`/api/v1/users/${createdUser1.id}`)
-      .set("Authorization", `Bearer ${tokenUser1}`)
-      .send({ email: userData2.email });
-
-    expect(response.status).toBe(409);
-
-    expect(response.body).toMatchObject({
-      code: "CONFLICT",
-      message: "Email já está em uso",
-      action: "Tente outro email",
-    });
-  });
-
-  it("should update all permited properties of the user are updated correctly", async () => {
-    const userData = makeUserData();
-
-    const createdUser = await buildUserWithFeatures(["update:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
-
-    const newUserData = makeUserData();
-
-    const response = await request(app)
-      .patch(`/api/v1/users/${createdUser.id}`)
+      .patch(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({
-        name: newUserData.name,
-        email: newUserData.email,
+        name: newName,
       });
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toEqual({
-      id: createdUser.id,
-      name: newUserData.name,
-      email: newUserData.email,
-      createdAt: createdUser.createdAt.toISOString(),
-      updatedAt: expect.any(String),
-      passwordHash: createdUser.passwordHash,
-    });
+    expect(response.body).toMatchView(userViews.owner);
 
-    //TODO assert passwordHash do not appear in the response body
-    // expect(response.body).not.toHaveProperty("passwordHash");
+    expect(response.body).not.toHaveProperty("passwordHash");
 
-    const updatedUserInDb = await findUserById(createdUser.id);
+    const updatedUserInDb = await findUserById(user.id);
 
     assert(updatedUserInDb !== null, "User should be found in the database");
 
-    expect(updatedUserInDb.name).toBe(newUserData.name);
-    expect(updatedUserInDb.email).toBe(newUserData.email);
+    expect(updatedUserInDb.name).toBe(newName);
+
     expect(updatedUserInDb.updatedAt.getTime()).toBeGreaterThan(
-      createdUser.updatedAt.getTime(),
+      user.updatedAt.getTime(),
     );
   });
 });
@@ -784,14 +826,12 @@ describe("DELETE /api/v1/users/:id", () => {
   });
 
   it("should return 403 if user does not have feature: `delete:user`", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({ denies: ["delete:user"] });
 
-    await buildUserWithFeatures(["create:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .delete("/api/v1/users/some-id")
+      .delete(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(403);
@@ -803,33 +843,45 @@ describe("DELETE /api/v1/users/:id", () => {
     });
   });
 
-  it("should return 400 if id is not a valid uuid", async () => {
-    const userData = makeUserData();
+  it("should return 403 if user tries to delete a non-existent user's data with `delete:user` feature", async () => {
+    const user1 = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["delete:user:others"],
+    });
 
-    await buildUserWithFeatures(["delete:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const tokenUser1 = await loginAs(user1.email, user1.password);
 
     const response = await request(app)
-      .delete("/api/v1/users/non-existing-id")
-      .set("Authorization", `Bearer ${token}`);
+      .delete(`/api/v1/users/${faker.string.uuid()}`)
+      .set("Authorization", `Bearer ${tokenUser1}`);
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(403);
 
     expect(response.body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      message: "Validation error",
+      code: "FORBIDDEN",
+      message: "Você não tem permissão para acessar este recurso",
+      action: 'Verifique se você tem acesso a feature "delete:user:others"',
     });
-    expect(response.body.errors).toBeInstanceOf(Array);
-    expect(response.body.errors.length).toBeGreaterThan(0);
+  });
+
+  it("should return 422 if id is not a valid uuid", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .delete("/api/v1/users/invalid-id")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["id"]);
   });
 
   it("should return 404 if user with given id does not exist", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({ roleNames: ["manager"] });
 
-    await buildUserWithFeatures(["delete:user:others"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
       .delete(`/api/v1/users/${faker.string.uuid()}`)
@@ -845,17 +897,17 @@ describe("DELETE /api/v1/users/:id", () => {
   });
 
   it("should return 403 if user tries to access another user's data without `delete:user:others` feature", async () => {
-    const userData1 = makeUserData();
-    const userData2 = makeUserData();
+    const user1 = await buildEmployee({
+      roleNames: ["manager"],
+      denies: ["delete:user:others"],
+    });
+    const user2 = await buildEmployee({ roleNames: ["manager"] });
 
-    await buildUserWithFeatures(["delete:user"], userData1);
-    const createdUser2 = await buildUser(userData2);
-
-    const tokenUser1 = await loginAs(userData1.email, userData1.password);
+    const token = await loginAs(user1.email, user1.password);
 
     const response = await request(app)
-      .delete(`/api/v1/users/${createdUser2.id}`)
-      .set("Authorization", `Bearer ${tokenUser1}`);
+      .delete(`/api/v1/users/${user2.id}`)
+      .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(403);
 
@@ -866,79 +918,146 @@ describe("DELETE /api/v1/users/:id", () => {
   });
 
   it("should return 204 and delete the user if user has feature: `delete:user` and is the owner of the user", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["delete:user:others"],
+    });
 
-    const createdUser = await buildUserWithFeatures(["delete:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .delete(`/api/v1/users/${createdUser.id}`)
+      .delete(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(204);
 
-    const deletedUserInDb = await findUserById(createdUser.id);
+    let deletedUserInDb = await findUserById(user.id);
 
     expect(deletedUserInDb).toBeNull();
+
+    deletedUserInDb = await findDeletedUserById(user.id);
+
+    expect(deletedUserInDb?.deletedAt).not.toBeNull();
   });
 
   it("should return 204 and delete the user if user has feature: `delete:user:others`", async () => {
-    const userData1 = makeUserData();
-    const userData2 = makeUserData();
+    const user1 = await buildEmployee({
+      roleNames: ["manager"],
+    });
 
-    await buildUserWithFeatures(["delete:user:others"], userData1);
-    const createdUser2 = await buildUser(userData2);
+    const user2 = await buildEmployee({
+      roleNames: ["attendant"],
+    });
 
-    const tokenUser1 = await loginAs(userData1.email, userData1.password);
+    const token = await loginAs(user1.email, user1.password);
 
     const response = await request(app)
-      .delete(`/api/v1/users/${createdUser2.id}`)
-      .set("Authorization", `Bearer ${tokenUser1}`);
+      .delete(`/api/v1/users/${user2.id}`)
+      .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(204);
 
-    const deletedUserInDb = await findUserById(createdUser2.id);
+    let deletedUserInDb = await findUserById(user2.id);
 
     expect(deletedUserInDb).toBeNull();
+
+    deletedUserInDb = await findDeletedUserById(user2.id);
+
+    expect(deletedUserInDb?.deletedAt).not.toBeNull();
   });
 
   it("should return 204 if user with delete:user:others deletes their own account", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+    });
 
-    const createdUser = await buildUserWithFeatures(
-      ["delete:user:others"],
-      userData,
-    );
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     const response = await request(app)
-      .delete(`/api/v1/users/${createdUser.id}`)
+      .delete(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(204);
 
-    const deletedUserInDb = await findUserById(createdUser.id);
+    let deletedUserInDb = await findUserById(user.id);
 
     expect(deletedUserInDb).toBeNull();
+
+    deletedUserInDb = await findDeletedUserById(user.id);
+
+    expect(deletedUserInDb?.deletedAt).not.toBeNull();
   });
 
   it("should invalidate the session after user deletion", async () => {
-    const userData = makeUserData();
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+    });
 
-    const createdUser = await buildUserWithFeatures(["delete:user"], userData);
-
-    const token = await loginAs(userData.email, userData.password);
+    const token = await loginAs(user.email, user.password);
 
     await request(app)
-      .delete(`/api/v1/users/${createdUser.id}`)
+      .delete(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     const response = await request(app)
-      .get(`/api/v1/users/${createdUser.id}`)
+      .get(`/api/v1/users/${user.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(401);
+  });
+
+  it("should return 204 and soft delete the target user, preserving the history of the user in the database", async () => {
+    const user1 = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const user2 = await buildEmployee({
+      roleNames: ["attendant"],
+    });
+
+    const token = await loginAs(user1.email, user1.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${user2.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    let deletedUserInDb = await findUserById(user2.id);
+
+    expect(deletedUserInDb).toBeNull();
+
+    deletedUserInDb = await findDeletedUserById(user2.id);
+
+    expect(deletedUserInDb?.deletedAt).not.toBeNull();
+    expect(deletedUserInDb?.employee).not.toBeNull();
+  });
+
+  it("should return 404 if user tries to delete a user that has already been deleted", async () => {
+    const user1 = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const user2 = await buildEmployee({
+      roleNames: ["attendant"],
+    });
+
+    const token = await loginAs(user1.email, user1.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${user2.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${user2.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+
+    expect(response.body).toMatchObject({
+      code: "NOT_FOUND",
+      message: "Usuário não encontrado",
+      action: "Verifique o ID e tente novamente",
+    });
   });
 });

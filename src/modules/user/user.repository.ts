@@ -1,91 +1,155 @@
 import { prisma } from "@/lib/prisma";
+import type { RoleName } from "../role/role.constants";
 
-type CreateUserData = {
+type createUserData = {
   name: string;
+  cpf: string;
   email: string;
   passwordHash: string;
+  roleNames: RoleName[];
 };
 
-type UpdateUserData = {
+export type createEmployeeData = createUserData;
+
+export type createCustomerData = createUserData & {
+  phone: string;
+};
+
+type updateUserData = {
   name?: string | undefined;
   email?: string | undefined;
   passwordHash?: string | undefined;
 };
 
-export async function findUserById(id: string) {
-  return prisma.user.findUnique({
-    where: { id },
+export const userInclude = {
+  employee: true,
+  customer: true,
+  roles: {
+    where: { deletedAt: null },
     include: {
-      features: {
-        include: {
-          feature: true,
-        },
-      },
+      role: true,
     },
+  },
+  features: {
+    where: { deletedAt: null },
+    include: {
+      feature: true,
+    },
+  },
+} as const;
+
+export async function findUserById(id: string) {
+  return prisma.user.findFirst({
+    where: { id, deletedAt: null },
+    include: userInclude,
   });
 }
 
 export async function findUserByEmail(email: string) {
-  return prisma.user.findUnique({
-    where: { email },
-    include: {
-      features: {
-        include: {
-          feature: true,
-        },
-      },
-    },
+  return prisma.user.findFirst({
+    where: { email, deletedAt: null },
+    include: userInclude,
   });
 }
 
 export async function findAllUsers() {
   return prisma.user.findMany({
-    include: {
-      features: {
-        include: {
-          feature: true,
-        },
-      },
-    },
+    where: { deletedAt: null },
+    include: userInclude,
   });
 }
 
-export async function createUser(data: CreateUserData) {
+export async function createEmployee(data: createEmployeeData) {
   return prisma.user.create({
     data: {
       name: data.name,
+      cpf: data.cpf,
       email: data.email,
       passwordHash: data.passwordHash,
-    },
-    include: {
-      features: {
-        include: {
-          feature: true,
-        },
+      roles: {
+        create: data.roleNames.map((name) => ({
+          role: { connect: { name } },
+        })),
+      },
+      employee: {
+        create: {},
       },
     },
+    include: userInclude,
   });
 }
 
-export async function updateUser(id: string, data: UpdateUserData) {
+export async function createCustomer(data: createCustomerData) {
+  return prisma.user.create({
+    data: {
+      name: data.name,
+      cpf: data.cpf,
+      email: data.email,
+      passwordHash: data.passwordHash,
+      roles: {
+        create: data.roleNames.map((name) => ({
+          role: { connect: { name } },
+        })),
+      },
+      customer: {
+        create: {
+          phone: data.phone,
+        },
+      },
+    },
+    include: userInclude,
+  });
+}
+
+export async function updateUser(id: string, data: updateUserData) {
   return prisma.user.update({
-    where: { id },
+    where: { id, deletedAt: null },
     data: {
       ...(data.name && { name: data.name }),
       ...(data.email && { email: data.email }),
     },
-    include: {
-      features: {
-        include: {
-          feature: true,
-        },
-      },
-    },
+    include: userInclude,
   });
 }
 
-export async function deleteUser(id: string) {
-  return prisma.user.delete({
-    where: { id },
+export async function softDeleteUserAndInvalidateSessions(userId: string) {
+  return prisma.$transaction([
+    prisma.session.updateMany({
+      where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
+      data: { invalidatedAt: new Date() },
+    }),
+    prisma.user.update({
+      where: { id: userId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    }),
+  ]);
+}
+
+export async function findDeletedUserById(id: string) {
+  return prisma.user.findFirst({
+    where: { id, deletedAt: { not: null } },
+    include: userInclude,
+  });
+}
+
+export async function getUserForFeatureComputation(userId: string) {
+  return prisma.user.findFirst({
+    where: { id: userId, deletedAt: null },
+    include: {
+      roles: {
+        where: { deletedAt: null },
+        include: {
+          role: {
+            include: {
+              features: { include: { feature: true } },
+            },
+          },
+        },
+      },
+      features: {
+        where: { deletedAt: null },
+        include: { feature: true },
+      },
+    },
   });
 }

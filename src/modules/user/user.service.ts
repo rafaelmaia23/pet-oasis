@@ -1,32 +1,58 @@
 import {
-  createConflictError,
   createForbiddenError,
   createNotFoundError,
+  createValidationError,
 } from "@/errors";
+import type { Role } from "@/generated/prisma/client";
+import type { ProfileKind } from "@/generated/prisma/enums";
 import type { AuthUser } from "@/lib/authorization";
 import { canActOnResource } from "@/lib/authorization";
 import { hashPassword } from "@/lib/password";
 import * as userRepository from "@/modules/user/user.repository";
 import type {
-  CreateUserInput,
+  CreateCustomerInput,
+  CreateEmployeeInput,
   UpdateUserInput,
 } from "@/modules/user/user.schema";
+import { validateRoles } from "@/utils/validateRoles";
+import type { RoleName } from "../role/role.constants";
+import { getRolesByNames } from "../role/role.repository";
 
-export async function createUser(data: CreateUserInput) {
-  const existing = await userRepository.findUserByEmail(data.email);
+export const DEFAULT_EMPLOYEE_ROLES: RoleName[] = ["attendant"];
+export const DEFAULT_CUSTOMER_ROLES: RoleName[] = ["customer"];
 
-  if (existing) {
-    throw createConflictError({
-      message: "Email já está em uso",
-      action: "Tente outro email",
-    });
-  }
+export async function createEmployee(data: CreateEmployeeInput) {
+  const rolesList = data.roleNames
+    ? await getRolesByNames(data.roleNames)
+    : await getRolesByNames(DEFAULT_EMPLOYEE_ROLES);
+
+  validateRoles(rolesList, "EMPLOYEE");
 
   const { password, ...userData } = data;
 
   const passwordHash = await hashPassword(password);
 
-  return userRepository.createUser({ ...userData, passwordHash });
+  return userRepository.createEmployee({
+    ...userData,
+    passwordHash,
+    roleNames: rolesList.map((r) => r.name as RoleName),
+  });
+}
+
+export async function createCustomer(data: CreateCustomerInput) {
+  const rolesList = await getRolesByNames(DEFAULT_CUSTOMER_ROLES);
+
+  validateRoles(rolesList, "CUSTOMER");
+
+  const { password, ...userData } = data;
+
+  const passwordHash = await hashPassword(password);
+
+  return userRepository.createCustomer({
+    ...userData,
+    passwordHash,
+    roleNames: rolesList.map((r) => r.name as RoleName),
+  });
 }
 
 export async function getUserById(requestingUser: AuthUser, targetId: string) {
@@ -81,37 +107,13 @@ export async function updateUser(
   targetId: string,
   data: UpdateUserInput,
 ) {
-  const user = await userRepository.findUserById(targetId);
-
-  if (!user) {
-    throw createNotFoundError({
-      message: "Usuário não encontrado",
-      action: "Verifique o ID e tente novamente",
-    });
-  }
-
-  if (!canActOnResource(requestingUser, "update:user", user.id)) {
+  if (!canActOnResource(requestingUser, "update:user", targetId)) {
     throw createForbiddenError({
       message: "Você não tem permissão para acessar este recurso",
       action: 'Verifique se você tem acesso a feature "update:user:others"',
     });
   }
 
-  if (data.email && data.email !== user.email) {
-    const emailInUse = await userRepository.findUserByEmail(data.email);
-
-    if (emailInUse) {
-      throw createConflictError({
-        message: "Email já está em uso",
-        action: "Tente outro email",
-      });
-    }
-  }
-
-  return userRepository.updateUser(targetId, data);
-}
-
-export async function deleteUser(requestingUser: AuthUser, targetId: string) {
   const user = await userRepository.findUserById(targetId);
 
   if (!user) {
@@ -121,12 +123,25 @@ export async function deleteUser(requestingUser: AuthUser, targetId: string) {
     });
   }
 
-  if (!canActOnResource(requestingUser, "delete:user", user.id)) {
+  return userRepository.updateUser(targetId, data);
+}
+
+export async function deleteUser(requestingUser: AuthUser, targetId: string) {
+  if (!canActOnResource(requestingUser, "delete:user", targetId)) {
     throw createForbiddenError({
       message: "Você não tem permissão para acessar este recurso",
       action: 'Verifique se você tem acesso a feature "delete:user:others"',
     });
   }
 
-  return userRepository.deleteUser(targetId);
+  const user = await userRepository.findUserById(targetId);
+
+  if (!user) {
+    throw createNotFoundError({
+      message: "Usuário não encontrado",
+      action: "Verifique o ID e tente novamente",
+    });
+  }
+
+  return await userRepository.softDeleteUserAndInvalidateSessions(targetId);
 }

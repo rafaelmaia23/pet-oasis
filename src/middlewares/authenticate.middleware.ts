@@ -1,7 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { env } from "@/config/env";
+import { computeEffectiveFeatures } from "@/lib/authorization";
 import { findSessionByToken } from "@/modules/auth/auth.repository";
+import { getUserForFeatureComputation } from "@/modules/user/user.repository";
 
 export async function authenticate(
   req: Request,
@@ -79,9 +81,23 @@ export async function authenticate(
     return;
   }
 
+  const userForFeatureComputation = await getUserForFeatureComputation(
+    session.userId,
+  );
+
+  if (!userForFeatureComputation) {
+    res.status(401).json({
+      message: "Usuário não encontrado",
+      code: "AUTH_USER_NOT_FOUND",
+    });
+    return;
+  }
+
+  const effectiveFeatures = computeEffectiveFeatures(userForFeatureComputation);
+
   req.user = {
-    id: session.user.id,
-    features: session.user.features.map((uf) => ({ name: uf.feature.name })),
+    id: session.userId,
+    features: effectiveFeatures,
   };
 
   next();

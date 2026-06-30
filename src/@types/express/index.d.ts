@@ -1,8 +1,9 @@
-declare namespace Express {
-  interface Request {
-    user?: {
-      id: string;
-      features: { name: string }[];
-    };
+import type { AuthUser } from "@/lib/authorization";
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: AuthUser;
+    }
   }
 }

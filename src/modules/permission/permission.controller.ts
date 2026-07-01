@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import {
   getPermissionParamsSchema,
   getUserRolesParamsSchema,
+  postUserRoleParamsSchema,
   removePermissionParamsSchema,
   upsertPermissionParamsSchema,
 } from "@/modules/permission/permission.schema";
@@ -32,6 +33,22 @@ export const getUserRoles = asyncHandler(
     res.status(200).json(rolePresenter.presentMany(roles, "default"));
   },
 );
+
+export const addUserRole = asyncHandler(async (req: Request, res: Response) => {
+  const { params } = postUserRoleParamsSchema.parse({
+    params: req.params,
+  });
+
+  const requestingUser = getAuthUser(req);
+
+  const role = await permissionService.addUserRole(
+    requestingUser.id,
+    params.userId,
+    params.roleId,
+  );
+
+  res.status(201).json(rolePresenter.present(role, "default"));
+});
 
 export const upsertUserFeature = asyncHandler(
   async (req: Request, res: Response) => {

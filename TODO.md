@@ -63,14 +63,14 @@
   - ✅ Controller + rota `GET /roles` (`canAccess("read:permission")`) em `permission.controller.ts`/`permission.routes.ts`, respondendo com `rolePresenter.presentMany`
   - ✅ Rodar suíte e confirmar verde
 
-- ⬜ **POST /api/v1/users/:userId/roles/:roleId** (feature `manage:permission`)
-  - ⬜ Testes de integração: 401 sem token; 403 sem `manage:permission`; 422 userId/roleId inválidos; 404 role não encontrada; 404 user não encontrado; 422 se `role.appliesTo` incompatível com os perfis ativos do user (action orienta a criar o perfil primeiro — NÃO cria perfil); 409 se o user já possui a role ativa; 403 se ator sem role admin tenta conceder uma role privilegiada (`PERMISSION_FEATURES`/wildcard, ex.: `admin`) mesmo tendo `manage:permission`; 201 admin concede role privilegiada; 201 concessão de role não-privilegiada por ator que só tem `manage:permission`
-  - ⬜ Rodar suíte e confirmar falha
-  - ⬜ Schema `postUserRoleParamsSchema` (sem body) em `permission.schema.ts`
-  - ⬜ Service: `assertAdminForRoleAssignment(requestingUserId, role)` (checa `role.features` contra `PERMISSION_FEATURES ∪ "*"`) + `addUserRole(requestingUserId, targetUserId, roleId)` — busca role (404) → checa não-escalação (403) → busca user (404) → valida perfil compatível com `role.appliesTo` (422) → valida idempotência via `user.roles` já carregado (409) → delega ao repository
-  - ⬜ Repository `addUserRole(userId, roleId)` em `permission.repository.ts` (`userRole.create`, include `role` com features)
-  - ⬜ Controller + rota `POST /roles/:roleId` (`canAccess("manage:permission")`) — responde 201 com `rolePresenter`
-  - ⬜ Rodar suíte e confirmar verde
+- ✅ **POST /api/v1/users/:userId/roles/:roleId** (feature `manage:permission`)
+  - ✅ Testes de integração: 401 sem token; 403 sem `manage:permission`; 422 userId/roleId inválidos; 404 role não encontrada; 404 user não encontrado; 422 se `role.appliesTo` incompatível com os perfis ativos do user (action orienta a criar o perfil primeiro — NÃO cria perfil); 409 se o user já possui a role ativa; 403 se ator sem role admin tenta conceder uma role privilegiada (`PERMISSION_FEATURES`/wildcard, ex.: `admin`) mesmo tendo `manage:permission`; 201 admin concede role privilegiada; 201 concessão de role não-privilegiada por ator que só tem `manage:permission`
+  - ✅ Rodar suíte e confirmar falha
+  - ✅ Schema `postUserRoleParamsSchema` (sem body) em `permission.schema.ts`
+  - ✅ Service: `assertAdminForRoleAssignment(requestingUserId, role)` (checa `role.features` contra `PERMISSION_FEATURES ∪ "*"`) + `addUserRole(requestingUserId, targetUserId, roleId)` — busca role (404) → checa não-escalação (403) → busca user (404) → valida perfil compatível com `role.appliesTo` (422) → valida idempotência via `user.roles` já carregado (409) → delega ao repository
+  - ✅ Repository `addUserRole(userId, roleId)` em `permission.repository.ts` (`userRole.create`, include `role` com features)
+  - ✅ Controller + rota `POST /roles/:roleId` (`canAccess("manage:permission")`) — responde 201 com `rolePresenter`
+  - ✅ Rodar suíte e confirmar verde
 
 - ⬜ **DELETE /api/v1/users/:userId/roles/:roleId** (feature `manage:permission`)
   - ⬜ Testes de integração: 401 sem token; 403 sem `manage:permission`; 422 userId/roleId inválidos; 404 role não encontrada; 404 user não possui essa role ativa; 403 se ator sem role admin tenta revogar role privilegiada; 409 se for a última role ativa do perfil correspondente (`action` aponta pro DELETE do perfil certo — customer ou employee); 204 remove role não-privilegiada com sucesso (mantendo as demais); 204 admin remove role privilegiada com sucesso

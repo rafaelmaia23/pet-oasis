@@ -52,3 +52,12 @@ export async function getUserRoles(userId: string) {
 
   return userRoles.map((ur) => ur.role);
 }
+
+export async function addUserRole(userId: string, roleId: string) {
+  return prisma.userRole.create({
+    data: { userId, roleId },
+    include: {
+      role: { include: { features: { include: { feature: true } } } },
+    },
+  });
+}

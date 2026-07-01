@@ -29,6 +29,13 @@ export const removePermissionParamsSchema = z.object({
   }),
 });
 
+export const postUserRoleParamsSchema = z.object({
+  params: z.object({
+    userId: z.uuid("Invalid user ID"),
+    roleId: z.uuid("Invalid role ID"),
+  }),
+});
+
 export type GetPermissionParams = z.infer<
   typeof getPermissionParamsSchema
 >["params"];
@@ -39,4 +46,8 @@ export type UpsertPermissionParams = z.infer<
 
 export type RemovePermissionParams = z.infer<
   typeof removePermissionParamsSchema
+>["params"];
+
+export type PostUserRoleParams = z.infer<
+  typeof postUserRoleParamsSchema
 >["params"];

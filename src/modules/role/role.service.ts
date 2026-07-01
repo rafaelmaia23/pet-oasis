@@ -1,10 +1,12 @@
 import { createNotFoundError } from "@/errors/errorFactory";
 import * as roleRepository from "./role.repository";
 
-export async function getAllRoles() {
-  const rolesFromDb = await roleRepository.getAllRoles();
+type RoleWithFeatures = NonNullable<
+  Awaited<ReturnType<typeof roleRepository.getRoleById>>
+>;
 
-  const roles = rolesFromDb.map((role) => ({
+export function toRoleDTO(role: RoleWithFeatures) {
+  return {
     id: role.id,
     name: role.name,
     description: role.description,
@@ -14,9 +16,13 @@ export async function getAllRoles() {
       name: rf.feature.name,
       description: rf.feature.description,
     })),
-  }));
+  };
+}
 
-  return roles;
+export async function getAllRoles() {
+  const rolesFromDb = await roleRepository.getAllRoles();
+
+  return rolesFromDb.map(toRoleDTO);
 }
 
 export async function getRoleById(id: string) {
@@ -28,17 +34,5 @@ export async function getRoleById(id: string) {
       action: "Verifique o ID e tente novamente",
     });
 
-  const role = {
-    id: roleFromDb.id,
-    name: roleFromDb.name,
-    description: roleFromDb.description,
-    appliesTo: roleFromDb.appliesTo,
-    features: roleFromDb.features.map((rf) => ({
-      id: rf.feature.id,
-      name: rf.feature.name,
-      description: rf.feature.description,
-    })),
-  };
-
-  return role;
+  return toRoleDTO(roleFromDb);
 }

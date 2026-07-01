@@ -41,3 +41,14 @@ export async function removeUserFeature(userFeatureId: string) {
     data: { deletedAt: new Date() },
   });
 }
+
+export async function getUserRoles(userId: string) {
+  const userRoles = await prisma.userRole.findMany({
+    where: { userId, deletedAt: null },
+    include: {
+      role: { include: { features: { include: { feature: true } } } },
+    },
+  });
+
+  return userRoles.map((ur) => ur.role);
+}

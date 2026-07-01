@@ -1,10 +1,12 @@
 import type { Request, Response } from "express";
 import {
   getPermissionParamsSchema,
+  getUserRolesParamsSchema,
   removePermissionParamsSchema,
   upsertPermissionParamsSchema,
 } from "@/modules/permission/permission.schema";
 import * as permissionService from "@/modules/permission/permission.service";
+import { rolePresenter } from "@/modules/role/role.presenter";
 import { asyncHandler } from "@/utils/asyncHandler";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userFeaturePresenter } from "./permission.presenter";
@@ -16,6 +18,18 @@ export const getUserFeatures = asyncHandler(
     const features = await permissionService.getUserFeatures(params.userId);
 
     res.status(200).json(userFeaturePresenter.presentMany(features, "default"));
+  },
+);
+
+export const getUserRoles = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { params } = getUserRolesParamsSchema.parse({
+      params: req.params,
+    });
+
+    const roles = await permissionService.getUserRoles(params.userId);
+
+    res.status(200).json(rolePresenter.presentMany(roles, "default"));
   },
 );
 

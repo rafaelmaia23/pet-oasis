@@ -10,6 +10,12 @@ permissionRouter.get(
   permissionController.getUserFeatures,
 );
 
+permissionRouter.get(
+  "/roles",
+  canAccess("read:permission"),
+  permissionController.getUserRoles,
+);
+
 permissionRouter.put(
   "/features/:featureId",
   canAccess("manage:permission"),

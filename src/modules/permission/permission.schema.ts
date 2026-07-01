@@ -16,6 +16,12 @@ export const getPermissionParamsSchema = z.object({
   }),
 });
 
+export const getUserRolesParamsSchema = z.object({
+  params: z.object({
+    userId: z.uuid("Invalid user ID"),
+  }),
+});
+
 export const removePermissionParamsSchema = z.object({
   params: z.object({
     userId: z.uuid("Invalid user ID"),

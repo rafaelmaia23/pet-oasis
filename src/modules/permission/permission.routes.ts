@@ -22,6 +22,12 @@ permissionRouter.post(
   permissionController.addUserRole,
 );
 
+permissionRouter.delete(
+  "/roles/:roleId",
+  canAccess("manage:permission"),
+  permissionController.removeUserRole,
+);
+
 permissionRouter.put(
   "/features/:featureId",
   canAccess("manage:permission"),

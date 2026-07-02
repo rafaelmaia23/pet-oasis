@@ -165,6 +165,61 @@ export async function addUserRole(
   return toRoleDTO(userRole.role);
 }
 
+export async function removeUserRole(
+  requestingUserId: string,
+  targetUserId: string,
+  roleId: string,
+) {
+  const role = await roleRepository.getRoleById(roleId);
+
+  if (!role) {
+    throw createNotFoundError({
+      message: "Role não encontrada",
+      action: "Verifique o ID e tente novamente",
+    });
+  }
+
+  await assertAdminForRoleAssignment(requestingUserId, role);
+
+  const user = await userRepository.findUserById(targetUserId);
+
+  if (!user) {
+    throw createNotFoundError({
+      message: "Usuário não encontrado",
+      action: "Verifique o ID e tente novamente",
+    });
+  }
+
+  const userRole = user.roles.find((ur) => ur.role.id === roleId);
+
+  if (!userRole) {
+    throw createNotFoundError({
+      message: "Usuário não possui essa role ativa",
+      action: "Verifique as roles do usuário",
+    });
+  }
+
+  if (role.appliesTo) {
+    const remainingActiveRoles = user.roles.filter(
+      (ur) => ur.role.id !== roleId && ur.role.appliesTo === role.appliesTo,
+    );
+
+    if (remainingActiveRoles.length === 0) {
+      const profileLabel =
+        role.appliesTo === "CUSTOMER" ? "de cliente" : "de funcionário";
+      const deleteEndpoint =
+        role.appliesTo === "CUSTOMER" ? "customer" : "employee";
+
+      throw createConflictError({
+        message: `Não é possível remover a última role ${profileLabel} do usuário`,
+        action: `Para remover o perfil ${profileLabel} inteiro, use o endpoint DELETE /users/:id/${deleteEndpoint}`,
+      });
+    }
+  }
+
+  return permissionRepository.removeUserRole(userRole.id);
+}
+
 export async function upsertUserFeature(
   requestingUserId: string,
   targetUserId: string,

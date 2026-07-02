@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import {
+  deleteUserRoleParamsSchema,
   getPermissionParamsSchema,
   getUserRolesParamsSchema,
   postUserRoleParamsSchema,
@@ -49,6 +50,24 @@ export const addUserRole = asyncHandler(async (req: Request, res: Response) => {
 
   res.status(201).json(rolePresenter.present(role, "default"));
 });
+
+export const removeUserRole = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { params } = deleteUserRoleParamsSchema.parse({
+      params: req.params,
+    });
+
+    const requestingUser = getAuthUser(req);
+
+    await permissionService.removeUserRole(
+      requestingUser.id,
+      params.userId,
+      params.roleId,
+    );
+
+    res.status(204).send();
+  },
+);
 
 export const upsertUserFeature = asyncHandler(
   async (req: Request, res: Response) => {

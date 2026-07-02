@@ -557,6 +557,270 @@ describe("POST /api/v1/users/:userId/roles/:roleId", () => {
   });
 });
 
+describe("DELETE /api/v1/users/:userId/roles/:roleId", () => {
+  it("should return 401 if no token is provided", async () => {
+    const response = await request(app).delete(
+      "/api/v1/users/some-id/roles/some-role-id",
+    );
+
+    expect(response.status).toBe(401);
+
+    expect(response.body).toMatchObject({
+      message: "Usuário não autenticado",
+      code: "UNAUTHORIZED",
+      action: "Faça login e tente novamente",
+    });
+  });
+
+  it("should return 403 if user does not have feature: `manage:permission`", async () => {
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${user.id}/roles/${faker.string.uuid()}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      message: "Você não tem permissão para acessar este recurso",
+      code: "FORBIDDEN",
+      action: `Verifique se você tem acesso a feature "manage:permission"`,
+    });
+  });
+
+  it("should return 422 if user id is not a valid uuid", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const attendantRole = await getRoleByName("attendant");
+
+    if (!attendantRole) {
+      throw createNotFoundError({ message: "Role não encontrada" });
+    }
+
+    const response = await request(app)
+      .delete(`/api/v1/users/non-valid-id/roles/${attendantRole.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["userId"]);
+  });
+
+  it("should return 422 if role id is not a valid uuid", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${user.id}/roles/non-valid-role-id`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["roleId"]);
+  });
+
+  it("should return 404 if role with given id does not exist", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${user.id}/roles/${faker.string.uuid()}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+
+    expect(response.body).toMatchObject({
+      code: "NOT_FOUND",
+      message: "Role não encontrada",
+      action: "Verifique o ID e tente novamente",
+    });
+  });
+
+  it("should return 404 if user does not have the given role active", async () => {
+    const actor = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const targetUser = await buildEmployee({
+      roleNames: ["attendant"],
+    });
+
+    const token = await loginAs(actor.email, actor.password);
+
+    const customerRole = await getRoleByName("customer");
+
+    if (!customerRole) {
+      throw createNotFoundError({ message: "Role não encontrada" });
+    }
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${targetUser.id}/roles/${customerRole.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+
+    expect(response.body).toMatchObject({
+      code: "NOT_FOUND",
+      message: "Usuário não possui essa role ativa",
+      action: "Verifique as roles do usuário",
+    });
+  });
+
+  it("should return 403 if a non admin role user tries to revoke a privileged role (PERMISSION_FEATURES/wildcard) even with `manage:permission`", async () => {
+    const actor = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const targetUser = await buildEmployee({
+      roleNames: ["attendant", "manager"],
+    });
+
+    const token = await loginAs(actor.email, actor.password);
+
+    const managerRole = await getRoleByName("manager");
+
+    if (!managerRole) {
+      throw createNotFoundError({ message: "Role não encontrada" });
+    }
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${targetUser.id}/roles/${managerRole.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Apenas administradores podem atribuir roles privilegiadas",
+      action: "Solicite a um administrador que faça essa alteração",
+    });
+  });
+
+  it("should return 409 if the role is the last active role of the user's profile", async () => {
+    const actor = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const targetUser = await buildEmployee({
+      roleNames: ["attendant"],
+    });
+
+    const token = await loginAs(actor.email, actor.password);
+
+    const attendantRole = await getRoleByName("attendant");
+
+    if (!attendantRole) {
+      throw createNotFoundError({ message: "Role não encontrada" });
+    }
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${targetUser.id}/roles/${attendantRole.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+
+    expect(response.body).toMatchObject({
+      code: "CONFLICT",
+    });
+
+    expect(response.body.action).toContain("/users/:id/employee");
+  });
+
+  it("should return 204 and remove a non-privileged role keeping the others", async () => {
+    const actor = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const targetUser = await buildEmployee({
+      roleNames: ["attendant", "manager"],
+    });
+
+    const token = await loginAs(actor.email, actor.password);
+
+    const attendantRole = await getRoleByName("attendant");
+
+    if (!attendantRole) {
+      throw createNotFoundError({ message: "Role não encontrada" });
+    }
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${targetUser.id}/roles/${attendantRole.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const userInDb = await findUserById(targetUser.id);
+
+    expect(userInDb).not.toBeNull();
+
+    expect(userInDb?.roles).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: expect.objectContaining({ name: "attendant" }),
+        }),
+      ]),
+    );
+
+    expect(userInDb?.roles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: expect.objectContaining({ name: "manager" }),
+        }),
+      ]),
+    );
+  });
+
+  it("should return 204 if admin role user revokes a privileged role from another user", async () => {
+    const actor = await buildEmployee({
+      roleNames: ["admin"],
+    });
+
+    const targetUser = await buildEmployee({
+      roleNames: ["attendant", "manager"],
+    });
+
+    const token = await loginAs(actor.email, actor.password);
+
+    const managerRole = await getRoleByName("manager");
+
+    if (!managerRole) {
+      throw createNotFoundError({ message: "Role não encontrada" });
+    }
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${targetUser.id}/roles/${managerRole.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const userInDb = await findUserById(targetUser.id);
+
+    expect(userInDb).not.toBeNull();
+
+    expect(userInDb?.roles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: expect.objectContaining({ name: "attendant" }),
+        }),
+      ]),
+    );
+  });
+});
+
 describe("PUT /api/v1/users/:userId/features/:featureId", () => {
   it("should return 401 if no token is provided", async () => {
     const response = await request(app)

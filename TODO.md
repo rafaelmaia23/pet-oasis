@@ -48,7 +48,7 @@
 - ✅ `delete:profile` adicionada a `USER_ADMINISTRATION_FEATURES` (manager tem a feature; seed sincronizado)
 - 🔸 Refatorar testes de POST /customer e POST /employee que manipulam banco diretamente para usar os DELETEs reais (agora que existem)
 
-### ⬜ Vínculo user↔role (GET/POST/DELETE) — módulo permission
+### ✅ Vínculo user↔role (GET/POST/DELETE) — módulo permission
 > Mora em `src/modules/permission/` (route, controller, service, repository, schema), ao lado dos overrides de feature. GET não estava previsto originalmente — lista as roles ativas (efetivas) do usuário.
 > Não-escalação generalizada: `assertAdminForRoleAssignment(requestingUserId, role)` — bloqueia ator não-admin se a role carrega alguma `PERMISSION_FEATURES` ou a feature wildcard `"*"` (cobre a role `admin` e qualquer role futura com esse perfil). Vale tanto pra conceder quanto pra revogar.
 
@@ -72,16 +72,16 @@
   - ✅ Controller + rota `POST /roles/:roleId` (`canAccess("manage:permission")`) — responde 201 com `rolePresenter`
   - ✅ Rodar suíte e confirmar verde
 
-- ⬜ **DELETE /api/v1/users/:userId/roles/:roleId** (feature `manage:permission`)
-  - ⬜ Testes de integração: 401 sem token; 403 sem `manage:permission`; 422 userId/roleId inválidos; 404 role não encontrada; 404 user não possui essa role ativa; 403 se ator sem role admin tenta revogar role privilegiada; 409 se for a última role ativa do perfil correspondente (`action` aponta pro DELETE do perfil certo — customer ou employee); 204 remove role não-privilegiada com sucesso (mantendo as demais); 204 admin remove role privilegiada com sucesso
-  - ⬜ Rodar suíte e confirmar falha
-  - ⬜ Schema `deleteUserRoleParamsSchema` em `permission.schema.ts`
-  - ⬜ Service `removeUserRole(requestingUserId, targetUserId, roleId)` — busca role (404) → `assertAdminForRoleAssignment` (403) → busca user (404) → localiza UserRole ativo em `user.roles` (404 se não tiver) → se `role.appliesTo` não for null, conta as demais roles ativas do user com o mesmo `appliesTo` (excluindo a atual) e bloqueia com 409 se for zero
-  - ⬜ Repository `removeUserRole(userRoleId)` em `permission.repository.ts` (soft delete — espelha `removeUserFeature`)
-  - ⬜ Controller + rota `DELETE /roles/:roleId` (`canAccess("manage:permission")`) — responde 204
-  - ⬜ Rodar suíte e confirmar verde
+- ✅ **DELETE /api/v1/users/:userId/roles/:roleId** (feature `manage:permission`)
+  - ✅ Testes de integração: 401 sem token; 403 sem `manage:permission`; 422 userId/roleId inválidos; 404 role não encontrada; 404 user não possui essa role ativa; 403 se ator sem role admin tenta revogar role privilegiada; 409 se for a última role ativa do perfil correspondente (`action` aponta pro DELETE do perfil certo — customer ou employee); 204 remove role não-privilegiada com sucesso (mantendo as demais); 204 admin remove role privilegiada com sucesso
+  - ✅ Rodar suíte e confirmar falha
+  - ✅ Schema `deleteUserRoleParamsSchema` em `permission.schema.ts`
+  - ✅ Service `removeUserRole(requestingUserId, targetUserId, roleId)` — busca role (404) → `assertAdminForRoleAssignment` (403) → busca user (404) → localiza UserRole ativo em `user.roles` (404 se não tiver) → se `role.appliesTo` não for null, conta as demais roles ativas do user com o mesmo `appliesTo` (excluindo a atual) e bloqueia com 409 se for zero
+  - ✅ Repository `removeUserRole(userRoleId)` em `permission.repository.ts` (soft delete — espelha `removeUserFeature`)
+  - ✅ Controller + rota `DELETE /roles/:roleId` (`canAccess("manage:permission")`) — responde 204
+  - ✅ Rodar suíte e confirmar verde
 
-- ⬜ Atualizar CONTEXT.md com o racional da não-escalação generalizada (por que cobre roles, não só overrides)
+- ✅ Atualizar CONTEXT.md com o racional da não-escalação generalizada (por que cobre roles, não só overrides)
 
 ### ⬜ Permissions efetivas + me
 - ⬜ `GET /users/:userId/permissions` (efetivas, reusa `computeEffectiveFeatures`)

@@ -61,3 +61,10 @@ export async function addUserRole(userId: string, roleId: string) {
     },
   });
 }
+
+export async function removeUserRole(userRoleId: string) {
+  return prisma.userRole.update({
+    where: { id: userRoleId, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
+}

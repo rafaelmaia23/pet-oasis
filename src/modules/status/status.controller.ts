@@ -1,8 +1,7 @@
 import type { Request, Response } from "express";
 import { prisma } from "@/lib/prisma";
-import { asyncHandler } from "@/utils/asyncHandler";
 
-export const getStatus = asyncHandler(async (_req: Request, res: Response) => {
+export const getStatus = async (_req: Request, res: Response) => {
   const updatedAt = new Date().toISOString();
 
   const databaseVersionResult = await prisma.$queryRaw<
@@ -38,4 +37,4 @@ export const getStatus = asyncHandler(async (_req: Request, res: Response) => {
       },
     },
   });
-});
+};

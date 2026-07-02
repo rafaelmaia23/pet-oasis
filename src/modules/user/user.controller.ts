@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import { asyncHandler } from "@/utils/asyncHandler";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "./user.presenter";
 import {
@@ -10,25 +9,23 @@ import {
 import * as userService from "./user.service";
 import { resolveUserView } from "./user.view-resolver";
 
-export const createEmployee = asyncHandler(
-  async (req: Request, res: Response) => {
-    const { body } = createEmployeeSchema.parse({ body: req.body });
+export const createEmployee = async (req: Request, res: Response) => {
+  const { body } = createEmployeeSchema.parse({ body: req.body });
 
-    const user = await userService.createEmployee(body);
+  const user = await userService.createEmployee(body);
 
-    return res
-      .status(201)
-      .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
-  },
-);
+  return res
+    .status(201)
+    .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
+};
 
-export const getAllUsers = asyncHandler(async (_: Request, res: Response) => {
+export const getAllUsers = async (_: Request, res: Response) => {
   const users = await userService.getAllUsers();
 
   return res.status(200).json(userPresenter.presentMany(users, "admin"));
-});
+};
 
-export const getUserById = asyncHandler(async (req: Request, res: Response) => {
+export const getUserById = async (req: Request, res: Response) => {
   const { params } = userParamsSchema.parse({ params: req.params });
 
   const authUser = getAuthUser(req);
@@ -38,9 +35,9 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
   return res
     .status(200)
     .json(userPresenter.present(user, resolveUserView(authUser)));
-});
+};
 
-export const updateUser = asyncHandler(async (req: Request, res: Response) => {
+export const updateUser = async (req: Request, res: Response) => {
   const { params, body } = updateUserSchema.parse({
     params: req.params,
     body: req.body,
@@ -51,12 +48,12 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   return res
     .status(200)
     .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
-});
+};
 
-export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
+export const deleteUser = async (req: Request, res: Response) => {
   const { params } = userParamsSchema.parse({ params: req.params });
 
   await userService.deleteUser(getAuthUser(req), params.id);
 
   return res.status(204).send();
-});
+};

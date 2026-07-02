@@ -12,7 +12,7 @@ export const loginSchema = z.object({
 
 export const refreshSessionSchema = z.object({
   body: z.object({
-    sessionId: z.guid("Invalid session ID"),
+    sessionId: z.uuid("Invalid session ID"),
   }),
 });
 

@@ -10,7 +10,6 @@ import { loginAs } from "@/__tests__/helpers/auth";
 import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
 import { createNotFoundError } from "@/errors/errorFactory";
-import { prisma } from "@/lib/prisma";
 import { userViews } from "@/modules/user/user.presenter";
 import { findUserById } from "@/modules/user/user.repository";
 
@@ -133,25 +132,11 @@ describe("POST /api/v1/users/:userId/customer", () => {
 
     expect(response.status).toBe(201);
 
-    const userInDb = await findUserById(user.id);
+    const deleteResponse = await request(app)
+      .delete(`/api/v1/users/${user.id}/customer`)
+      .set("Authorization", `Bearer ${token}`);
 
-    if (!userInDb) {
-      throw createNotFoundError({
-        message: "Usuário não encontrado",
-      });
-    }
-
-    if (!userInDb.customer) {
-      throw createNotFoundError({
-        message: "Perfil de cliente não encontrado",
-      });
-    }
-
-    // TODO: refatorar para usar o endpoint de deleção de perfil de cliente
-    await prisma.customer.update({
-      where: { id: userInDb.customer.id },
-      data: { deletedAt: new Date() },
-    });
+    expect(deleteResponse.status).toBe(204);
 
     const response2 = await request(app)
       .post(`/api/v1/users/${user.id}/customer`)
@@ -341,25 +326,11 @@ describe("POST /api/v1/users/:userId/employee", () => {
 
     expect(response.status).toBe(201);
 
-    const userInDb = await findUserById(customer.id);
+    const deleteResponse = await request(app)
+      .delete(`/api/v1/users/${customer.id}/employee`)
+      .set("Authorization", `Bearer ${token}`);
 
-    if (!userInDb) {
-      throw createNotFoundError({
-        message: "Usuário não encontrado",
-      });
-    }
-
-    if (!userInDb.employee) {
-      throw createNotFoundError({
-        message: "Perfil de funcionário não encontrado",
-      });
-    }
-
-    // TODO: refatorar para usar o endpoint de deleção de perfil de funcionário
-    await prisma.employee.update({
-      where: { id: userInDb.employee.id },
-      data: { deletedAt: new Date() },
-    });
+    expect(deleteResponse.status).toBe(204);
 
     const response2 = await request(app)
       .post(`/api/v1/users/${customer.id}/employee`)

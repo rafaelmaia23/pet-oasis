@@ -24,6 +24,10 @@ Se estiver em dúvida se algo é regra de negócio → **trate como se fosse e p
 
 Todo trabalho novo segue **teste primeiro, código depois em Branch separada por feat**, no padrão dos testes existentes (Vitest + Supertest, arquivos em `src/__tests__/integration/v1/` e `src/__tests__/unit/`). Fluxo: cria uma Branch com o nome da feat → escreve os testes do caso → roda e vê falhar → implementa o mínimo pra passar → refatora → commit → PR. Nunca implemente uma feature sem teste que a guie. Nunca implemente uma feature na Branch Main.
 
+## Commits em ingles
+
+Mensagens de commit devem ser escritas em ingles. **Nunca assinar o commit**, apenas escrever as mensagens. 
+
 ---
 
 ## Stack
@@ -38,7 +42,7 @@ Fluxo rígido: **route → controller (Zod parse) → service (regras de negóci
 
 Cada módulo em `src/modules/<nome>/` com: `*.route.ts`, `*.controller.ts`, `*.service.ts`, `*.repository.ts`, `*.schema.ts` (Zod), `*.presenter.ts` (views). Módulos: **user** (CRUD + perfis em subarquivos `user.profile.*`), **role** (read-only), **feature** (read-only), **permission** (overrides de feature), **auth** (login/sessão). Constantes de domínio (roles, features) em `*.constants.ts`, lidas pelo seed.
 
-Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasFeature`/`canActOnResource`), `utils/presenter.ts` (whitelist via Zod), `utils/asyncHandler.ts`, error handler central, `errors/errorFactory.ts` (factories `create*`).
+Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasFeature`/`canActOnResource`), `utils/presenter.ts` (whitelist via Zod), error handler central, `errors/errorFactory.ts` (factories `create*`).
 
 ---
 

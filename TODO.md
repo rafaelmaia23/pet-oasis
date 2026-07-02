@@ -91,7 +91,11 @@
   - ✅ Service `getUserPermissions(userId)` em `permission.service.ts` — reusa `getUserForFeatureComputation` (user.repository) + `computeEffectiveFeatures`, array ordenado (`.sort()`) para resposta determinística
   - ✅ Presenter `effectiveFeaturesPresenter` (`z.array(z.string())`) em `permission.presenter.ts`
   - ✅ Controller + rota `GET /permissions` (`canAccess("read:permission")`)
-- ⬜ `GET /api/v1/me` (view `me` com features efetivas)
+- ✅ `GET /api/v1/me` (view `me` com features efetivas)
+  - ✅ Testes de integração: 401 sem token; 403 sem `read:user`; 200 perfil customer com suas roles; 200 perfil employee com suas roles; 200 usuário com os dois perfis (roles não se misturam entre eles); 200 perfil soft-deletado não aparece (`null`); 200 override deny remove feature; 200 override grant adiciona feature; 200 admin com feature `"*"`
+  - ✅ Decisões confirmadas com o usuário: exige feature `read:user` (mesmo padrão de `GET /users/:id`); roles dentro de `customer`/`employee` em shape enxuto (`{id,name,description,appliesTo}`, sem features aninhadas — já cobertas pelo `features` efetivo); perfil soft-deletado retorna `null`
+  - ✅ Módulo próprio `src/modules/me/` (`me.routes.ts`, `me.controller.ts`, `me.service.ts`, `me.presenter.ts`), montado em `/api/v1/me` — reusa `userRepository.findUserById` (sem query nova) e `req.user.features` já computado pelo `authenticate` (sem recomputar `computeEffectiveFeatures`)
+  - ✅ Rodar suíte e confirmar verde
 
 ### ⬜ Fechos pendentes
 - ⬜ signup usa `createCustomer` (auth.service ainda no modelo antigo — remover createUser comentado)

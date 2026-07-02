@@ -16,6 +16,12 @@ permissionRouter.get(
   permissionController.getUserRoles,
 );
 
+permissionRouter.get(
+  "/permissions",
+  canAccess("read:permission"),
+  permissionController.getUserPermissions,
+);
+
 permissionRouter.post(
   "/roles/:roleId",
   canAccess("manage:permission"),

@@ -84,7 +84,13 @@
 - ✅ Atualizar CONTEXT.md com o racional da não-escalação generalizada (por que cobre roles, não só overrides)
 
 ### ⬜ Permissions efetivas + me
-- ⬜ `GET /users/:userId/permissions` (efetivas, reusa `computeEffectiveFeatures`)
+- ✅ `GET /users/:userId/permissions` (efetivas, reusa `computeEffectiveFeatures`)
+  - ✅ Testes de integração: 401 sem token; 403 sem `read:permission`; 403 sem `read:permission` em usuário inexistente (não vaza 404); 422 userId inválido; 404 user não encontrado; 200 features efetivas do próprio usuário; 200 features efetivas de outro usuário (ator com `read:permission`); 200 override deny remove feature de role; 200 override grant adiciona feature fora de qualquer role
+  - ✅ Shape: `string[]` (só as features efetivas — não roles, não overrides), decisão confirmada com o usuário e alinhada à nota já registrada em `CONTEXT.md`
+  - ✅ Schema `getUserPermissionsParamsSchema` em `permission.schema.ts`
+  - ✅ Service `getUserPermissions(userId)` em `permission.service.ts` — reusa `getUserForFeatureComputation` (user.repository) + `computeEffectiveFeatures`, array ordenado (`.sort()`) para resposta determinística
+  - ✅ Presenter `effectiveFeaturesPresenter` (`z.array(z.string())`) em `permission.presenter.ts`
+  - ✅ Controller + rota `GET /permissions` (`canAccess("read:permission")`)
 - ⬜ `GET /api/v1/me` (view `me` com features efetivas)
 
 ### ⬜ Fechos pendentes

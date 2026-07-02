@@ -281,6 +281,186 @@ describe("GET /api/v1/users/:userId/roles", () => {
   });
 });
 
+describe("GET /api/v1/users/:userId/permissions", () => {
+  it("should return 401 if no token is provided", async () => {
+    const response = await request(app).get(
+      "/api/v1/users/some-id/permissions",
+    );
+
+    expect(response.status).toBe(401);
+
+    expect(response.body).toMatchObject({
+      message: "Usuário não autenticado",
+      code: "UNAUTHORIZED",
+      action: "Faça login e tente novamente",
+    });
+  });
+
+  it("should return 403 if user does not have feature: `read:permission`", async () => {
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get(`/api/v1/users/${user.id}/permissions`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      message: "Você não tem permissão para acessar este recurso",
+      code: "FORBIDDEN",
+      action: `Verifique se você tem acesso a feature "read:permission"`,
+    });
+  });
+
+  it("should return 403 if user without `read:permission` tries to access non-existent user's permissions", async () => {
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get(`/api/v1/users/${faker.string.uuid()}/permissions`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      message: "Você não tem permissão para acessar este recurso",
+      code: "FORBIDDEN",
+      action: `Verifique se você tem acesso a feature "read:permission"`,
+    });
+  });
+
+  it("should return 422 if user id is not a valid uuid", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/users/non-valid-id/permissions")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["userId"]);
+  });
+
+  it("should return 404 if user with given id does not exist", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get(`/api/v1/users/${faker.string.uuid()}/permissions`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+
+    expect(response.body).toMatchObject({
+      code: "NOT_FOUND",
+      message: "Usuário não encontrado",
+      action: "Verifique o ID e tente novamente",
+    });
+  });
+
+  it("should return 200 and the effective features of the user if the user has feature: `read:permission`", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get(`/api/v1/users/${user.id}/permissions`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    expect(response.body).toMatchView(z.array(z.string()));
+
+    expect(response.body).toEqual(
+      expect.arrayContaining(["manage:permission"]),
+    );
+  });
+
+  it("should return 200 and the effective features of another user if requester has feature: `read:permission`", async () => {
+    const user1 = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const user2 = await buildEmployee({
+      roleNames: ["attendant"],
+    });
+
+    const token = await loginAs(user1.email, user1.password);
+
+    const response = await request(app)
+      .get(`/api/v1/users/${user2.id}/permissions`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    expect(response.body).toMatchView(z.array(z.string()));
+
+    expect(response.body).toEqual(expect.arrayContaining(["read:user"]));
+  });
+
+  it("should not include a role feature that has been denied via override", async () => {
+    const targetUser = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["read:user"],
+    });
+
+    const actor = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .get(`/api/v1/users/${targetUser.id}/permissions`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    expect(response.body).toEqual(
+      expect.arrayContaining(["update:user", "logout:session"]),
+    );
+
+    expect(response.body).not.toEqual(expect.arrayContaining(["read:user"]));
+  });
+
+  it("should include a granted override feature not present in any role", async () => {
+    const targetUser = await buildEmployee({
+      roleNames: ["attendant"],
+      grants: ["read:role"],
+    });
+
+    const actor = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .get(`/api/v1/users/${targetUser.id}/permissions`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    expect(response.body).toEqual(expect.arrayContaining(["read:role"]));
+  });
+});
+
 describe("POST /api/v1/users/:userId/roles/:roleId", () => {
   it("should return 401 if no token is provided", async () => {
     const response = await request(app).post(

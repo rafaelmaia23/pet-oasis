@@ -4,6 +4,7 @@ import {
   createNotFoundError,
   createValidationError,
 } from "@/errors";
+import { computeEffectiveFeatures } from "@/lib/authorization";
 import * as featureRepository from "@/modules/feature/feature.repository";
 import { PERMISSION_FEATURES } from "../role/role.constants";
 import * as roleRepository from "../role/role.repository";
@@ -122,6 +123,19 @@ export async function getUserRoles(userId: string) {
   const roles = await permissionRepository.getUserRoles(userId);
 
   return roles.map(toRoleDTO);
+}
+
+export async function getUserPermissions(userId: string) {
+  const user = await userRepository.getUserForFeatureComputation(userId);
+
+  if (!user) {
+    throw createNotFoundError({
+      message: "Usuário não encontrado",
+      action: "Verifique o ID e tente novamente",
+    });
+  }
+
+  return Array.from(computeEffectiveFeatures(user)).sort();
 }
 
 export async function addUserRole(

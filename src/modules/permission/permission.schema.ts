@@ -22,6 +22,12 @@ export const getUserRolesParamsSchema = z.object({
   }),
 });
 
+export const getUserPermissionsParamsSchema = z.object({
+  params: z.object({
+    userId: z.uuid("Invalid user ID"),
+  }),
+});
+
 export const removePermissionParamsSchema = z.object({
   params: z.object({
     userId: z.uuid("Invalid user ID"),
@@ -61,4 +67,8 @@ export type PostUserRoleParams = z.infer<
 
 export type DeleteUserRoleParams = z.infer<
   typeof deleteUserRoleParamsSchema
+>["params"];
+
+export type GetUserPermissionsParams = z.infer<
+  typeof getUserPermissionsParamsSchema
 >["params"];

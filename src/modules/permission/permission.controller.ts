@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import {
   deleteUserRoleParamsSchema,
   getPermissionParamsSchema,
+  getUserPermissionsParamsSchema,
   getUserRolesParamsSchema,
   postUserRoleParamsSchema,
   removePermissionParamsSchema,
@@ -10,7 +11,10 @@ import {
 import * as permissionService from "@/modules/permission/permission.service";
 import { rolePresenter } from "@/modules/role/role.presenter";
 import { getAuthUser } from "@/utils/getAuthUser";
-import { userFeaturePresenter } from "./permission.presenter";
+import {
+  effectiveFeaturesPresenter,
+  userFeaturePresenter,
+} from "./permission.presenter";
 
 export const getUserFeatures = async (req: Request, res: Response) => {
   const { params } = getPermissionParamsSchema.parse({ params: req.params });
@@ -28,6 +32,16 @@ export const getUserRoles = async (req: Request, res: Response) => {
   const roles = await permissionService.getUserRoles(params.userId);
 
   res.status(200).json(rolePresenter.presentMany(roles, "default"));
+};
+
+export const getUserPermissions = async (req: Request, res: Response) => {
+  const { params } = getUserPermissionsParamsSchema.parse({
+    params: req.params,
+  });
+
+  const features = await permissionService.getUserPermissions(params.userId);
+
+  res.status(200).json(effectiveFeaturesPresenter.present(features, "default"));
 };
 
 export const addUserRole = async (req: Request, res: Response) => {

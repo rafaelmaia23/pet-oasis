@@ -8,7 +8,7 @@
 
 ---
 
-## Fase 2 — Autorização e perfis (ATUAL)
+## Fase 2 — Autorização e perfis ✅
 
 ### ✅ Fundação de autorização
 - ✅ `computeEffectiveFeatures` (pura) + `can`/`hasFeature`/`canActOnResource` (Set, wildcard) + suítes unitárias
@@ -25,13 +25,11 @@
 
 ### ✅ Módulo role (read-only)
 - ✅ `GET /roles` + `GET /roles/:id` (feature `read:role`)
-- 🔸 extrair `toRoleDTO` (duplicação getAll/getById no service)
 
 ### ✅ Módulo permission — overrides
 - ✅ `PUT /users/:userId/features/:featureId` (grant/deny, body `{ granted }`)
 - ✅ `DELETE /users/:userId/features/:featureId` (remove override; 404 se não há — decidido: avisar, não 204 silencioso)
 - ✅ Não-escalação: mexer em PERMISSION_FEATURES via override exige role **admin** (`assertAdminForPermissionFeature`, reusado no PUT e DELETE)
-- 🔸 `z.guid` → `z.uuid` (grep geral)
 
 ### ✅ Soft delete de UserFeature e UserRole (auditoria)
 - ✅ `id` próprio como PK (não par composto) + `deletedAt` nos dois models
@@ -46,7 +44,7 @@
 - ✅ `DELETE /users/:id/customer` (`$transaction`: soft-delete Customer + UserRoles com appliesTo CUSTOMER; recusa se único perfil ativo; 204)
 - ✅ `DELETE /users/:id/employee` (espelha o customer; soft-delete Employee + UserRoles com appliesTo EMPLOYEE; recusa se único perfil ativo; 204)
 - ✅ `delete:profile` adicionada a `USER_ADMINISTRATION_FEATURES` (manager tem a feature; seed sincronizado)
-- 🔸 Refatorar testes de POST /customer e POST /employee que manipulam banco diretamente para usar os DELETEs reais (agora que existem)
+- ✅ Testes de POST /customer e POST /employee refatorados para usar os DELETEs reais em vez de manipular o banco direto via Prisma
 
 ### ✅ Vínculo user↔role (GET/POST/DELETE) — módulo permission
 > Mora em `src/modules/permission/` (route, controller, service, repository, schema), ao lado dos overrides de feature. GET não estava previsto originalmente — lista as roles ativas (efetivas) do usuário.
@@ -83,7 +81,7 @@
 
 - ✅ Atualizar CONTEXT.md com o racional da não-escalação generalizada (por que cobre roles, não só overrides)
 
-### ⬜ Permissions efetivas + me
+### ✅ Permissions efetivas + me
 - ✅ `GET /users/:userId/permissions` (efetivas, reusa `computeEffectiveFeatures`)
   - ✅ Testes de integração: 401 sem token; 403 sem `read:permission`; 403 sem `read:permission` em usuário inexistente (não vaza 404); 422 userId inválido; 404 user não encontrado; 200 features efetivas do próprio usuário; 200 features efetivas de outro usuário (ator com `read:permission`); 200 override deny remove feature de role; 200 override grant adiciona feature fora de qualquer role
   - ✅ Shape: `string[]` (só as features efetivas — não roles, não overrides), decisão confirmada com o usuário e alinhada à nota já registrada em `CONTEXT.md`
@@ -97,24 +95,21 @@
   - ✅ Módulo próprio `src/modules/me/` (`me.routes.ts`, `me.controller.ts`, `me.service.ts`, `me.presenter.ts`), montado em `/api/v1/me` — reusa `userRepository.findUserById` (sem query nova) e `req.user.features` já computado pelo `authenticate` (sem recomputar `computeEffectiveFeatures`)
   - ✅ Rodar suíte e confirmar verde
 
-### ⬜ Fechos pendentes
-- ⬜ signup usa `createCustomer` (auth.service ainda no modelo antigo — remover createUser comentado)
-- ⬜ Refatorar `auth.test.ts` para helpers novos (arquivo inteiro ainda no padrão antigo)
-- 🔸 grep geral `z.guid` → `z.uuid`
+### ✅ Fechos pendentes
+- ✅ signup usa `createCustomer` (já resolvido no commit `f531e4d`; nenhum código morto restante em `auth.service.ts`/`auth.repository.ts`/`user.repository.ts`)
+- ✅ `z.guid` → `z.uuid` em todo o repo (`feature.schema.ts`, `role.schema.ts`, `auth.schema.ts`)
 
-> **Testes refatorados p/ helpers novos:** user, role, feature, status, permission, profile (customer+employee CRUD+DELETE), units (password, authorization) ✅ · **Falta:** auth
+> **Testes refatorados p/ helpers novos:** user, role, feature, status, permission, profile (customer+employee CRUD+DELETE), units (password, authorization) ✅ · **Falta:** auth — movido para a Fase 3 (ver abaixo), decisão explícita: não mexer em `auth.test.ts` (nem o fix do import quebrado) até lá
 
 ---
 
 ## Dívidas técnicas (resolver na Fase 3)
 - Middleware `authenticate` usa `res.json` cru em vez de AppError + handler — padronizar no refactor de auth
-- Aprender/aplicar erro async em middleware Express (next(error)/asyncHandler)
-- Middleware sem teste unitário (coberto por integração; reavaliar se crescer)
 
 ---
 
 ## Fases seguintes (resumo)
-- **Fase 3 — Auth alvo:** access JWT 15min validado localmente + refresh opaco rotativo com detecção de roubo; Session reshape (refreshToken/userAgent/ip/usedAt); cookie httpOnly; GET/DELETE `/auth/sessions`.
+- **Fase 3 — Auth alvo:** refatorar `auth.test.ts` para os helpers novos (fix do import quebrado de `makeUserData` + `buildCustomer`/`loginAs`/`expectValidationError`/`toMatchView`, no padrão dos demais arquivos de teste); access JWT 15min validado localmente + refresh opaco rotativo com detecção de roubo; Session reshape (refreshToken/userAgent/ip/usedAt); cookie httpOnly; GET/DELETE `/auth/sessions`.
 - **Fase 4 — Email + status:** nodemailer; status PENDING/ACTIVE/BANNED + EmailVerificationToken + activate; bloquear login não-ACTIVE; PasswordResetToken (forgot/reset); change-password. (É aqui que o soft delete ganha peso — vendas se ligam a customer.)
 - **Fase 5 — Hardening:** rate limiting, account lockout. (Revisitar proteção de escalação se precisar de algo além do admin-only.)
 - **Fase 6 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.

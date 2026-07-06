@@ -8,6 +8,16 @@ import {
 } from "@/errors";
 import { PrismaClientKnownRequestError } from "@/generated/prisma/internal/prismaNamespace";
 
+// Formato interno do driver adapter `pg` pra erro de constraint — não é tipado
+// pelo Prisma (meta é Record<string, unknown>); shape inferido do runtime.
+type DriverAdapterConstraintError = {
+  cause?: {
+    constraint?: {
+      fields?: string[];
+    };
+  };
+};
+
 export function errorHandler(
   err: unknown,
   _req: Request,
@@ -37,8 +47,10 @@ export function errorHandler(
   }
 
   if (err instanceof PrismaClientKnownRequestError && err.code === "P2002") {
-    const fields =
-      (err.meta?.driverAdapterError as any)?.cause?.constraint?.fields ?? [];
+    const driverAdapterError = err.meta?.driverAdapterError as
+      | DriverAdapterConstraintError
+      | undefined;
+    const fields = driverAdapterError?.cause?.constraint?.fields ?? [];
     const field =
       fields[0] ??
       "{ERROR: name of field was not identified in the error object}";

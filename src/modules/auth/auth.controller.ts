@@ -67,7 +67,9 @@ export const logout = async (req: Request, res: Response) => {
 
   await authService.logout(refreshToken, getAuthUser(req).id);
 
-  res.clearCookie(REFRESH_TOKEN_COOKIE_NAME, { path: REFRESH_TOKEN_COOKIE_PATH });
+  res.clearCookie(REFRESH_TOKEN_COOKIE_NAME, {
+    path: REFRESH_TOKEN_COOKIE_PATH,
+  });
   res.status(204).send();
 };
 

@@ -8,7 +8,9 @@ import { getUserForFeatureComputation } from "@/modules/user/user.repository";
 
 vi.mock("@/modules/user/user.repository");
 
-const mockedGetUserForFeatureComputation = vi.mocked(getUserForFeatureComputation);
+const mockedGetUserForFeatureComputation = vi.mocked(
+  getUserForFeatureComputation,
+);
 
 function makeReq(authHeader?: string): Request {
   return { headers: { authorization: authHeader } } as Request;
@@ -35,39 +37,39 @@ describe("authenticate middleware", () => {
 
   it("header without 'Bearer ' prefix -> rejects with 401", async () => {
     const req = makeReq("Token abc123");
-    await expect(authenticate(req, {} as Response, vi.fn())).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      authenticate(req, {} as Response, vi.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it("empty token after 'Bearer ' -> rejects with 401", async () => {
     const req = makeReq("Bearer ");
-    await expect(authenticate(req, {} as Response, vi.fn())).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      authenticate(req, {} as Response, vi.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it("malformed/invalid-signature JWT -> rejects with 401", async () => {
     const req = makeReq("Bearer not-a-real-jwt");
-    await expect(authenticate(req, {} as Response, vi.fn())).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      authenticate(req, {} as Response, vi.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it("expired JWT -> rejects with 401", async () => {
     const token = signToken({ sub: "user-id" }, { expiresIn: -10 });
     const req = makeReq(`Bearer ${token}`);
-    await expect(authenticate(req, {} as Response, vi.fn())).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      authenticate(req, {} as Response, vi.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it("valid JWT without sub -> rejects with 401", async () => {
     const token = signToken({});
     const req = makeReq(`Bearer ${token}`);
-    await expect(authenticate(req, {} as Response, vi.fn())).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
+    await expect(
+      authenticate(req, {} as Response, vi.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it("valid JWT, user not found -> rejects with 401", async () => {
@@ -75,10 +77,12 @@ describe("authenticate middleware", () => {
     const token = signToken({ sub: "missing-user-id" });
     const req = makeReq(`Bearer ${token}`);
 
-    await expect(authenticate(req, {} as Response, vi.fn())).rejects.toBeInstanceOf(
-      UnauthorizedError,
+    await expect(
+      authenticate(req, {} as Response, vi.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(mockedGetUserForFeatureComputation).toHaveBeenCalledWith(
+      "missing-user-id",
     );
-    expect(mockedGetUserForFeatureComputation).toHaveBeenCalledWith("missing-user-id");
   });
 
   it("valid JWT + user found -> populates req.user and calls next() without error", async () => {

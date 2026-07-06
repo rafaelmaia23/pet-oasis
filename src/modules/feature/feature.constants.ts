@@ -16,7 +16,10 @@ export const DEFAULT_FEATURES = [
 
   // Session features
   { name: "read:session", description: "Ver as próprias sessões" },
-  { name: "manage:session", description: "Gerenciar (encerrar) as próprias sessões" },
+  {
+    name: "manage:session",
+    description: "Gerenciar (encerrar) as próprias sessões",
+  },
 
   // Feature management features
   { name: "read:feature", description: "Ler features do sistema" },

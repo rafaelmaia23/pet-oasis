@@ -120,8 +120,7 @@ export async function deleteCustomerProfile(userId: string) {
   if (!hasActiveEmployee) {
     throw createConflictError({
       message: "Não é possível deletar o último perfil do usuário",
-      action:
-        "Para excluir esse usuario use o endpoint de deleção de usuário.",
+      action: "Para excluir esse usuario use o endpoint de deleção de usuário.",
     });
   }
 
@@ -158,8 +157,7 @@ export async function deleteEmployeeProfile(userId: string) {
   if (!hasActiveCustomer) {
     throw createConflictError({
       message: "Não é possível deletar o último perfil do usuário",
-      action:
-        "Para excluir esse usuario use o endpoint de deleção de usuário.",
+      action: "Para excluir esse usuario use o endpoint de deleção de usuário.",
     });
   }
 

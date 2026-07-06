@@ -77,7 +77,15 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 - Testar 1 arquivo: `npx vitest run <nome>` · watch: `npx vitest <nome>` · 1 caso: `-t "nome"`
 - Migration dev: `npm run db:migrate` (já gera o client) · reset: `npm run db:reset` + `db:seed`
 - Banco de teste: `db:test:up` / `db:test:migrate`
-- Lint/format: Biome
+- Typecheck: `npm run typecheck` · Lint: `npm run lint` · Lint com fix: `npm run lint:fix` · Format: `npm run format`
+
+## ⚠️ REGRA — Prefira os scripts do `package.json` a comandos diretos
+
+Antes de rodar um comando pra fazer algo que o projeto já tem um script pronto (typecheck, lint, migration, teste, seed, etc.), **use o script** (`npm run <nome>`), não a ferramenta direta (`tsc --noEmit`, `prisma migrate dev`, `biome check .`, etc.). Os scripts existem pra manter o projeto consistente (flags certas, `DATABASE_URL` certa, etc.) — rodar a ferramenta crua por fora pode divergir sutilmente do que o script faz. Ex.: gerar uma migration deve ser `npm run db:migrate`, não `prisma migrate dev` direto no terminal.
+
+Ao final de qualquer trabalho ou antes de commitar, rode `npm run typecheck` e `npm run lint` (ou `lint:fix` se houver algo auto-corrigível) e confirme que ambos passam limpos — igual já se faz com a suíte de testes.
+
+Se perceber a necessidade de um script que não existe — algo que você (ou o padrão do projeto) vai repetir com frequência — **pare e sugira criar o script no `package.json`** em vez de só rodar o comando direto. Para algo pontual, que não vai se repetir, tudo bem rodar direto no terminal sem propor script novo.
 
 ---
 

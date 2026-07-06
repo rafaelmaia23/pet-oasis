@@ -1,6 +1,14 @@
 import type { Request, Response } from "express";
+import { env } from "@/config/env";
+import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user/user.presenter";
-import { loginSchema, signupSchema } from "./auth.schema";
+import {
+  REFRESH_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_COOKIE_PATH,
+  REFRESH_TOKEN_TTL_MS,
+} from "./auth.constants";
+import { sessionPresenter } from "./auth.presenter";
+import { loginSchema, sessionParamsSchema, signupSchema } from "./auth.schema";
 import * as authService from "./auth.service";
 
 export const signup = async (req: Request, res: Response) => {
@@ -14,35 +22,65 @@ export const signup = async (req: Request, res: Response) => {
 export const login = async (req: Request, res: Response) => {
   const { body } = loginSchema.parse({ body: req.body });
 
-  const token = req.headers.authorization?.split(" ")[1];
+  const { accessToken, refreshToken } = await authService.login(body, {
+    userAgent: req.headers["user-agent"],
+    ipAddress: req.ip,
+  });
 
-  const result = await authService.login(body, token);
+  res.cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: env.NODE_ENV === "production",
+    path: REFRESH_TOKEN_COOKIE_PATH,
+    maxAge: REFRESH_TOKEN_TTL_MS,
+  });
 
-  res.status(200).json(result);
+  res.status(200).json({ accessToken });
+};
+
+export const refresh = async (req: Request, res: Response) => {
+  const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE_NAME] as
+    | string
+    | undefined;
+
+  const { accessToken, refreshToken: newRefreshToken } =
+    await authService.refresh(refreshToken, {
+      userAgent: req.headers["user-agent"],
+      ipAddress: req.ip,
+    });
+
+  res.cookie(REFRESH_TOKEN_COOKIE_NAME, newRefreshToken, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: env.NODE_ENV === "production",
+    path: REFRESH_TOKEN_COOKIE_PATH,
+    maxAge: REFRESH_TOKEN_TTL_MS,
+  });
+
+  res.status(200).json({ accessToken });
 };
 
 export const logout = async (req: Request, res: Response) => {
-  const authHeader = req.headers.authorization;
+  const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE_NAME] as
+    | string
+    | undefined;
 
-  if (!authHeader?.startsWith("Bearer ")) {
-    res.status(401).json({
-      message: "Token de autenticação ausente ou inválido",
-      code: "AUTH_TOKEN_MISSING",
-    });
-    return;
-  }
+  await authService.logout(refreshToken, getAuthUser(req).id);
 
-  const token = authHeader.split(" ")[1];
+  res.clearCookie(REFRESH_TOKEN_COOKIE_NAME, { path: REFRESH_TOKEN_COOKIE_PATH });
+  res.status(204).send();
+};
 
-  if (!token) {
-    res.status(401).json({
-      message: "Token de autenticação ausente ou inválido",
-      code: "AUTH_TOKEN_MISSING",
-    });
-    return;
-  }
+export const listSessions = async (req: Request, res: Response) => {
+  const sessions = await authService.listSessions(getAuthUser(req).id);
 
-  await authService.logout(token);
+  res.status(200).json(sessionPresenter.presentMany(sessions, "default"));
+};
+
+export const revokeSession = async (req: Request, res: Response) => {
+  const { params } = sessionParamsSchema.parse({ params: req.params });
+
+  await authService.revokeSession(getAuthUser(req).id, params.id);
 
   res.status(204).send();
 };

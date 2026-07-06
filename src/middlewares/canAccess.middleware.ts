@@ -1,28 +1,25 @@
 import type { NextFunction, Request, Response } from "express";
+import { createForbiddenError, createUnauthorizedError } from "@/errors";
 import { can } from "@/lib/authorization";
 
 export function canAccess(featureName: string) {
   return function canAccessMiddleware(
     req: Request,
-    res: Response,
+    _res: Response,
     next: NextFunction,
   ): void {
     if (!req.user) {
-      res.status(401).json({
+      throw createUnauthorizedError({
         message: "Usuário não autenticado",
-        code: "UNAUTHORIZED",
         action: "Faça login e tente novamente",
       });
-      return;
     }
 
     if (!can(req.user, featureName)) {
-      res.status(403).json({
+      throw createForbiddenError({
         message: "Você não tem permissão para acessar este recurso",
-        code: "FORBIDDEN",
         action: `Verifique se você tem acesso a feature "${featureName}"`,
       });
-      return;
     }
 
     next();

@@ -11,6 +11,7 @@ import { loginAs } from "@/__tests__/helpers/auth";
 import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
 import { createNotFoundError } from "@/errors/errorFactory";
+import { prisma } from "@/lib/prisma";
 import { getFeatureByName } from "@/modules/feature/feature.repository";
 import { userFeatureViews } from "@/modules/permission/permission.presenter";
 import { roleViews } from "@/modules/role/role.presenter";
@@ -433,7 +434,7 @@ describe("GET /api/v1/users/:userId/permissions", () => {
     expect(response.status).toBe(200);
 
     expect(response.body).toEqual(
-      expect.arrayContaining(["update:user", "logout:session"]),
+      expect.arrayContaining(["update:user", "read:session"]),
     );
 
     expect(response.body).not.toEqual(expect.arrayContaining(["read:user"]));
@@ -1758,91 +1759,91 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
   });
 });
 
-// describe("Soft delete de overrides — efeito no cômputo", () => {
-//   describe("Soft delete de overrides — regressão de cômputo", () => {
-//     it("should make the feature return to role-based state after a deny override is soft-deleted", async () => {
-//       // attendant tem read:user pela role. Damos um DENY explícito, depois removemos o deny.
-//       // A feature deve VOLTAR (o deny soft-deletado não conta mais no cômputo).
-//       const admin = await buildEmployee({ roleNames: ["admin"] });
-//       const adminToken = await loginAs(admin.email, admin.password);
+describe("Soft delete de overrides — efeito no cômputo", () => {
+  describe("Soft delete de overrides — regressão de cômputo", () => {
+    it("should make the feature return to role-based state after a deny override is soft-deleted", async () => {
+      // attendant tem read:user pela role. Damos um DENY explícito, depois removemos o deny.
+      // A feature deve VOLTAR (o deny soft-deletado não conta mais no cômputo).
+      const admin = await buildEmployee({ roleNames: ["admin"] });
+      const adminToken = await loginAs(admin.email, admin.password);
 
-//       // user-alvo: attendant (tem read:user pela role attendant)
-//       const target = await buildEmployee({ roleNames: ["attendant"] });
-//       const feature = await getFeatureByName("read:user");
-//       if (!feature) throw new Error("Feature read:user não encontrada no seed");
+      // user-alvo: attendant (tem read:user pela role attendant)
+      const target = await buildEmployee({ roleNames: ["attendant"] });
+      const feature = await getFeatureByName("read:user");
+      if (!feature) throw new Error("Feature read:user não encontrada no seed");
 
-//       // 1. DENY explícito de read:user → feature deve sumir do efetivo
-//       await request(app)
-//         .put(`/api/v1/users/${target.id}/features/${feature.id}`)
-//         .set("Authorization", `Bearer ${adminToken}`)
-//         .send({ granted: false });
+      // 1. DENY explícito de read:user → feature deve sumir do efetivo
+      await request(app)
+        .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ granted: false });
 
-//       // confirma que o deny está ativo (a feature não está mais nas efetivas)
-//       const targetToken = await loginAs(target.email, target.password);
-//       const deniedResp = await request(app)
-//         .get(`/api/v1/users/${target.id}`)
-//         .set("Authorization", `Bearer ${targetToken}`);
-//       // attendant SEM read:user (negado) não consegue ler o próprio user → 403
-//       expect(deniedResp.status).toBe(403);
+      // confirma que o deny está ativo (a feature não está mais nas efetivas)
+      const targetToken = await loginAs(target.email, target.password);
+      const deniedResp = await request(app)
+        .get(`/api/v1/users/${target.id}`)
+        .set("Authorization", `Bearer ${targetToken}`);
+      // attendant SEM read:user (negado) não consegue ler o próprio user → 403
+      expect(deniedResp.status).toBe(403);
 
-//       // 2. Remove o override (soft delete do deny)
-//       const delResp = await request(app)
-//         .delete(`/api/v1/users/${target.id}/features/${feature.id}`)
-//         .set("Authorization", `Bearer ${adminToken}`);
-//       expect(delResp.status).toBe(204);
+      // 2. Remove o override (soft delete do deny)
+      const delResp = await request(app)
+        .delete(`/api/v1/users/${target.id}/features/${feature.id}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+      expect(delResp.status).toBe(204);
 
-//       // 3. A feature deve ter VOLTADO (deny soft-deletado não conta) → consegue ler de novo
-//       const restoredToken = await loginAs(target.email, target.password);
-//       const restoredResp = await request(app)
-//         .get(`/api/v1/users/${target.id}`)
-//         .set("Authorization", `Bearer ${restoredToken}`);
-//       expect(restoredResp.status).toBe(200);
+      // 3. A feature deve ter VOLTADO (deny soft-deletado não conta) → consegue ler de novo
+      const restoredToken = await loginAs(target.email, target.password);
+      const restoredResp = await request(app)
+        .get(`/api/v1/users/${target.id}`)
+        .set("Authorization", `Bearer ${restoredToken}`);
+      expect(restoredResp.status).toBe(200);
 
-//       // confirma no banco: existe UserFeature deletado (histórico preservado)
-//       const allOverrides = await prisma.userFeature.findMany({
-//         where: { userId: target.id, featureId: feature.id },
-//       });
-//       expect(allOverrides.length).toBeGreaterThanOrEqual(1);
-//       expect(allOverrides.some((uf) => uf.deletedAt !== null)).toBe(true);
-//     });
+      // confirma no banco: existe UserFeature deletado (histórico preservado)
+      const allOverrides = await prisma.userFeature.findMany({
+        where: { userId: target.id, featureId: feature.id },
+      });
+      expect(allOverrides.length).toBeGreaterThanOrEqual(1);
+      expect(allOverrides.some((uf) => uf.deletedAt !== null)).toBe(true);
+    });
 
-//     it("should allow re-granting a feature after its override was soft-deleted (no unique clash, history kept)", async () => {
-//       const admin = await buildEmployee({ roleNames: ["admin"] });
-//       const adminToken = await loginAs(admin.email, admin.password);
+    it("should allow re-granting a feature after its override was soft-deleted (no unique clash, history kept)", async () => {
+      const admin = await buildEmployee({ roleNames: ["admin"] });
+      const adminToken = await loginAs(admin.email, admin.password);
 
-//       const target = await buildEmployee({ roleNames: ["attendant"] });
-//       const feature = await getFeatureByName("read:user:others");
-//       if (!feature)
-//         throw new Error("Feature read:user:others não encontrada no seed");
+      const target = await buildEmployee({ roleNames: ["attendant"] });
+      const feature = await getFeatureByName("read:user:others");
+      if (!feature)
+        throw new Error("Feature read:user:others não encontrada no seed");
 
-//       // 1. GRANT
-//       const grant1 = await request(app)
-//         .put(`/api/v1/users/${target.id}/features/${feature.id}`)
-//         .set("Authorization", `Bearer ${adminToken}`)
-//         .send({ granted: true });
-//       expect(grant1.status).toBe(200);
+      // 1. GRANT
+      const grant1 = await request(app)
+        .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ granted: true });
+      expect(grant1.status).toBe(200);
 
-//       // 2. DELETE (soft)
-//       const del = await request(app)
-//         .delete(`/api/v1/users/${target.id}/features/${feature.id}`)
-//         .set("Authorization", `Bearer ${adminToken}`);
-//       expect(del.status).toBe(204);
+      // 2. DELETE (soft)
+      const del = await request(app)
+        .delete(`/api/v1/users/${target.id}/features/${feature.id}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+      expect(del.status).toBe(204);
 
-//       // 3. GRANT de novo — não deve dar unique clash; cria um override ativo novo
-//       const grant2 = await request(app)
-//         .put(`/api/v1/users/${target.id}/features/${feature.id}`)
-//         .set("Authorization", `Bearer ${adminToken}`)
-//         .send({ granted: true });
-//       expect(grant2.status).toBe(200);
+      // 3. GRANT de novo — não deve dar unique clash; cria um override ativo novo
+      const grant2 = await request(app)
+        .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ granted: true });
+      expect(grant2.status).toBe(200);
 
-//       // banco: vários registros do mesmo par (histórico), mas só UM ativo
-//       const overrides = await prisma.userFeature.findMany({
-//         where: { userId: target.id, featureId: feature.id },
-//       });
-//       const ativos = overrides.filter((uf) => uf.deletedAt === null);
-//       const deletados = overrides.filter((uf) => uf.deletedAt !== null);
-//       expect(ativos.length).toBe(1); // exatamente um ativo
-//       expect(deletados.length).toBeGreaterThanOrEqual(1); // histórico preservado
-//     });
-//   });
-// });
+      // banco: vários registros do mesmo par (histórico), mas só UM ativo
+      const overrides = await prisma.userFeature.findMany({
+        where: { userId: target.id, featureId: feature.id },
+      });
+      const ativos = overrides.filter((uf) => uf.deletedAt === null);
+      const deletados = overrides.filter((uf) => uf.deletedAt !== null);
+      expect(ativos.length).toBe(1); // exatamente um ativo
+      expect(deletados.length).toBeGreaterThanOrEqual(1); // histórico preservado
+    });
+  });
+});

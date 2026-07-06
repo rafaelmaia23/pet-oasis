@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
 import * as authController from "./auth.controller";
 
@@ -6,6 +7,24 @@ const authRouter = Router();
 
 authRouter.post("/signup", authController.signup);
 authRouter.post("/login", authController.login);
-authRouter.post("/logout", canAccess("logout:session"), authController.logout);
+authRouter.post("/refresh", authController.refresh);
+authRouter.post(
+  "/logout",
+  authenticate,
+  canAccess("manage:session"),
+  authController.logout,
+);
+authRouter.get(
+  "/sessions",
+  authenticate,
+  canAccess("read:session"),
+  authController.listSessions,
+);
+authRouter.delete(
+  "/sessions/:id",
+  authenticate,
+  canAccess("manage:session"),
+  authController.revokeSession,
+);
 
 export default authRouter;

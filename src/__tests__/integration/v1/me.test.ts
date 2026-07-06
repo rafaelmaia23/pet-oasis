@@ -205,7 +205,7 @@ describe("GET /api/v1/me", () => {
       expect.arrayContaining(["update:user"]),
     );
     expect(response.body.features).toEqual(
-      expect.arrayContaining(["read:user", "logout:session"]),
+      expect.arrayContaining(["read:user", "read:session"]),
     );
   });
 

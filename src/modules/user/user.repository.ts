@@ -115,7 +115,12 @@ export async function updateUser(id: string, data: updateUserData) {
 export async function softDeleteUserAndInvalidateSessions(userId: string) {
   return prisma.$transaction([
     prisma.session.updateMany({
-      where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
+      where: {
+        userId,
+        usedAt: null,
+        invalidatedAt: null,
+        expiresAt: { gt: new Date() },
+      },
       data: { invalidatedAt: new Date() },
     }),
     prisma.user.update({

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authenticate } from "@/middlewares/authenticate.middleware";
 import authRouter from "@/modules/auth/auth.routes";
 import featureRouter from "@/modules/feature/feature.routes";
 import meRouter from "@/modules/me/me.routes";
@@ -10,14 +11,17 @@ import userRouter from "@/modules/user/user.routes";
 
 const v1Router = Router();
 
+// PÚBLICAS — sem authenticate
 v1Router.use("/status", statusRouter);
 v1Router.use("/auth", authRouter);
-v1Router.use("/me", meRouter);
-v1Router.use("/users", userRouter);
-v1Router.use("/users/:userId", userProfileRouter);
-v1Router.use("/users/:userId", permissionRouter);
-v1Router.use("/features", featureRouter);
-v1Router.use("/roles", roleRouter);
+
+// PROTEGIDAS — com authenticate
+v1Router.use("/me", authenticate, meRouter);
+v1Router.use("/users", authenticate, userRouter);
+v1Router.use("/users/:userId", authenticate, userProfileRouter);
+v1Router.use("/users/:userId", authenticate, permissionRouter);
+v1Router.use("/features", authenticate, featureRouter);
+v1Router.use("/roles", authenticate, roleRouter);
 
 export const router = Router();
 router.use("/api/v1", v1Router);

@@ -15,7 +15,8 @@ export const DEFAULT_FEATURES = [
   { name: "delete:profile", description: "Deletar um perfil de usuário" },
 
   // Session features
-  { name: "logout:session", description: "Encerrar a própria sessão" },
+  { name: "read:session", description: "Ver as próprias sessões" },
+  { name: "manage:session", description: "Gerenciar (encerrar) as próprias sessões" },
 
   // Feature management features
   { name: "read:feature", description: "Ler features do sistema" },

@@ -190,7 +190,7 @@ describe("Authorization", () => {
                 { feature: { name: "read:user" } },
                 { feature: { name: "update:user" } },
                 { feature: { name: "delete:user" } },
-                { feature: { name: "logout:session" } },
+                { feature: { name: "read:session" } },
               ],
             },
           },
@@ -205,7 +205,7 @@ describe("Authorization", () => {
           "read:user",
           "update:user",
           "delete:user",
-          "logout:session",
+          "read:session",
         ]),
       );
     });
@@ -225,7 +225,7 @@ describe("Authorization", () => {
                 { feature: { name: "read:user" } },
                 { feature: { name: "update:user" } },
                 { feature: { name: "delete:user" } },
-                { feature: { name: "logout:session" } },
+                { feature: { name: "read:session" } },
               ],
             },
           },
@@ -251,7 +251,7 @@ describe("Authorization", () => {
           "read:user",
           "update:user",
           "delete:user",
-          "logout:session",
+          "read:session",
           "create:user",
           "read:user:others",
           "update:user:others",
@@ -272,7 +272,7 @@ describe("Authorization", () => {
                 { feature: { name: "read:user" } },
                 { feature: { name: "update:user" } },
                 { feature: { name: "delete:user" } },
-                { feature: { name: "logout:session" } },
+                { feature: { name: "read:session" } },
               ],
             },
           },
@@ -283,7 +283,7 @@ describe("Authorization", () => {
                 { feature: { name: "read:user" } },
                 { feature: { name: "update:user" } },
                 { feature: { name: "delete:user" } },
-                { feature: { name: "logout:session" } },
+                { feature: { name: "read:session" } },
               ],
             },
           },
@@ -293,7 +293,7 @@ describe("Authorization", () => {
       const result = computeEffectiveFeatures(user);
 
       expect(result).toEqual(
-        new Set(["read:user", "update:user", "delete:user", "logout:session"]),
+        new Set(["read:user", "update:user", "delete:user", "read:session"]),
       );
     });
 
@@ -309,7 +309,7 @@ describe("Authorization", () => {
                 { feature: { name: "read:user" } },
                 { feature: { name: "update:user" } },
                 { feature: { name: "delete:user" } },
-                { feature: { name: "logout:session" } },
+                { feature: { name: "read:session" } },
               ],
             },
           },
@@ -335,7 +335,7 @@ describe("Authorization", () => {
           "read:user",
           "update:user",
           "delete:user",
-          "logout:session",
+          "read:session",
           "create:user",
           "read:user:others",
           "update:user:others",

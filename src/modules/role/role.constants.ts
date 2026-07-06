@@ -13,7 +13,8 @@ const SELF_MANAGEMENT_FEATURES: FeatureName[] = [
   "read:user",
   "update:user",
   "delete:user",
-  "logout:session",
+  "read:session",
+  "manage:session",
 ];
 
 const USER_ADMINISTRATION_FEATURES: FeatureName[] = [

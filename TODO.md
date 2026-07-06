@@ -103,13 +103,95 @@
 
 ---
 
-## Dívidas técnicas (resolver na Fase 3)
-- Middleware `authenticate` usa `res.json` cru em vez de AppError + handler — padronizar no refactor de auth
+## Fase 3 — Auth alvo (access JWT + refresh opaco rotativo) ✅
+
+> Migra de "1 JWT guardado como Session, validado no banco a cada request" pra "access JWT 15min validado localmente + refresh opaco rotativo em Session, só tocado em /refresh". Resolve de quebra a dívida do `authenticate` usando `res.json` cru (item que estava anotado aqui como dívida técnica — fechado dentro da seção do middleware abaixo). Detalhe completo das decisões no CONTEXT.md.
+
+### ✅ Fundação (schema, libs, constants)
+- ✅ Migration: `Session` perde `token`, ganha `refreshTokenHash` (`@unique`), `usedAt`, `userAgent`, `ipAddress`; mantém `expiresAt`/`invalidatedAt`/`createdAt`/`userId`. SQL editado à mão com `TRUNCATE TABLE "sessions"` antes do reshape (sessões antigas não sobrevivem à migração — aceitável em dev)
+- ✅ `npm install cookie-parser` + `npm install -D @types/cookie-parser`; wire em `src/app.ts` entre `express.json()` e `authenticate`
+- ✅ `src/lib/token.ts`: `generateOpaqueRefreshToken()` (crypto.randomBytes) + `hashRefreshToken()` (SHA-256) — TDD, testes unitários em `src/__tests__/unit/lib/token.test.ts` primeiro
+- ✅ `src/modules/auth/auth.constants.ts`: `REFRESH_TOKEN_COOKIE_NAME`, `REFRESH_TOKEN_TTL_MS` (7 dias, deslizante), `REFRESH_TOKEN_COOKIE_PATH` (`/api/v1/auth`)
+- ✅ `feature.constants.ts`: adiciona `read:session`/`manage:session`; remove `logout:session`
+- ✅ `role.constants.ts`: `SELF_MANAGEMENT_FEATURES` ganha as duas novas, perde `logout:session`; roda seed e confirma catálogo sincronizado (seed.ts ganhou um passo de poda de features órfãs — primeira vez que uma feature sai do catálogo)
+- ✅ Efeito colateral consertado: `src/__tests__/unit/lib/authorization.test.ts` usava `"logout:session"` como feature-exemplo genérica em testes de `computeEffectiveFeatures` (lógica pura, sem relação com sessão) — trocado por `"read:session"`, mecânico
+- ⚠️ **Estado esperado ao final deste item** (confirmado com o usuário, branch dedicada `feat/auth-refresh-rotation`, não mergear até a fase fechar): `npm run typecheck` mostra só os erros já previstos em `auth.repository.ts`/`auth.service.ts` (uso de `Session.token`, que não existe mais) + o import quebrado pré-existente de `auth.test.ts`; testes de integração que dependem de `loginAs` falham em cascata (login grava em `token`, campo inexistente) até a seção de login ser reescrita — não é regressão, é o próximo item da fase
+
+### ✅ Middleware `authenticate` (refactor + testes próprios) — dívida técnica fechada aqui
+- ✅ Testes unitários primeiro: `src/__tests__/unit/middlewares/authenticate.test.ts` (sem precedente no projeto — primeiro uso de `vi.mock()` no repo; mocka só `getUserForFeatureComputation`, `req`/`res` como objetos simples, asserts via promise rejeitada já que o middleware é chamado direto, fora do Express)
+  - ✅ Sem header → `next()` sem erro, `req.user` continua `undefined`
+  - ✅ Header sem "Bearer " ou token vazio → rejeita 401
+  - ✅ JWT malformado/assinatura inválida → rejeita 401
+  - ✅ JWT expirado → rejeita 401
+  - ✅ JWT válido sem `sub` → rejeita 401
+  - ✅ JWT válido, usuário não encontrado (`getUserForFeatureComputation` retorna null) → rejeita 401
+  - ✅ JWT válido + usuário encontrado → `req.user` populado corretamente, `next()` sem erro
+  - ✅ Regressão: `getUserForFeatureComputation` chamado exatamente 1x (documenta "1 leitura de banco, não 2")
+- ✅ Rodar suíte e confirmar falha (8/9 vermelhos, "sem header" já passava por não mudar de comportamento)
+- ✅ Reescrever `authenticate.middleware.ts`: valida JWT só localmente (assinatura + expiração), sem `findSessionByToken`; `req.user.id` passa a vir de `payload.sub` (não mais `session.userId`); todos os erros via `create*Error` (throw, não `res.json`)
+- ✅ Rodar suíte e confirmar verde (9/9; suíte unitária completa 40/40; `typecheck` só com os erros já esperados desde o item 1)
+
+### ✅ `POST /auth/login` (TDD)
+- ✅ Testes de integração primeiro (em `auth.test.ts`) — reescritos pro padrão correto: `signup` migrado de `makeUserData` (interna, sem perfil — nunca deveria ter sido usada) pra `makeCustomerData`; `login`/`logout` migrados de "signup então login" pra `buildCustomer` (usuário real, com perfil + role, já no banco), como o resto da suíte. Casos de `login`: 200 só com `accessToken` no corpo; 200 cookie de refresh (`HttpOnly`/`SameSite=Lax`/`Path` certo/sem `Secure` em teste); 401 senha errada; 401 email inexistente; 422 email inválido; 422 senha vazia; dois logins geram duas `Session` independentes (prova que o quirk de reuso sumiu, checado via `prisma.session.findMany`)
+- ✅ `src/lib/token.ts` reusado (`generateOpaqueRefreshToken`/`hashRefreshToken`); `auth.service.login`: sempre cria `Session` nova (quirk de reuso removido, `existingToken` saiu da assinatura); gera access (JWT, inalterado) + refresh (opaco, hash salvo); `userAgent`/`ipAddress` capturados do request e gravados na `Session` (decisão confirmada com o usuário — fecha o que o schema do item 1 já previa; normalizados pra `null` na fronteira do repository por causa do `exactOptionalPropertyTypes`)
+- ✅ `auth.repository.createSession` (`CreateSessionData` novo: `refreshTokenHash`/`userAgent`/`ipAddress` no lugar de `token`)
+- ✅ `auth.controller.login`: seta cookie de refresh (httpOnly, sameSite lax, secure em produção, path `/api/v1/auth`), responde `{ accessToken }` (sem refresh no corpo)
+- ✅ Efeito colateral resolvido de propósito: `loginAs` (helper usado por toda a suíte de integração) atualizado pra ler `accessToken` em vez de `token` — sem isso, login already-corrigido continuaria "quebrado" pra todo o resto da suíte só por causa do nome do campo. TODO original previa esse fix só no fecho da fase; adiantado aqui por ser mecânico e sem risco
+- ✅ Dois efeitos colaterais adicionais encontrados e corrigidos (heranças do rename `logout:session` → `read:session`/`manage:session` do item 1, que não tinham aparecido ainda porque a suíte de integração inteira estava vermelha): asserções desatualizadas em `me.test.ts` e `permission.test.ts` referenciando o nome antigo da feature
+- ✅ Rodar suíte e confirmar verde (237/239 — os 2 vermelhos restantes são os testes de `logout`, fora de escopo deste item: `canAccess("logout:session")` na rota dá 403 porque a feature saiu do catálogo no item 1; conserto é o próximo item)
+
+### ✅ `POST /auth/refresh` (TDD) — rotação + detecção de roubo
+- ✅ Testes de integração primeiro: sem cookie → 401; hash não encontrado → 401; sessão invalidada → 401; sessão expirada → 401; replay de refresh já usado invalida TODAS as sessions do usuário (testado com 2 dispositivos independentes — a terceira sessão, sem relação com a reusada, também precisa ficar invalidada); rotação com sucesso troca o valor do cookie e o novo access token funciona numa rota protegida (`GET /me`)
+- ✅ **Mudança de arquitetura não prevista originalmente, decidida com o usuário**: `authenticate` saiu de global (`app.ts`) para por-grupo-de-rota (`routes/index.ts`) — motivo: `/auth/refresh` precisa funcionar mesmo com access token ausente/expirado, mas o `authenticate` global lançava 401 pra qualquer Bearer inválido antes mesmo da rota ser alcançada. `/status` e `/auth` (login/signup/refresh) ficaram públicos de propósito; `/me`, `/users`, `/users/:userId`, `/features`, `/roles` continuam protegidos, agora com `authenticate` aplicado no próprio `v1Router.use(...)`. Racional completo em `CONTEXT.md`
+- ✅ `auth.repository`: `findSessionByHash`, `rotateSession` (transação: marca antiga `usedAt`, cria nova), `invalidateAllUserSessions` (ganhou o primeiro caller de verdade)
+- ✅ `auth.service.refresh`: sem cookie → 401; hash não encontrado → 401; **`usedAt` setado → invalida TODAS as sessions do usuário (roubo) → 401**; `invalidatedAt` setado → 401; expirado → 401; senão rotaciona e retorna novo par (mesma mensagem genérica em todo 401, não revela qual checagem falhou)
+- ✅ `auth.controller.refresh`: sem `canAccess` (funciona com access token ausente/expirado — é o propósito do endpoint); seta novo cookie, responde `{ accessToken }`
+- ✅ Rota `POST /auth/refresh` sem `canAccess`
+- ✅ Rodar suíte e confirmar verde (243/245 — os 2 vermelhos restantes continuam sendo os testes de `logout`, agora falhando com 401 em vez de 403 pela mesma causa raiz: `canAccess("logout:session")` sem `authenticate` próprio numa rota que ficou pública — fora de escopo, é o próximo item)
+
+### ✅ `POST /auth/logout` (TDD)
+- ✅ Testes de integração primeiro: 401 sem access token; 403 sem `manage:session`; 401 sem cookie de refresh; 404 sessão não encontrada; 404 sessão de outro usuário (ownership — não vaza existência); 204 invalida + limpa o cookie; 204 idempotente; 204 não afeta outras sessões do mesmo usuário; access token continua válido até expirar mesmo após logout (documenta o trade-off do design stateless)
+- ✅ **Redesenho decidido com o usuário** (diferente do texto original abaixo — desatualizado, escrito antes da mudança de arquitetura do item `refresh`): rota ganha `authenticate` própria (não o grupo `/auth`) + `canAccess("manage:session")` no lugar de `logout:session`; identifica a sessão pelo cookie de refresh (`findSessionByHash`, igual ao `refresh`), não mais pelo access token; confere que a sessão pertence ao `req.user.id` antes de invalidar (404 se não — mesma resposta de "não encontrada")
+- ✅ `auth.service.logout(refreshToken, userId)`: sem cookie → 401; sessão não encontrada OU não é do usuário → 404 (mantém comportamento de 404 já existente); invalida (idempotente, `update` sobrescreve `invalidatedAt`) → sucesso
+- ✅ `auth.controller.logout`: lê cookie, usa `getAuthUser(req)` (padrão já usado no resto do projeto), limpa cookie na resposta, 204
+- ✅ Rota `POST /auth/logout` com `authenticate` + `canAccess("manage:session")` (não mais `logout:session`, removida do catálogo no item 1)
+- ✅ `auth.repository`: removida `findSessionByToken` (órfã); `invalidateSession` passou a chavear por `id`, não mais por `token`
+- ✅ Rodar suíte e confirmar verde — **252/252 testes + `npm run typecheck` limpo**, primeira vez desde o item 1 que tudo fecha ao mesmo tempo
+
+### ✅ `GET /api/v1/auth/sessions` (feature `read:session`)
+- ✅ Testes de integração primeiro: 401 sem access token; 403 sem `read:session`; 200 lista só sessões vivas do próprio usuário (cria vivas + rotacionada + invalidada + expirada, confirma que só as vivas aparecem); 200 não inclui sessões de outro usuário; shape via `sessionPresenter`/`toMatchView` (sem `refreshTokenHash`)
+- ✅ Rodar suíte e confirmar falha
+- ✅ `auth.repository.findLiveSessionsByUserId` — filtro `usedAt: null, invalidatedAt: null, expiresAt: { gt: new Date() }` (nota: mais rigoroso que `invalidateAllUserSessions`, que não filtra `usedAt` — gap conhecido, tratado separadamente no fecho da fase)
+- ✅ `auth.service.listSessions` — sem checagem de existência do user (garantida pelo `authenticate`); lista vazia é resultado válido
+- ✅ `auth.presenter.ts` (view `default`: id, createdAt, expiresAt, userAgent, ipAddress)
+- ✅ Controller + rota `GET /sessions` (`authenticate` + `canAccess("read:session")` próprios da rota, mesmo padrão do `logout`)
+- ✅ Rodar suíte e confirmar verde (256/256 + `npm run typecheck` limpo)
+
+### ✅ `DELETE /api/v1/auth/sessions/:id` (feature `manage:session`)
+- ✅ Testes de integração primeiro: 401 sem access token; 403 sem `manage:session`; 422 `:id` inválido; 404 sessão de outro usuário (não vaza existência); 404 sessão inexistente; **404 sessão do próprio usuário mas já morta** (testado nos três estados: usada/invalidada/expirada); 204 revoga sessão viva própria; 204 não afeta outras sessões vivas do mesmo usuário (revogação pontual, não em massa)
+- ✅ Rodar suíte e confirmar falha
+- ✅ `auth.schema.sessionParamsSchema`
+- ✅ `auth.repository.findSessionByIdForUser` (scoped por dono via `where: { id, userId }`, qualquer estado — não achar é indistinguível de "é de outro usuário")
+- ✅ `auth.service.revokeSession`: não encontrada OU encontrada mas não viva → 404 genérico (mesma mensagem, não diferencia os casos); senão invalida → sucesso
+- ✅ Controller + rota `DELETE /sessions/:id` (`authenticate` + `canAccess("manage:session")` próprios da rota, mesmo padrão do `logout`/`GET /sessions`)
+- ✅ Rodar suíte e confirmar verde (266/266 + `npm run typecheck` limpo)
+
+### ✅ Fechos da fase
+- ✅ `src/__tests__/helpers/auth.ts`: `loginAs` lê `response.body.accessToken`; novos helpers `extractRefreshCookie(response)` e `loginWithSession(email, password)` — adiantados (itens `login` e `refresh`), não precisam ser refeitos aqui
+- ✅ Reescrever `src/__tests__/integration/v1/auth.test.ts` por completo (conserta o import quebrado de `makeUserData` → nunca exportar, usar `buildCustomer`/`buildEmployee`, não a função interna sem perfil; migra pro padrão `buildCustomer`/`buildEmployee`/`loginAs`/`expectValidationError`/`toMatchView`), cobrindo: signup; login (access no corpo, refresh só em cookie, 401 credenciais erradas, dois logins geram duas sessions independentes); refresh (rotação troca o valor do refresh cookie, cookie antigo vira `usedAt`, replay do token antigo derruba TODAS as sessions do usuário incluindo as de outros logins/dispositivos, access token novo funciona numa rota protegida); logout (invalida só aquela sessão, não afeta outros dispositivos, cookie limpo na resposta, `Authorization` header + `authenticate`+`canAccess("manage:session")` próprios da rota); sessions (list/delete, casos completos); **adicionado além do previsto**: teste ponta-a-ponta signup real (via `POST /auth/signup`) → login → `GET /me` → refresh → `GET /sessions` → logout, num usuário genuinamente criado pelo endpoint (não via `buildCustomer`), fechando o gap de nunca ter exercitado esse caminho completo numa sequência só
+- ✅ **Refactor de `authenticate` (global → por grupo de rota, feito no item `refresh`) confirmado**: nenhum grupo protegido ficou sem `authenticate` em `routes/index.ts`; `/status` e `/auth` continuam públicos de propósito; `logout`, `GET /auth/sessions` e `DELETE /auth/sessions/:id` têm `authenticate` própria (não o grupo `/auth` inteiro)
+- ✅ `user.repository.softDeleteUserAndInvalidateSessions`: filtro do `updateMany` ganha `usedAt: null` (mesma tripla de `findLiveSessionsByUserId`)
+- ✅ **Auditoria geral pedida pelo usuário ao fechar a fase** (routing/middlewares, referências obsoletas ao shape antigo de `Session`, fluxo ponta-a-ponta) — achados extras corrigidos, fora do escopo original da fase:
+  - `canAccess.middleware.ts` migrado de `res.status().json()` cru para `createUnauthorizedError`/`createForbiddenError` — mesma dívida técnica que a fase já tinha fechado para `authenticate`, mas que não tinha sido estendida a `canAccess`. Confirmado seguro: toda asserção de teste existente usa `toMatchObject`, não `toEqual` estrito, então os campos extras do `AppError.toJson()` (`name`, `statusCode`) não quebram nada
+  - `refreshSessionSchema` (código morto em `auth.schema.ts`, zero usos, pré-datava o design atual de identificar sessão por `id`/cookie) removido
+  - **Decisão explícita tomada durante a implementação**: `auth.repository.invalidateAllUserSessions` (resposta a roubo no `refresh`) NÃO ganhou o filtro `usedAt: null` — diferente de `softDeleteUserAndInvalidateSessions`, de propósito. O teste `"should invalidate ALL of the user's sessions when a used refresh token is replayed"` exige que TODA sessão do usuário fique com `invalidatedAt` setado, inclusive a já usada, para auditoria completa do incidente. Adicionar o filtro quebraria esse teste e essa garantia. Racional completo no `CONTEXT.md`
+  - Reativados dois testes comentados em `permission.test.ts` (de antes da Fase 3, sem relação com ela) que testam a regressão "override soft-deletado devolve a feature" e "re-grant após soft-delete sem choque de unicidade" — estavam comentados por causa de um `import { prisma }` faltando no arquivo (`ReferenceError`, não um problema de lógica); corrigido o import, testes voltaram a passar sem qualquer mudança de lógica
+- ✅ `npm run typecheck` + `npm run test:run` limpos
+- ✅ `TODO.md` marcando a fase como ✅ e `CONTEXT.md` atualizado com o racional do design de `Session`, a ordem de checagem no `refresh`, e a distinção de critério entre `invalidateAllUserSessions` e `softDeleteUserAndInvalidateSessions`
 
 ---
 
 ## Fases seguintes (resumo)
-- **Fase 3 — Auth alvo:** refatorar `auth.test.ts` para os helpers novos (fix do import quebrado de `makeUserData` + `buildCustomer`/`loginAs`/`expectValidationError`/`toMatchView`, no padrão dos demais arquivos de teste); access JWT 15min validado localmente + refresh opaco rotativo com detecção de roubo; Session reshape (refreshToken/userAgent/ip/usedAt); cookie httpOnly; GET/DELETE `/auth/sessions`.
 - **Fase 4 — Email + status:** nodemailer; status PENDING/ACTIVE/BANNED + EmailVerificationToken + activate; bloquear login não-ACTIVE; PasswordResetToken (forgot/reset); change-password. (É aqui que o soft delete ganha peso — vendas se ligam a customer.)
 - **Fase 5 — Hardening:** rate limiting, account lockout. (Revisitar proteção de escalação se precisar de algo além do admin-only.)
 - **Fase 6 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.

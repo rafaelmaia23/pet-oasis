@@ -3,9 +3,11 @@ import type { StringValue } from "ms";
 import { env } from "@/config/env";
 import { createNotFoundError, createUnauthorizedError } from "@/errors";
 import { verifyPassword } from "@/lib/password";
+import { generateOpaqueRefreshToken, hashRefreshToken } from "@/lib/token";
 import * as userService from "@/modules/user/user.service";
 import * as userRepository from "../user/user.repository";
 import type { CreateCustomerInput } from "../user/user.schema";
+import { REFRESH_TOKEN_TTL_MS } from "./auth.constants";
 import * as authRepository from "./auth.repository";
 import type { LoginInput } from "./auth.schema";
 
@@ -15,32 +17,16 @@ function generateToken(userId: string): string {
   });
 }
 
-function getExpiresAt(): Date {
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7); // Set expiration to 7 days from now
-  return expiresAt;
-}
-
 export async function signup(data: CreateCustomerInput) {
   const user = await userService.createCustomer(data);
 
   return user;
 }
 
-export async function login(data: LoginInput, existingToken?: string) {
-  if (existingToken) {
-    const existingSession =
-      await authRepository.findSessionByToken(existingToken);
-
-    if (
-      existingSession &&
-      !existingSession.invalidatedAt &&
-      existingSession.expiresAt > new Date()
-    ) {
-      return { token: existingToken };
-    }
-  }
-
+export async function login(
+  data: LoginInput,
+  context: { userAgent?: string | undefined; ipAddress?: string | undefined },
+) {
   const user = await userRepository.findUserByEmail(data.email);
 
   if (!user) {
@@ -59,26 +45,118 @@ export async function login(data: LoginInput, existingToken?: string) {
     });
   }
 
-  const token = generateToken(user.id);
+  const accessToken = generateToken(user.id);
+  const refreshToken = generateOpaqueRefreshToken();
 
   await authRepository.createSession({
     userId: user.id,
-    token,
-    expiresAt: getExpiresAt(),
+    refreshTokenHash: hashRefreshToken(refreshToken),
+    expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+    userAgent: context.userAgent,
+    ipAddress: context.ipAddress,
   });
 
-  return { token };
+  return { accessToken, refreshToken };
 }
 
-export async function logout(token: string) {
-  const session = await authRepository.findSessionByToken(token);
+const REFRESH_INVALID_ERROR = {
+  message: "Sessão inválida",
+  action: "Faça login novamente",
+};
+
+export async function refresh(
+  refreshToken: string | undefined,
+  context: { userAgent?: string | undefined; ipAddress?: string | undefined },
+) {
+  if (!refreshToken) {
+    throw createUnauthorizedError(REFRESH_INVALID_ERROR);
+  }
+
+  const session = await authRepository.findSessionByHash(
+    hashRefreshToken(refreshToken),
+  );
 
   if (!session) {
+    throw createUnauthorizedError(REFRESH_INVALID_ERROR);
+  }
+
+  if (session.usedAt) {
+    await authRepository.invalidateAllUserSessions(session.userId);
+    throw createUnauthorizedError(REFRESH_INVALID_ERROR);
+  }
+
+  if (session.invalidatedAt) {
+    throw createUnauthorizedError(REFRESH_INVALID_ERROR);
+  }
+
+  if (session.expiresAt < new Date()) {
+    throw createUnauthorizedError(REFRESH_INVALID_ERROR);
+  }
+
+  const newRefreshToken = generateOpaqueRefreshToken();
+
+  await authRepository.rotateSession(session.id, {
+    userId: session.userId,
+    refreshTokenHash: hashRefreshToken(newRefreshToken),
+    expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+    userAgent: context.userAgent,
+    ipAddress: context.ipAddress,
+  });
+
+  const accessToken = generateToken(session.userId);
+
+  return { accessToken, refreshToken: newRefreshToken };
+}
+
+const LOGOUT_INVALID_ERROR = {
+  message: "Sessão inválida",
+  action: "Faça login novamente",
+};
+
+export async function logout(refreshToken: string | undefined, userId: string) {
+  if (!refreshToken) {
+    throw createUnauthorizedError(LOGOUT_INVALID_ERROR);
+  }
+
+  const session = await authRepository.findSessionByHash(
+    hashRefreshToken(refreshToken),
+  );
+
+  if (!session || session.userId !== userId) {
     throw createNotFoundError({
       message: "Sessão não encontrada",
       action: "Faça login para criar uma nova sessão",
     });
   }
 
-  await authRepository.invalidateSession(session.token);
+  await authRepository.invalidateSession(session.id);
+}
+
+export async function listSessions(userId: string) {
+  return authRepository.findLiveSessionsByUserId(userId);
+}
+
+const REVOKE_SESSION_NOT_FOUND_ERROR = {
+  message: "Sessão não encontrada",
+  action: "Verifique o ID e tente novamente",
+};
+
+export async function revokeSession(userId: string, sessionId: string) {
+  const session = await authRepository.findSessionByIdForUser(
+    sessionId,
+    userId,
+  );
+
+  if (!session) {
+    throw createNotFoundError(REVOKE_SESSION_NOT_FOUND_ERROR);
+  }
+
+  const isLive =
+    !session.usedAt && !session.invalidatedAt && session.expiresAt > new Date();
+
+  if (!isLive) {
+    throw createNotFoundError(REVOKE_SESSION_NOT_FOUND_ERROR);
+  }
+
+  await authRepository.invalidateSession(session.id);
 }

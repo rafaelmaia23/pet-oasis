@@ -46,6 +46,11 @@ async function main() {
         },
       });
     }
+
+    const currentFeatureNames = DEFAULT_FEATURES.map((f) => f.name);
+    await tx.feature.deleteMany({
+      where: { name: { notIn: currentFeatureNames } },
+    });
   });
 
   console.log(`${DEFAULT_FEATURES.length} features sincronizadas com sucesso.`);

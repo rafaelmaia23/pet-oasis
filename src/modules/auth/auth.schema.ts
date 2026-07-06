@@ -10,10 +10,12 @@ export const loginSchema = z.object({
   }),
 });
 
-export const refreshSessionSchema = z.object({
-  body: z.object({
-    sessionId: z.uuid("Invalid session ID"),
+export const sessionParamsSchema = z.object({
+  params: z.object({
+    id: z.uuid("Invalid session ID"),
   }),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>["body"];
+
+export type SessionParams = z.infer<typeof sessionParamsSchema>["params"];

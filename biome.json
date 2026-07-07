@@ -1,4 +1,7 @@
 {
+  "files": {
+    "includes": ["**", "!src/generated"]
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space"

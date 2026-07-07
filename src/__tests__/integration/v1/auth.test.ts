@@ -18,7 +18,7 @@ import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
-import { hashRefreshToken } from "@/lib/token";
+import { hashToken } from "@/lib/token";
 import {
   REFRESH_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_PATH,
@@ -34,9 +34,7 @@ function rawRefreshTokenFromCookie(refreshCookie: string): string {
 async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
   const session = await prisma.session.findUniqueOrThrow({
     where: {
-      refreshTokenHash: hashRefreshToken(
-        rawRefreshTokenFromCookie(refreshCookie),
-      ),
+      refreshTokenHash: hashToken(rawRefreshTokenFromCookie(refreshCookie)),
     },
   });
   return session.id;

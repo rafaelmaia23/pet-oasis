@@ -1,7 +1,7 @@
 import { faker } from "@faker-js/faker";
 import { cpf } from "cpf-cnpj-validator";
 import { createInternalServerError } from "@/errors/errorFactory";
-import type { ProfileKind } from "@/generated/prisma/enums";
+import type { ProfileKind, UserStatus } from "@/generated/prisma/enums";
 import { type AuthUser, computeEffectiveFeatures } from "@/lib/authorization";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -58,6 +58,7 @@ export async function buildCustomer(overrides?: {
   roleNames?: RoleName[];
   grants?: FeatureName[];
   denies?: FeatureName[];
+  status?: UserStatus;
   data?: Partial<CreateCustomerInput>;
 }) {
   const rawData = makeCustomerData(overrides?.data);
@@ -72,6 +73,11 @@ export async function buildCustomer(overrides?: {
     ...userData,
     passwordHash,
     roleNames: overrides?.roleNames ?? DEFAULT_CUSTOMER_ROLES,
+  });
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { status: overrides?.status ?? "ACTIVE" },
   });
 
   if (overrides?.grants || overrides?.denies) {
@@ -107,6 +113,7 @@ export async function buildEmployee(overrides?: {
   roleNames?: RoleName[];
   grants?: FeatureName[];
   denies?: FeatureName[];
+  status?: UserStatus;
   data?: Partial<CreateEmployeeInput>;
 }) {
   const rawData = makeEmployeeData(overrides?.data);
@@ -121,6 +128,11 @@ export async function buildEmployee(overrides?: {
     ...userData,
     passwordHash,
     roleNames: overrides?.roleNames ?? DEFAULT_EMPLOYEE_ROLES,
+  });
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { status: overrides?.status ?? "ACTIVE" },
   });
 
   if (overrides?.grants || overrides?.denies) {

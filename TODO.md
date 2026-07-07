@@ -43,9 +43,9 @@
 - ✅ `docker-compose.yml`: serviço `mailpit` (`axllent/mailpit`, SMTP `1025`, UI `8025`, sem volume) + npm script `mail:up` (padrão dos `db:*`). `nodemailer` + `@types/nodemailer` instalados. **Rename:** `db:up`/`db:down`/`db:reset` (rodam `docker compose` sem serviço → sobem/derrubam tudo) → `services:up`/`services:down`/`services:reset`; refs atualizadas no `CLAUDE.md`.
 - ✅ `src/lib/token.ts`: generalizado `generateOpaqueRefreshToken`/`hashRefreshToken` → `generateOpaqueToken`/`hashToken` (+ const `OPAQUE_TOKEN_BYTES`); implementação inalterada (sha256/hex, 32 bytes). Callers adaptados (`auth.service.ts`, `auth.test.ts` integração). Testes unitários primeiro (`token.test.ts`); suíte de auth verde.
 - ✅ `src/lib/email.ts`: serviço genérico — `transporter` singleton via `env` (`secure` = produção; `auth` só se `SMTP_USER`), `send({ to, subject, html, text? })` com `from: MAIL_FROM`, erro → `createServiceUnavailableError` (503, message/action PT, `cause` preservado). Teste unitário com nodemailer mockado (`vi.hoisted` + factory `vi.mock` — primeiro mock de módulo default-export no repo).
-- ⬜ `feature.constants.ts`: adicionar `manage:user:status` (ban/unban). `role.constants.ts`: incluir em `USER_ADMINISTRATION_FEATURES` (manager ganha; admin via `*`). `npm run db:seed` e confirmar catálogo sincronizado.
-- ⬜ `src/__tests__/helpers/database.ts` (`clearDatabase`): deletar `verificationToken` na ordem certa (antes de `user`). Factories (`buildCustomer`/`buildEmployee`): permitir criar já `ACTIVE` (helper de teste não deve passar por verificação de email a cada caso).
-- ⬜ `npm run typecheck` + `npm run lint` limpos.
+- ✅ `feature.constants.ts`: adicionado `manage:user:status`. `role.constants.ts`: incluído em `USER_ADMINISTRATION_FEATURES` (manager ganha; admin via `*`). `npm run db:seed` (17 features) + client regenerado (`db:generate`); catálogo sincronizado (test DB reseeda no globalSetup do Vitest).
+- ✅ `src/__tests__/helpers/database.ts` (`clearDatabase`): deleta `verificationToken` antes de `user`. Factories (`buildCustomer`/`buildEmployee`): override `status?` com default `ACTIVE` (PENDING sob demanda p/ testes da 4.1); repository de signup inalterado (segue `PENDING`).
+- ✅ `npm run typecheck` + `npm run lint` limpos (suíte 273/273 verde).
 
 ### ⬜ Fase 4.1 — Verificação de email + gate de login
 > **Firmado:** todo usuário novo (signup self-service **e** criados por admin via `POST /users` / `POST /users/:id/employee|customer`) nasce `PENDING`. Verificação sob `/auth` (recurso central = token). Só `ACTIVE` loga.

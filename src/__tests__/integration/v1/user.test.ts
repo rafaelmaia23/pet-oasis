@@ -1,8 +1,17 @@
 import { faker } from "@faker-js/faker";
 import request from "supertest";
-import { afterEach, assert, describe, expect, it } from "vitest";
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import z from "zod";
 import {
+  buildCustomer,
   buildEmployee,
   makeEmployeeData,
 } from "@/__tests__/factories/user.factory";
@@ -10,15 +19,25 @@ import {
   expectValidationError,
   expectValidUuid,
 } from "@/__tests__/helpers/assertions";
-import { loginAs } from "@/__tests__/helpers/auth";
+import { loginAs, loginWithSession } from "@/__tests__/helpers/auth";
 import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
 import { verifyPassword } from "@/lib/password";
+import { prisma } from "@/lib/prisma";
 import { userViews } from "@/modules/user/user.presenter";
 import {
   findDeletedUserById,
   findUserById,
 } from "@/modules/user/user.repository";
+
+const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }));
+
+vi.mock("@/lib/email", () => ({ send: sendMock }));
+
+beforeEach(() => {
+  sendMock.mockReset();
+  sendMock.mockResolvedValue(undefined);
+});
 
 afterEach(async () => {
   await clearDatabase();
@@ -194,6 +213,38 @@ describe("POST /api/v1/users", () => {
       false,
     );
   });
+
+  it("should create the user as PENDING and emit an email verification token", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    sendMock.mockClear();
+
+    const newUserData = makeEmployeeData();
+
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(newUserData);
+
+    expect(response.status).toBe(201);
+
+    const userInDb = await findUserById(response.body.id);
+    assert(userInDb !== null, "User should be found in the database");
+    expect(userInDb.status).toBe("PENDING");
+
+    const tokens = await prisma.verificationToken.findMany({
+      where: { userId: userInDb.id },
+    });
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]?.purpose).toBe("EMAIL_VERIFICATION");
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: newUserData.email }),
+    );
+  });
 });
 
 describe("GET /api/v1/users", () => {
@@ -331,8 +382,8 @@ describe("GET /api/v1/users/:id", () => {
     expectValidationError(response, ["id"]);
   });
 
-  it("should return 404 if user with given id does not exist", async () => {
-    const user = await buildEmployee({ roleNames: ["attendant"] });
+  it("should return 404 if user with given id does not exist (authorized actor)", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
 
     const token = await loginAs(user.email, user.password);
 
@@ -346,6 +397,27 @@ describe("GET /api/v1/users/:id", () => {
       code: "NOT_FOUND",
       message: "Usuário não encontrado",
       action: "Verifique o ID e tente novamente",
+    });
+  });
+
+  it("should return 403 (not 404) for a non-existent id when the actor lacks read:user:others — no existence leak", async () => {
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["read:user:others"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get(`/api/v1/users/${faker.string.uuid()}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Você não tem permissão para acessar este recurso",
+      action: 'Verifique se você tem acesso a feature "read:user:others"',
     });
   });
 
@@ -1059,5 +1131,278 @@ describe("DELETE /api/v1/users/:id", () => {
       message: "Usuário não encontrado",
       action: "Verifique o ID e tente novamente",
     });
+  });
+});
+
+describe("POST /api/v1/users/:id/ban", () => {
+  it("should return 401 without an access token", async () => {
+    const target = await buildCustomer();
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/ban`)
+      .send({ reason: "abuse" });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 403 without the manage:user:status feature", async () => {
+    const actor = await buildEmployee({ roleNames: ["attendant"] });
+    const target = await buildCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ reason: "abuse" });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 422 for an invalid :id", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post("/api/v1/users/not-a-uuid/ban")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ reason: "abuse" });
+
+    expect(response.status).toBe(422);
+  });
+
+  it("should return 422 when reason is missing", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["reason"]);
+  });
+
+  it("should return 404 for a non-existent target", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${faker.string.uuid()}/ban`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ reason: "abuse" });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("should return 403 when a non-admin bans a privileged target", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ reason: "abuse" });
+
+    expect(response.status).toBe(403);
+
+    const targetInDb = await findUserById(target.id);
+    expect(targetInDb?.bannedAt).toBeNull();
+  });
+
+  it("should return 409 when the actor tries to ban itself", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${actor.id}/ban`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ reason: "abuse" });
+
+    expect(response.status).toBe(409);
+
+    const actorInDb = await findUserById(actor.id);
+    expect(actorInDb?.bannedAt).toBeNull();
+  });
+
+  it("should return 409 when the target is already banned", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildCustomer();
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { bannedAt: new Date(), banReason: "prior" },
+    });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ reason: "abuse" });
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should ban the target, set the audit columns and invalidate its sessions", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(
+      target.email,
+      target.password,
+    );
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ reason: "spam" });
+
+    expect(response.status).toBe(204);
+
+    const targetInDb = await findUserById(target.id);
+    expect(targetInDb?.bannedAt).not.toBeNull();
+    expect(targetInDb?.bannedBy).toBe(actor.id);
+    expect(targetInDb?.banReason).toBe("spam");
+
+    // sessions dropped
+    const refreshResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(refreshResponse.status).toBe(401);
+
+    // banned account cannot log in
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: target.password,
+    });
+    expect(loginResponse.status).toBe(403);
+  });
+});
+
+describe("DELETE /api/v1/users/:id/ban", () => {
+  async function bannedCustomer() {
+    const target = await buildCustomer();
+    await prisma.user.update({
+      where: { id: target.id },
+      data: {
+        bannedAt: new Date(),
+        bannedBy: faker.string.uuid(),
+        banReason: "x",
+      },
+    });
+    return target;
+  }
+
+  it("should return 401 without an access token", async () => {
+    const target = await bannedCustomer();
+
+    const response = await request(app).delete(
+      `/api/v1/users/${target.id}/ban`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 403 without the manage:user:status feature", async () => {
+    const actor = await buildEmployee({ roleNames: ["attendant"] });
+    const target = await bannedCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 422 for an invalid :id", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete("/api/v1/users/not-a-uuid/ban")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+  });
+
+  it("should return 404 for a non-existent target", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${faker.string.uuid()}/ban`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+  });
+
+  it("should return 403 when a non-admin unbans a privileged target", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildEmployee({ roleNames: ["admin"] });
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { bannedAt: new Date(), banReason: "x" },
+    });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 409 when the actor tries to unban itself", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${actor.id}/ban`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should return 409 when the target is not banned", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should unban the target, clear the audit columns and preserve status", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildCustomer();
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { bannedAt: new Date(), bannedBy: actor.id, banReason: "x" },
+    });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const targetInDb = await findUserById(target.id);
+    expect(targetInDb?.bannedAt).toBeNull();
+    expect(targetInDb?.bannedBy).toBeNull();
+    expect(targetInDb?.banReason).toBeNull();
+    expect(targetInDb?.status).toBe("ACTIVE");
+
+    // can log in again
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: target.password,
+    });
+    expect(loginResponse.status).toBe(200);
   });
 });

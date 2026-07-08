@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "./user.presenter";
 import {
+  banUserSchema,
   createEmployeeSchema,
   updateUserSchema,
   userParamsSchema,
@@ -54,6 +55,25 @@ export const deleteUser = async (req: Request, res: Response) => {
   const { params } = userParamsSchema.parse({ params: req.params });
 
   await userService.deleteUser(getAuthUser(req), params.id);
+
+  return res.status(204).send();
+};
+
+export const banUser = async (req: Request, res: Response) => {
+  const { params, body } = banUserSchema.parse({
+    params: req.params,
+    body: req.body,
+  });
+
+  await userService.banUser(getAuthUser(req).id, params.id, body.reason);
+
+  return res.status(204).send();
+};
+
+export const unbanUser = async (req: Request, res: Response) => {
+  const { params } = userParamsSchema.parse({ params: req.params });
+
+  await userService.unbanUser(getAuthUser(req).id, params.id);
 
   return res.status(204).send();
 };

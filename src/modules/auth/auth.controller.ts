@@ -8,8 +8,19 @@ import {
   REFRESH_TOKEN_TTL_MS,
 } from "./auth.constants";
 import { sessionPresenter } from "./auth.presenter";
-import { loginSchema, sessionParamsSchema, signupSchema } from "./auth.schema";
+import {
+  changePasswordSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  resendVerificationSchema,
+  resetPasswordSchema,
+  sessionParamsSchema,
+  signupSchema,
+  verifyEmailSchema,
+} from "./auth.schema";
 import * as authService from "./auth.service";
+import * as passwordService from "./password.service";
+import * as verificationService from "./verification.service";
 
 export const signup = async (req: Request, res: Response) => {
   const { body } = signupSchema.parse({ body: req.body });
@@ -17,6 +28,56 @@ export const signup = async (req: Request, res: Response) => {
   const result = await authService.signup(body);
 
   res.status(201).json(userPresenter.present(result, "owner"));
+};
+
+export const verifyEmail = async (req: Request, res: Response) => {
+  const { body } = verifyEmailSchema.parse({ body: req.body });
+
+  await verificationService.verifyEmail(body.token);
+
+  res.status(204).send();
+};
+
+export const resendVerification = async (req: Request, res: Response) => {
+  const { body } = resendVerificationSchema.parse({ body: req.body });
+
+  await verificationService.resendVerification(body.email);
+
+  res.status(200).json({
+    message:
+      "Se houver uma conta pendente com este email, um novo link de verificação foi enviado",
+  });
+};
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  const { body } = forgotPasswordSchema.parse({ body: req.body });
+
+  await passwordService.requestPasswordReset(body.email);
+
+  res.status(200).json({
+    message:
+      "Se houver uma conta ativa com este email, um link de redefinição de senha foi enviado",
+  });
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  const { body } = resetPasswordSchema.parse({ body: req.body });
+
+  await passwordService.resetPassword(body.token, body.newPassword);
+
+  res.status(204).send();
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  const { body } = changePasswordSchema.parse({ body: req.body });
+
+  await passwordService.changePassword(
+    getAuthUser(req).id,
+    body.currentPassword,
+    body.newPassword,
+  );
+
+  res.status(204).send();
 };
 
 export const login = async (req: Request, res: Response) => {

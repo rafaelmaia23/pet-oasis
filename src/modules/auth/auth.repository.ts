@@ -1,3 +1,4 @@
+import type { VerificationPurpose } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 
 type CreateSessionData = {
@@ -58,6 +59,76 @@ export async function invalidateAllUserSessions(userId: string) {
 
 export async function findSessionByIdForUser(id: string, userId: string) {
   return prisma.session.findFirst({ where: { id, userId } });
+}
+
+type CreateVerificationTokenData = {
+  userId: string;
+  tokenHash: string;
+  purpose: VerificationPurpose;
+  expiresAt: Date;
+};
+
+export async function createVerificationToken(
+  data: CreateVerificationTokenData,
+) {
+  return prisma.verificationToken.create({ data });
+}
+
+export async function findVerificationTokenByHash(tokenHash: string) {
+  return prisma.verificationToken.findUnique({ where: { tokenHash } });
+}
+
+export async function consumeEmailVerification(
+  tokenId: string,
+  userId: string,
+) {
+  return prisma.$transaction([
+    prisma.verificationToken.update({
+      where: { id: tokenId },
+      data: { usedAt: new Date() },
+    }),
+    prisma.user.update({
+      where: { id: userId },
+      data: { status: "ACTIVE" },
+    }),
+  ]);
+}
+
+export async function consumePasswordReset(
+  tokenId: string,
+  userId: string,
+  passwordHash: string,
+) {
+  return prisma.$transaction([
+    prisma.verificationToken.update({
+      where: { id: tokenId },
+      data: { usedAt: new Date() },
+    }),
+    prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    }),
+    prisma.session.updateMany({
+      where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
+      data: { invalidatedAt: new Date() },
+    }),
+  ]);
+}
+
+export async function updatePasswordAndInvalidateSessions(
+  userId: string,
+  passwordHash: string,
+) {
+  return prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    }),
+    prisma.session.updateMany({
+      where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
+      data: { invalidatedAt: new Date() },
+    }),
+  ]);
 }
 
 export async function findLiveSessionsByUserId(userId: string) {

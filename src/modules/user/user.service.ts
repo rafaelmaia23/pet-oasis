@@ -66,19 +66,19 @@ export async function createCustomer(data: CreateCustomerInput) {
 }
 
 export async function getUserById(requestingUser: AuthUser, targetId: string) {
+  if (!canActOnResource(requestingUser, "read:user", targetId)) {
+    throw createForbiddenError({
+      message: "Você não tem permissão para acessar este recurso",
+      action: 'Verifique se você tem acesso a feature "read:user:others"',
+    });
+  }
+
   const user = await userRepository.findUserById(targetId);
 
   if (!user) {
     throw createNotFoundError({
       message: "Usuário não encontrado",
       action: "Verifique o ID e tente novamente",
-    });
-  }
-
-  if (!canActOnResource(requestingUser, "read:user", user.id)) {
-    throw createForbiddenError({
-      message: "Você não tem permissão para acessar este recurso",
-      action: 'Verifique se você tem acesso a feature "read:user:others"',
     });
   }
 

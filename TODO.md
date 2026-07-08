@@ -31,7 +31,7 @@
 
 ---
 
-## Fase 4 — Email, status de conta e banimento ⬜
+## Fase 4 — Email, status de conta e banimento ✅
 
 > Introduz status de conta com verificação de email obrigatória, um serviço de email genérico (nodemailer; mailpit em dev / Resend em prod), troca/recuperação de senha e banimento. Regras de negócio decididas no planejamento e registradas no `CONTEXT.md` (seção "Fase 4"). Cada seção abaixo é uma feat-branch em TDD (teste primeiro, código depois).
 >
@@ -101,12 +101,12 @@
 - ✅ Status de resposta do ban decidido: **204** (coerente com DELETE de user)
 - ✅ Suíte (326) + `typecheck` + `lint` verdes
 
-### ⬜ Fase 4.5 — Fechos
-- ⬜ Atualizar `ENDPOINTS.md` com as rotas novas (`/auth/verify-email`, `/auth/verify-email/resend`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/change-password`, `POST`/`DELETE /users/:id/ban`) + a nova feature `manage:user:status`
-- ⬜ `CONTEXT.md`: consolidar o racional (status ortogonal ao ban, anti-enumeração no forgot/resend/signup, invalidação de sessão em reset/change/ban, design do `VerificationToken` genérico, gate de login 403) — já esboçado na seção "Fase 4 (planejada)", promover a "fechada"
-- ⬜ **Bug pré-existente (achado na condensação das Fases 2/3):** `user.service.getUserById` (`src/modules/user/user.service.ts:52-70`) faz a busca ANTES da autorização (404 antes de 403), contrariando a regra "autorização antes da busca / 403 vence 404" — vaza existência de id em `GET /users/:id` para ator sem `read:user:others`. Inverter a ordem (checar `canActOnResource` antes do `findUserById`), espelhando `updateUser`/`deleteUser`; adicionar teste de regressão (403 igual para id existente e inexistente).
-- ⬜ **Bug — request sem body / JSON malformado → 500 (deveria ser 400/422):** quando o `express.json()` (body-parser) falha ao parsear o corpo, ele lança um `SyntaxError` com `type: 'entity.parse.failed'` e `statusCode: 400`, e o error handler central não o reconhece → responde **500** "Unexpected error". Repro: `POST /api/v1/auth/signup` **sem body** (ou com JSON inválido) → 500. Provavelmente **todos** os endpoints que dependem de body (`schema.parse({ body: req.body })`) se comportam igual. Tarefa: (1) investigar todos os POST/PATCH que leem body e confirmar o alcance; (2) tratar no error handler central o erro do body-parser (checar `err.type === 'entity.parse.failed'` / `err.statusCode === 400` / instância de `SyntaxError` com `body`), mapeando para o shape de erro padrão do projeto; (3) **decidir 400 (BAD_REQUEST) vs 422 (VALIDATION_ERROR)** — o que for mais semântico (decisão de negócio, definir na escrita); (4) testes cobrindo body ausente **e** body com JSON inválido, em pelo menos um endpoint representativo (idealmente um helper reaproveitável).
-- ⬜ `npm run typecheck` + `npm run lint` + `npm run test:run` limpos; marcar Fase 4 ✅
+### ✅ Fase 4.5 — Fechos
+- ✅ Atualizado `ENDPOINTS.md` com as rotas novas (`/auth/verify-email`, `/auth/verify-email/resend`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/change-password`, `POST`/`DELETE /users/:id/ban`) + a feature `manage:user:status` (na coluna Auth das linhas de ban)
+- ✅ `CONTEXT.md`: racional da Fase 4 promovido de "planejada" a "implementada/fechada" (§2.1, §3, §4); acrescentadas as decisões da execução (reset/change 204, change-password 403 senha errada, auto-ban 409, `assertAdminForBan` via features efetivas do alvo, freeze estendido a reset/change)
+- ✅ **Bug pré-existente corrigido:** `user.service.getUserById` agora autoriza ANTES de buscar (`canActOnResource` antes do `findUserById`, espelhando `deleteUser`) — 403 vence 404, não vaza existência de id. Teste de regressão adicionado (ator sem `read:user:others` → 403 igual para id existente e inexistente); teste do 404 legítimo trocado para ator com `read:user:others`. (`getUserByEmail` tem o mesmo padrão mas é código morto e não dá pra autorizar antes da busca por email — deixado como observação, fora de escopo.)
+- ✅ **Bug corrigido — request com JSON malformado → 500:** error handler central passou a mapear o `SyntaxError` do body-parser (`err instanceof SyntaxError && "body" in err`) para **400 BAD_REQUEST** (decisão firmada: 400, não 422). Testes de body malformado/`null` em endpoint representativo (`auth.test.ts` signup).
+- ✅ `npm run typecheck` + `npm run lint` + `npm run test:run` (329) limpos; **Fase 4 marcada ✅**
 
 ---
 

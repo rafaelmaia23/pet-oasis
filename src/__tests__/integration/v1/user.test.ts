@@ -1,6 +1,14 @@
 import { faker } from "@faker-js/faker";
 import request from "supertest";
-import { afterEach, assert, describe, expect, it } from "vitest";
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import z from "zod";
 import {
   buildEmployee,
@@ -14,11 +22,21 @@ import { loginAs } from "@/__tests__/helpers/auth";
 import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
 import { verifyPassword } from "@/lib/password";
+import { prisma } from "@/lib/prisma";
 import { userViews } from "@/modules/user/user.presenter";
 import {
   findDeletedUserById,
   findUserById,
 } from "@/modules/user/user.repository";
+
+const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }));
+
+vi.mock("@/lib/email", () => ({ send: sendMock }));
+
+beforeEach(() => {
+  sendMock.mockReset();
+  sendMock.mockResolvedValue(undefined);
+});
 
 afterEach(async () => {
   await clearDatabase();
@@ -192,6 +210,38 @@ describe("POST /api/v1/users", () => {
     ).toBe(true);
     expect(await verifyPassword("wrong-password", userInDb.passwordHash)).toBe(
       false,
+    );
+  });
+
+  it("should create the user as PENDING and emit an email verification token", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    sendMock.mockClear();
+
+    const newUserData = makeEmployeeData();
+
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(newUserData);
+
+    expect(response.status).toBe(201);
+
+    const userInDb = await findUserById(response.body.id);
+    assert(userInDb !== null, "User should be found in the database");
+    expect(userInDb.status).toBe("PENDING");
+
+    const tokens = await prisma.verificationToken.findMany({
+      where: { userId: userInDb.id },
+    });
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]?.purpose).toBe("EMAIL_VERIFICATION");
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: newUserData.email }),
     );
   });
 });

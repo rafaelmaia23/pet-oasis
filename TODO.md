@@ -37,7 +37,7 @@
 >
 > **Modelo de status (firmado):** `enum UserStatus { PENDING, ACTIVE }` + coluna `status` (default `PENDING`). Ban é **ortogonal**: colunas `bannedAt`/`bannedBy`/`banReason` no `User` (idioma timestamp-flag, como `deletedAt`). Loga só se `status == ACTIVE` **e** `bannedAt == null`. Desbanir limpa as três colunas e preserva o `status`.
 
-### 🔄 Fase 4.0 — Fundação (schema, config, docker, libs)
+### ✅ Fase 4.0 — Fundação (schema, config, docker, libs)
 - ✅ Migration: `enum UserStatus { PENDING, ACTIVE }`; `users.status` (default `PENDING`); `users.bannedAt`/`bannedBy`/`banReason` (nullable, `bannedBy` = uuid cru sem FK); model `VerificationToken` (`id`, `userId`, `tokenHash @unique`, `purpose`, `expiresAt`, `usedAt?`, `createdAt`, `onDelete: Cascade`) + `enum VerificationPurpose { EMAIL_VERIFICATION, PASSWORD_RESET }`. Aplicada em dev + teste; backfill `UPDATE users SET status='ACTIVE'` para linhas pré-existentes (default seguro).
 - ✅ `src/config/env.ts` + `env.example`: `SMTP_HOST`, `SMTP_PORT` (`z.coerce.number()`), `SMTP_USER`/`SMTP_PASS` (opcionais — mailpit sem auth), `MAIL_FROM`, `APP_URL`. Defaults dev-friendly (mailpit `localhost:1025`) → boota sem config; prod sobrescreve. Espelhado em `env.example` (grupo `# Mail`).
 - ✅ `docker-compose.yml`: serviço `mailpit` (`axllent/mailpit`, SMTP `1025`, UI `8025`, sem volume) + npm script `mail:up` (padrão dos `db:*`). `nodemailer` + `@types/nodemailer` instalados. **Rename:** `db:up`/`db:down`/`db:reset` (rodam `docker compose` sem serviço → sobem/derrubam tudo) → `services:up`/`services:down`/`services:reset`; refs atualizadas no `CLAUDE.md`.
@@ -47,22 +47,24 @@
 - ✅ `src/__tests__/helpers/database.ts` (`clearDatabase`): deleta `verificationToken` antes de `user`. Factories (`buildCustomer`/`buildEmployee`): override `status?` com default `ACTIVE` (PENDING sob demanda p/ testes da 4.1); repository de signup inalterado (segue `PENDING`).
 - ✅ `npm run typecheck` + `npm run lint` limpos (suíte 273/273 verde).
 
-### ⬜ Fase 4.1 — Verificação de email + gate de login
-> **Firmado:** todo usuário novo (signup self-service **e** criados por admin via `POST /users` / `POST /users/:id/employee|customer`) nasce `PENDING`. Verificação sob `/auth` (recurso central = token). Só `ACTIVE` loga.
+### ✅ Fase 4.1 — Verificação de email + gate de login
+> **Firmado:** todo usuário novo (signup self-service **e** criados por admin via `POST /users`) nasce `PENDING`. Verificação sob `/auth` (recurso central = token). Só `ACTIVE` loga.
+>
+> **Decisões desta fase:** emissão vale só para a **criação de usuário** (`createCustomer`/`createEmployee`, que cobre signup **e** `POST /users`); os **POSTs de perfil NÃO emitem** (adicionam perfil a user já existente, que já tem status/token). Token inválido/expirado/usado no verify-email → **400 genérico** (reusado no reset da 4.2). Sucesso do verify-email → **204**. Para evitar import circular (`auth.service`↔`user.service`), a orquestração vive em `src/modules/auth/verification.service.ts`.
 
-- ⬜ Criação de usuário passa a: setar `status: PENDING`, emitir `VerificationToken(EMAIL_VERIFICATION)` (opaco, hash salvo, TTL **24h**), enviar email com link do front (`APP_URL`) + token. Vale pra `createCustomer`/`createEmployee` (service) e para os POSTs de perfil.
-  - ⬜ Testes: signup/criação deixa o user `PENDING`; um `VerificationToken` é criado; o email é disparado (transporter mockado).
-- ⬜ **POST /api/v1/auth/verify-email** `{ token }` (público)
-  - ⬜ Testes primeiro: 422 body inválido; token inexistente/expirado/já usado → erro genérico (não vaza qual); sucesso → `status = ACTIVE`, token marca `usedAt`; verificar duas vezes o mesmo token → falha na segunda
-  - ⬜ Schema `verifyEmailSchema` (`auth.schema.ts`); service (busca por hash → valida `expiresAt`/`usedAt` → `$transaction`: ativa user + consome token); repository (`findVerificationTokenByHash`, `markTokenUsed`, `activateUser`); controller + rota
-- ⬜ **POST /api/v1/auth/verify-email/resend** `{ email }` (público)
-  - ⬜ Testes primeiro: **sempre 200 genérico** (anti-enumeração — email inexistente/já ACTIVE/banido respondem igual); se `PENDING` e não banido, um token novo é gerado e email enviado
-  - ⬜ Schema + service (`if PENDING && !banned → novo token + email`, senão no-op) + controller + rota
-- ⬜ **Gate de login** em `auth.service.login` (após a checagem de senha, ~`auth.service.ts:46`): `status != ACTIVE` → **403** ("verifique seu email para ativar a conta"); `bannedAt != null` → **403** ("conta suspensa, se acha que é um erro entre em contato com o suporte"). Senha errada continua **401** genérico.
-  - ⬜ Testes: login de `PENDING` → 403 mensagem de verificação; login de `ACTIVE` → 200; (banido coberto na Fase 4.4)
-- ⬜ Signup com email banido: confirmar que o **409 genérico** já existente (email `@unique` + linha do banido persiste) continua valendo, sem mensagem especial "banido"
-- ⬜ Atualizar as asserções de testes existentes que assumiam usuário utilizável na hora (factories agora criam `ACTIVE`; fluxos reais via endpoint criam `PENDING`)
-- ⬜ Suíte + `typecheck` verdes
+- ✅ Criação de usuário: `status` fica `PENDING` (default do schema), emite `VerificationToken(EMAIL_VERIFICATION)` (opaco, hash salvo, TTL **24h**) e envia email com link do front (`APP_URL`) + token. Vale só pra `createCustomer`/`createEmployee` (service). `EMAIL_VERIFICATION_TTL_MS` em `auth.constants.ts`.
+  - ✅ Testes: signup e `POST /users` deixam o user `PENDING`; um `VerificationToken` é criado; o email é disparado (`@/lib/email` mockado).
+- ✅ **POST /api/v1/auth/verify-email** `{ token }` (público)
+  - ✅ Testes: 422 body inválido; token inexistente/expirado/já usado → **400** genérico; sucesso → **204**, `status = ACTIVE`, token marca `usedAt`; verificar duas vezes o mesmo token → 2ª falha 400
+  - ✅ Schema `verifyEmailSchema`; `verification.service.verifyEmail` (busca por hash → valida `purpose`/`expiresAt`/`usedAt` → `authRepository.consumeEmailVerification` `$transaction`: consome token + ativa user); repository (`findVerificationTokenByHash`, `createVerificationToken`, `consumeEmailVerification`); controller + rota
+- ✅ **POST /api/v1/auth/verify-email/resend** `{ email }` (público)
+  - ✅ Testes: **sempre 200 genérico** (email inexistente/já ACTIVE/banido respondem igual, nenhum email sai); se `PENDING` e não banido, token novo + email
+  - ✅ Schema `resendVerificationSchema` + `verification.service.resendVerification` (`if PENDING && !banned → issueEmailVerification`, senão no-op) + controller + rota
+- ✅ **Gate de login** em `auth.service.login` (após a checagem de senha): `bannedAt != null` → **403** ("conta suspensa..."); `status != ACTIVE` → **403** ("verifique seu email..."). Senha errada continua **401** genérico.
+  - ✅ Testes: login de `PENDING` → 403; login de banido → 403; login de `ACTIVE` → 200
+- ✅ Signup com email banido: **409 genérico** (email `@unique` + linha do banido persiste) continua valendo, sem mensagem especial "banido" (teste de regressão)
+- ✅ Atualizado o teste end-to-end que logava logo após signup (agora verifica o email antes do login, extraindo o token do email mockado)
+- ✅ Suíte (289) + `typecheck` + `lint` verdes
 
 ### ⬜ Fase 4.2 — Recuperação de senha (forgot/reset)
 > **Firmado:** forgot sempre 200 genérico; reset invalida TODAS as sessões.

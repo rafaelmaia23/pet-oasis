@@ -9,6 +9,7 @@ import {
 } from "./auth.constants";
 import { sessionPresenter } from "./auth.presenter";
 import {
+  changePasswordSchema,
   forgotPasswordSchema,
   loginSchema,
   resendVerificationSchema,
@@ -63,6 +64,18 @@ export const resetPassword = async (req: Request, res: Response) => {
   const { body } = resetPasswordSchema.parse({ body: req.body });
 
   await passwordService.resetPassword(body.token, body.newPassword);
+
+  res.status(204).send();
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  const { body } = changePasswordSchema.parse({ body: req.body });
+
+  await passwordService.changePassword(
+    getAuthUser(req).id,
+    body.currentPassword,
+    body.newPassword,
+  );
 
   res.status(204).send();
 };

@@ -1,9 +1,13 @@
 import { env } from "@/config/env";
-import { createBadRequestError } from "@/errors";
+import {
+  createBadRequestError,
+  createForbiddenError,
+  createUnauthorizedError,
+} from "@/errors";
 import { send } from "@/lib/email";
-import { hashPassword } from "@/lib/password";
+import { hashPassword, verifyPassword } from "@/lib/password";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
-import { findUserByEmail } from "@/modules/user/user.repository";
+import { findUserByEmail, findUserById } from "@/modules/user/user.repository";
 import { PASSWORD_RESET_TTL_MS } from "./auth.constants";
 import * as authRepository from "./auth.repository";
 
@@ -62,6 +66,40 @@ export async function resetPassword(token: string, newPassword: string) {
   await authRepository.consumePasswordReset(
     resetToken.id,
     resetToken.userId,
+    passwordHash,
+  );
+}
+
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) {
+  const user = await findUserById(userId);
+
+  if (!user) {
+    throw createUnauthorizedError({
+      message: "Usuário não autenticado",
+      action: "Faça login e tente novamente",
+    });
+  }
+
+  const passwordMatch = await verifyPassword(
+    currentPassword,
+    user.passwordHash,
+  );
+
+  if (!passwordMatch) {
+    throw createForbiddenError({
+      message: "Senha atual incorreta",
+      action: "Verifique a senha atual e tente novamente",
+    });
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  await authRepository.updatePasswordAndInvalidateSessions(
+    userId,
     passwordHash,
   );
 }

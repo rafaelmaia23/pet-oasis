@@ -77,13 +77,13 @@
   - ✅ `passwordSchema` exportado de `user.schema.ts` + `resetPasswordSchema` + `password.service.resetPassword` + `auth.repository.consumePasswordReset` (`$transaction`: nova senha + consome token + invalida sessões) + controller (204) + rota
 - ✅ Suíte (302) + `typecheck` + `lint` verdes
 
-### ⬜ Fase 4.3 — Troca de senha (logado)
-> **Firmado:** single-step, sem email/código. Exige só a senha atual. Invalida TODAS as sessões (o usuário reloga).
+### ✅ Fase 4.3 — Troca de senha (logado)
+> **Firmado:** single-step, sem email/código. Exige só a senha atual. Invalida TODAS as sessões (o usuário reloga). Senha atual errada → **403** (request já autenticada; 401 seria lido como "token expirou"). Sucesso → **204**. **Não** recusa `newPassword == currentPassword` (escopo mínimo). **Nota p/ 4.4:** não recheca ban/status (usuário com Bearer válido troca a senha).
 
-- ⬜ **POST /api/v1/auth/change-password** `{ currentPassword, newPassword }` (só `authenticate`, sem `canAccess`)
-  - ⬜ Testes primeiro: 401 sem access token; senha atual errada → 401/403 (decidir na escrita, coerente com o login); 422 `newPassword` inválida; sucesso → hash novo salvo + **`invalidateAllUserSessions`** (todas as sessões, inclusive a atual — o usuário reloga)
-  - ⬜ Schema `changePasswordSchema` + service (verifica `currentPassword` via bcrypt → troca → invalida sessões) + controller (`getAuthUser`) + rota com `authenticate`
-- ⬜ Suíte + `typecheck` verdes
+- ✅ **POST /api/v1/auth/change-password** `{ currentPassword, newPassword }` (só `authenticate`, sem `canAccess`)
+  - ✅ Testes: 401 sem access token; 422 `newPassword` fraca / `currentPassword` ausente; senha atual errada → **403** (senha inalterada, nenhuma sessão cai); sucesso → **204**, hash novo salvo (login antigo 401 / novo 200) + `updatePasswordAndInvalidateSessions` derruba TODAS as sessões, inclusive a atual (refresh antigo → 401)
+  - ✅ `changePasswordSchema` (`currentPassword` só `min(1)`; `newPassword` reusa `passwordSchema`) + `password.service.changePassword` (verifica `currentPassword` via bcrypt → 403 se errada → troca) + `auth.repository.updatePasswordAndInvalidateSessions` (`$transaction`: nova senha + invalida sessões) + controller (`getAuthUser`, 204) + rota com `authenticate` inline
+- ✅ Suíte (307) + `typecheck` + `lint` verdes
 
 ### ⬜ Fase 4.4 — Banimento (ban/unban)
 > **Firmado:** `POST`/`DELETE /users/:id/ban`; feature `manage:user:status` (manager+admin); proteção de privilegiado (banir/desbanir alvo com `PERMISSION_FEATURES`/`*` exige role admin); banido = conta congelada (login, forgot/reset e resend bloqueados; sessões derrubadas). Audit `bannedAt`+`bannedBy`+`banReason` (reason obrigatório).

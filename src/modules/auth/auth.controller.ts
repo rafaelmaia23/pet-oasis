@@ -9,13 +9,16 @@ import {
 } from "./auth.constants";
 import { sessionPresenter } from "./auth.presenter";
 import {
+  forgotPasswordSchema,
   loginSchema,
   resendVerificationSchema,
+  resetPasswordSchema,
   sessionParamsSchema,
   signupSchema,
   verifyEmailSchema,
 } from "./auth.schema";
 import * as authService from "./auth.service";
+import * as passwordService from "./password.service";
 import * as verificationService from "./verification.service";
 
 export const signup = async (req: Request, res: Response) => {
@@ -43,6 +46,25 @@ export const resendVerification = async (req: Request, res: Response) => {
     message:
       "Se houver uma conta pendente com este email, um novo link de verificação foi enviado",
   });
+};
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  const { body } = forgotPasswordSchema.parse({ body: req.body });
+
+  await passwordService.requestPasswordReset(body.email);
+
+  res.status(200).json({
+    message:
+      "Se houver uma conta ativa com este email, um link de redefinição de senha foi enviado",
+  });
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  const { body } = resetPasswordSchema.parse({ body: req.body });
+
+  await passwordService.resetPassword(body.token, body.newPassword);
+
+  res.status(204).send();
 };
 
 export const login = async (req: Request, res: Response) => {

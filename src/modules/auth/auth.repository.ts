@@ -94,6 +94,27 @@ export async function consumeEmailVerification(
   ]);
 }
 
+export async function consumePasswordReset(
+  tokenId: string,
+  userId: string,
+  passwordHash: string,
+) {
+  return prisma.$transaction([
+    prisma.verificationToken.update({
+      where: { id: tokenId },
+      data: { usedAt: new Date() },
+    }),
+    prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    }),
+    prisma.session.updateMany({
+      where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
+      data: { invalidatedAt: new Date() },
+    }),
+  ]);
+}
+
 export async function findLiveSessionsByUserId(userId: string) {
   return prisma.session.findMany({
     where: {

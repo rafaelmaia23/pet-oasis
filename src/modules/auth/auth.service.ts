@@ -3,7 +3,7 @@ import type { StringValue } from "ms";
 import { env } from "@/config/env";
 import { createNotFoundError, createUnauthorizedError } from "@/errors";
 import { verifyPassword } from "@/lib/password";
-import { generateOpaqueRefreshToken, hashRefreshToken } from "@/lib/token";
+import { generateOpaqueToken, hashToken } from "@/lib/token";
 import * as userService from "@/modules/user/user.service";
 import * as userRepository from "../user/user.repository";
 import type { CreateCustomerInput } from "../user/user.schema";
@@ -46,11 +46,11 @@ export async function login(
   }
 
   const accessToken = generateToken(user.id);
-  const refreshToken = generateOpaqueRefreshToken();
+  const refreshToken = generateOpaqueToken();
 
   await authRepository.createSession({
     userId: user.id,
-    refreshTokenHash: hashRefreshToken(refreshToken),
+    refreshTokenHash: hashToken(refreshToken),
     expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
     userAgent: context.userAgent,
     ipAddress: context.ipAddress,
@@ -73,7 +73,7 @@ export async function refresh(
   }
 
   const session = await authRepository.findSessionByHash(
-    hashRefreshToken(refreshToken),
+    hashToken(refreshToken),
   );
 
   if (!session) {
@@ -93,11 +93,11 @@ export async function refresh(
     throw createUnauthorizedError(REFRESH_INVALID_ERROR);
   }
 
-  const newRefreshToken = generateOpaqueRefreshToken();
+  const newRefreshToken = generateOpaqueToken();
 
   await authRepository.rotateSession(session.id, {
     userId: session.userId,
-    refreshTokenHash: hashRefreshToken(newRefreshToken),
+    refreshTokenHash: hashToken(newRefreshToken),
     expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
     userAgent: context.userAgent,
     ipAddress: context.ipAddress,
@@ -119,7 +119,7 @@ export async function logout(refreshToken: string | undefined, userId: string) {
   }
 
   const session = await authRepository.findSessionByHash(
-    hashRefreshToken(refreshToken),
+    hashToken(refreshToken),
   );
 
   if (!session || session.userId !== userId) {

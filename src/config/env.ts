@@ -15,6 +15,13 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("15m"),
 
   PEPPER: z.string().min(32),
+
+  SMTP_HOST: z.string().default("localhost"),
+  SMTP_PORT: z.coerce.number().default(1025),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  MAIL_FROM: z.string().default("Pet Oasis <no-reply@petoasis.dev>"),
+  APP_URL: z.url().default("http://localhost:5173"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

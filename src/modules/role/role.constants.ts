@@ -24,6 +24,7 @@ const USER_ADMINISTRATION_FEATURES: FeatureName[] = [
   "delete:user:others",
   "create:profile",
   "delete:profile",
+  "manage:user:status",
 ];
 
 export const PERMISSION_FEATURES: FeatureName[] = [

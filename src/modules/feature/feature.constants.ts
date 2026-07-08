@@ -31,6 +31,9 @@ export const DEFAULT_FEATURES = [
   { name: "read:permission", description: "Ler permissões de usuários" },
   { name: "manage:permission", description: "Gerenciar permissões" },
 
+  // User status administration features
+  { name: "manage:user:status", description: "Banir e desbanir usuários" },
+
   // Wildcard feature
   { name: "*", description: "Acesso total a todas as funcionalidades" },
 ] as const;

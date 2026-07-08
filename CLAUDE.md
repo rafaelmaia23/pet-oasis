@@ -75,8 +75,9 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 ## Comandos
 
 - Testar 1 arquivo: `npx vitest run <nome>` · watch: `npx vitest <nome>` · 1 caso: `-t "nome"`
-- Migration dev: `npm run db:migrate` (já gera o client) · reset: `npm run db:reset` + `db:seed`
-- Banco de teste: `db:test:up` / `db:test:migrate`
+- Migration dev: `npm run db:migrate` (já gera o client) · reset: `npm run services:reset` + `db:seed`
+- Banco de teste: `db:test:up` / `db:test:migrate` · Subir tudo (db + db_test + mailpit): `services:up`
+- Mail (dev): `npm run mail:up` (mailpit; SMTP 1025, UI http://localhost:8025)
 - Typecheck: `npm run typecheck` · Lint: `npm run lint` · Lint com fix: `npm run lint:fix` · Format: `npm run format`
 
 ## ⚠️ REGRA — Prefira os scripts do `package.json` a comandos diretos

@@ -1192,6 +1192,34 @@ describe("POST /api/v1/auth/reset-password", () => {
       .send({ token: rawToken, newPassword: "Other@1234" });
     expect(second.status).toBe(400);
   });
+
+  it("should return 403 for a banned account even with a valid token", async () => {
+    const user = await buildCustomer();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { bannedAt: new Date(), banReason: "abuse" },
+    });
+    const rawToken = await seedVerificationToken(user.id, {
+      purpose: "PASSWORD_RESET",
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(403);
+
+    // password unchanged, token not consumed
+    const oldLogin = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+    expect(oldLogin.status).toBe(403); // banned gate
+    const tokenInDb = await prisma.verificationToken.findFirst({
+      where: { userId: user.id, purpose: "PASSWORD_RESET" },
+    });
+    expect(tokenInDb?.usedAt).toBeNull();
+  });
 });
 
 describe("POST /api/v1/auth/change-password", () => {
@@ -1286,6 +1314,22 @@ describe("POST /api/v1/auth/change-password", () => {
       .post("/api/v1/auth/refresh")
       .set("Cookie", refreshCookie);
     expect(refreshResponse.status).toBe(401);
+  });
+
+  it("should return 403 for a banned account with a still-valid access token", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { bannedAt: new Date(), banReason: "abuse" },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(403);
   });
 });
 

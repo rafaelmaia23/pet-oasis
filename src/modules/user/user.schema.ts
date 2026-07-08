@@ -70,6 +70,19 @@ export const userParamsSchema = z.object({
   }),
 });
 
+export const banUserSchema = z.object({
+  params: z.object({
+    id: z.uuid("Invalid user ID"),
+  }),
+  body: z.object({
+    reason: z
+      .string()
+      .min(1, "Reason is required")
+      .max(500, "Reason must be at most 500 characters"),
+  }),
+});
+
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>["body"];
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>["body"];
 export type UpdateUserInput = z.infer<typeof updateUserSchema>["body"];
+export type BanUserInput = z.infer<typeof banUserSchema>["body"];

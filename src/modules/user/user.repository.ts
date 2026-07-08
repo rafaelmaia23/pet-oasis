@@ -130,6 +130,35 @@ export async function softDeleteUserAndInvalidateSessions(userId: string) {
   ]);
 }
 
+export async function banUserAndInvalidateSessions(
+  userId: string,
+  bannedBy: string,
+  reason: string,
+) {
+  return prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId, deletedAt: null },
+      data: { bannedAt: new Date(), bannedBy, banReason: reason },
+    }),
+    prisma.session.updateMany({
+      where: {
+        userId,
+        usedAt: null,
+        invalidatedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { invalidatedAt: new Date() },
+    }),
+  ]);
+}
+
+export async function unbanUser(userId: string) {
+  return prisma.user.update({
+    where: { id: userId, deletedAt: null },
+    data: { bannedAt: null, bannedBy: null, banReason: null },
+  });
+}
+
 export async function findDeletedUserById(id: string) {
   return prisma.user.findFirst({
     where: { id, deletedAt: { not: null } },

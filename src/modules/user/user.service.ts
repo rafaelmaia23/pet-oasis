@@ -9,6 +9,7 @@ import type {
   UpdateUserInput,
 } from "@/modules/user/user.schema";
 import { validateRoles } from "@/utils/validateRoles";
+import { issueEmailVerification } from "../auth/verification.service";
 import type { RoleName } from "../role/role.constants";
 import { getRolesByNames } from "../role/role.repository";
 
@@ -26,11 +27,15 @@ export async function createEmployee(data: CreateEmployeeInput) {
 
   const passwordHash = await hashPassword(password);
 
-  return userRepository.createEmployee({
+  const user = await userRepository.createEmployee({
     ...userData,
     passwordHash,
     roleNames: rolesList.map((r) => r.name as RoleName),
   });
+
+  await issueEmailVerification(user.id, user.email);
+
+  return user;
 }
 
 export async function createCustomer(data: CreateCustomerInput) {
@@ -42,11 +47,15 @@ export async function createCustomer(data: CreateCustomerInput) {
 
   const passwordHash = await hashPassword(password);
 
-  return userRepository.createCustomer({
+  const user = await userRepository.createCustomer({
     ...userData,
     passwordHash,
     roleNames: rolesList.map((r) => r.name as RoleName),
   });
+
+  await issueEmailVerification(user.id, user.email);
+
+  return user;
 }
 
 export async function getUserById(requestingUser: AuthUser, targetId: string) {

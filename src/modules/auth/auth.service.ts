@@ -1,7 +1,11 @@
 import jwt from "jsonwebtoken";
 import type { StringValue } from "ms";
 import { env } from "@/config/env";
-import { createNotFoundError, createUnauthorizedError } from "@/errors";
+import {
+  createForbiddenError,
+  createNotFoundError,
+  createUnauthorizedError,
+} from "@/errors";
 import { verifyPassword } from "@/lib/password";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import * as userService from "@/modules/user/user.service";
@@ -42,6 +46,20 @@ export async function login(
     throw createUnauthorizedError({
       message: "Credenciais inválidas",
       action: "Verifique seu email e senha e tente novamente",
+    });
+  }
+
+  if (user.bannedAt !== null) {
+    throw createForbiddenError({
+      message: "Conta suspensa",
+      action: "Se você acha que isso é um erro, entre em contato com o suporte",
+    });
+  }
+
+  if (user.status !== "ACTIVE") {
+    throw createForbiddenError({
+      message: "Conta não verificada",
+      action: "Verifique seu email para ativar a conta",
     });
   }
 

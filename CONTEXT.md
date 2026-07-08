@@ -92,6 +92,14 @@ cpf aparece em `owner` (dado próprio) e `admin` (gerente vê — normal em pet 
 
 **Por que serviço de email genérico:** o `send({to,subject,html,text})` em `src/lib/email.ts` não sabe de verificação/reset — recebe o email pronto. Isso o deixa reusável para o que vem depois (lembretes de agendamento, confirmações de serviço/venda). Transporter configurado por `env` (dev aponta pro mailpit no docker; produção usa credenciais SMTP do Resend com `secure: true`). Falha de envio → `createServiceUnavailableError` (503).
 
+### Fase 4.1 (implementada) — decisões firmadas na execução
+
+**Por que só a criação de usuário emite verificação (e os POSTs de perfil NÃO):** a emissão do `VerificationToken(EMAIL_VERIFICATION)` + email mora em `user.service.createCustomer`/`createEmployee`, que cobre os dois caminhos que criam um usuário novo (signup self-service e `POST /users` do admin). `POST /users/:id/customer|employee` **não** emite: adiciona um 2º perfil a um usuário que **já existe** (já tem `status` e já recebeu o email na criação) — re-emitir ali só geraria ruído (reenvio a um user talvez já `ACTIVE`) sem provar nada de novo sobre o email. Verificação é sobre a identidade do email, que não muda ao ganhar um perfil.
+
+**Por que token inválido/expirado/usado no `verify-email` é 400 genérico (não 422/401):** o token é sintaticamente válido (passou no Zod) mas imprestável — não é erro de validação de campo (o 422 do projeto carrega `errors` por campo, que não encaixa num token opaco) nem credencial de sessão (401 é para Bearer/refresh). É um `createBadRequestError` genérico que não vaza **qual** condição falhou (inexistente vs expirado vs usado). Mesmo 400 será reusado no `reset-password` (4.2). Sucesso do `verify-email` → **204** (idioma do projeto para ação sem corpo: logout, DELETE de sessão/perfil).
+
+**Por que a orquestração de verificação vive em `verification.service.ts` (e não em `auth.service`):** `auth.service` já importa `user.service` (para `signup`), e `user.service` precisa disparar a emissão na criação — pôr a emissão em `auth.service` fecharia um ciclo `user.service → auth.service → user.service`. `src/modules/auth/verification.service.ts` concentra `issueEmailVerification`/`verifyEmail`/`resendVerification` importando só `auth.repository` (CRUD do token), `user.repository`, `lib/email` e `lib/token` — ninguém que ele importa reimporta ele. O gate de login continua em `auth.service.login` (só lê `user.status`/`user.bannedAt`, que já vêm no `findUserByEmail`).
+
 ---
 
 ## 3. Schema — pontos de atenção

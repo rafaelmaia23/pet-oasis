@@ -20,9 +20,17 @@ Se estiver em dúvida se algo é regra de negócio → **trate como se fosse e p
 
 ---
 
-## ⚠️ REGRA — TDD sempre com feat por Branch
+## ⚠️ REGRA — TDD sempre, com fluxo de branches por fase
 
-Todo trabalho novo segue **teste primeiro, código depois em Branch separada por feat**, no padrão dos testes existentes (Vitest + Supertest, arquivos em `src/__tests__/integration/v1/` e `src/__tests__/unit/`). Fluxo: cria uma Branch com o nome da feat → escreve os testes do caso → roda e vê falhar → implementa o mínimo pra passar → refatora → commit → PR. Nunca implemente uma feature sem teste que a guie. Nunca implemente uma feature na Branch Main.
+Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos testes existentes (Vitest + Supertest, arquivos em `src/__tests__/integration/v1/` e `src/__tests__/unit/`). Ciclo de cada feature: escreve os testes do caso → roda e vê falhar → implementa o mínimo pra passar → refatora → commit. Nunca implemente uma feature sem teste que a guie.
+
+**Hierarquia de branches (git-flow por fase):**
+- `main` é a base estável — **nunca** se desenvolve direto nela.
+- Cada fase do roadmap (ver `TODO.md`) tem **uma branch de fase** criada a partir da `main`, nomeada `fase-<n>` (ex.: `fase-4`).
+- Cada feature da fase tem **sua própria branch** criada a partir da branch da fase, nomeada `feat/fase-<n>-<m>-<slug>` (ex.: `feat/fase-4-2-password-reset`). Ao terminar a feature (testes + `typecheck` + `lint` verdes), **mergeia de volta na branch da fase** (`--no-ff`) e apaga a branch da feature.
+- Ao concluir a **fase inteira**, a branch da fase é mergeada na `main`; entre uma fase e a próxima, fica só a `main` (+ a branch da fase seguinte quando começar).
+
+Resumo do fluxo: `main` → `fase-<n>` → `feat/fase-<n>-<m>-<slug>` → merge na `fase-<n>` → (fim da fase) merge na `main`.
 
 ## Commits em ingles
 

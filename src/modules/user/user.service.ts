@@ -1,6 +1,13 @@
-import { createForbiddenError, createNotFoundError } from "@/errors";
+import {
+  createConflictError,
+  createForbiddenError,
+  createNotFoundError,
+} from "@/errors";
 import type { AuthUser } from "@/lib/authorization";
-import { canActOnResource } from "@/lib/authorization";
+import {
+  canActOnResource,
+  computeEffectiveFeatures,
+} from "@/lib/authorization";
 import { hashPassword } from "@/lib/password";
 import * as userRepository from "@/modules/user/user.repository";
 import type {
@@ -10,7 +17,7 @@ import type {
 } from "@/modules/user/user.schema";
 import { validateRoles } from "@/utils/validateRoles";
 import { issueEmailVerification } from "../auth/verification.service";
-import type { RoleName } from "../role/role.constants";
+import { PERMISSION_FEATURES, type RoleName } from "../role/role.constants";
 import { getRolesByNames } from "../role/role.repository";
 
 export const DEFAULT_EMPLOYEE_ROLES: RoleName[] = ["attendant"];
@@ -147,4 +154,99 @@ export async function deleteUser(requestingUser: AuthUser, targetId: string) {
   }
 
   return await userRepository.softDeleteUserAndInvalidateSessions(targetId);
+}
+
+type UserForFeatureComputation = NonNullable<
+  Awaited<ReturnType<typeof userRepository.getUserForFeatureComputation>>
+>;
+
+async function assertAdminForBan(
+  requestingUserId: string,
+  target: UserForFeatureComputation,
+) {
+  const effectiveFeatures = computeEffectiveFeatures(target);
+
+  const isPrivileged =
+    effectiveFeatures.has("*") ||
+    PERMISSION_FEATURES.some((feature) => effectiveFeatures.has(feature));
+
+  if (!isPrivileged) return;
+
+  const requestingUser = await userRepository.findUserById(requestingUserId);
+
+  const isAdmin =
+    requestingUser?.roles.some((r) => r.role.name === "admin") ?? false;
+
+  if (!isAdmin) {
+    throw createForbiddenError({
+      message: "Apenas administradores podem banir usuários privilegiados",
+      action: "Solicite a um administrador que faça essa alteração",
+    });
+  }
+}
+
+export async function banUser(
+  requestingUserId: string,
+  targetId: string,
+  reason: string,
+) {
+  if (requestingUserId === targetId) {
+    throw createConflictError({
+      message: "Não é possível banir a si mesmo",
+      action: "Peça a outro administrador que faça essa alteração",
+    });
+  }
+
+  const target = await userRepository.getUserForFeatureComputation(targetId);
+
+  if (!target) {
+    throw createNotFoundError({
+      message: "Usuário não encontrado",
+      action: "Verifique o ID e tente novamente",
+    });
+  }
+
+  await assertAdminForBan(requestingUserId, target);
+
+  if (target.bannedAt !== null) {
+    throw createConflictError({
+      message: "Usuário já está banido",
+      action: "Verifique o estado do usuário",
+    });
+  }
+
+  return userRepository.banUserAndInvalidateSessions(
+    targetId,
+    requestingUserId,
+    reason,
+  );
+}
+
+export async function unbanUser(requestingUserId: string, targetId: string) {
+  if (requestingUserId === targetId) {
+    throw createConflictError({
+      message: "Não é possível desbanir a si mesmo",
+      action: "Peça a outro administrador que faça essa alteração",
+    });
+  }
+
+  const target = await userRepository.getUserForFeatureComputation(targetId);
+
+  if (!target) {
+    throw createNotFoundError({
+      message: "Usuário não encontrado",
+      action: "Verifique o ID e tente novamente",
+    });
+  }
+
+  await assertAdminForBan(requestingUserId, target);
+
+  if (target.bannedAt === null) {
+    throw createConflictError({
+      message: "Usuário não está banido",
+      action: "Verifique o estado do usuário",
+    });
+  }
+
+  return userRepository.unbanUser(targetId);
 }

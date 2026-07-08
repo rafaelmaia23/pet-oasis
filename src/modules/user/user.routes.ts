@@ -9,5 +9,15 @@ userRouter.get("/", canAccess("read:user:others"), userController.getAllUsers);
 userRouter.get("/:id", canAccess("read:user"), userController.getUserById);
 userRouter.patch("/:id", canAccess("update:user"), userController.updateUser);
 userRouter.delete("/:id", canAccess("delete:user"), userController.deleteUser);
+userRouter.post(
+  "/:id/ban",
+  canAccess("manage:user:status"),
+  userController.banUser,
+);
+userRouter.delete(
+  "/:id/ban",
+  canAccess("manage:user:status"),
+  userController.unbanUser,
+);
 
 export default userRouter;

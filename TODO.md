@@ -85,20 +85,21 @@
   - ✅ `changePasswordSchema` (`currentPassword` só `min(1)`; `newPassword` reusa `passwordSchema`) + `password.service.changePassword` (verifica `currentPassword` via bcrypt → 403 se errada → troca) + `auth.repository.updatePasswordAndInvalidateSessions` (`$transaction`: nova senha + invalida sessões) + controller (`getAuthUser`, 204) + rota com `authenticate` inline
 - ✅ Suíte (307) + `typecheck` + `lint` verdes
 
-### ⬜ Fase 4.4 — Banimento (ban/unban)
-> **Firmado:** `POST`/`DELETE /users/:id/ban`; feature `manage:user:status` (manager+admin); proteção de privilegiado (banir/desbanir alvo com `PERMISSION_FEATURES`/`*` exige role admin); banido = conta congelada (login, forgot/reset e resend bloqueados; sessões derrubadas). Audit `bannedAt`+`bannedBy`+`banReason` (reason obrigatório).
+### ✅ Fase 4.4 — Banimento (ban/unban)
+> **Firmado:** `POST`/`DELETE /users/:id/ban`; feature `manage:user:status` (manager+admin); proteção de privilegiado (banir/desbanir alvo com `PERMISSION_FEATURES`/`*` exige role admin); banido = conta congelada (login, forgot/reset/resend/change bloqueados; sessões derrubadas). Audit `bannedAt`+`bannedBy`+`banReason` (reason obrigatório). **Decisões desta fase:** sucesso → **204**; auto-ban/-unban → **409**; freeze estendido a reset/change (dono banido → **403**). Ban vive no módulo user (não em submódulo), param `:id`.
 
-- ⬜ **POST /api/v1/users/:id/ban** `{ reason }` (`manage:user:status`)
-  - ⬜ Testes primeiro: 401 sem token; 403 sem `manage:user:status`; 422 `:id` inválido / `reason` ausente; 404 user inexistente (autorização antes da busca, não vaza); **403 ator não-admin bane alvo privilegiado** (role com `PERMISSION_FEATURES`/`*`); 409 se já banido; 204/200 bane com sucesso → `bannedAt`/`bannedBy = ator`/`banReason` setados + **sessões do alvo invalidadas**
-  - ⬜ Schema + service (`assertAdminForBan` reusando o padrão de `assertAdminForRoleAssignment`; 409 se já banido; `$transaction`: seta ban + `invalidateAllUserSessions`) + repository + controller + rota
-- ⬜ **DELETE /api/v1/users/:id/ban** (`manage:user:status`)
-  - ⬜ Testes primeiro: mesmos guards (401/403/422/404); **403 ator não-admin desbane alvo privilegiado**; 409 se não estava banido; 204 desbane → limpa `bannedAt`/`bannedBy`/`banReason`, `status` preservado
-  - ⬜ Service + repository + controller + rota
-- ⬜ **Efeito conta-congelada** (estender guards já criados):
-  - ⬜ Login de banido → 403 msg de suporte (gate da Fase 4.1 já checa `bannedAt`; adicionar teste)
-  - ⬜ `forgot-password` e `verify-email/resend` de banido → 200 genérico mas **nenhum email sai** (adicionar checagem `!banned` + testes)
-- ⬜ Decidir status de resposta do ban (204 vs 200 com recurso) na escrita — coerente com o padrão do projeto (DELETE de user = 204)
-- ⬜ Suíte + `typecheck` verdes
+- ✅ **POST /api/v1/users/:id/ban** `{ reason }` (`manage:user:status`)
+  - ✅ Testes: 401 sem token; 403 sem `manage:user:status`; 422 `:id` inválido / `reason` ausente; 404 alvo inexistente; **403 manager bane alvo admin (privilegiado)**; **409 auto-ban**; 409 já banido; **204** → `bannedAt`/`bannedBy = ator`/`banReason` setados + sessões do alvo invalidadas (refresh → 401, login → 403)
+  - ✅ `banUserSchema` + `userService.banUser` + `assertAdminForBan` (features efetivas do alvo via `getUserForFeatureComputation`+`computeEffectiveFeatures`; ator admin por `roles.some(name==="admin")`) + `userRepository.banUserAndInvalidateSessions` (`$transaction`) + controller (204) + rota
+- ✅ **DELETE /api/v1/users/:id/ban** (`manage:user:status`)
+  - ✅ Testes: mesmos guards (401/403/422/404); **403 manager desbane alvo admin**; **409 auto-unban**; 409 não estava banido; **204** → limpa `bannedAt`/`bannedBy`/`banReason`, `status` preservado, alvo volta a logar (200)
+  - ✅ `userService.unbanUser` + `userRepository.unbanUser` + controller + rota (reusa `userParamsSchema`)
+- ✅ **Efeito conta-congelada**:
+  - ✅ Login de banido → 403 (gate 4.1; teste já existia)
+  - ✅ `forgot-password` e `verify-email/resend` de banido → 200 genérico, nenhum email (checagem `!banned` já existia desde 4.1/4.2; testes já cobriam)
+  - ✅ `reset-password` (token válido) e `change-password` (Bearer válido) de banido → **403** (checagem `bannedAt` adicionada no `password.service`)
+- ✅ Status de resposta do ban decidido: **204** (coerente com DELETE de user)
+- ✅ Suíte (326) + `typecheck` + `lint` verdes
 
 ### ⬜ Fase 4.5 — Fechos
 - ⬜ Atualizar `ENDPOINTS.md` com as rotas novas (`/auth/verify-email`, `/auth/verify-email/resend`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/change-password`, `POST`/`DELETE /users/:id/ban`) + a nova feature `manage:user:status`

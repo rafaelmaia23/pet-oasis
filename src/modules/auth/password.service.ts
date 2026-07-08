@@ -16,6 +16,11 @@ const INVALID_TOKEN_ERROR = {
   action: "Solicite uma nova redefinição de senha",
 };
 
+const BANNED_ACCOUNT_ERROR = {
+  message: "Conta suspensa",
+  action: "Se você acha que isso é um erro, entre em contato com o suporte",
+};
+
 function buildPasswordResetEmail(rawToken: string) {
   const link = `${env.APP_URL}/reset-password?token=${rawToken}`;
 
@@ -61,6 +66,16 @@ export async function resetPassword(token: string, newPassword: string) {
     throw createBadRequestError(INVALID_TOKEN_ERROR);
   }
 
+  const user = await findUserById(resetToken.userId);
+
+  if (!user) {
+    throw createBadRequestError(INVALID_TOKEN_ERROR);
+  }
+
+  if (user.bannedAt !== null) {
+    throw createForbiddenError(BANNED_ACCOUNT_ERROR);
+  }
+
   const passwordHash = await hashPassword(newPassword);
 
   await authRepository.consumePasswordReset(
@@ -82,6 +97,10 @@ export async function changePassword(
       message: "Usuário não autenticado",
       action: "Faça login e tente novamente",
     });
+  }
+
+  if (user.bannedAt !== null) {
+    throw createForbiddenError(BANNED_ACCOUNT_ERROR);
   }
 
   const passwordMatch = await verifyPassword(

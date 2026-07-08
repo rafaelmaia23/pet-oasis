@@ -994,6 +994,206 @@ describe("POST /api/v1/auth/verify-email/resend", () => {
   });
 });
 
+describe("POST /api/v1/auth/forgot-password", () => {
+  it("should return 422 when the email is invalid", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: "not-an-email" });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["email"]);
+  });
+
+  it("should return 200 without sending for a non-existent email", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: "ghost@example.com" });
+
+    expect(response.status).toBe(200);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("should return 200 without sending for a pending account", async () => {
+    const user = await buildCustomer({ status: "PENDING" });
+
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: user.email });
+
+    expect(response.status).toBe(200);
+    expect(sendMock).not.toHaveBeenCalled();
+
+    const tokens = await prisma.verificationToken.findMany({
+      where: { userId: user.id, purpose: "PASSWORD_RESET" },
+    });
+    expect(tokens).toHaveLength(0);
+  });
+
+  it("should return 200 without sending for a banned account", async () => {
+    const user = await buildCustomer();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { bannedAt: new Date(), banReason: "abuse" },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: user.email });
+
+    expect(response.status).toBe(200);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("should issue a PASSWORD_RESET token and send for an active, non-banned account", async () => {
+    const user = await buildCustomer();
+
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: user.email });
+
+    expect(response.status).toBe(200);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: user.email }),
+    );
+
+    const tokens = await prisma.verificationToken.findMany({
+      where: { userId: user.id, purpose: "PASSWORD_RESET" },
+    });
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]?.usedAt).toBeNull();
+  });
+});
+
+describe("POST /api/v1/auth/reset-password", () => {
+  const NEW_PASSWORD = "NewPass@123";
+
+  it("should return 422 when the token is missing", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["token"]);
+  });
+
+  it("should return 422 when the new password is too weak", async () => {
+    const user = await buildCustomer();
+    const rawToken = await seedVerificationToken(user.id, {
+      purpose: "PASSWORD_RESET",
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword: "weak" });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["newPassword"]);
+  });
+
+  it("should return 400 for a non-existent token", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: generateOpaqueToken(), newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("should return 400 for an expired token", async () => {
+    const user = await buildCustomer();
+    const rawToken = await seedVerificationToken(user.id, {
+      purpose: "PASSWORD_RESET",
+      expiresAt: new Date(Date.now() - 1000),
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("should return 400 for an already used token", async () => {
+    const user = await buildCustomer();
+    const rawToken = await seedVerificationToken(user.id, {
+      purpose: "PASSWORD_RESET",
+      usedAt: new Date(),
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("should return 400 for a token of the wrong purpose", async () => {
+    const user = await buildCustomer();
+    const rawToken = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_VERIFICATION",
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("should reset the password, consume the token and invalidate all sessions", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = await seedVerificationToken(user.id, {
+      purpose: "PASSWORD_RESET",
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(204);
+
+    const oldLogin = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+    expect(oldLogin.status).toBe(401);
+
+    const newLogin = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: NEW_PASSWORD,
+    });
+    expect(newLogin.status).toBe(200);
+
+    const tokenInDb = await prisma.verificationToken.findFirst({
+      where: { userId: user.id, purpose: "PASSWORD_RESET" },
+    });
+    expect(tokenInDb?.usedAt).not.toBeNull();
+
+    const refreshResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(refreshResponse.status).toBe(401);
+  });
+
+  it("should reject reusing the same reset token", async () => {
+    const user = await buildCustomer();
+    const rawToken = await seedVerificationToken(user.id, {
+      purpose: "PASSWORD_RESET",
+    });
+
+    const first = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword: NEW_PASSWORD });
+    expect(first.status).toBe(204);
+
+    const second = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword: "Other@1234" });
+    expect(second.status).toBe(400);
+  });
+});
+
 describe("End-to-end: signup -> login -> me -> refresh -> sessions -> logout", () => {
   it("should support the full auth lifecycle for a freshly signed-up customer", async () => {
     const data = makeCustomerData();

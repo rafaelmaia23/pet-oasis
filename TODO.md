@@ -66,16 +66,16 @@
 - ✅ Atualizado o teste end-to-end que logava logo após signup (agora verifica o email antes do login, extraindo o token do email mockado)
 - ✅ Suíte (289) + `typecheck` + `lint` verdes
 
-### ⬜ Fase 4.2 — Recuperação de senha (forgot/reset)
-> **Firmado:** forgot sempre 200 genérico; reset invalida TODAS as sessões.
+### ✅ Fase 4.2 — Recuperação de senha (forgot/reset)
+> **Firmado:** forgot sempre 200 genérico; reset invalida TODAS as sessões. Token inválido/expirado/usado/`purpose` errado → **400 genérico**; sucesso do reset → **204**. Orquestração em `src/modules/auth/password.service.ts` (espelha `verification.service`). **Nota p/ 4.4:** reset **não** recheca ban/status no consumo do token — o reforço "conta congelada" nesse caminho fica pra 4.4.
 
-- ⬜ **POST /api/v1/auth/forgot-password** `{ email }` (público)
-  - ⬜ Testes primeiro: **sempre 200 genérico**; email de reset só sai se a conta existe, é `ACTIVE` e não banida (`VerificationToken(PASSWORD_RESET)`, TTL **1h**); email inexistente/PENDING/banido → 200 sem enviar
-  - ⬜ Schema + service + repository + controller + rota
-- ⬜ **POST /api/v1/auth/reset-password** `{ token, newPassword }` (público)
-  - ⬜ Testes primeiro: 422 body inválido; token inexistente/expirado/usado → erro genérico; sucesso → hash da senha nova salvo, token consome `usedAt`, **`invalidateAllUserSessions`** derruba as sessões; token single-use
-  - ⬜ Schema + service (`$transaction`: nova senha + consome token + invalida sessões) + controller + rota
-- ⬜ Suíte + `typecheck` verdes
+- ✅ **POST /api/v1/auth/forgot-password** `{ email }` (público)
+  - ✅ Testes: 422 email inválido; **sempre 200 genérico**; email de reset só sai se a conta existe, é `ACTIVE` e não banida (`VerificationToken(PASSWORD_RESET)`, TTL **1h**); email inexistente/PENDING/banido → 200 sem enviar nem criar token
+  - ✅ `forgotPasswordSchema` + `password.service.requestPasswordReset` (`if !ACTIVE || banned → no-op`) + controller (200 msg genérica) + rota
+- ✅ **POST /api/v1/auth/reset-password** `{ token, newPassword }` (público)
+  - ✅ Testes: 422 body inválido (token ausente / `newPassword` fraca reusando `passwordSchema`); token inexistente/expirado/usado/`purpose` errado → **400**; sucesso → **204**, hash da senha nova salvo (login antigo 401 / novo 200), token consome `usedAt`, `consumePasswordReset` derruba TODAS as sessões (refresh antigo → 401); token single-use
+  - ✅ `passwordSchema` exportado de `user.schema.ts` + `resetPasswordSchema` + `password.service.resetPassword` + `auth.repository.consumePasswordReset` (`$transaction`: nova senha + consome token + invalida sessões) + controller (204) + rota
+- ✅ Suíte (302) + `typecheck` + `lint` verdes
 
 ### ⬜ Fase 4.3 — Troca de senha (logado)
 > **Firmado:** single-step, sem email/código. Exige só a senha atual. Invalida TODAS as sessões (o usuário reloga).

@@ -1194,6 +1194,101 @@ describe("POST /api/v1/auth/reset-password", () => {
   });
 });
 
+describe("POST /api/v1/auth/change-password", () => {
+  const NEW_PASSWORD = "NewPass@123";
+
+  it("should return 401 without an access token", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/change-password")
+      .send({ currentPassword: "Whatever@1", newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 422 when the new password is too weak", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newPassword: "weak" });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["newPassword"]);
+  });
+
+  it("should return 422 when currentPassword is missing", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["currentPassword"]);
+  });
+
+  it("should return 403 when the current password is incorrect", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: "WrongPass@1", newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(403);
+
+    // password unchanged: the old one still logs in
+    const oldLogin = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+    expect(oldLogin.status).toBe(200);
+
+    // no session was invalidated
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    expect(sessions.every((s) => s.invalidatedAt === null)).toBe(true);
+  });
+
+  it("should change the password and invalidate all sessions on success", async () => {
+    const user = await buildCustomer();
+    const { accessToken, refreshCookie } = await loginWithSession(
+      user.email,
+      user.password,
+    );
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({ currentPassword: user.password, newPassword: NEW_PASSWORD });
+
+    expect(response.status).toBe(204);
+
+    const oldLogin = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+    expect(oldLogin.status).toBe(401);
+
+    const newLogin = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: NEW_PASSWORD,
+    });
+    expect(newLogin.status).toBe(200);
+
+    const refreshResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(refreshResponse.status).toBe(401);
+  });
+});
+
 describe("End-to-end: signup -> login -> me -> refresh -> sessions -> logout", () => {
   it("should support the full auth lifecycle for a freshly signed-up customer", async () => {
     const data = makeCustomerData();

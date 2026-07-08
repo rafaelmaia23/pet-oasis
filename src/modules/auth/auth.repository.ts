@@ -115,6 +115,22 @@ export async function consumePasswordReset(
   ]);
 }
 
+export async function updatePasswordAndInvalidateSessions(
+  userId: string,
+  passwordHash: string,
+) {
+  return prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    }),
+    prisma.session.updateMany({
+      where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
+      data: { invalidatedAt: new Date() },
+    }),
+  ]);
+}
+
 export async function findLiveSessionsByUserId(userId: string) {
   return prisma.session.findMany({
     where: {

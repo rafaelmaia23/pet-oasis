@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import {
   AppError,
+  createBadRequestError,
   createValidationError,
   InternalServerError,
   PresentationError,
@@ -24,6 +25,19 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ) {
+  // Corpo malformado — body-parser (express.json) lança um SyntaxError com
+  // `body`/`type: "entity.parse.failed"`/`status: 400` que, sem isto, cairia
+  // no fallback 500. Responde 400 genérico (não vaza o parse error interno).
+  if (err instanceof SyntaxError && "body" in err) {
+    const badRequestError = createBadRequestError({
+      message: "Corpo da requisição inválido",
+      action: "Envie um JSON válido no corpo da requisição",
+    });
+    return res
+      .status(badRequestError.statusCode)
+      .json(badRequestError.toJson());
+  }
+
   if (err instanceof ZodError) {
     const fieldErrors: Record<string, string[]> = {};
     for (const issue of err.issues) {

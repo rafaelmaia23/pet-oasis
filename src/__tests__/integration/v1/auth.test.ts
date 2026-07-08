@@ -1405,3 +1405,29 @@ describe("End-to-end: signup -> login -> me -> refresh -> sessions -> logout", (
     expect(sessionInDb.invalidatedAt).not.toBeNull();
   });
 });
+
+describe("Malformed request body", () => {
+  it("should return 400 (not 500) for an unparseable JSON body", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/signup")
+      .set("Content-Type", "application/json")
+      .send("not json");
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      code: "BAD_REQUEST",
+      message: expect.any(String),
+      action: expect.any(String),
+    });
+  });
+
+  it("should return 400 for a top-level non-object JSON body", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/signup")
+      .set("Content-Type", "application/json")
+      .send("null");
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("BAD_REQUEST");
+  });
+});

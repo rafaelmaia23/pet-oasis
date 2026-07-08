@@ -382,8 +382,8 @@ describe("GET /api/v1/users/:id", () => {
     expectValidationError(response, ["id"]);
   });
 
-  it("should return 404 if user with given id does not exist", async () => {
-    const user = await buildEmployee({ roleNames: ["attendant"] });
+  it("should return 404 if user with given id does not exist (authorized actor)", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
 
     const token = await loginAs(user.email, user.password);
 
@@ -397,6 +397,27 @@ describe("GET /api/v1/users/:id", () => {
       code: "NOT_FOUND",
       message: "Usuário não encontrado",
       action: "Verifique o ID e tente novamente",
+    });
+  });
+
+  it("should return 403 (not 404) for a non-existent id when the actor lacks read:user:others — no existence leak", async () => {
+    const user = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["read:user:others"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get(`/api/v1/users/${faker.string.uuid()}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Você não tem permissão para acessar este recurso",
+      action: 'Verifique se você tem acesso a feature "read:user:others"',
     });
   });
 

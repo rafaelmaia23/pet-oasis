@@ -31,6 +31,11 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | POST `/api/v1/auth/logout` | `manage:session` | Revoga a sessão do cookie de refresh, limpa o cookie |
 | GET `/api/v1/auth/sessions` | `read:session` | Lista as sessões vivas do próprio usuário |
 | DELETE `/api/v1/auth/sessions/:id` | `manage:session` | Revoga uma sessão específica do próprio usuário |
+| POST `/api/v1/auth/verify-email` | público | Verifica o email via token e ativa a conta (`ACTIVE`), 204 |
+| POST `/api/v1/auth/verify-email/resend` | público | Reenvia o email de verificação (sempre 200 genérico) |
+| POST `/api/v1/auth/forgot-password` | público | Dispara email de reset de senha (sempre 200 genérico) |
+| POST `/api/v1/auth/reset-password` | público | Troca a senha via token e invalida TODAS as sessões, 204 |
+| POST `/api/v1/auth/change-password` | `authenticate` | Troca a senha logado (exige senha atual) e invalida TODAS as sessões, 204 |
 
 ## Me — `src/modules/me/me.routes.ts`
 
@@ -47,6 +52,8 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | GET `/api/v1/users/:id` | `read:user` | Busca um usuário por id |
 | PATCH `/api/v1/users/:id` | `update:user` | Atualiza um usuário |
 | DELETE `/api/v1/users/:id` | `delete:user` | Soft delete do usuário + invalida sessões |
+| POST `/api/v1/users/:id/ban` | `manage:user:status` | Bane o usuário (`bannedAt`/`bannedBy`/`banReason`) + invalida sessões, 204 |
+| DELETE `/api/v1/users/:id/ban` | `manage:user:status` | Desbane o usuário (limpa colunas de ban, preserva `status`), 204 |
 
 ## User profile — `src/modules/user/profile/user.profile.routes.ts`
 

@@ -1,0 +1,17 @@
+meta {
+  name: Get Me
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/me
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("userId", res.getBody().id);
+  }
+}

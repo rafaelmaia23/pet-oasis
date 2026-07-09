@@ -1,0 +1,15 @@
+meta {
+  name: Refresh
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/auth/refresh
+  body: none
+  auth: none
+}
+
+docs {
+  Usa o refresh cookie httpOnly setado no Login (cookie jar do Bruno). Rotaciona e devolve um novo access token.
+}

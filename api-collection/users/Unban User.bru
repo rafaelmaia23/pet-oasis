@@ -1,0 +1,15 @@
+meta {
+  name: Unban User
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/users/{{userId}}/ban
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:user:status. O demo não tem essa feature, retorna 403.
+}

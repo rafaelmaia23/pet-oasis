@@ -138,15 +138,15 @@
 - ✅ Testes (`reference.test.ts`): `GET /reference` sem token → **200** + `content-type` HTML; HTML referencia `/openapi.json` e o Scalar. Suíte 335 verde. Smoke em runtime confirmou o fluxo “try it”: login do demo → **200** em `GET /users` → **403** em `DELETE /users/:id` (RBAC ao vivo).
 - ✅ 🔸 Tema `deepSpace` aplicado (ajuste fino de branding fica opcional).
 
-### ⬜ Fase 5.4 — README
+### ⬜ Fase 5.4 — README *(adiada para o fim da Fase 5)*
 - ⬜ Reescrever/expandir o `README.md`: visão do projeto, stack, arquitetura em camadas (route→controller→service→repository), **como subir com Docker** (git clone → `.env` → um comando), fluxo de dev local (`services:up` + `npm run dev` com tsx no host), **credenciais públicas do demo**, links para `/reference` e `/openapi.json`, ponteiro para a coleção Bruno em `/api-collection`.
 - ⬜ 🔸 Badges, screenshot da UI Scalar, índice.
 
-### ⬜ Fase 5.5 — Coleção Bruno versionada (`/api-collection`)
-- ⬜ Criar `/api-collection` versionada no repo, organizada **por módulo** (`auth/`, `users/`, `me/`, `roles/`, `features/`, `permissions/`, `status/`).
-- ⬜ Environments `local` (`http://localhost:3000/api/v1`) e `prod` (URL do deploy), com `baseUrl` por env.
-- ⬜ Fluxo de auth: request de `login` com **post-response script** salvando o access token numa variável de env; requests protegidas usam `Authorization: Bearer {{token}}`.
-- ⬜ Checkpoint: abrir no Bruno, rodar `login` → token salvo → uma request protegida herda o token e responde 200.
+### ✅ Fase 5.5 — Coleção Bruno versionada (`/api-collection`)
+- ✅ `api-collection/` versionada, organizada **por módulo** (`status/`, `auth/`, `me/`, `users/`, `profiles/`, `permissions/`, `roles/`, `features/`) — 35 requests cobrindo os ~30 endpoints. `bruno.json` + `collection.bru` (bearer no nível da coleção). Biome ignora `api-collection`.
+- ✅ Environments `local` (`http://localhost:3000/api/v1`) e `prod` (baseUrl placeholder `https://SEU-DOMINIO/api/v1`, a preencher na 5.8).
+- ✅ Fluxo de auth: `Login` (demo) com `script:post-response` salvando o access token via **`bru.setVar`** (runtime, **não** `setEnvVar` — evita gravar segredo no `.bru` versionado / futuro Bruno v4); auth bearer `{{accessToken}}` herdada por `auth: inherit`. `Get Me`/`List Users`/`List Roles`/`List Features`/`List Sessions` capturam ids (`userId`/`roleId`/`featureId`/`sessionId`) para as rotas com path param.
+- ✅ Checkpoint validado com `@usebruno/cli`: Login → **200** + token (assert ✓); varredura das 8 pastas não-auth → leituras **200**, escritas do demo **403** (RBAC ao vivo), inheritance + chaining de ids OK. `typecheck`/`lint`/suíte (335) verdes.
 
 ### ⬜ Fase 5.6 — Dockerfile (app buildado)
 - ⬜ `Dockerfile` multi-stage: **build** (instala deps, `prisma generate`, `npm run build` via tsup) → **runtime** (node slim, copia `dist/` + client Prisma gerado + deps de produção, usuário não-root, `EXPOSE`, entrypoint). `.dockerignore` (node_modules, dist local, .env, .git).

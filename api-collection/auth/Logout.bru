@@ -1,0 +1,15 @@
+meta {
+  name: Logout
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/auth/logout
+  body: none
+  auth: inherit
+}
+
+docs {
+  Requer Bearer + o refresh cookie do Login. Revoga a sessão atual (204).
+}

@@ -1,0 +1,33 @@
+meta {
+  name: Login (demo)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "demo@petoasis.dev",
+    "password": "DemoOasis2026!"
+  }
+}
+
+script:post-response {
+  // runtime var (bru.setVar): reusável na sessão sem gravar segredo no .bru versionado
+  if (res.getStatus() === 200) {
+    bru.setVar("accessToken", res.getBody().accessToken);
+  }
+}
+
+assert {
+  res.status: eq 200
+}

@@ -1,0 +1,21 @@
+meta {
+  name: List Users
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/users
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  if (res.getStatus() === 200 && res.getBody().length > 0) {
+    bru.setVar("userId", res.getBody()[0].id);
+  }
+}
+
+docs {
+  Exige read:user:others (o demo tem). Captura o 1º userId para as requests com path param.
+}

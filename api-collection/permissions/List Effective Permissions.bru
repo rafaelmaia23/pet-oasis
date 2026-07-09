@@ -1,0 +1,15 @@
+meta {
+  name: List Effective Permissions
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/users/{{userId}}/permissions
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige read:permission (o demo tem). Lista as features efetivas (string[]) do usuário.
+}

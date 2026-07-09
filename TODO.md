@@ -133,10 +133,10 @@
 - ✅ **`GET /openapi.json`** (público) montado no `router` de topo (fora de `authenticate`), servindo o documento memoizado.
 - ✅ Testes (`openapi.test.ts`, 4 casos): sem token → **200** + `content-type` JSON; `openapi === "3.1.0"`, `servers[0].url === "/api/v1"`, `bearerAuth` presente, paths-amostra (`/auth/login`, `/users`, `/roles`); doc **não** contém `passwordHash`/`tokenHash`/`refreshTokenHash`. Suíte completa 333 verde. 🔸 linter Redocly/Spectral fica como polish opcional.
 
-### ⬜ Fase 5.3 — UI Scalar (`/reference`)
-- ⬜ **`GET /reference`** (público, `router` de topo): `@scalar/express-api-reference` consumindo `url: "/openapi.json"`. Configurar `authentication` (bearer JWT preenchível no “try it”) e `theme`/layout 🔸.
-- ⬜ Testes: `curl /reference` → **200** (HTML). Fluxo “try it” manual/documentado: login do demo → cola o Bearer → `GET` → **200**; `DELETE`/`POST` → **403** (RBAC visível na UI).
-- ⬜ 🔸 Polir tema/branding do Scalar (não bloqueia).
+### ✅ Fase 5.3 — UI Scalar (`/reference`)
+- ✅ **`GET /reference`** (público, `router` de topo): `@scalar/express-api-reference` (`src/docs/reference.ts`) consumindo `url: "/openapi.json"`, `authentication.preferredSecurityScheme: "bearerAuth"` (Bearer preenchível no “try it”), tema `deepSpace`. Bundle carregado via CDN jsdelivr client-side. ⚠️ Nota p/ Fase 6.1: um CSP estrito (helmet) precisará allowlistar `cdn.jsdelivr.net` (ou nonce/self-host).
+- ✅ Testes (`reference.test.ts`): `GET /reference` sem token → **200** + `content-type` HTML; HTML referencia `/openapi.json` e o Scalar. Suíte 335 verde. Smoke em runtime confirmou o fluxo “try it”: login do demo → **200** em `GET /users` → **403** em `DELETE /users/:id` (RBAC ao vivo).
+- ✅ 🔸 Tema `deepSpace` aplicado (ajuste fino de branding fica opcional).
 
 ### ⬜ Fase 5.4 — README
 - ⬜ Reescrever/expandir o `README.md`: visão do projeto, stack, arquitetura em camadas (route→controller→service→repository), **como subir com Docker** (git clone → `.env` → um comando), fluxo de dev local (`services:up` + `npm run dev` com tsx no host), **credenciais públicas do demo**, links para `/reference` e `/openapi.json`, ponteiro para a coleção Bruno em `/api-collection`.

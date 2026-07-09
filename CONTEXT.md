@@ -110,6 +110,34 @@ cpf aparece em `owner` (dado próprio) e `admin` (gerente vê — normal em pet 
 
 ---
 
+## 2.2 Fase 5 (planejada) — decisões e racional
+
+> Fase 5 amplia o escopo original do roadmap (que previa só "rate limiting, account lockout") para incluir também polimento das features de auth/authz/gestão de usuário já construídas. Decisões tomadas no planejamento, antes de qualquer feat-branch abrir — passo-a-passo atômico no `TODO.md`.
+
+**Por que Redis (não in-memory) para rate limiting e lockout:** os dois mecanismos compartilham a mesma necessidade — um contador que sobreviva a restart do processo e funcione corretamente mesmo se a app um dia rodar em mais de uma instância. In-memory (`express-rate-limit` puro) resolveria o caso atual (single-instance) mas quebraria silenciosamente no primeiro dia de scale-out horizontal. Custo aceito: um serviço novo (`redis`) no `docker-compose.yml` e mais uma peça de infra em produção.
+
+**Por que rate limit é por IP e lockout é por conta (dois mecanismos, não um só):** têm alvos diferentes. Rate limit por IP protege contra volume (DoS, scraping, spam de criação de conta) sem se importar com qual conta está sendo tentada. Lockout por conta protege uma credencial específica contra força bruta direcionada, mesmo vinda de IPs diferentes (distribuída/credential stuffing). Um não substitui o outro.
+
+**Lockout híbrido (janela fixa → backoff exponencial):** `N` tentativas erradas consecutivas trava a conta por uma janela fixa; se, depois da janela liberar, a próxima tentativa também errar, o tempo de espera dobra a cada ciclo até um teto. Reseta (contador **e** nível de backoff) no login certo. Motivo do híbrido: janela fixa sozinha é previsível e barata de testar, mas um atacante que espera exatamente o tempo da janela nunca é penalizado mais que isso; o backoff crescente fecha essa lacuna sem penalizar pesadamente o usuário legítimo que só errou a senha uma vez (só entra em jogo depois de repetidos ciclos de erro).
+
+**Por que a resposta de conta travada é 429 genérico (não 401, não revela qual mecanismo disparou):** login com senha errada continua 401 genérico (nenhuma identidade estabelecida). Rate limit por IP e lockout por conta devolvem o mesmo 429 ("muitas tentativas, tente novamente mais tarde"), sem indicar qual dos dois disparou nem confirmar a existência da conta além do que as tentativas anteriores já revelam — mesmo espírito anti-enumeração já usado em `forgot-password`/`verify-email/resend`.
+
+**Por que existe desbloqueio manual pelo admin, e por que reseta por completo:** um usuário legítimo travado (ex. esqueceu a senha e errou várias vezes antes de pedir reset) não deveria precisar esperar o backoff vencer sozinho. O desbloqueio (`manage:user:status`, mesma feature do ban/unban) limpa contador e nível de backoff — mesmo idioma de unban (restaura o estado anterior, não deixa resíduo). Não existe "lock manual" pelo admin nesta fase (lock só acontece automaticamente por tentativas erradas) — fora de escopo, backlog se for necessário depois.
+
+**Por que desbloquear um alvo privilegiado exige ator admin (mesma guarda do ban):** destravar não concede privilégio novo, mas remove uma proteção de segurança sobre a conta-alvo. Um manager comprometido (ou mal-intencionado) poderia destravar uma conta admin no meio de um ataque de força bruta, anulando o lockout bem na hora que ele mais protege — o mesmo raciocínio de escalação lateral já usado em `assertAdminForBan`.
+
+**Por que os 3 guards de escalação (`assertAdminForBan`, `assertAdminForPermissionFeature`, `assertAdminForRoleAssignment`) viram um só:** os três repetem o mesmo miolo — busca o ator, checa `roles.some(r => r.role.name === "admin")`, lança 403 — e só o predicado de "o alvo/feature/role é privilegiado" muda entre eles. Consolidar num `assertActorIsAdmin` compartilhado (em `src/lib/authorization.ts`, ao lado de `can`/`hasFeature`/`canActOnResource`) é o próprio item que o roadmap da Fase 4→5 já sinalizava como pendente ("revisitar proteção de escalação"). Refactor comportamento-preservado — nenhuma regra de negócio muda, só reduz duplicação.
+
+**Por que log de acesso HTTP e audit log de ações sensíveis são dois mecanismos separados, com destinos diferentes:** servem propósitos diferentes. O log de acesso (toda request: método, rota, status, duração, IP, user-agent, request-id) é sinal operacional/de tráfego — vai para stdout estruturado (JSON, via `pino`/`pino-http`); a app só emite, a retenção durável é responsabilidade da infra (arquivo com rotação hoje, agregador de log depois). Já o audit log é sobre **eventos de negócio** específicos (login falho, lockout, desbloqueio, ban/unban, grant/revoke de role e de permission override, reset/troca de senha, troca de email, user criado/deletado) — precisa ser consultável pela própria aplicação (quem fez o quê, quando), então vive numa tabela (`AuditLog`), no mesmo espírito de "preservar histórico para auditoria" já usado no soft delete (`CLAUDE.md`). Misturar os dois numa tabela só inflaria o banco com uma linha por request (ordens de magnitude a mais que qualquer tabela do projeto hoje) para um propósito que não precisa de índice/consulta transacional.
+
+**Por que o audit log não ganha endpoint de leitura nesta fase:** o volume de decisões desta fase já é grande; expor `GET /audit-logs` implica desenhar mais uma feature (`read:audit-log`?), paginação própria e filtros — proposta é registrar os eventos agora (a tabela já vale como trilha de auditoria consultável via banco) e deixar o endpoint de leitura como decisão de uma fase futura, se/quando for pedido.
+
+**Sessões: teto de sessões vivas e faxina de tokens mortos são higiene, não perda de auditoria:** o teto evita um usuário acumular sessões vivas indefinidamente (evict da mais antiga ao exceder, login nunca é recusado). A faxina faz **hard delete** (não soft delete) de `Session`/`VerificationToken` já mortos há tempo suficiente — são registros técnicos, não dados de negócio, e o rastro de auditoria de verdade agora vive no `AuditLog`, não nessas linhas.
+
+**Troca de email e "forçar troca de senha" (admin) ficam com desenho proposto, não firmado:** ao contrário dos outros itens desta fase, essas duas mudam decisões de negócio já fechadas antes (email é imutável hoje) ou introduzem um estado novo de conta (`mustChangePassword`) com implicações de UX (bloqueia login? deixa entrar e força a tela?). A forma exata de cada uma será confirmada no início da respectiva feat-branch, não fixada aqui sem validação explícita — ver `TODO.md` (marcadas com nota "a confirmar").
+
+---
+
 ## 3. Schema — pontos de atenção
 
 - **User**: id, name, cpf @unique, email @unique, passwordHash, createdAt, updatedAt, deletedAt?. Relações: employee?, customer?, roles[], features[], sessions[].

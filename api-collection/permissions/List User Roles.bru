@@ -1,0 +1,15 @@
+meta {
+  name: List User Roles
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/users/{{userId}}/roles
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige read:permission (o demo tem). Lista as roles ativas do usuário.
+}

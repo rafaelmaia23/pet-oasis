@@ -110,73 +110,142 @@
 
 ---
 
-## Fase 5 — Hardening e polimento 🔄
-> Amplia o escopo original ("rate limiting, account lockout") para incluir também polimento de features já construídas. Decisões e racional completos no `CONTEXT.md` (§2.2). Cada seção abaixo é uma feat-branch em TDD, a partir da branch `fase-5`.
+## Fase 5 — Documentação da API + Containerização (deploy) ✅
+> Fecha o Ciclo 1 como peça de portfólio: API documentada (OpenAPI gerado dos schemas Zod → UI Scalar → coleção Bruno) e no ar via Docker (git clone → um `docker compose up` sobe banco + app buildado, migra e semeia do zero). Decisões e racional no `CONTEXT.md` (§ a criar). Fonte única da doc: os próprios schemas Zod via `.meta()` (Zod 4 nativo, sem monkey-patch). Cada seção abaixo é uma feat-branch a partir da branch `fase-5`.
+>
+> **Decisões firmadas:** demo read-only = role `demo` (`appliesTo EMPLOYEE`) com todas as features de leitura (`read:user`, `read:user:others`, `read:session`, `read:feature`, `read:role`, `read:permission`) — GET em toda a API, escrita → 403 (RBAC ao vivo). Seed do **usuário** demo gated por `SEED_DEMO_USER=true` (ligado no Docker/prod, desligado em test/dev); a **role** `demo` é sempre semeada. `/openapi.json` e `/reference` são rotas públicas (montadas no `router` de topo, fora dos grupos protegidos). Migração em produção usa `prisma migrate deploy` (nunca `migrate dev`). Segredos via `.env` não-versionado + `.env.example`.
 
-### ⬜ Fase 5.0 — Fundação de infra
+### ✅ Fase 5.0 — Fundação (deps + env)
+- ✅ Instalar `zod-openapi`, `@scalar/express-api-reference` (deps de runtime).
+- ✅ `src/config/env.ts` + `env.example`: `SEED_DEMO_USER` (`z.stringbool()`, default `false`), `DEMO_EMAIL` (default `demo@petoasis.dev`), `DEMO_PASSWORD` (default público que satisfaz `passwordSchema`, ex. `DemoOasis2026!`). Grupo `# Demo` no `env.example`.
+- ✅ Checkpoint: `npm run typecheck` + `npm run lint` verdes (app boota lendo os defaults novos).
+
+### ✅ Fase 5.1 — Seed do usuário demo (read-only)
+- ✅ `role.constants.ts`: adicionada role `demo` a `DEFAULT_ROLES` — `appliesTo: ProfileKind.EMPLOYEE`, features `[read:user, read:user:others, read:session, read:feature, read:role, read:permission]` (grupo `DEMO_READ_FEATURES` deduplicado). `RoleName`/`ROLE_NAMES` ganham `"demo"` automaticamente.
+- ✅ `prisma/seed.ts`: após sincronizar features/roles, **se `env.SEED_DEMO_USER`**, upsert idempotente do usuário demo por `email` — perfil `Employee`, `status: ACTIVE`, vínculo com a role `demo`, `passwordHash` via `hashPassword` (bcrypt + `PEPPER`). O `update` limpa `bannedAt/bannedBy/banReason` (redeploy restaura o demo).
+- ✅ Testes: `db:seed` 2× com `SEED_DEMO_USER=true` → 1 usuário demo (idempotente, verificado no dev DB). Suíte (329) verde com o flag desligado no test DB.
+- ✅ Checkpoint (smoke antecipado no host): login do demo → **200**; `GET /users` e `GET /roles` → **200**; `POST /users` e `DELETE /users/:id` → **403** (RBAC ao vivo).
+
+### ✅ Fase 5.2 — OpenAPI via `zod-openapi` (`.meta()`, sem monkey-patch)
+- ✅ Schemas anotados com `.meta({ description, example, id? })` (Zod 4 nativo). Aplicado nos 6 `*.schema.ts` (request) e 6 `*.presenter.ts` (response) — views viram componentes nomeados (`UserOwner`, `Session`, `Me`, `Role`, `Feature`, ...). Views são whitelist → exemplos de response sem campo sensível (verificado: doc não contém `passwordHash`/`tokenHash`).
+- ✅ `src/docs/openapi.ts` (+ `components.ts`, `helpers.ts`, `paths/<módulo>.ts`): documento montado com `createDocument`. Helper `fromEnvelope` extrai `.shape.body`/`.shape.params`/`.shape.query` com guarda de presença, sem quebrar a convenção `{ body, params, query }`. 27 paths registrados por módulo.
+- ✅ Prefixo `/api/v1` via `servers: [{ url: "/api/v1" }]` (relativo → resolve contra a origem). `components.securitySchemes.bearerAuth` (JWT) global; operações públicas sobrescrevem com `security: []`.
+- ✅ **`GET /openapi.json`** (público) montado no `router` de topo (fora de `authenticate`), servindo o documento memoizado.
+- ✅ Testes (`openapi.test.ts`, 4 casos): sem token → **200** + `content-type` JSON; `openapi === "3.1.0"`, `servers[0].url === "/api/v1"`, `bearerAuth` presente, paths-amostra (`/auth/login`, `/users`, `/roles`); doc **não** contém `passwordHash`/`tokenHash`/`refreshTokenHash`. Suíte completa 333 verde. 🔸 linter Redocly/Spectral fica como polish opcional.
+
+### ✅ Fase 5.3 — UI Scalar (`/reference`)
+- ✅ **`GET /reference`** (público, `router` de topo): `@scalar/express-api-reference` (`src/docs/reference.ts`) consumindo `url: "/openapi.json"`, `authentication.preferredSecurityScheme: "bearerAuth"` (Bearer preenchível no “try it”), tema `deepSpace`. Bundle carregado via CDN jsdelivr client-side (ver aviso de CSP na Fase 6.1).
+- ✅ Testes (`reference.test.ts`): `GET /reference` sem token → **200** + `content-type` HTML; HTML referencia `/openapi.json` e o Scalar. Suíte 335 verde. Smoke em runtime confirmou o fluxo “try it”: login do demo → **200** em `GET /users` → **403** em `DELETE /users/:id` (RBAC ao vivo).
+- ✅ 🔸 Tema `deepSpace` aplicado (ajuste fino de branding fica opcional).
+
+### ✅ Fase 5.4 — README *(feito no fecho da Fase 5, junto com 5.8/5.9)*
+- ✅ `README.md` (novo, PT-BR): visão do projeto, stack, arquitetura em camadas (route→controller→service→repository + presenter/RBAC/soft delete), **subir com Docker** (git clone → `cp env.example .env` → `npm run stack:up`), fluxo de dev local (`services:up` + `npm run dev` com tsx), **credenciais públicas do demo** (`demo@petoasis.dev`/`DemoOasis2026!`), links para `/reference` e `/openapi.json`, ponteiro para a coleção Bruno em `api-collection/`, tabela de comandos, roadmap e licença (ISC).
+- 🔸 Badges/screenshot da UI Scalar ficaram de fora (polish opcional).
+
+### ✅ Fase 5.5 — Coleção Bruno versionada (`/api-collection`)
+- ✅ `api-collection/` versionada, organizada **por módulo** (`status/`, `auth/`, `me/`, `users/`, `profiles/`, `permissions/`, `roles/`, `features/`) — 35 requests cobrindo os ~30 endpoints. `bruno.json` + `collection.bru` (bearer no nível da coleção). Biome ignora `api-collection`.
+- ✅ Environments `local` (`http://localhost:3000/api/v1`) e `prod` (baseUrl placeholder `https://SEU-DOMINIO/api/v1`, a preencher na 5.8).
+- ✅ Fluxo de auth: `Login` (demo) com `script:post-response` salvando o access token via **`bru.setVar`** (runtime, **não** `setEnvVar` — evita gravar segredo no `.bru` versionado / futuro Bruno v4); auth bearer `{{accessToken}}` herdada por `auth: inherit`. `Get Me`/`List Users`/`List Roles`/`List Features`/`List Sessions` capturam ids (`userId`/`roleId`/`featureId`/`sessionId`) para as rotas com path param.
+- ✅ Checkpoint validado com `@usebruno/cli`: Login → **200** + token (assert ✓); varredura das 8 pastas não-auth → leituras **200**, escritas do demo **403** (RBAC ao vivo), inheritance + chaining de ids OK. `typecheck`/`lint`/suíte (335) verdes.
+
+### ✅ Fase 5.6 — Dockerfile (app buildado)
+- ✅ `Dockerfile` multi-stage (`node:22-bookworm-slim` nos dois stages, p/ o prebuilt do `bcrypt` bater): **deps** (`npm ci --omit=dev` → node_modules de produção) · **build** (`npm ci` completo → `npm run db:generate` → `npm run build` via tsup) → **runtime** (copia `node_modules` de produção + `dist/` + `package.json`, `USER node`, `EXPOSE 3000`, `CMD ["node","dist/server.js"]`).
+  - ✅ **Client Prisma gerado NÃO é copiado** ao runtime: o tsup resolve o alias `@/*` e **embute** `src/generated/prisma` no bundle; o query-compiler wasm do Prisma 7 vem de `node_modules/@prisma/client` (dep de produção) via `import()`. Logo runtime = deps de produção + bundle.
+  - ✅ `prisma generate` exige `env("DATABASE_URL")` resolvível ao carregar `prisma.config.ts` (não conecta) → placeholder `ENV DATABASE_URL` só no stage build (não vaza pro runtime).
+- ✅ `.dockerignore` (node_modules, dist, coverage, `src/generated`, `src/__tests__`, .env, .git, api-collection, docs, `**/*.md`, etc.).
+- ✅ Checkpoint: `docker build` conclui (bundle 144 KB); container roda **não-root** (`uid=1000 node`); `docker run` (com `DATABASE_URL`/`JWT_SECRET`/`PEPPER`) → "Server is running on port 3000"; `GET /api/v1/status` → **200** (consulta o Postgres de fato: `version 16.14`, `opened_connections: 1` → bundle + Prisma client OK); `GET /openapi.json` → **200**. `typecheck`/`lint` verdes.
+- 🔸 **Nota p/ 5.7:** o seed roda `tsx prisma/seed.ts` importando de `src/`, que não existe na imagem de produção — a estratégia de seed no container fica pra 5.7 (que também estende o stage runtime com schema/migrations/CLI + entrypoint `migrate deploy`→seed→start).
+
+### ✅ Fase 5.7 — Compose full-stack (sem quebrar o dev)
+- ✅ Serviço **`app`** no `docker-compose.yml` sob `profiles: ["full"]` — `docker compose up -d` (dev, `services:up`) continua subindo **só** `db`/`db_test`/`mailpit` (verificado: app ausente); o app-em-container só sobe com `--profile full`. `depends_on: db` com `condition: service_healthy` (healthcheck `pg_isready` adicionado ao `db`).
+- ✅ **DATABASE_URL (Opção A):** o `.env` mantém `localhost` (tooling no host); o serviço `app` **deriva a própria** `DATABASE_URL` apontando p/ `db:5432` a partir de `POSTGRES_*`, dentro do compose. Dev intacto. `SMTP_HOST: mailpit` no app p/ alcançar o mailpit na rede do compose.
+- ✅ **Seed no container (resolve a nota da 5.6):** `prisma/seed.ts` virou 2ª entry do tsup (`entry: { server, seed }`) → `dist/seed.js` auto-contido (bundle 55 KB), sem tsx/src no runtime. Dev segue com `prisma db seed` (tsx) inalterado.
+- ✅ **Entrypoint** (`docker-entrypoint.sh`, `ENTRYPOINT` no stage runtime): `prisma migrate deploy` (nunca `migrate dev`) → `node dist/seed.js` (features/roles + demo, `SEED_DEMO_USER=true`, idempotente) → `exec node dist/server.js`. Runtime ganhou `prisma/` (schema+migrations) + `prisma.config.ts`; CLI `prisma` já é dep de produção. **`migrate deploy` carrega o `prisma.config.ts` (TS) nativamente, sem tsx** (confirmado em runtime).
+- ✅ `package.json`: `db:deploy` (`prisma migrate deploy`), `stack:up` (`docker compose --profile full up -d --build`), `stack:down` (paridade). `services:up` **inalterado**.
+- ✅ `env.example`: comentários esclarecendo os dois contextos de `DATABASE_URL` (host localhost vs. app deriva `@db`) + reforço `JWT_SECRET`/`PEPPER` ≥32 e `APP_URL` = domínio em prod. `.env` **não versionado**.
+- ✅ Checkpoint (do zero, `down -v` → `stack:up`): migrations aplicadas → seed (17 features, 5 roles, demo) → "Server is running on port 3000"; `GET /api/v1/status`/`/openapi.json`/`/reference` → **200**; login do demo → **200** + token; `GET /users` → **200**; `DELETE /users/:id` → **403** (RBAC ao vivo). `typecheck`/`lint`/suíte (335) verdes.
+- 🔸 Aviso cosmético do Prisma no runtime slim ("Prisma failed to detect libssl/openssl") — `migrate deploy` conclui normalmente (o driver adapter do Prisma 7 não usa o engine binário). Silenciar via `apt-get install -y openssl` no runtime fica como polish opcional.
+
+### ✅ Fase 5.8 — Deploy no servidor
+- ✅ Passo-a-passo documentado como **seção "Deploy em servidor" no `README.md`** (coube numa tela → não precisou de `DEPLOY.md` separado): clone → `cp env.example .env` de produção (`JWT_SECRET`/`PEPPER` fortes ≥32, `APP_URL` = domínio real, SMTP reais, `DEMO_*` opcional) → `npm run stack:up`; migração via `migrate deploy` no entrypoint.
+- ✅ 🔸 Nota de infra fora do escopo da app registrada no README: reverse proxy/TLS (Caddy/nginx), backup do volume `postgres_data`, firewall. CORS ainda não configurado (é Fase 6.1) — não prometido no README.
+
+### ✅ Fase 5.9 — Fechos
+- ✅ **`CONTEXT.md`:** nova `§2.3 Fase 5 (implementada) — Documentação + Deploy` no estilo "Por que...": fonte única Zod→OpenAPI (`.meta()` nativo, envelope via `.shape.*`, presenters sem campo sensível), demo read-only + seed gated, `migrate deploy` vs `migrate dev`, seed bundlado (`dist/seed.js`), profile `full`, `DATABASE_URL` derivada (`@db`), imagem multi-stage não-root. Antigo `§2.2 "Fase 5 (planejada)"` relabelado para `"Fase 6 (planejada)"` (+ history `Fase 5 (fechada)` no §4).
+- ✅ `ENDPOINTS.md`: seção "Docs" com `GET /openapi.json` e `GET /reference` (públicas, router de topo); cabeçalho/Mounting de-stalados (OpenAPI existe agora).
+- ✅ `npm run typecheck` + `npm run lint` + `npm run test:run` (335) verdes; **Fase 5 marcada ✅**.
+
+---
+
+## Fase 6 — Hardening e polimento 🔄
+> Amplia o escopo original ("rate limiting, account lockout") para incluir também polimento de features já construídas. Decisões e racional completos no `CONTEXT.md` (§2.2). Cada seção abaixo é uma feat-branch em TDD, a partir da branch `fase-6`.
+
+### ⬜ Fase 6.0 — Fundação de infra
 - ⬜ Serviço `redis` no `docker-compose.yml` (+ script `npm run` análogo aos `services:*`/`mail:up`); `REDIS_URL` em `env.ts`/`env.example`; client em `src/lib/redis.ts`.
 - ⬜ `app.set("trust proxy", ...)` (assume um hop de proxy reverso — ajustar se a topologia de deploy for outra) para IP real chegar certo no rate limit/lockout.
 - ⬜ `express.json({ limit: "100kb" })` (ajustável).
-- ⬜ `pino` + `pino-http` instalados (base para 5.3).
+- ⬜ `pino` + `pino-http` instalados (base para 6.3).
 
-### ⬜ Fase 5.1 — Helmet + CORS explícito
-- ⬜ `helmet()` (preset default — API pura, sem HTML servido).
+### ⬜ Fase 6.1 — Helmet + CORS explícito
+- ⬜ `helmet()` (preset default).
+- ⬜ ⚠️ **CSP × Scalar (Fase 5.3):** a UI em `/reference` carrega o bundle do Scalar do CDN `cdn.jsdelivr.net` client-side. O `helmet()` default já liga um `Content-Security-Policy` com `script-src 'self'`, que **bloquearia** esse CDN (e o `/reference` quebra). Ao ligar o helmet, resolver uma destas: (a) allowlistar `https://cdn.jsdelivr.net` no `script-src` (e o que mais o bundle exigir); (b) passar um `nonce` por request pro `apiReference` (`script-src 'nonce-...'`, `style-src` ainda precisa de `'unsafe-inline'`); ou (c) auto-hospedar o bundle e servir do próprio domínio. Testar `GET /reference` no navegador (não só `curl`) após ligar o helmet.
 - ⬜ CORS com allowlist a partir de `APP_URL` (+ eventual `CORS_ALLOWED_ORIGINS` separado por vírgula), `credentials: true`.
 
-### ⬜ Fase 5.2 — Consolidar guards de escalação
+### ⬜ Fase 6.2 — Consolidar guards de escalação
 - ⬜ Extrair `assertActorIsAdmin` (nome a definir) em `src/lib/authorization.ts`.
 - ⬜ `assertAdminForBan` (`user.service.ts`), `assertAdminForPermissionFeature` e `assertAdminForRoleAssignment` (`permission.service.ts`) passam a reusá-lo, mantendo seu próprio predicado de "alvo/feature/role privilegiado".
 - ⬜ Suíte de escalação existente continua verde sem alteração (refactor comportamento-preservado) + teste unitário do helper novo.
 
-### ⬜ Fase 5.3 — Log de acesso HTTP
+### ⬜ Fase 6.3 — Log de acesso HTTP
 - ⬜ `pino-http` logando toda request em stdout (JSON): método, rota, status, duração, IP (via `req.ip`), user-agent, request-id, `userId` quando autenticado.
 - ⬜ Nunca logar body, header `Authorization`, cookies ou senha.
 - ⬜ Nota: retenção/agregação fora da app fica fora de escopo desta fase (responsabilidade de infra/deploy).
 
-### ⬜ Fase 5.4 — Audit log de ações sensíveis
+### ⬜ Fase 6.4 — Audit log de ações sensíveis
 - ⬜ Migration: model `AuditLog` (id, actorId?, action, targetType, targetId?, metadata Json?, ip?, userAgent?, createdAt).
 - ⬜ `src/lib/auditLog.ts` (`record(action, {actorId, targetType, targetId, metadata?, ip?, userAgent?})`).
 - ⬜ Chamado nos pontos: login falho, lockout disparado, conta desbloqueada, ban/unban, grant/revoke de role, grant/revoke de permission override, password reset (solicitado e concluído), password change, troca de email (solicitada e concluída), forçar troca de senha, criação e deleção de usuário.
 - ⬜ Sem endpoint de leitura nesta fase (ver racional no `CONTEXT.md`).
 
-### ⬜ Fase 5.5 — Rate limiting nas rotas de auth
+### ⬜ Fase 6.5 — Rate limiting nas rotas de auth
 - ⬜ `rate-limiter-flexible` com `RateLimiterRedis`.
 - ⬜ Regras propostas (por IP, ajustáveis): `login` 20/15min; `signup` 5/1h; `forgot-password` 5/1h; `verify-email/resend` 5/1h.
 - ⬜ Resposta 429 genérica (não revela qual regra disparou).
 - ⬜ Excedido → também gera entrada no audit log (`rate_limit_exceeded`).
 
-### ⬜ Fase 5.6 — Account lockout + desbloqueio pelo admin
+### ⬜ Fase 6.6 — Account lockout + desbloqueio pelo admin
 - ⬜ Contador de falhas por conta em Redis; threshold e janela fixa propostos (ex. 5 falhas → 15min), backoff exponencial depois (dobra a cada ciclo até um teto) — números exatos confirmados no início da feature.
 - ⬜ Reset completo (contador + backoff) no login certo.
 - ⬜ Checagem entra em `auth.service.login`, ao lado dos gates de `bannedAt`/`status`.
-- ⬜ **`DELETE /users/:id/lock`** (`manage:user:status`; guarda de privilegiado reusando o helper da 5.2) — desbloqueia, reset completo, 204 sucesso, 409 se não estava travada; registra no audit log.
+- ⬜ **`DELETE /users/:id/lock`** (`manage:user:status`; guarda de privilegiado reusando o helper da 6.2) — desbloqueia, reset completo, 204 sucesso, 409 se não estava travada; registra no audit log.
 - ⬜ Sem lock manual pelo admin nesta fase (só o desbloqueio) — fora de escopo, backlog se necessário.
 
-### ⬜ Fase 5.7 — Teto de sessões vivas + faxina de tokens mortos
+### ⬜ Fase 6.7 — Teto de sessões vivas + faxina de tokens mortos
 - ⬜ Teto de sessões vivas simultâneas por usuário (número a confirmar); evict da mais antiga ao exceder (login nunca é recusado).
 - ⬜ Script de faxina (hard delete) de `Session`/`VerificationToken` mortos há mais de um período de retenção a definir (ex. 30 dias) — rodado via `npm run` script, não automático dentro do request/response.
 
-### ⬜ Fase 5.8 — Paginação/filtro em `GET /users`
+### ⬜ Fase 6.8 — Paginação/filtro em `GET /users`
 - ⬜ `?page=&limit=` (offset-based, `limit` máximo a definir), resposta `{ data, meta: { page, limit, total } }`.
 - ⬜ Filtros: `status`, `banned` (via `bannedAt`), `role`.
 
-### ⬜ Fase 5.9 — Troca de email *(desenho a confirmar no início da feature)*
+### ⬜ Fase 6.9 — Troca de email *(desenho a confirmar no início da feature)*
 - ⬜ Reabre a decisão de `user.schema.ts:56` (hoje bloqueada). Proposta a validar: endpoint próprio autenticado, senha atual exigida (como change-password), fluxo de 2 passos com verificação no email novo antes de efetivar (`pendingEmail` + `VerificationPurpose.EMAIL_CHANGE`).
 - ⬜ Pontos a decidir na feature: notifica o email antigo da troca? o que acontece se o novo email já existe (conflito)? TTL do pending?
 
-### ⬜ Fase 5.10 — Forçar troca de senha, ação do admin *(desenho a confirmar)*
+### ⬜ Fase 6.10 — Forçar troca de senha, ação do admin *(desenho a confirmar)*
 - ⬜ Proposta: flag `mustChangePassword` no `User`; endpoint que a ativa + invalida sessões do alvo (feature a definir — provável `manage:user:status`).
 - ⬜ Ponto a decidir na feature: login com a flag ativa bloqueia acesso até trocar, ou deixa entrar sinalizando pro front forçar a troca?
 
-### ⬜ Fase 5.11 — Polir `GET /auth/sessions`
+### ⬜ Fase 6.11 — Polir `GET /auth/sessions`
 - ⬜ Parsing de user-agent (ex. `ua-parser-js`) → `{ device: "Chrome no Windows", ipAddress, createdAt, current }`, marcando a sessão da request atual.
 
-### ⬜ Fase 5.12 — Fechos
+### ⬜ Fase 6.12 — Fechos
 - ⬜ `ENDPOINTS.md` atualizado com todas as rotas novas.
-- ⬜ `CONTEXT.md`: promover racional de "planejada" a "implementada", com as decisões efetivamente confirmadas em cada sub-fase (inclusive 5.9/5.10).
-- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 5 marcada ✅.
+- ⬜ `CONTEXT.md`: promover racional de "planejada" a "implementada", com as decisões efetivamente confirmadas em cada sub-fase (inclusive 6.9/6.10).
+- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 6 marcada ✅.
 
 ---
 
 ## Fases seguintes (resumo)
-- **Fase 6 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.
+- **Fase 6 — Hardening e polimento:** rate limiting, account lockout, audit log, guards de escalação consolidados, paginação/filtros (detalhado acima).
+- **Fase 7 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.

@@ -1,17 +1,28 @@
 # pet-oasis — Endpoints
 
-> Índice interno das rotas existentes (1 linha por rota). **Não é** documentação de contrato — OpenAPI fica pra depois. Serve só pra organização enquanto o projeto cresce.
+> Índice interno das rotas existentes (1 linha por rota). O contrato formal da API é o `GET /openapi.json` (OpenAPI 3.1) + a UI interativa em `GET /reference`; este arquivo é só o índice enxuto para organização enquanto o projeto cresce.
 > Ao adicionar/alterar rotas, atualize aqui. Detalhe de decisões no `CONTEXT.md`.
 
 ## Mounting
 
-Tudo sob **`/api/v1`** (`src/routes/index.ts`). `authenticate` é aplicado **por grupo de rota**, não global:
+As rotas de negócio ficam sob **`/api/v1`** (`src/routes/index.ts`). `authenticate` é aplicado **por grupo de rota**, não global:
 
 - **Públicas** (sem `authenticate`): `/status`, `/auth`.
 - **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/features`, `/roles`.
 - Exceção: 3 rotas dentro de `/auth` (público) aplicam `authenticate` **inline** na própria definição (`logout`, `GET /sessions`, `DELETE /sessions/:id`).
 
+As rotas de **documentação** (`/openapi.json`, `/reference`) ficam no router de topo, **fora** de `/api/v1` e de `authenticate` — são públicas.
+
 Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado; `feature` = exige a feature via `canAccess(...)`.
+
+---
+
+## Docs — `src/routes/index.ts` (router de topo)
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/openapi.json` | público | Spec OpenAPI 3.1 gerada dos schemas Zod |
+| GET `/reference` | público | UI Scalar — referência interativa da API |
 
 ---
 

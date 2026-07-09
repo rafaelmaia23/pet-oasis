@@ -1,0 +1,21 @@
+meta {
+  name: List Features
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/features
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  if (res.getStatus() === 200 && res.getBody().length > 0) {
+    bru.setVar("featureId", res.getBody()[0].id);
+  }
+}
+
+docs {
+  Exige read:feature (o demo tem). Captura o 1º featureId para as requests de permissão.
+}

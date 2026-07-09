@@ -1,0 +1,15 @@
+meta {
+  name: List Feature Overrides
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/users/{{userId}}/features
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige read:permission (o demo tem). Lista os overrides de feature do usuário.
+}

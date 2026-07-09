@@ -1,0 +1,15 @@
+meta {
+  name: Revoke Role
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/users/{{userId}}/roles/{{roleId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:permission (o demo não tem → 403). roleId vem de "List Roles".
+}

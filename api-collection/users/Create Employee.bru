@@ -1,0 +1,29 @@
+meta {
+  name: Create Employee
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/users
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "João Atendente",
+    "email": "joao@example.com",
+    "cpf": "98765432100",
+    "password": "DemoOasis2026!",
+    "roleNames": ["attendant"]
+  }
+}
+
+docs {
+  Exige a feature create:user. Como o usuário demo é read-only, retorna 403.
+}

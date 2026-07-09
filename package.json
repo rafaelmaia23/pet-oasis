@@ -24,7 +24,10 @@
     "services:up": "docker compose up -d",
     "services:down": "docker compose down",
     "services:reset": "docker compose down -v && docker compose up -d",
+    "stack:up": "docker compose --profile full up -d --build",
+    "stack:down": "docker compose --profile full down",
     "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio"
@@ -51,6 +54,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@scalar/express-api-reference": "^0.10.9",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
@@ -60,6 +64,7 @@
     "pg": "^8.20.0",
     "prisma": "^7.8.0",
     "uuid": "^14.0.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "zod-openapi": "^6.0.0"
   }
 }

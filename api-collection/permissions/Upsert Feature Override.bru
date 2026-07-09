@@ -1,0 +1,25 @@
+meta {
+  name: Upsert Feature Override
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/users/{{userId}}/features/{{featureId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "granted": true
+  }
+}
+
+docs {
+  Exige manage:permission (o demo não tem → 403). featureId vem de "List Features".
+}

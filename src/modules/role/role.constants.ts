@@ -54,6 +54,18 @@ const MANAGER_FEATURES: FeatureName[] = [
   ]),
 ];
 
+// Somente leitura — usuário público de demonstração da API hospedada
+const DEMO_READ_FEATURES: FeatureName[] = [
+  ...new Set<FeatureName>([
+    "read:user",
+    "read:user:others",
+    "read:session",
+    "read:feature",
+    "read:role",
+    "read:permission",
+  ]),
+];
+
 // Definição dos Roles do sistema - cada role abaixo é o que o seed.ts irá sincronizar com o banco de dados
 export const DEFAULT_ROLES = [
   {
@@ -78,6 +90,12 @@ export const DEFAULT_ROLES = [
     name: "admin",
     description: "Administrador do sistema",
     features: ["*"],
+    appliesTo: ProfileKind.EMPLOYEE,
+  },
+  {
+    name: "demo",
+    description: "Usuário de demonstração (somente leitura)",
+    features: DEMO_READ_FEATURES,
     appliesTo: ProfileKind.EMPLOYEE,
   },
 ] as const satisfies readonly RoleDefinition[];

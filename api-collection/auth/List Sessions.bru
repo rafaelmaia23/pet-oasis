@@ -1,0 +1,17 @@
+meta {
+  name: List Sessions
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/auth/sessions
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  if (res.getStatus() === 200 && res.getBody().length > 0) {
+    bru.setVar("sessionId", res.getBody()[0].id);
+  }
+}

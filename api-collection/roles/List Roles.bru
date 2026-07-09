@@ -1,0 +1,21 @@
+meta {
+  name: List Roles
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/roles
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  if (res.getStatus() === 200 && res.getBody().length > 0) {
+    bru.setVar("roleId", res.getBody()[0].id);
+  }
+}
+
+docs {
+  Exige read:role (o demo tem). Captura o 1º roleId para as requests de permissão.
+}

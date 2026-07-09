@@ -1,0 +1,15 @@
+meta {
+  name: Revoke Session
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{baseUrl}}/auth/sessions/{{sessionId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Revoga a sessão em {{sessionId}} (capturada por "List Sessions"). 204 no sucesso.
+}

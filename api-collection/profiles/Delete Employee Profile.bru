@@ -1,0 +1,15 @@
+meta {
+  name: Delete Employee Profile
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/users/{{userId}}/employee
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige delete:profile. O demo é read-only → 403.
+}

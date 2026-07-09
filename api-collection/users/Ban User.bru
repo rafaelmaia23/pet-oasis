@@ -1,0 +1,25 @@
+meta {
+  name: Ban User
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/users/{{userId}}/ban
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reason": "Violação dos termos de uso"
+  }
+}
+
+docs {
+  Exige manage:user:status. O demo não tem essa feature, retorna 403.
+}

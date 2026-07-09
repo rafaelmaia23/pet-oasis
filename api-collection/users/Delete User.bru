@@ -1,0 +1,15 @@
+meta {
+  name: Delete User
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/users/{{userId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige delete:user. Como o demo é read-only, retorna 403 (RBAC ao vivo).
+}

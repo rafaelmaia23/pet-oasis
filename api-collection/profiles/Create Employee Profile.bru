@@ -1,0 +1,25 @@
+meta {
+  name: Create Employee Profile
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/users/{{userId}}/employee
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "roleNames": ["attendant"]
+  }
+}
+
+docs {
+  Exige create:profile. O demo é read-only → 403.
+}

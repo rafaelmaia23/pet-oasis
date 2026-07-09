@@ -24,7 +24,10 @@
     "services:up": "docker compose up -d",
     "services:down": "docker compose down",
     "services:reset": "docker compose down -v && docker compose up -d",
+    "stack:up": "docker compose --profile full up -d --build",
+    "stack:down": "docker compose --profile full down",
     "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio"

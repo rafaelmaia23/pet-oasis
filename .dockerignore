@@ -1,0 +1,13 @@
+node_modules
+dist
+coverage
+src/generated
+src/__tests__
+.env
+.git
+.gitignore
+.vscode
+.claude
+api-collection
+docs
+**/*.md

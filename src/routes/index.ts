@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { buildOpenApiDocument } from "@/docs/openapi";
 import { authenticate } from "@/middlewares/authenticate.middleware";
 import authRouter from "@/modules/auth/auth.routes";
 import featureRouter from "@/modules/feature/feature.routes";
@@ -24,4 +25,10 @@ v1Router.use("/features", authenticate, featureRouter);
 v1Router.use("/roles", authenticate, roleRouter);
 
 export const router = Router();
+
+// Documentação — pública, fora dos grupos protegidos por `authenticate`
+router.get("/openapi.json", (_req, res) => {
+  res.json(buildOpenApiDocument());
+});
+
 router.use("/api/v1", v1Router);

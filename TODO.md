@@ -126,12 +126,12 @@
 - ✅ Testes: `db:seed` 2× com `SEED_DEMO_USER=true` → 1 usuário demo (idempotente, verificado no dev DB). Suíte (329) verde com o flag desligado no test DB.
 - ✅ Checkpoint (smoke antecipado no host): login do demo → **200**; `GET /users` e `GET /roles` → **200**; `POST /users` e `DELETE /users/:id` → **403** (RBAC ao vivo).
 
-### ⬜ Fase 5.2 — OpenAPI via `zod-openapi` (`.meta()`, sem monkey-patch)
-- ⬜ Anotar os schemas com `.meta({ description, example, id? })` (Zod 4 nativo). Padrão aplicado em **todos** os `src/modules/*/*.schema.ts` (request) e `*.presenter.ts` (response) — ex. `auth.schema.ts`, `user.schema.ts`, `user.presenter.ts`, `role.presenter.ts`. As views (presenter) já são whitelist Zod → os **exemplos de response saem sem campos sensíveis** por construção (nada de `passwordHash`/`tokenHash`).
-- ⬜ `src/lib/openapi.ts` (ou `src/docs/openapi.ts`): construir o documento com `createDocument` de `zod-openapi`. Para cada rota, registrar path+método extraindo as partes internas do envelope — `schema.shape.body` / `schema.shape.params` / `schema.shape.query` — com guarda de presença (nem toda rota tem os três; ex. `loginSchema` só tem `body`), **sem quebrar** a convenção `{ body, params, query }`.
-- ⬜ Refletir o prefixo real **`/api/v1`** nos `paths` do documento. Configurar `components.securitySchemes.bearerAuth` (JWT, `type: http`, `scheme: bearer`, `bearerFormat: JWT`) e aplicá-lo às rotas protegidas.
-- ⬜ **`GET /openapi.json`** (público): montar no `router` de topo (fora dos grupos `/api/v1/...`, logo sem `authenticate`), servindo o documento.
-- ⬜ Testes: `GET /openapi.json` **sem token** → **200** e `content-type` JSON; validar o documento num linter OpenAPI (Redocly/Spectral); asserção de que os `paths` carregam `/api/v1`; grep no JSON por `passwordHash`/`tokenHash`/`refreshTokenHash` → ausentes.
+### ✅ Fase 5.2 — OpenAPI via `zod-openapi` (`.meta()`, sem monkey-patch)
+- ✅ Schemas anotados com `.meta({ description, example, id? })` (Zod 4 nativo). Aplicado nos 6 `*.schema.ts` (request) e 6 `*.presenter.ts` (response) — views viram componentes nomeados (`UserOwner`, `Session`, `Me`, `Role`, `Feature`, ...). Views são whitelist → exemplos de response sem campo sensível (verificado: doc não contém `passwordHash`/`tokenHash`).
+- ✅ `src/docs/openapi.ts` (+ `components.ts`, `helpers.ts`, `paths/<módulo>.ts`): documento montado com `createDocument`. Helper `fromEnvelope` extrai `.shape.body`/`.shape.params`/`.shape.query` com guarda de presença, sem quebrar a convenção `{ body, params, query }`. 27 paths registrados por módulo.
+- ✅ Prefixo `/api/v1` via `servers: [{ url: "/api/v1" }]` (relativo → resolve contra a origem). `components.securitySchemes.bearerAuth` (JWT) global; operações públicas sobrescrevem com `security: []`.
+- ✅ **`GET /openapi.json`** (público) montado no `router` de topo (fora de `authenticate`), servindo o documento memoizado.
+- ✅ Testes (`openapi.test.ts`, 4 casos): sem token → **200** + `content-type` JSON; `openapi === "3.1.0"`, `servers[0].url === "/api/v1"`, `bearerAuth` presente, paths-amostra (`/auth/login`, `/users`, `/roles`); doc **não** contém `passwordHash`/`tokenHash`/`refreshTokenHash`. Suíte completa 333 verde. 🔸 linter Redocly/Spectral fica como polish opcional.
 
 ### ⬜ Fase 5.3 — UI Scalar (`/reference`)
 - ⬜ **`GET /reference`** (público, `router` de topo): `@scalar/express-api-reference` consumindo `url: "/openapi.json"`. Configurar `authentication` (bearer JWT preenchível no “try it”) e `theme`/layout 🔸.

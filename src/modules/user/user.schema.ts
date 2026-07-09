@@ -8,24 +8,39 @@ export const passwordSchema = z
   .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
   .regex(/[a-z]/, "Password must contain at least one lowercase letter")
   .regex(/[0-9]/, "Password must contain at least one number")
-  .regex(/[@$!%*?&]/, "Password must contain at least one special character");
+  .regex(/[@$!%*?&]/, "Password must contain at least one special character")
+  .meta({
+    description:
+      "Senha forte: 8+ caracteres com maiúscula, minúscula, número e símbolo",
+    example: "DemoOasis2026!",
+  });
 
 const userBodySchema = z.object({
   name: z
     .string()
     .min(2, "Name is required")
-    .max(100, "Name must be less than 100 characters"),
-  email: z.email("Invalid email address"),
+    .max(100, "Name must be less than 100 characters")
+    .meta({ example: "Maria Silva" }),
+  email: z
+    .email("Invalid email address")
+    .meta({ example: "maria@example.com" }),
   cpf: z
     .string()
     .transform((val) => val.replace(/\D/g, ""))
-    .pipe(z.string().length(11, "CPF must be exactly 11 digits")),
+    .pipe(z.string().length(11, "CPF must be exactly 11 digits"))
+    .meta({ description: "CPF (11 dígitos)", example: "12345678901" }),
   password: passwordSchema,
 });
 
 export const createEmployeeSchema = z.object({
   body: userBodySchema.extend({
-    roleNames: z.array(z.enum(ROLE_NAMES)).optional(),
+    roleNames: z
+      .array(z.enum(ROLE_NAMES))
+      .optional()
+      .meta({
+        description: "Papéis a atribuir (default: attendant)",
+        example: ["attendant"],
+      }),
   }),
 });
 
@@ -38,7 +53,11 @@ export const createCustomerSchema = z.object({
         z
           .string()
           .regex(/^\d{10,11}$/, "Telefone deve ter 10 ou 11 dígitos (com DDD)"),
-      ),
+      )
+      .meta({
+        description: "Telefone com DDD (10-11 dígitos)",
+        example: "11987654321",
+      }),
   }),
 });
 
@@ -78,7 +97,8 @@ export const banUserSchema = z.object({
     reason: z
       .string()
       .min(1, "Reason is required")
-      .max(500, "Reason must be at most 500 characters"),
+      .max(500, "Reason must be at most 500 characters")
+      .meta({ example: "Violação dos termos de uso" }),
   }),
 });
 

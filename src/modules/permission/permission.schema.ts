@@ -6,7 +6,10 @@ export const upsertPermissionParamsSchema = z.object({
     featureId: z.uuid("Invalid feature ID"),
   }),
   body: z.object({
-    granted: z.boolean({ message: "Invalid granted value" }),
+    granted: z.boolean({ message: "Invalid granted value" }).meta({
+      description: "true = grant (concede), false = deny (nega)",
+      example: true,
+    }),
   }),
 });
 

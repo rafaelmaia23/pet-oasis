@@ -108,8 +108,6 @@ npm run stack:up
 
 A migração roda via `prisma migrate deploy` no entrypoint (nunca `migrate dev`) e o seed é idempotente — a subida deixa o ambiente do zero funcionando.
 
-> **🔸 Fora do escopo da aplicação** (responsabilidade de infra/deploy): reverse proxy + TLS (Caddy/nginx), backup do volume `postgres_data` do Postgres e firewall. CORS explícito ainda não está configurado — chega na Fase 6 (hardening).
-
 ## Status e roadmap
 
 Ciclo 1 (fundação) com as fases 2–5 concluídas: autorização e perfis, auth com refresh rotativo, email/status/banimento e documentação + containerização. À frente: **Fase 6** (hardening — rate limiting, account lockout, audit log, paginação) e **Fase 7** (domínio do pet shop — Pets ligados a Customers, e adiante vendas/pedidos). Detalhe em [TODO.md](TODO.md).

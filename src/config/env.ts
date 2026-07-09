@@ -22,6 +22,10 @@ const envSchema = z.object({
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().default("Pet Oasis <no-reply@petoasis.dev>"),
   APP_URL: z.url().default("http://localhost:5173"),
+
+  SEED_DEMO_USER: z.stringbool().default(false),
+  DEMO_EMAIL: z.email().default("demo@petoasis.dev"),
+  DEMO_PASSWORD: z.string().default("DemoOasis2026!"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

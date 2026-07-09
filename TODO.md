@@ -110,73 +110,135 @@
 
 ---
 
-## Fase 5 — Hardening e polimento 🔄
-> Amplia o escopo original ("rate limiting, account lockout") para incluir também polimento de features já construídas. Decisões e racional completos no `CONTEXT.md` (§2.2). Cada seção abaixo é uma feat-branch em TDD, a partir da branch `fase-5`.
+## Fase 5 — Documentação da API + Containerização (deploy) ⬜
+> Fecha o Ciclo 1 como peça de portfólio: API documentada (OpenAPI gerado dos schemas Zod → UI Scalar → coleção Bruno) e no ar via Docker (git clone → um `docker compose up` sobe banco + app buildado, migra e semeia do zero). Decisões e racional no `CONTEXT.md` (§ a criar). Fonte única da doc: os próprios schemas Zod via `.meta()` (Zod 4 nativo, sem monkey-patch). Cada seção abaixo é uma feat-branch a partir da branch `fase-5`.
+>
+> **Decisões firmadas:** demo read-only = role `demo` (`appliesTo EMPLOYEE`) com todas as features de leitura (`read:user`, `read:user:others`, `read:session`, `read:feature`, `read:role`, `read:permission`) — GET em toda a API, escrita → 403 (RBAC ao vivo). Seed do **usuário** demo gated por `SEED_DEMO_USER=true` (ligado no Docker/prod, desligado em test/dev); a **role** `demo` é sempre semeada. `/openapi.json` e `/reference` são rotas públicas (montadas no `router` de topo, fora dos grupos protegidos). Migração em produção usa `prisma migrate deploy` (nunca `migrate dev`). Segredos via `.env` não-versionado + `.env.example`.
 
-### ⬜ Fase 5.0 — Fundação de infra
+### ⬜ Fase 5.0 — Fundação (deps + env)
+- ⬜ Instalar `zod-openapi`, `@scalar/express-api-reference` (deps de runtime).
+- ⬜ `src/config/env.ts` + `env.example`: `SEED_DEMO_USER` (`z.stringbool`/coerce, default `false`), `DEMO_EMAIL` (default `demo@petoasis.dev`), `DEMO_PASSWORD` (default público que satisfaz `passwordSchema`, ex. `DemoOasis2026!`). Grupo `# Demo` no `env.example`.
+- ⬜ Checkpoint: `npm run typecheck` verde (app boota lendo os defaults novos).
+
+### ⬜ Fase 5.1 — Seed do usuário demo (read-only)
+- ⬜ `role.constants.ts`: adicionar role `demo` a `DEFAULT_ROLES` — `appliesTo: ProfileKind.EMPLOYEE`, features `[read:user, read:user:others, read:session, read:feature, read:role, read:permission]` (grupo semântico próprio `DEMO_READ_FEATURES` deduplicado, no padrão dos demais). `RoleName`/`ROLE_NAMES` ganham `"demo"` automaticamente.
+- ⬜ `prisma/seed.ts`: após sincronizar features/roles (upsert já existente), **se `env.SEED_DEMO_USER`**, fazer upsert idempotente do usuário demo por `email` — perfil `Employee`, `status: ACTIVE` (sem `VerificationToken`), vínculo com a role `demo` (garantindo 1 vínculo ativo, sem duplicar em re-seed), `passwordHash` gerado pelo **mesmo helper de hash usado na criação de usuário** (bcrypt + `PEPPER`) — não reimplementar. Reutilizar `DEMO_EMAIL`/`DEMO_PASSWORD` do `env`.
+- ⬜ Testes: rodar `npm run db:seed` duas vezes com `SEED_DEMO_USER=true` → sem duplicar usuário/role/perfil (idempotente). Confirmar a suíte com `SEED_DEMO_USER` desligado no test DB → contagens de usuário inalteradas (`npm run test:run` verde).
+- ⬜ Checkpoint (após app no ar em 5.7): `POST /api/v1/auth/login` do demo → **200**; `GET /api/v1/users` → **200**; `DELETE /api/v1/users/:id` (qualquer) → **403**; `POST /api/v1/users` → **403**.
+
+### ⬜ Fase 5.2 — OpenAPI via `zod-openapi` (`.meta()`, sem monkey-patch)
+- ⬜ Anotar os schemas com `.meta({ description, example, id? })` (Zod 4 nativo). Padrão aplicado em **todos** os `src/modules/*/*.schema.ts` (request) e `*.presenter.ts` (response) — ex. `auth.schema.ts`, `user.schema.ts`, `user.presenter.ts`, `role.presenter.ts`. As views (presenter) já são whitelist Zod → os **exemplos de response saem sem campos sensíveis** por construção (nada de `passwordHash`/`tokenHash`).
+- ⬜ `src/lib/openapi.ts` (ou `src/docs/openapi.ts`): construir o documento com `createDocument` de `zod-openapi`. Para cada rota, registrar path+método extraindo as partes internas do envelope — `schema.shape.body` / `schema.shape.params` / `schema.shape.query` — com guarda de presença (nem toda rota tem os três; ex. `loginSchema` só tem `body`), **sem quebrar** a convenção `{ body, params, query }`.
+- ⬜ Refletir o prefixo real **`/api/v1`** nos `paths` do documento. Configurar `components.securitySchemes.bearerAuth` (JWT, `type: http`, `scheme: bearer`, `bearerFormat: JWT`) e aplicá-lo às rotas protegidas.
+- ⬜ **`GET /openapi.json`** (público): montar no `router` de topo (fora dos grupos `/api/v1/...`, logo sem `authenticate`), servindo o documento.
+- ⬜ Testes: `GET /openapi.json` **sem token** → **200** e `content-type` JSON; validar o documento num linter OpenAPI (Redocly/Spectral); asserção de que os `paths` carregam `/api/v1`; grep no JSON por `passwordHash`/`tokenHash`/`refreshTokenHash` → ausentes.
+
+### ⬜ Fase 5.3 — UI Scalar (`/reference`)
+- ⬜ **`GET /reference`** (público, `router` de topo): `@scalar/express-api-reference` consumindo `url: "/openapi.json"`. Configurar `authentication` (bearer JWT preenchível no “try it”) e `theme`/layout 🔸.
+- ⬜ Testes: `curl /reference` → **200** (HTML). Fluxo “try it” manual/documentado: login do demo → cola o Bearer → `GET` → **200**; `DELETE`/`POST` → **403** (RBAC visível na UI).
+- ⬜ 🔸 Polir tema/branding do Scalar (não bloqueia).
+
+### ⬜ Fase 5.4 — README
+- ⬜ Reescrever/expandir o `README.md`: visão do projeto, stack, arquitetura em camadas (route→controller→service→repository), **como subir com Docker** (git clone → `.env` → um comando), fluxo de dev local (`services:up` + `npm run dev` com tsx no host), **credenciais públicas do demo**, links para `/reference` e `/openapi.json`, ponteiro para a coleção Bruno em `/api-collection`.
+- ⬜ 🔸 Badges, screenshot da UI Scalar, índice.
+
+### ⬜ Fase 5.5 — Coleção Bruno versionada (`/api-collection`)
+- ⬜ Criar `/api-collection` versionada no repo, organizada **por módulo** (`auth/`, `users/`, `me/`, `roles/`, `features/`, `permissions/`, `status/`).
+- ⬜ Environments `local` (`http://localhost:3000/api/v1`) e `prod` (URL do deploy), com `baseUrl` por env.
+- ⬜ Fluxo de auth: request de `login` com **post-response script** salvando o access token numa variável de env; requests protegidas usam `Authorization: Bearer {{token}}`.
+- ⬜ Checkpoint: abrir no Bruno, rodar `login` → token salvo → uma request protegida herda o token e responde 200.
+
+### ⬜ Fase 5.6 — Dockerfile (app buildado)
+- ⬜ `Dockerfile` multi-stage: **build** (instala deps, `prisma generate`, `npm run build` via tsup) → **runtime** (node slim, copia `dist/` + client Prisma gerado + deps de produção, usuário não-root, `EXPOSE`, entrypoint). `.dockerignore` (node_modules, dist local, .env, .git).
+- ⬜ Checkpoint: `docker build` conclui; `docker run` do container sobe o processo (com um banco alcançável).
+
+### ⬜ Fase 5.7 — Compose full-stack (sem quebrar o dev)
+- ⬜ Adicionar serviço **`app`** ao `docker-compose.yml` sob **profile** (ex. `profiles: ["full"]`) — assim `docker compose up -d` (dev, via `services:up`) continua subindo **só** `db`/`db_test`/`mailpit` e o app roda no host via tsx; o app-em-container só sobe no profile. `depends_on: db` com healthcheck; env via `.env`.
+- ⬜ **Entrypoint de subida (do zero, produção):** `prisma migrate deploy` (nunca `migrate dev`) → `prisma db seed` (com `SEED_DEMO_USER=true`) → `node dist/server.js`. Migração e seed acontecem na subida, ambiente sai do zero funcionando.
+- ⬜ `package.json`: sugerir scripts `db:deploy` (`prisma migrate deploy`) e `stack:up` (`docker compose --profile full up -d --build`) — mantendo o padrão “prefira scripts” do `CLAUDE.md`. `services:up` permanece **inalterado** (dev).
+- ⬜ `.env.example`: todas as chaves necessárias para o full-stack — `POSTGRES_*`, `DATABASE_URL` (host = nome do serviço `db`), `JWT_SECRET`/`PEPPER` (≥32), `SMTP_*`/`MAIL_FROM`/`APP_URL`, `SEED_DEMO_USER`/`DEMO_EMAIL`/`DEMO_PASSWORD`, `CORS`/`PORT`. `.env` **não versionado**.
+- ⬜ Checkpoint (do zero): `docker compose --profile full up --build` num clone limpo → `db` + `app` sobem, migrations aplicadas, seed rodado; `GET /api/v1/status` → **200**; `GET /openapi.json` → **200**; `curl /reference` → **200**; login do demo → **200** e `DELETE` → **403**.
+
+### ⬜ Fase 5.8 — Deploy no servidor
+- ⬜ Documentar o passo-a-passo (no `README.md` ou `DEPLOY.md`): clone → preencher `.env` de produção → `docker compose --profile full up -d --build`. `APP_URL`/CORS apontando para o domínio real; migração já via `migrate deploy` no entrypoint.
+- ⬜ 🔸 Nota de infra fora do escopo da app: reverse proxy/TLS (Caddy/nginx), backup de volume do Postgres — responsabilidade de deploy, não da aplicação.
+
+### ⬜ Fase 5.9 — Fechos
+- ⬜ **`CONTEXT.md`:** registrar o racional das decisões desta fase numa seção nova (ex. `§2.3 — Fase 5 (Documentação + Deploy)`): **fonte única Zod→OpenAPI** (`.meta()` nativo, sem monkey-patch; envelope extraído por `.shape.*`; presenters garantindo exemplos sem campo sensível), **demo read-only + seed gated** (`SEED_DEMO_USER`, role `demo` sempre semeada), **containerização** (`migrate deploy` vs `migrate dev`, segredos via `.env`, profile `full` para não quebrar o fluxo de dev). Relabelar o antigo `§2.2 “Fase 5 (planejada)”` para `“Fase 6 (planejada)”`.
+- ⬜ `ENDPOINTS.md`: adicionar `GET /openapi.json` e `GET /reference` (públicas).
+- ⬜ `npm run typecheck` + `npm run lint` + `npm run test:run` verdes; **Fase 5 marcada ✅**.
+
+---
+
+## Fase 6 — Hardening e polimento 🔄
+> Amplia o escopo original ("rate limiting, account lockout") para incluir também polimento de features já construídas. Decisões e racional completos no `CONTEXT.md` (§2.2). Cada seção abaixo é uma feat-branch em TDD, a partir da branch `fase-6`.
+
+### ⬜ Fase 6.0 — Fundação de infra
 - ⬜ Serviço `redis` no `docker-compose.yml` (+ script `npm run` análogo aos `services:*`/`mail:up`); `REDIS_URL` em `env.ts`/`env.example`; client em `src/lib/redis.ts`.
 - ⬜ `app.set("trust proxy", ...)` (assume um hop de proxy reverso — ajustar se a topologia de deploy for outra) para IP real chegar certo no rate limit/lockout.
 - ⬜ `express.json({ limit: "100kb" })` (ajustável).
-- ⬜ `pino` + `pino-http` instalados (base para 5.3).
+- ⬜ `pino` + `pino-http` instalados (base para 6.3).
 
-### ⬜ Fase 5.1 — Helmet + CORS explícito
+### ⬜ Fase 6.1 — Helmet + CORS explícito
 - ⬜ `helmet()` (preset default — API pura, sem HTML servido).
 - ⬜ CORS com allowlist a partir de `APP_URL` (+ eventual `CORS_ALLOWED_ORIGINS` separado por vírgula), `credentials: true`.
 
-### ⬜ Fase 5.2 — Consolidar guards de escalação
+### ⬜ Fase 6.2 — Consolidar guards de escalação
 - ⬜ Extrair `assertActorIsAdmin` (nome a definir) em `src/lib/authorization.ts`.
 - ⬜ `assertAdminForBan` (`user.service.ts`), `assertAdminForPermissionFeature` e `assertAdminForRoleAssignment` (`permission.service.ts`) passam a reusá-lo, mantendo seu próprio predicado de "alvo/feature/role privilegiado".
 - ⬜ Suíte de escalação existente continua verde sem alteração (refactor comportamento-preservado) + teste unitário do helper novo.
 
-### ⬜ Fase 5.3 — Log de acesso HTTP
+### ⬜ Fase 6.3 — Log de acesso HTTP
 - ⬜ `pino-http` logando toda request em stdout (JSON): método, rota, status, duração, IP (via `req.ip`), user-agent, request-id, `userId` quando autenticado.
 - ⬜ Nunca logar body, header `Authorization`, cookies ou senha.
 - ⬜ Nota: retenção/agregação fora da app fica fora de escopo desta fase (responsabilidade de infra/deploy).
 
-### ⬜ Fase 5.4 — Audit log de ações sensíveis
+### ⬜ Fase 6.4 — Audit log de ações sensíveis
 - ⬜ Migration: model `AuditLog` (id, actorId?, action, targetType, targetId?, metadata Json?, ip?, userAgent?, createdAt).
 - ⬜ `src/lib/auditLog.ts` (`record(action, {actorId, targetType, targetId, metadata?, ip?, userAgent?})`).
 - ⬜ Chamado nos pontos: login falho, lockout disparado, conta desbloqueada, ban/unban, grant/revoke de role, grant/revoke de permission override, password reset (solicitado e concluído), password change, troca de email (solicitada e concluída), forçar troca de senha, criação e deleção de usuário.
 - ⬜ Sem endpoint de leitura nesta fase (ver racional no `CONTEXT.md`).
 
-### ⬜ Fase 5.5 — Rate limiting nas rotas de auth
+### ⬜ Fase 6.5 — Rate limiting nas rotas de auth
 - ⬜ `rate-limiter-flexible` com `RateLimiterRedis`.
 - ⬜ Regras propostas (por IP, ajustáveis): `login` 20/15min; `signup` 5/1h; `forgot-password` 5/1h; `verify-email/resend` 5/1h.
 - ⬜ Resposta 429 genérica (não revela qual regra disparou).
 - ⬜ Excedido → também gera entrada no audit log (`rate_limit_exceeded`).
 
-### ⬜ Fase 5.6 — Account lockout + desbloqueio pelo admin
+### ⬜ Fase 6.6 — Account lockout + desbloqueio pelo admin
 - ⬜ Contador de falhas por conta em Redis; threshold e janela fixa propostos (ex. 5 falhas → 15min), backoff exponencial depois (dobra a cada ciclo até um teto) — números exatos confirmados no início da feature.
 - ⬜ Reset completo (contador + backoff) no login certo.
 - ⬜ Checagem entra em `auth.service.login`, ao lado dos gates de `bannedAt`/`status`.
-- ⬜ **`DELETE /users/:id/lock`** (`manage:user:status`; guarda de privilegiado reusando o helper da 5.2) — desbloqueia, reset completo, 204 sucesso, 409 se não estava travada; registra no audit log.
+- ⬜ **`DELETE /users/:id/lock`** (`manage:user:status`; guarda de privilegiado reusando o helper da 6.2) — desbloqueia, reset completo, 204 sucesso, 409 se não estava travada; registra no audit log.
 - ⬜ Sem lock manual pelo admin nesta fase (só o desbloqueio) — fora de escopo, backlog se necessário.
 
-### ⬜ Fase 5.7 — Teto de sessões vivas + faxina de tokens mortos
+### ⬜ Fase 6.7 — Teto de sessões vivas + faxina de tokens mortos
 - ⬜ Teto de sessões vivas simultâneas por usuário (número a confirmar); evict da mais antiga ao exceder (login nunca é recusado).
 - ⬜ Script de faxina (hard delete) de `Session`/`VerificationToken` mortos há mais de um período de retenção a definir (ex. 30 dias) — rodado via `npm run` script, não automático dentro do request/response.
 
-### ⬜ Fase 5.8 — Paginação/filtro em `GET /users`
+### ⬜ Fase 6.8 — Paginação/filtro em `GET /users`
 - ⬜ `?page=&limit=` (offset-based, `limit` máximo a definir), resposta `{ data, meta: { page, limit, total } }`.
 - ⬜ Filtros: `status`, `banned` (via `bannedAt`), `role`.
 
-### ⬜ Fase 5.9 — Troca de email *(desenho a confirmar no início da feature)*
+### ⬜ Fase 6.9 — Troca de email *(desenho a confirmar no início da feature)*
 - ⬜ Reabre a decisão de `user.schema.ts:56` (hoje bloqueada). Proposta a validar: endpoint próprio autenticado, senha atual exigida (como change-password), fluxo de 2 passos com verificação no email novo antes de efetivar (`pendingEmail` + `VerificationPurpose.EMAIL_CHANGE`).
 - ⬜ Pontos a decidir na feature: notifica o email antigo da troca? o que acontece se o novo email já existe (conflito)? TTL do pending?
 
-### ⬜ Fase 5.10 — Forçar troca de senha, ação do admin *(desenho a confirmar)*
+### ⬜ Fase 6.10 — Forçar troca de senha, ação do admin *(desenho a confirmar)*
 - ⬜ Proposta: flag `mustChangePassword` no `User`; endpoint que a ativa + invalida sessões do alvo (feature a definir — provável `manage:user:status`).
 - ⬜ Ponto a decidir na feature: login com a flag ativa bloqueia acesso até trocar, ou deixa entrar sinalizando pro front forçar a troca?
 
-### ⬜ Fase 5.11 — Polir `GET /auth/sessions`
+### ⬜ Fase 6.11 — Polir `GET /auth/sessions`
 - ⬜ Parsing de user-agent (ex. `ua-parser-js`) → `{ device: "Chrome no Windows", ipAddress, createdAt, current }`, marcando a sessão da request atual.
 
-### ⬜ Fase 5.12 — Fechos
+### ⬜ Fase 6.12 — Fechos
 - ⬜ `ENDPOINTS.md` atualizado com todas as rotas novas.
-- ⬜ `CONTEXT.md`: promover racional de "planejada" a "implementada", com as decisões efetivamente confirmadas em cada sub-fase (inclusive 5.9/5.10).
-- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 5 marcada ✅.
+- ⬜ `CONTEXT.md`: promover racional de "planejada" a "implementada", com as decisões efetivamente confirmadas em cada sub-fase (inclusive 6.9/6.10).
+- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 6 marcada ✅.
 
 ---
 
 ## Fases seguintes (resumo)
-- **Fase 6 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.
+- **Fase 5 — Documentação da API + Containerização:** OpenAPI gerado dos schemas Zod (`.meta()`) → UI Scalar em `/reference` + `/openapi.json`, usuário demo read-only, coleção Bruno, Docker full-stack (detalhado acima).
+- **Fase 6 — Hardening e polimento:** rate limiting, account lockout, audit log, guards de escalação consolidados, paginação/filtros (detalhado acima).
+- **Fase 7 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.

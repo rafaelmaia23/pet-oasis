@@ -110,28 +110,28 @@
 
 ---
 
-## Fase 5 — Documentação da API + Containerização (deploy) ⬜
+## Fase 5 — Documentação da API + Containerização (deploy) 🔄
 > Fecha o Ciclo 1 como peça de portfólio: API documentada (OpenAPI gerado dos schemas Zod → UI Scalar → coleção Bruno) e no ar via Docker (git clone → um `docker compose up` sobe banco + app buildado, migra e semeia do zero). Decisões e racional no `CONTEXT.md` (§ a criar). Fonte única da doc: os próprios schemas Zod via `.meta()` (Zod 4 nativo, sem monkey-patch). Cada seção abaixo é uma feat-branch a partir da branch `fase-5`.
 >
 > **Decisões firmadas:** demo read-only = role `demo` (`appliesTo EMPLOYEE`) com todas as features de leitura (`read:user`, `read:user:others`, `read:session`, `read:feature`, `read:role`, `read:permission`) — GET em toda a API, escrita → 403 (RBAC ao vivo). Seed do **usuário** demo gated por `SEED_DEMO_USER=true` (ligado no Docker/prod, desligado em test/dev); a **role** `demo` é sempre semeada. `/openapi.json` e `/reference` são rotas públicas (montadas no `router` de topo, fora dos grupos protegidos). Migração em produção usa `prisma migrate deploy` (nunca `migrate dev`). Segredos via `.env` não-versionado + `.env.example`.
 
-### ⬜ Fase 5.0 — Fundação (deps + env)
-- ⬜ Instalar `zod-openapi`, `@scalar/express-api-reference` (deps de runtime).
-- ⬜ `src/config/env.ts` + `env.example`: `SEED_DEMO_USER` (`z.stringbool`/coerce, default `false`), `DEMO_EMAIL` (default `demo@petoasis.dev`), `DEMO_PASSWORD` (default público que satisfaz `passwordSchema`, ex. `DemoOasis2026!`). Grupo `# Demo` no `env.example`.
-- ⬜ Checkpoint: `npm run typecheck` verde (app boota lendo os defaults novos).
+### ✅ Fase 5.0 — Fundação (deps + env)
+- ✅ Instalar `zod-openapi`, `@scalar/express-api-reference` (deps de runtime).
+- ✅ `src/config/env.ts` + `env.example`: `SEED_DEMO_USER` (`z.stringbool()`, default `false`), `DEMO_EMAIL` (default `demo@petoasis.dev`), `DEMO_PASSWORD` (default público que satisfaz `passwordSchema`, ex. `DemoOasis2026!`). Grupo `# Demo` no `env.example`.
+- ✅ Checkpoint: `npm run typecheck` + `npm run lint` verdes (app boota lendo os defaults novos).
 
-### ⬜ Fase 5.1 — Seed do usuário demo (read-only)
-- ⬜ `role.constants.ts`: adicionar role `demo` a `DEFAULT_ROLES` — `appliesTo: ProfileKind.EMPLOYEE`, features `[read:user, read:user:others, read:session, read:feature, read:role, read:permission]` (grupo semântico próprio `DEMO_READ_FEATURES` deduplicado, no padrão dos demais). `RoleName`/`ROLE_NAMES` ganham `"demo"` automaticamente.
-- ⬜ `prisma/seed.ts`: após sincronizar features/roles (upsert já existente), **se `env.SEED_DEMO_USER`**, fazer upsert idempotente do usuário demo por `email` — perfil `Employee`, `status: ACTIVE` (sem `VerificationToken`), vínculo com a role `demo` (garantindo 1 vínculo ativo, sem duplicar em re-seed), `passwordHash` gerado pelo **mesmo helper de hash usado na criação de usuário** (bcrypt + `PEPPER`) — não reimplementar. Reutilizar `DEMO_EMAIL`/`DEMO_PASSWORD` do `env`.
-- ⬜ Testes: rodar `npm run db:seed` duas vezes com `SEED_DEMO_USER=true` → sem duplicar usuário/role/perfil (idempotente). Confirmar a suíte com `SEED_DEMO_USER` desligado no test DB → contagens de usuário inalteradas (`npm run test:run` verde).
-- ⬜ Checkpoint (após app no ar em 5.7): `POST /api/v1/auth/login` do demo → **200**; `GET /api/v1/users` → **200**; `DELETE /api/v1/users/:id` (qualquer) → **403**; `POST /api/v1/users` → **403**.
+### ✅ Fase 5.1 — Seed do usuário demo (read-only)
+- ✅ `role.constants.ts`: adicionada role `demo` a `DEFAULT_ROLES` — `appliesTo: ProfileKind.EMPLOYEE`, features `[read:user, read:user:others, read:session, read:feature, read:role, read:permission]` (grupo `DEMO_READ_FEATURES` deduplicado). `RoleName`/`ROLE_NAMES` ganham `"demo"` automaticamente.
+- ✅ `prisma/seed.ts`: após sincronizar features/roles, **se `env.SEED_DEMO_USER`**, upsert idempotente do usuário demo por `email` — perfil `Employee`, `status: ACTIVE`, vínculo com a role `demo`, `passwordHash` via `hashPassword` (bcrypt + `PEPPER`). O `update` limpa `bannedAt/bannedBy/banReason` (redeploy restaura o demo).
+- ✅ Testes: `db:seed` 2× com `SEED_DEMO_USER=true` → 1 usuário demo (idempotente, verificado no dev DB). Suíte (329) verde com o flag desligado no test DB.
+- ✅ Checkpoint (smoke antecipado no host): login do demo → **200**; `GET /users` e `GET /roles` → **200**; `POST /users` e `DELETE /users/:id` → **403** (RBAC ao vivo).
 
-### ⬜ Fase 5.2 — OpenAPI via `zod-openapi` (`.meta()`, sem monkey-patch)
-- ⬜ Anotar os schemas com `.meta({ description, example, id? })` (Zod 4 nativo). Padrão aplicado em **todos** os `src/modules/*/*.schema.ts` (request) e `*.presenter.ts` (response) — ex. `auth.schema.ts`, `user.schema.ts`, `user.presenter.ts`, `role.presenter.ts`. As views (presenter) já são whitelist Zod → os **exemplos de response saem sem campos sensíveis** por construção (nada de `passwordHash`/`tokenHash`).
-- ⬜ `src/lib/openapi.ts` (ou `src/docs/openapi.ts`): construir o documento com `createDocument` de `zod-openapi`. Para cada rota, registrar path+método extraindo as partes internas do envelope — `schema.shape.body` / `schema.shape.params` / `schema.shape.query` — com guarda de presença (nem toda rota tem os três; ex. `loginSchema` só tem `body`), **sem quebrar** a convenção `{ body, params, query }`.
-- ⬜ Refletir o prefixo real **`/api/v1`** nos `paths` do documento. Configurar `components.securitySchemes.bearerAuth` (JWT, `type: http`, `scheme: bearer`, `bearerFormat: JWT`) e aplicá-lo às rotas protegidas.
-- ⬜ **`GET /openapi.json`** (público): montar no `router` de topo (fora dos grupos `/api/v1/...`, logo sem `authenticate`), servindo o documento.
-- ⬜ Testes: `GET /openapi.json` **sem token** → **200** e `content-type` JSON; validar o documento num linter OpenAPI (Redocly/Spectral); asserção de que os `paths` carregam `/api/v1`; grep no JSON por `passwordHash`/`tokenHash`/`refreshTokenHash` → ausentes.
+### ✅ Fase 5.2 — OpenAPI via `zod-openapi` (`.meta()`, sem monkey-patch)
+- ✅ Schemas anotados com `.meta({ description, example, id? })` (Zod 4 nativo). Aplicado nos 6 `*.schema.ts` (request) e 6 `*.presenter.ts` (response) — views viram componentes nomeados (`UserOwner`, `Session`, `Me`, `Role`, `Feature`, ...). Views são whitelist → exemplos de response sem campo sensível (verificado: doc não contém `passwordHash`/`tokenHash`).
+- ✅ `src/docs/openapi.ts` (+ `components.ts`, `helpers.ts`, `paths/<módulo>.ts`): documento montado com `createDocument`. Helper `fromEnvelope` extrai `.shape.body`/`.shape.params`/`.shape.query` com guarda de presença, sem quebrar a convenção `{ body, params, query }`. 27 paths registrados por módulo.
+- ✅ Prefixo `/api/v1` via `servers: [{ url: "/api/v1" }]` (relativo → resolve contra a origem). `components.securitySchemes.bearerAuth` (JWT) global; operações públicas sobrescrevem com `security: []`.
+- ✅ **`GET /openapi.json`** (público) montado no `router` de topo (fora de `authenticate`), servindo o documento memoizado.
+- ✅ Testes (`openapi.test.ts`, 4 casos): sem token → **200** + `content-type` JSON; `openapi === "3.1.0"`, `servers[0].url === "/api/v1"`, `bearerAuth` presente, paths-amostra (`/auth/login`, `/users`, `/roles`); doc **não** contém `passwordHash`/`tokenHash`/`refreshTokenHash`. Suíte completa 333 verde. 🔸 linter Redocly/Spectral fica como polish opcional.
 
 ### ⬜ Fase 5.3 — UI Scalar (`/reference`)
 - ⬜ **`GET /reference`** (público, `router` de topo): `@scalar/express-api-reference` consumindo `url: "/openapi.json"`. Configurar `authentication` (bearer JWT preenchível no “try it”) e `theme`/layout 🔸.

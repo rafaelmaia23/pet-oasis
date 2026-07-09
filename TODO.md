@@ -110,7 +110,7 @@
 
 ---
 
-## Fase 5 — Documentação da API + Containerização (deploy) 🔄
+## Fase 5 — Documentação da API + Containerização (deploy) ✅
 > Fecha o Ciclo 1 como peça de portfólio: API documentada (OpenAPI gerado dos schemas Zod → UI Scalar → coleção Bruno) e no ar via Docker (git clone → um `docker compose up` sobe banco + app buildado, migra e semeia do zero). Decisões e racional no `CONTEXT.md` (§ a criar). Fonte única da doc: os próprios schemas Zod via `.meta()` (Zod 4 nativo, sem monkey-patch). Cada seção abaixo é uma feat-branch a partir da branch `fase-5`.
 >
 > **Decisões firmadas:** demo read-only = role `demo` (`appliesTo EMPLOYEE`) com todas as features de leitura (`read:user`, `read:user:others`, `read:session`, `read:feature`, `read:role`, `read:permission`) — GET em toda a API, escrita → 403 (RBAC ao vivo). Seed do **usuário** demo gated por `SEED_DEMO_USER=true` (ligado no Docker/prod, desligado em test/dev); a **role** `demo` é sempre semeada. `/openapi.json` e `/reference` são rotas públicas (montadas no `router` de topo, fora dos grupos protegidos). Migração em produção usa `prisma migrate deploy` (nunca `migrate dev`). Segredos via `.env` não-versionado + `.env.example`.
@@ -138,9 +138,9 @@
 - ✅ Testes (`reference.test.ts`): `GET /reference` sem token → **200** + `content-type` HTML; HTML referencia `/openapi.json` e o Scalar. Suíte 335 verde. Smoke em runtime confirmou o fluxo “try it”: login do demo → **200** em `GET /users` → **403** em `DELETE /users/:id` (RBAC ao vivo).
 - ✅ 🔸 Tema `deepSpace` aplicado (ajuste fino de branding fica opcional).
 
-### ⬜ Fase 5.4 — README *(adiada para o fim da Fase 5)*
-- ⬜ Reescrever/expandir o `README.md`: visão do projeto, stack, arquitetura em camadas (route→controller→service→repository), **como subir com Docker** (git clone → `.env` → um comando), fluxo de dev local (`services:up` + `npm run dev` com tsx no host), **credenciais públicas do demo**, links para `/reference` e `/openapi.json`, ponteiro para a coleção Bruno em `/api-collection`.
-- ⬜ 🔸 Badges, screenshot da UI Scalar, índice.
+### ✅ Fase 5.4 — README *(feito no fecho da Fase 5, junto com 5.8/5.9)*
+- ✅ `README.md` (novo, PT-BR): visão do projeto, stack, arquitetura em camadas (route→controller→service→repository + presenter/RBAC/soft delete), **subir com Docker** (git clone → `cp env.example .env` → `npm run stack:up`), fluxo de dev local (`services:up` + `npm run dev` com tsx), **credenciais públicas do demo** (`demo@petoasis.dev`/`DemoOasis2026!`), links para `/reference` e `/openapi.json`, ponteiro para a coleção Bruno em `api-collection/`, tabela de comandos, roadmap e licença (ISC).
+- 🔸 Badges/screenshot da UI Scalar ficaram de fora (polish opcional).
 
 ### ✅ Fase 5.5 — Coleção Bruno versionada (`/api-collection`)
 - ✅ `api-collection/` versionada, organizada **por módulo** (`status/`, `auth/`, `me/`, `users/`, `profiles/`, `permissions/`, `roles/`, `features/`) — 35 requests cobrindo os ~30 endpoints. `bruno.json` + `collection.bru` (bearer no nível da coleção). Biome ignora `api-collection`.
@@ -166,14 +166,14 @@
 - ✅ Checkpoint (do zero, `down -v` → `stack:up`): migrations aplicadas → seed (17 features, 5 roles, demo) → "Server is running on port 3000"; `GET /api/v1/status`/`/openapi.json`/`/reference` → **200**; login do demo → **200** + token; `GET /users` → **200**; `DELETE /users/:id` → **403** (RBAC ao vivo). `typecheck`/`lint`/suíte (335) verdes.
 - 🔸 Aviso cosmético do Prisma no runtime slim ("Prisma failed to detect libssl/openssl") — `migrate deploy` conclui normalmente (o driver adapter do Prisma 7 não usa o engine binário). Silenciar via `apt-get install -y openssl` no runtime fica como polish opcional.
 
-### ⬜ Fase 5.8 — Deploy no servidor
-- ⬜ Documentar o passo-a-passo (no `README.md` ou `DEPLOY.md`): clone → preencher `.env` de produção → `docker compose --profile full up -d --build`. `APP_URL`/CORS apontando para o domínio real; migração já via `migrate deploy` no entrypoint.
-- ⬜ 🔸 Nota de infra fora do escopo da app: reverse proxy/TLS (Caddy/nginx), backup de volume do Postgres — responsabilidade de deploy, não da aplicação.
+### ✅ Fase 5.8 — Deploy no servidor
+- ✅ Passo-a-passo documentado como **seção "Deploy em servidor" no `README.md`** (coube numa tela → não precisou de `DEPLOY.md` separado): clone → `cp env.example .env` de produção (`JWT_SECRET`/`PEPPER` fortes ≥32, `APP_URL` = domínio real, SMTP reais, `DEMO_*` opcional) → `npm run stack:up`; migração via `migrate deploy` no entrypoint.
+- ✅ 🔸 Nota de infra fora do escopo da app registrada no README: reverse proxy/TLS (Caddy/nginx), backup do volume `postgres_data`, firewall. CORS ainda não configurado (é Fase 6.1) — não prometido no README.
 
-### ⬜ Fase 5.9 — Fechos
-- ⬜ **`CONTEXT.md`:** registrar o racional das decisões desta fase numa seção nova (ex. `§2.3 — Fase 5 (Documentação + Deploy)`): **fonte única Zod→OpenAPI** (`.meta()` nativo, sem monkey-patch; envelope extraído por `.shape.*`; presenters garantindo exemplos sem campo sensível), **demo read-only + seed gated** (`SEED_DEMO_USER`, role `demo` sempre semeada), **containerização** (`migrate deploy` vs `migrate dev`, segredos via `.env`, profile `full` para não quebrar o fluxo de dev). Relabelar o antigo `§2.2 “Fase 5 (planejada)”` para `“Fase 6 (planejada)”`.
-- ⬜ `ENDPOINTS.md`: adicionar `GET /openapi.json` e `GET /reference` (públicas).
-- ⬜ `npm run typecheck` + `npm run lint` + `npm run test:run` verdes; **Fase 5 marcada ✅**.
+### ✅ Fase 5.9 — Fechos
+- ✅ **`CONTEXT.md`:** nova `§2.3 Fase 5 (implementada) — Documentação + Deploy` no estilo "Por que...": fonte única Zod→OpenAPI (`.meta()` nativo, envelope via `.shape.*`, presenters sem campo sensível), demo read-only + seed gated, `migrate deploy` vs `migrate dev`, seed bundlado (`dist/seed.js`), profile `full`, `DATABASE_URL` derivada (`@db`), imagem multi-stage não-root. Antigo `§2.2 "Fase 5 (planejada)"` relabelado para `"Fase 6 (planejada)"` (+ history `Fase 5 (fechada)` no §4).
+- ✅ `ENDPOINTS.md`: seção "Docs" com `GET /openapi.json` e `GET /reference` (públicas, router de topo); cabeçalho/Mounting de-stalados (OpenAPI existe agora).
+- ✅ `npm run typecheck` + `npm run lint` + `npm run test:run` (335) verdes; **Fase 5 marcada ✅**.
 
 ---
 
@@ -247,6 +247,5 @@
 ---
 
 ## Fases seguintes (resumo)
-- **Fase 5 — Documentação da API + Containerização:** OpenAPI gerado dos schemas Zod (`.meta()`) → UI Scalar em `/reference` + `/openapi.json`, usuário demo read-only, coleção Bruno, Docker full-stack (detalhado acima).
 - **Fase 6 — Hardening e polimento:** rate limiting, account lockout, audit log, guards de escalação consolidados, paginação/filtros (detalhado acima).
 - **Fase 7 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.

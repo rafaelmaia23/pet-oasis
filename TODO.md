@@ -148,9 +148,13 @@
 - ✅ Fluxo de auth: `Login` (demo) com `script:post-response` salvando o access token via **`bru.setVar`** (runtime, **não** `setEnvVar` — evita gravar segredo no `.bru` versionado / futuro Bruno v4); auth bearer `{{accessToken}}` herdada por `auth: inherit`. `Get Me`/`List Users`/`List Roles`/`List Features`/`List Sessions` capturam ids (`userId`/`roleId`/`featureId`/`sessionId`) para as rotas com path param.
 - ✅ Checkpoint validado com `@usebruno/cli`: Login → **200** + token (assert ✓); varredura das 8 pastas não-auth → leituras **200**, escritas do demo **403** (RBAC ao vivo), inheritance + chaining de ids OK. `typecheck`/`lint`/suíte (335) verdes.
 
-### ⬜ Fase 5.6 — Dockerfile (app buildado)
-- ⬜ `Dockerfile` multi-stage: **build** (instala deps, `prisma generate`, `npm run build` via tsup) → **runtime** (node slim, copia `dist/` + client Prisma gerado + deps de produção, usuário não-root, `EXPOSE`, entrypoint). `.dockerignore` (node_modules, dist local, .env, .git).
-- ⬜ Checkpoint: `docker build` conclui; `docker run` do container sobe o processo (com um banco alcançável).
+### ✅ Fase 5.6 — Dockerfile (app buildado)
+- ✅ `Dockerfile` multi-stage (`node:22-bookworm-slim` nos dois stages, p/ o prebuilt do `bcrypt` bater): **deps** (`npm ci --omit=dev` → node_modules de produção) · **build** (`npm ci` completo → `npm run db:generate` → `npm run build` via tsup) → **runtime** (copia `node_modules` de produção + `dist/` + `package.json`, `USER node`, `EXPOSE 3000`, `CMD ["node","dist/server.js"]`).
+  - ✅ **Client Prisma gerado NÃO é copiado** ao runtime: o tsup resolve o alias `@/*` e **embute** `src/generated/prisma` no bundle; o query-compiler wasm do Prisma 7 vem de `node_modules/@prisma/client` (dep de produção) via `import()`. Logo runtime = deps de produção + bundle.
+  - ✅ `prisma generate` exige `env("DATABASE_URL")` resolvível ao carregar `prisma.config.ts` (não conecta) → placeholder `ENV DATABASE_URL` só no stage build (não vaza pro runtime).
+- ✅ `.dockerignore` (node_modules, dist, coverage, `src/generated`, `src/__tests__`, .env, .git, api-collection, docs, `**/*.md`, etc.).
+- ✅ Checkpoint: `docker build` conclui (bundle 144 KB); container roda **não-root** (`uid=1000 node`); `docker run` (com `DATABASE_URL`/`JWT_SECRET`/`PEPPER`) → "Server is running on port 3000"; `GET /api/v1/status` → **200** (consulta o Postgres de fato: `version 16.14`, `opened_connections: 1` → bundle + Prisma client OK); `GET /openapi.json` → **200**. `typecheck`/`lint` verdes.
+- 🔸 **Nota p/ 5.7:** o seed roda `tsx prisma/seed.ts` importando de `src/`, que não existe na imagem de produção — a estratégia de seed no container fica pra 5.7 (que também estende o stage runtime com schema/migrations/CLI + entrypoint `migrate deploy`→seed→start).
 
 ### ⬜ Fase 5.7 — Compose full-stack (sem quebrar o dev)
 - ⬜ Adicionar serviço **`app`** ao `docker-compose.yml` sob **profile** (ex. `profiles: ["full"]`) — assim `docker compose up -d` (dev, via `services:up`) continua subindo **só** `db`/`db_test`/`mailpit` e o app roda no host via tsx; o app-em-container só sobe no profile. `depends_on: db` com healthcheck; env via `.env`.

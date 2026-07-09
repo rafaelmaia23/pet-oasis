@@ -23,13 +23,18 @@ RUN npm run db:generate
 RUN npm run build
 
 # ─── runtime ──────────────────────────────────────────────────────────────────
-# Slim, non-root image that just runs the bundled app.
+# Slim, non-root image. The entrypoint applies migrations and seeds before start.
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY package.json ./
+# prisma migrate deploy needs the schema + migrations + config; the prisma CLI is
+# a production dependency (already in node_modules).
+COPY --from=build /app/prisma ./prisma
+COPY package.json prisma.config.ts ./
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 USER node
 EXPOSE 3000
-CMD ["node", "dist/server.js"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

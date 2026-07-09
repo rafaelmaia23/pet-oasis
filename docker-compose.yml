@@ -11,6 +11,11 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   db_test:
     image: postgres:16-alpine
@@ -32,6 +37,36 @@ services:
     ports:
       - "1025:1025" # SMTP
       - "8025:8025" # Web UI
+
+  # Full-stack app, only started under the "full" profile (`npm run stack:up`).
+  # Plain `docker compose up -d` (dev, `services:up`) leaves this off and runs
+  # the app on the host via tsx.
+  app:
+    build:
+      context: .
+    container_name: pet-oasis-app
+    profiles: ["full"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Container talks to the db service by name; the host .env keeps localhost.
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      PEPPER: ${PEPPER}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      MAIL_FROM: ${MAIL_FROM}
+      APP_URL: ${APP_URL}
+      SEED_DEMO_USER: "true"
+      DEMO_EMAIL: ${DEMO_EMAIL:-demo@petoasis.dev}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-DemoOasis2026!}
+    ports:
+      - "${APP_PORT:-3000}:3000"
 
 volumes:
   postgres_data:

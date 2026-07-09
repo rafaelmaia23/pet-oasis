@@ -134,7 +134,7 @@
 - ✅ Testes (`openapi.test.ts`, 4 casos): sem token → **200** + `content-type` JSON; `openapi === "3.1.0"`, `servers[0].url === "/api/v1"`, `bearerAuth` presente, paths-amostra (`/auth/login`, `/users`, `/roles`); doc **não** contém `passwordHash`/`tokenHash`/`refreshTokenHash`. Suíte completa 333 verde. 🔸 linter Redocly/Spectral fica como polish opcional.
 
 ### ✅ Fase 5.3 — UI Scalar (`/reference`)
-- ✅ **`GET /reference`** (público, `router` de topo): `@scalar/express-api-reference` (`src/docs/reference.ts`) consumindo `url: "/openapi.json"`, `authentication.preferredSecurityScheme: "bearerAuth"` (Bearer preenchível no “try it”), tema `deepSpace`. Bundle carregado via CDN jsdelivr client-side. ⚠️ Nota p/ Fase 6.1: um CSP estrito (helmet) precisará allowlistar `cdn.jsdelivr.net` (ou nonce/self-host).
+- ✅ **`GET /reference`** (público, `router` de topo): `@scalar/express-api-reference` (`src/docs/reference.ts`) consumindo `url: "/openapi.json"`, `authentication.preferredSecurityScheme: "bearerAuth"` (Bearer preenchível no “try it”), tema `deepSpace`. Bundle carregado via CDN jsdelivr client-side (ver aviso de CSP na Fase 6.1).
 - ✅ Testes (`reference.test.ts`): `GET /reference` sem token → **200** + `content-type` HTML; HTML referencia `/openapi.json` e o Scalar. Suíte 335 verde. Smoke em runtime confirmou o fluxo “try it”: login do demo → **200** em `GET /users` → **403** em `DELETE /users/:id` (RBAC ao vivo).
 - ✅ 🔸 Tema `deepSpace` aplicado (ajuste fino de branding fica opcional).
 
@@ -180,7 +180,8 @@
 - ⬜ `pino` + `pino-http` instalados (base para 6.3).
 
 ### ⬜ Fase 6.1 — Helmet + CORS explícito
-- ⬜ `helmet()` (preset default — API pura, sem HTML servido).
+- ⬜ `helmet()` (preset default).
+- ⬜ ⚠️ **CSP × Scalar (Fase 5.3):** a UI em `/reference` carrega o bundle do Scalar do CDN `cdn.jsdelivr.net` client-side. O `helmet()` default já liga um `Content-Security-Policy` com `script-src 'self'`, que **bloquearia** esse CDN (e o `/reference` quebra). Ao ligar o helmet, resolver uma destas: (a) allowlistar `https://cdn.jsdelivr.net` no `script-src` (e o que mais o bundle exigir); (b) passar um `nonce` por request pro `apiReference` (`script-src 'nonce-...'`, `style-src` ainda precisa de `'unsafe-inline'`); ou (c) auto-hospedar o bundle e servir do próprio domínio. Testar `GET /reference` no navegador (não só `curl`) após ligar o helmet.
 - ⬜ CORS com allowlist a partir de `APP_URL` (+ eventual `CORS_ALLOWED_ORIGINS` separado por vírgula), `credentials: true`.
 
 ### ⬜ Fase 6.2 — Consolidar guards de escalação

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { buildOpenApiDocument } from "@/docs/openapi";
+import { referenceHandler } from "@/docs/reference";
 import { authenticate } from "@/middlewares/authenticate.middleware";
 import authRouter from "@/modules/auth/auth.routes";
 import featureRouter from "@/modules/feature/feature.routes";
@@ -30,5 +31,6 @@ export const router = Router();
 router.get("/openapi.json", (_req, res) => {
   res.json(buildOpenApiDocument());
 });
+router.use("/reference", referenceHandler);
 
 router.use("/api/v1", v1Router);

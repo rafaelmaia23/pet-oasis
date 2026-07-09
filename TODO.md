@@ -110,6 +110,73 @@
 
 ---
 
+## Fase 5 — Hardening e polimento 🔄
+> Amplia o escopo original ("rate limiting, account lockout") para incluir também polimento de features já construídas. Decisões e racional completos no `CONTEXT.md` (§2.2). Cada seção abaixo é uma feat-branch em TDD, a partir da branch `fase-5`.
+
+### ⬜ Fase 5.0 — Fundação de infra
+- ⬜ Serviço `redis` no `docker-compose.yml` (+ script `npm run` análogo aos `services:*`/`mail:up`); `REDIS_URL` em `env.ts`/`env.example`; client em `src/lib/redis.ts`.
+- ⬜ `app.set("trust proxy", ...)` (assume um hop de proxy reverso — ajustar se a topologia de deploy for outra) para IP real chegar certo no rate limit/lockout.
+- ⬜ `express.json({ limit: "100kb" })` (ajustável).
+- ⬜ `pino` + `pino-http` instalados (base para 5.3).
+
+### ⬜ Fase 5.1 — Helmet + CORS explícito
+- ⬜ `helmet()` (preset default — API pura, sem HTML servido).
+- ⬜ CORS com allowlist a partir de `APP_URL` (+ eventual `CORS_ALLOWED_ORIGINS` separado por vírgula), `credentials: true`.
+
+### ⬜ Fase 5.2 — Consolidar guards de escalação
+- ⬜ Extrair `assertActorIsAdmin` (nome a definir) em `src/lib/authorization.ts`.
+- ⬜ `assertAdminForBan` (`user.service.ts`), `assertAdminForPermissionFeature` e `assertAdminForRoleAssignment` (`permission.service.ts`) passam a reusá-lo, mantendo seu próprio predicado de "alvo/feature/role privilegiado".
+- ⬜ Suíte de escalação existente continua verde sem alteração (refactor comportamento-preservado) + teste unitário do helper novo.
+
+### ⬜ Fase 5.3 — Log de acesso HTTP
+- ⬜ `pino-http` logando toda request em stdout (JSON): método, rota, status, duração, IP (via `req.ip`), user-agent, request-id, `userId` quando autenticado.
+- ⬜ Nunca logar body, header `Authorization`, cookies ou senha.
+- ⬜ Nota: retenção/agregação fora da app fica fora de escopo desta fase (responsabilidade de infra/deploy).
+
+### ⬜ Fase 5.4 — Audit log de ações sensíveis
+- ⬜ Migration: model `AuditLog` (id, actorId?, action, targetType, targetId?, metadata Json?, ip?, userAgent?, createdAt).
+- ⬜ `src/lib/auditLog.ts` (`record(action, {actorId, targetType, targetId, metadata?, ip?, userAgent?})`).
+- ⬜ Chamado nos pontos: login falho, lockout disparado, conta desbloqueada, ban/unban, grant/revoke de role, grant/revoke de permission override, password reset (solicitado e concluído), password change, troca de email (solicitada e concluída), forçar troca de senha, criação e deleção de usuário.
+- ⬜ Sem endpoint de leitura nesta fase (ver racional no `CONTEXT.md`).
+
+### ⬜ Fase 5.5 — Rate limiting nas rotas de auth
+- ⬜ `rate-limiter-flexible` com `RateLimiterRedis`.
+- ⬜ Regras propostas (por IP, ajustáveis): `login` 20/15min; `signup` 5/1h; `forgot-password` 5/1h; `verify-email/resend` 5/1h.
+- ⬜ Resposta 429 genérica (não revela qual regra disparou).
+- ⬜ Excedido → também gera entrada no audit log (`rate_limit_exceeded`).
+
+### ⬜ Fase 5.6 — Account lockout + desbloqueio pelo admin
+- ⬜ Contador de falhas por conta em Redis; threshold e janela fixa propostos (ex. 5 falhas → 15min), backoff exponencial depois (dobra a cada ciclo até um teto) — números exatos confirmados no início da feature.
+- ⬜ Reset completo (contador + backoff) no login certo.
+- ⬜ Checagem entra em `auth.service.login`, ao lado dos gates de `bannedAt`/`status`.
+- ⬜ **`DELETE /users/:id/lock`** (`manage:user:status`; guarda de privilegiado reusando o helper da 5.2) — desbloqueia, reset completo, 204 sucesso, 409 se não estava travada; registra no audit log.
+- ⬜ Sem lock manual pelo admin nesta fase (só o desbloqueio) — fora de escopo, backlog se necessário.
+
+### ⬜ Fase 5.7 — Teto de sessões vivas + faxina de tokens mortos
+- ⬜ Teto de sessões vivas simultâneas por usuário (número a confirmar); evict da mais antiga ao exceder (login nunca é recusado).
+- ⬜ Script de faxina (hard delete) de `Session`/`VerificationToken` mortos há mais de um período de retenção a definir (ex. 30 dias) — rodado via `npm run` script, não automático dentro do request/response.
+
+### ⬜ Fase 5.8 — Paginação/filtro em `GET /users`
+- ⬜ `?page=&limit=` (offset-based, `limit` máximo a definir), resposta `{ data, meta: { page, limit, total } }`.
+- ⬜ Filtros: `status`, `banned` (via `bannedAt`), `role`.
+
+### ⬜ Fase 5.9 — Troca de email *(desenho a confirmar no início da feature)*
+- ⬜ Reabre a decisão de `user.schema.ts:56` (hoje bloqueada). Proposta a validar: endpoint próprio autenticado, senha atual exigida (como change-password), fluxo de 2 passos com verificação no email novo antes de efetivar (`pendingEmail` + `VerificationPurpose.EMAIL_CHANGE`).
+- ⬜ Pontos a decidir na feature: notifica o email antigo da troca? o que acontece se o novo email já existe (conflito)? TTL do pending?
+
+### ⬜ Fase 5.10 — Forçar troca de senha, ação do admin *(desenho a confirmar)*
+- ⬜ Proposta: flag `mustChangePassword` no `User`; endpoint que a ativa + invalida sessões do alvo (feature a definir — provável `manage:user:status`).
+- ⬜ Ponto a decidir na feature: login com a flag ativa bloqueia acesso até trocar, ou deixa entrar sinalizando pro front forçar a troca?
+
+### ⬜ Fase 5.11 — Polir `GET /auth/sessions`
+- ⬜ Parsing de user-agent (ex. `ua-parser-js`) → `{ device: "Chrome no Windows", ipAddress, createdAt, current }`, marcando a sessão da request atual.
+
+### ⬜ Fase 5.12 — Fechos
+- ⬜ `ENDPOINTS.md` atualizado com todas as rotas novas.
+- ⬜ `CONTEXT.md`: promover racional de "planejada" a "implementada", com as decisões efetivamente confirmadas em cada sub-fase (inclusive 5.9/5.10).
+- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 5 marcada ✅.
+
+---
+
 ## Fases seguintes (resumo)
-- **Fase 5 — Hardening:** rate limiting, account lockout. (Revisitar proteção de escalação se precisar de algo além do admin-only.)
 - **Fase 6 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.

@@ -1,14 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# ─── deps ─────────────────────────────────────────────────────────────────────
-# Production-only node_modules for the runtime stage.
-FROM node:22-bookworm-slim AS deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
-
 # ─── build ────────────────────────────────────────────────────────────────────
-# Full deps → generate Prisma client → bundle the app with tsup.
+# Single `npm ci` → generate Prisma client → bundle with tsup → prune to prod deps.
+# One install (not two parallel ones) keeps peak memory low enough for small VPSes.
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -21,13 +15,16 @@ COPY tsconfig.json tsup.config.ts prisma.config.ts ./
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 RUN npm run db:generate
 RUN npm run build
+# Drop dev dependencies in place → production-only node_modules for the runtime
+# stage (reuses the install above; no second download/compile).
+RUN npm prune --omit=dev
 
 # ─── runtime ──────────────────────────────────────────────────────────────────
 # Slim, non-root image. The entrypoint applies migrations and seeds before start.
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 # prisma migrate deploy needs the schema + migrations + config; the prisma CLI is
 # a production dependency (already in node_modules).

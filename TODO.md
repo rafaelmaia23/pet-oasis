@@ -250,6 +250,7 @@
 ### ⬜ Fase 7.7 — Teto de sessões vivas + faxina de tokens mortos
 - ⬜ Teto de sessões vivas simultâneas por usuário (número a confirmar); evict da mais antiga ao exceder (login nunca é recusado).
 - ⬜ Script de faxina (hard delete) de `Session`/`VerificationToken` mortos há mais de um período de retenção a definir (ex. 30 dias) — rodado via `npm run` script, não automático dentro do request/response.
+- ⬜ Script de faxina (hard delete) de `users` em deploy com flag DEMO de período em periodo a definir (ex. 3 dias) — rodado via `npm run` script, não automático dentro do request/response.
 
 ### ⬜ Fase 7.8 — Paginação/filtro em `GET /users`
 - ⬜ `?page=&limit=` (offset-based, `limit` máximo a definir), resposta `{ data, meta: { page, limit, total } }`.

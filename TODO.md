@@ -177,75 +177,102 @@
 
 ---
 
-## Fase 6 — Hardening e polimento 🔄
-> Amplia o escopo original ("rate limiting, account lockout") para incluir também polimento de features já construídas. Decisões e racional completos no `CONTEXT.md` (§2.2). Cada seção abaixo é uma feat-branch em TDD, a partir da branch `fase-6`.
+## Fase 6 — Ambientes, Docker por ambiente e deploy ✅
+> Reformula dev/test/prod para um **Compose base + overrides** por ambiente, corrige dois bugs de deploy (app hardcodado no mailpit em vez da Resend; prod subindo db/mailpit de dev) e adiciona **graceful shutdown**. Nenhuma regra de negócio nova. Racional no `CONTEXT.md` (§2.4) e no ADR `docs/adr/ambientes-e-deploy.md`. Branch `fase-6`.
 
-### ⬜ Fase 6.0 — Fundação de infra
+### ✅ Fase 6.0 — Env files + dotenv-cli
+- ✅ `.env.development`/`.env.test`/`.env.production` (fora do git) + `.env.example` versionado; `.gitignore` ampliado (`.env.*` com `!.env.example`). `dotenv-cli` (devDep).
+- ✅ Colapsadas as 5 fontes de env: a URL do banco de teste (antes duplicada em 4 lugares) vive só no `.env.test`; `vitest.config.ts` carrega `.env.test` (`override:true` → `npx vitest run <arquivo>` funciona sozinho); `global.ts` sem prefixos inline. `env.ts`/`prisma.config.ts` intocados (o `import "dotenv/config"` vira no-op).
+
+### ✅ Fase 6.1 — Graceful shutdown (SIGTERM) — TDD
+- ✅ `src/lib/shutdown.ts` (`createShutdownHandler`, injeção de dependência): `server.close()` (drena in-flight) → `prisma.$disconnect()` → exit, com timeout de força-saída (10s) e guarda de dupla-invocação. 5 testes unitários (ordem, falha de close, falha de disconnect, dupla-sinal, timeout).
+- ✅ `server.ts` captura o `http.Server` e registra SIGTERM/SIGINT.
+
+### ✅ Fase 6.2 — Dockerfile stage `dev` + entrypoint de dev
+- ✅ Stage `dev` (npm ci completo, sem bundle/prune, root p/ evitar EACCES no bind-mount); `runtime` de prod intocado. `docker-entrypoint.dev.sh`: `exec tsx watch` (PID 1) após generate → migrate deploy → seed. `.dockerignore` exclui `.env.*`.
+
+### ✅ Fase 6.3 — Compose base + dev/prod/test overrides
+- ✅ `docker-compose.yml` (base, esqueleto do app) + `.dev`/`.prod`/`.test`. Isolamento por `-p pet-oasis-{dev,test,prod}` + container/volume/porta distintos (dev e test rodam juntos). Prod só app + Postgres-de-prod (SMTP do `.env.production` → mata o **bug 1**; sem mailpit/db-de-dev → mata o **bug 2**). Dev com bind-mount `./src`/`./prisma` + volume anônimo `/app/src/generated`. Test só Postgres-de-test (mailpit atrás de `--profile mail`).
+
+### ✅ Fase 6.4 — Scripts por ambiente
+- ✅ `dev`/`dev:down`/`dev:reset`/`dev:mail`; `prod:up`/`prod:down`/`prod:logs`; `test` (sobe test-db isolado, Vitest no host, teardown **garantido** por trap de EXIT) + `test:services:up`/`down`; `db:migrate`/`db:seed`/`db:studio` prefixados com `dotenv -e .env.development` (`db:migrate` = `migrate dev`, autoria consciente). Removidos `services:*`/`stack:*`/`db:test:*`/`mail:up`/`test:run` (+ profile `full`).
+
+### ✅ Fase 6.5 — Guarda + docs + fechos
+- ✅ Teste-guarda `clearDatabase.guard.test.ts` (afirma que Feature/Role/RoleFeature sobrevivem ao `clearDatabase` — não era bug) + comentário no helper.
+- ✅ ADR `docs/adr/ambientes-e-deploy.md`; `CONTEXT.md` §2.4 + renumeração da antiga "Fase 6 (planejada)" → "Fase 7 (planejada)"; `README.md`/`CLAUDE.md`/`docs/documentar-endpoint.md` atualizados; TODO renumerado (antigas Fase 6→7 Hardening, Fase 7→8 Domínio).
+- ✅ `typecheck` + `lint` + suíte verdes; verificação ponta a ponta dos 3 ambientes (dev: boot + status 200 + demo off + SIGTERM gracioso; `npm test`: suíte + teardown; prod: bug1/bug2 + status 200 + demo login 200 + SIGTERM gracioso).
+
+---
+
+## Fase 7 — Hardening e polimento 🔄
+> Amplia o escopo original ("rate limiting, account lockout") para incluir também polimento de features já construídas. Decisões e racional completos no `CONTEXT.md` (§2.2). Cada seção abaixo é uma feat-branch em TDD, a partir da branch `fase-7`.
+
+### ⬜ Fase 7.0 — Fundação de infra
 - ⬜ Serviço `redis` no `docker-compose.yml` (+ script `npm run` análogo aos `services:*`/`mail:up`); `REDIS_URL` em `env.ts`/`env.example`; client em `src/lib/redis.ts`.
 - ⬜ `app.set("trust proxy", ...)` (assume um hop de proxy reverso — ajustar se a topologia de deploy for outra) para IP real chegar certo no rate limit/lockout.
 - ⬜ `express.json({ limit: "100kb" })` (ajustável).
-- ⬜ `pino` + `pino-http` instalados (base para 6.3).
+- ⬜ `pino` + `pino-http` instalados (base para 7.3).
 
-### ⬜ Fase 6.1 — Helmet + CORS explícito
+### ⬜ Fase 7.1 — Helmet + CORS explícito
 - ⬜ `helmet()` (preset default).
 - ⬜ ⚠️ **CSP × Scalar (Fase 5.3):** a UI em `/reference` carrega o bundle do Scalar do CDN `cdn.jsdelivr.net` client-side. O `helmet()` default já liga um `Content-Security-Policy` com `script-src 'self'`, que **bloquearia** esse CDN (e o `/reference` quebra). Ao ligar o helmet, resolver uma destas: (a) allowlistar `https://cdn.jsdelivr.net` no `script-src` (e o que mais o bundle exigir); (b) passar um `nonce` por request pro `apiReference` (`script-src 'nonce-...'`, `style-src` ainda precisa de `'unsafe-inline'`); ou (c) auto-hospedar o bundle e servir do próprio domínio. Testar `GET /reference` no navegador (não só `curl`) após ligar o helmet.
 - ⬜ CORS com allowlist a partir de `APP_URL` (+ eventual `CORS_ALLOWED_ORIGINS` separado por vírgula), `credentials: true`.
 
-### ⬜ Fase 6.2 — Consolidar guards de escalação
+### ⬜ Fase 7.2 — Consolidar guards de escalação
 - ⬜ Extrair `assertActorIsAdmin` (nome a definir) em `src/lib/authorization.ts`.
 - ⬜ `assertAdminForBan` (`user.service.ts`), `assertAdminForPermissionFeature` e `assertAdminForRoleAssignment` (`permission.service.ts`) passam a reusá-lo, mantendo seu próprio predicado de "alvo/feature/role privilegiado".
 - ⬜ Suíte de escalação existente continua verde sem alteração (refactor comportamento-preservado) + teste unitário do helper novo.
 
-### ⬜ Fase 6.3 — Log de acesso HTTP
+### ⬜ Fase 7.3 — Log de acesso HTTP
 - ⬜ `pino-http` logando toda request em stdout (JSON): método, rota, status, duração, IP (via `req.ip`), user-agent, request-id, `userId` quando autenticado.
 - ⬜ Nunca logar body, header `Authorization`, cookies ou senha.
 - ⬜ Nota: retenção/agregação fora da app fica fora de escopo desta fase (responsabilidade de infra/deploy).
 
-### ⬜ Fase 6.4 — Audit log de ações sensíveis
+### ⬜ Fase 7.4 — Audit log de ações sensíveis
 - ⬜ Migration: model `AuditLog` (id, actorId?, action, targetType, targetId?, metadata Json?, ip?, userAgent?, createdAt).
 - ⬜ `src/lib/auditLog.ts` (`record(action, {actorId, targetType, targetId, metadata?, ip?, userAgent?})`).
 - ⬜ Chamado nos pontos: login falho, lockout disparado, conta desbloqueada, ban/unban, grant/revoke de role, grant/revoke de permission override, password reset (solicitado e concluído), password change, troca de email (solicitada e concluída), forçar troca de senha, criação e deleção de usuário.
 - ⬜ Sem endpoint de leitura nesta fase (ver racional no `CONTEXT.md`).
 
-### ⬜ Fase 6.5 — Rate limiting nas rotas de auth
+### ⬜ Fase 7.5 — Rate limiting nas rotas de auth
 - ⬜ `rate-limiter-flexible` com `RateLimiterRedis`.
 - ⬜ Regras propostas (por IP, ajustáveis): `login` 20/15min; `signup` 5/1h; `forgot-password` 5/1h; `verify-email/resend` 5/1h.
 - ⬜ Resposta 429 genérica (não revela qual regra disparou).
 - ⬜ Excedido → também gera entrada no audit log (`rate_limit_exceeded`).
 
-### ⬜ Fase 6.6 — Account lockout + desbloqueio pelo admin
+### ⬜ Fase 7.6 — Account lockout + desbloqueio pelo admin
 - ⬜ Contador de falhas por conta em Redis; threshold e janela fixa propostos (ex. 5 falhas → 15min), backoff exponencial depois (dobra a cada ciclo até um teto) — números exatos confirmados no início da feature.
 - ⬜ Reset completo (contador + backoff) no login certo.
 - ⬜ Checagem entra em `auth.service.login`, ao lado dos gates de `bannedAt`/`status`.
-- ⬜ **`DELETE /users/:id/lock`** (`manage:user:status`; guarda de privilegiado reusando o helper da 6.2) — desbloqueia, reset completo, 204 sucesso, 409 se não estava travada; registra no audit log.
+- ⬜ **`DELETE /users/:id/lock`** (`manage:user:status`; guarda de privilegiado reusando o helper da 7.2) — desbloqueia, reset completo, 204 sucesso, 409 se não estava travada; registra no audit log.
 - ⬜ Sem lock manual pelo admin nesta fase (só o desbloqueio) — fora de escopo, backlog se necessário.
 
-### ⬜ Fase 6.7 — Teto de sessões vivas + faxina de tokens mortos
+### ⬜ Fase 7.7 — Teto de sessões vivas + faxina de tokens mortos
 - ⬜ Teto de sessões vivas simultâneas por usuário (número a confirmar); evict da mais antiga ao exceder (login nunca é recusado).
 - ⬜ Script de faxina (hard delete) de `Session`/`VerificationToken` mortos há mais de um período de retenção a definir (ex. 30 dias) — rodado via `npm run` script, não automático dentro do request/response.
 
-### ⬜ Fase 6.8 — Paginação/filtro em `GET /users`
+### ⬜ Fase 7.8 — Paginação/filtro em `GET /users`
 - ⬜ `?page=&limit=` (offset-based, `limit` máximo a definir), resposta `{ data, meta: { page, limit, total } }`.
 - ⬜ Filtros: `status`, `banned` (via `bannedAt`), `role`.
 
-### ⬜ Fase 6.9 — Troca de email *(desenho a confirmar no início da feature)*
+### ⬜ Fase 7.9 — Troca de email *(desenho a confirmar no início da feature)*
 - ⬜ Reabre a decisão de `user.schema.ts:56` (hoje bloqueada). Proposta a validar: endpoint próprio autenticado, senha atual exigida (como change-password), fluxo de 2 passos com verificação no email novo antes de efetivar (`pendingEmail` + `VerificationPurpose.EMAIL_CHANGE`).
 - ⬜ Pontos a decidir na feature: notifica o email antigo da troca? o que acontece se o novo email já existe (conflito)? TTL do pending?
 
-### ⬜ Fase 6.10 — Forçar troca de senha, ação do admin *(desenho a confirmar)*
+### ⬜ Fase 7.10 — Forçar troca de senha, ação do admin *(desenho a confirmar)*
 - ⬜ Proposta: flag `mustChangePassword` no `User`; endpoint que a ativa + invalida sessões do alvo (feature a definir — provável `manage:user:status`).
 - ⬜ Ponto a decidir na feature: login com a flag ativa bloqueia acesso até trocar, ou deixa entrar sinalizando pro front forçar a troca?
 
-### ⬜ Fase 6.11 — Polir `GET /auth/sessions`
+### ⬜ Fase 7.11 — Polir `GET /auth/sessions`
 - ⬜ Parsing de user-agent (ex. `ua-parser-js`) → `{ device: "Chrome no Windows", ipAddress, createdAt, current }`, marcando a sessão da request atual.
 
-### ⬜ Fase 6.12 — Fechos
+### ⬜ Fase 7.12 — Fechos
 - ⬜ `ENDPOINTS.md` atualizado com todas as rotas novas.
-- ⬜ `CONTEXT.md`: promover racional de "planejada" a "implementada", com as decisões efetivamente confirmadas em cada sub-fase (inclusive 6.9/6.10).
-- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 6 marcada ✅.
+- ⬜ `CONTEXT.md`: promover racional de "planejada" a "implementada", com as decisões efetivamente confirmadas em cada sub-fase (inclusive 7.9/7.10).
+- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 7 marcada ✅.
 
 ---
 
 ## Fases seguintes (resumo)
-- **Fase 6 — Hardening e polimento:** rate limiting, account lockout, audit log, guards de escalação consolidados, paginação/filtros (detalhado acima).
-- **Fase 7 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.
+- **Fase 7 — Hardening e polimento:** rate limiting, account lockout, audit log, guards de escalação consolidados, paginação/filtros (detalhado acima).
+- **Fase 8 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.

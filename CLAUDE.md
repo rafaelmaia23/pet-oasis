@@ -82,10 +82,11 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 
 ## Comandos
 
-- Testar 1 arquivo: `npx vitest run <nome>` · watch: `npx vitest <nome>` · 1 caso: `-t "nome"`
-- Migration dev: `npm run db:migrate` (já gera o client) · reset: `npm run services:reset` + `db:seed`
-- Banco de teste: `db:test:up` / `db:test:migrate` · Subir tudo (db + db_test + mailpit): `services:up`
-- Mail (dev): `npm run mail:up` (mailpit; SMTP 1025, UI http://localhost:8025)
+- Ambientes via Compose base + overrides, isolados por `-p pet-oasis-{dev,test,prod}`; env por arquivo (`.env.development`/`.env.test`/`.env.production`, fora do git; `.env.example` versionado). Racional em `docs/adr/ambientes-e-deploy.md`.
+- Dev: `npm run dev` (Compose em foreground: db + mailpit + app-em-container via tsx watch; Ctrl+C = SIGTERM gracioso) · `dev:down` · `dev:reset` · `dev:mail`.
+- Teste: `npm test` (sobe o Postgres-de-test isolado, roda o Vitest no host e **sempre** derruba ao final, inclusive em falha) · `test:coverage` · `test:watch` · helpers `test:services:up`/`down`. Testar 1 arquivo (com o test-db de pé): `npx vitest run <nome>` · watch: `npx vitest <nome>` · 1 caso: `-t "nome"`.
+- Produção: `npm run prod:up` (build + só app + Postgres-de-prod, `migrate deploy` no entrypoint) · `prod:down` · `prod:logs`.
+- Migration dev (autoria consciente): `npm run db:migrate` (roda com `.env.development`, já gera o client) · `db:generate` · `db:seed` · `db:studio`.
 - Typecheck: `npm run typecheck` · Lint: `npm run lint` · Lint com fix: `npm run lint:fix` · Format: `npm run format`
 
 ## ⚠️ REGRA — Prefira os scripts do `package.json` a comandos diretos

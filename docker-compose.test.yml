@@ -1,0 +1,35 @@
+# Test override — isolated Postgres-de-test only (distinct names/port/volume from
+# dev, so tests run with the dev stack up). The app is NOT started here: Vitest
+# runs it in-process on the host (supertest). mailpit is defined but gated behind
+# `--profile mail` — integration tests mock @/lib/email, so it stays inert unless
+# a future real-SMTP e2e needs it.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pet-oasis-test-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - test_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit
+    container_name: pet-oasis-test-mailpit
+    profiles: ["mail"]
+    restart: unless-stopped
+    ports:
+      - "1125:1025" # SMTP
+      - "8125:8025" # Web UI
+
+volumes:
+  test_pgdata:

@@ -11,7 +11,10 @@ echo "Applying migrations..."
 node_modules/.bin/prisma migrate deploy
 
 echo "Seeding database..."
-node_modules/.bin/prisma db seed
+# Run the seed directly with the local tsx binary. `prisma db seed` would spawn
+# `tsx` expecting it on PATH, which fails when prisma is invoked directly (not
+# via an npm script that prepends node_modules/.bin).
+node_modules/.bin/tsx prisma/seed.ts
 
 echo "Starting dev server (tsx watch)..."
 exec node_modules/.bin/tsx watch src/server.ts

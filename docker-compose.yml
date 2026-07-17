@@ -1,79 +1,22 @@
+# Base compose — shared `app` skeleton only. Per-environment overrides add the
+# databases / mailpit and complete the app service (build target, env_file,
+# mounts, ports):
+#   dev  → docker-compose.dev.yml   (db + mailpit + app via tsx watch)
+#   prod → docker-compose.prod.yml  (db + app runtime bundle; no mailpit)
+#   test → docker-compose.test.yml  (db [+ mailpit via `--profile mail`]; NO app,
+#                                    Vitest runs the app in-process on the host)
+#
+# Always invoke through the npm scripts, which pass `-p <project>`,
+# `--env-file .env.<env>` and the right `-f` files. Never a bare `docker compose`.
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: pet-oasis-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "${POSTGRES_PORT}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  db_test:
-    image: postgres:16-alpine
-    container_name: pet-oasis-db-test
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}_test
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres_test_data:/var/lib/postgresql/data
-
-  mailpit:
-    image: axllent/mailpit
-    container_name: pet-oasis-mailpit
-    restart: unless-stopped
-    ports:
-      - "1025:1025" # SMTP
-      - "8025:8025" # Web UI
-
-  # Full-stack app, only started under the "full" profile (`npm run stack:up`).
-  # Plain `docker compose up -d` (dev, `services:up`) leaves this off and runs
-  # the app on the host via tsx.
   app:
     build:
       context: .
-      # Host's DNS is Tailscale MagicDNS (100.100.100.100), only reachable from
-      # the host's own network namespace. Docker's default bridge network can't
-      # route to it, so container-side lookups during `npm ci` etc. hang
-      # forever instead of failing. Building with the host's network sidesteps
-      # that without touching the Docker daemon's global DNS config.
+      # Host DNS is Tailscale MagicDNS (100.100.100.100), reachable only from the
+      # host network namespace; Docker's default bridge can't route to it, so
+      # container DNS lookups during `npm ci` hang. Building on the host network
+      # sidesteps it without touching the daemon's global DNS config.
       network: host
-    container_name: pet-oasis-app
-    profiles: ["full"]
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      # Container talks to the db service by name; the host .env keeps localhost.
-      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
-      PEPPER: ${PEPPER}
-      SMTP_HOST: mailpit
-      SMTP_PORT: 1025
-      MAIL_FROM: ${MAIL_FROM}
-      APP_URL: ${APP_URL}
-      SEED_DEMO_USER: "true"
-      DEMO_EMAIL: ${DEMO_EMAIL:-demo@petoasis.dev}
-      DEMO_PASSWORD: ${DEMO_PASSWORD:-DemoOasis2026!}
-    ports:
-      - "${APP_PORT:-3000}:3000"
-
-volumes:
-  postgres_data:
-  postgres_test_data:
+    expose:
+      - "3000"

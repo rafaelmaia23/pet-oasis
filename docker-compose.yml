@@ -44,6 +44,12 @@ services:
   app:
     build:
       context: .
+      # Host's DNS is Tailscale MagicDNS (100.100.100.100), only reachable from
+      # the host's own network namespace. Docker's default bridge network can't
+      # route to it, so container-side lookups during `npm ci` etc. hang
+      # forever instead of failing. Building with the host's network sidesteps
+      # that without touching the Docker daemon's global DNS config.
+      network: host
     container_name: pet-oasis-app
     profiles: ["full"]
     restart: unless-stopped

@@ -4,6 +4,7 @@ coverage
 src/generated
 src/__tests__
 .env
+.env.*
 .git
 .gitignore
 .vscode

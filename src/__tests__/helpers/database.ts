@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
 
+// Wipes only the transactional tables (users/sessions/tokens/profiles), in
+// FK-safe order. It deliberately does NOT touch the reference tables
+// (Feature, Role, RoleFeature): those are seeded once by the Vitest globalSetup
+// and must survive between tests, because the factories (buildEmployee /
+// buildCustomer) connect users to roles/features by name. Deleting them here
+// would break every test that grants a role. Guarded by clearDatabase.guard.test.ts.
 export async function clearDatabase() {
   await prisma.userFeature.deleteMany();
   await prisma.userRole.deleteMany();

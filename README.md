@@ -43,74 +43,64 @@ O ambiente Docker sobe com um usuário público **read-only** para explorar a AP
 
 A role `demo` tem **todas as features de leitura** — qualquer `GET` responde **200**, qualquer escrita responde **403** (o RBAC funcionando ao vivo). Faça login pela UI em `/reference` e experimente.
 
-## Subir com Docker (full-stack)
+## Rodar em desenvolvimento (Docker)
 
-Pré-requisito: **Docker** (com Compose). Do zero:
+Pré-requisito: **Docker** (com Compose). Tudo roda em container, inclusive o app — com hot-reload via `tsx watch` lendo `src/` por bind-mount.
 
 ```bash
 git clone <repo> && cd pet-oasis
-cp env.example .env          # preencha JWT_SECRET e PEPPER (≥ 32 chars cada)
-npm run stack:up             # docker compose --profile full up -d --build
+cp .env.example .env.development   # preencha JWT_SECRET e PEPPER (≥ 32 chars cada)
+npm run dev                        # Compose em foreground: db + mailpit + app
 ```
 
-O container faz tudo na subida: aplica as migrations (`prisma migrate deploy`), semeia (features/roles + usuário demo) e sobe o servidor. Então acesse:
+Na subida o container aplica as migrations (`prisma migrate deploy`) e semeia features/roles (usuário demo só com `SEED_DEMO_USER=true`). Então acesse:
 
 - API: `http://localhost:3000/api/v1`
 - Referência interativa: `http://localhost:3000/reference`
+- Mailpit (emails de dev): `http://localhost:8025` (SMTP `1025`)
 
-Derrubar tudo: `npm run stack:down`.
-
-## Desenvolvimento local (host + tsx)
-
-Para desenvolver com hot-reload rodando o app no host e só a infra em container:
-
-```bash
-npm ci
-cp env.example .env          # preencha JWT_SECRET e PEPPER (≥ 32 chars cada)
-npm run services:up          # sobe apenas db, db_test e mailpit
-npm run db:migrate           # aplica migrations no banco de dev
-npm run db:seed              # semeia features/roles (demo só com SEED_DEMO_USER=true)
-npm run dev                  # tsx watch em http://localhost:3000
-```
+`Ctrl+C` derruba tudo com shutdown gracioso. Outros: `npm run dev:down`, `npm run dev:reset` (recria do zero, apagando o volume), `npm run dev:mail` (só o Mailpit).
 
 Comandos úteis:
 
 | Comando | O quê |
 |---|---|
-| `npm run test:run` | Suíte completa (Vitest + Supertest) |
+| `npm test` | Sobe o Postgres-de-test isolado, roda a suíte (Vitest + Supertest) no host e derruba ao final (inclusive em falha) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | Biome (`lint:fix` corrige o auto-corrigível) |
+| `npm run db:migrate` | Cria/aplica uma migration nova em dev (autoria consciente) |
 | `npm run db:studio` | Prisma Studio |
 
-Emails em dev caem no **Mailpit** — UI em `http://localhost:8025` (SMTP `1025`).
+## Deploy em produção
 
-## Deploy em servidor
-
-O mesmo full-stack do Docker roda em produção. No servidor:
+Produção sobe **só** o app + Postgres-de-prod (sem Mailpit nem banco de dev/test). O app é buildado e roda direto num VPS **ARM64**. No servidor:
 
 ```bash
 git clone <repo> && cd pet-oasis
-cp env.example .env
+cp .env.example .env.production
 ```
 
-Preencha o `.env` **para produção**:
+Preencha o `.env.production`:
 
-- `JWT_SECRET` e `PEPPER` — segredos fortes, ≥ 32 chars cada (não reutilize os de dev).
+- `JWT_SECRET` e `PEPPER` — segredos fortes, ≥ 32 chars cada (`openssl rand -hex 32`; não reutilize os de dev).
+- `POSTGRES_PASSWORD` — senha forte do banco.
 - `APP_URL` — o domínio real do front (usado nos links de email).
-- `MAIL_FROM` e `SMTP_*` — credenciais SMTP reais (ex.: Resend).
-- `DEMO_EMAIL` / `DEMO_PASSWORD` — só se quiser manter o usuário demo público.
+- `MAIL_FROM` e `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS` — SMTP real (ex.: Resend, `smtp.resend.com:465`).
+- `SEED_DEMO_USER=true` + `DEMO_*` — só se quiser o usuário demo público.
 
 Então:
 
 ```bash
-npm run stack:up
+npm run prod:up    # build + up (só app + Postgres-de-prod); migrate deploy + seed no entrypoint
 ```
 
-A migração roda via `prisma migrate deploy` no entrypoint (nunca `migrate dev`) e o seed é idempotente — a subida deixa o ambiente do zero funcionando.
+`npm run prod:down` derruba; `npm run prod:logs` acompanha. A migração roda via `prisma migrate deploy` (nunca `migrate dev`) e o seed é idempotente — a subida deixa o ambiente do zero funcionando.
+
+> Fora do escopo da app (infra do servidor): reverse proxy/TLS (Caddy/nginx), backup do volume `prod_pgdata`, firewall.
 
 ## Status e roadmap
 
-Ciclo 1 (fundação) com as fases 2–5 concluídas: autorização e perfis, auth com refresh rotativo, email/status/banimento e documentação + containerização. À frente: **Fase 6** (hardening — rate limiting, account lockout, audit log, paginação) e **Fase 7** (domínio do pet shop — Pets ligados a Customers, e adiante vendas/pedidos). Detalhe em [TODO.md](TODO.md).
+Ciclo 1 (fundação) com as fases 2–6 concluídas: autorização e perfis, auth com refresh rotativo, email/status/banimento, documentação + containerização e **ambientes dev/test/prod + deploy** (Compose base + overrides, graceful shutdown). À frente: **Fase 7** (hardening — rate limiting, account lockout, audit log, paginação) e **Fase 8** (domínio do pet shop — Pets ligados a Customers, e adiante vendas/pedidos). Detalhe em [TODO.md](TODO.md).
 
 ## Licença
 

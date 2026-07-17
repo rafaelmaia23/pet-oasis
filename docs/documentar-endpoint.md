@@ -74,8 +74,8 @@ Peças reutilizáveis (de `src/docs/components.ts` e `helpers.ts`):
 ## 5. Fechar
 
 - Atualizar o índice interno **`ENDPOINTS.md`** (1 linha por rota — não é OpenAPI, é o mapa rápido).
-- `npm run typecheck` + `npm run lint` verdes. O `openapi.test.ts` roda no `test:run` e falha se a doc vazar campo sensível ou se um path sumir — rodar a suíte.
-- Conferir no ar (opcional): `npm run stack:up` → `GET /openapi.json` e `/reference` mostram a rota nova; validar o `.bru` com `@usebruno/cli` se quiser.
+- `npm run typecheck` + `npm run lint` verdes. O `openapi.test.ts` roda em `npm test` e falha se a doc vazar campo sensível ou se um path sumir — rodar a suíte.
+- Conferir no ar (opcional): `npm run dev` → `GET /openapi.json` e `/reference` mostram a rota nova; validar o `.bru` com `@usebruno/cli` se quiser.
 
 ---
 

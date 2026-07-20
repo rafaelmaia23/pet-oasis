@@ -11,7 +11,10 @@
 services:
   app:
     build:
-      context: .
+      # A raiz do repo, não infra/ — os caminhos aqui são relativos a este
+      # arquivo. Com o contexto na raiz, o Dockerfile é achado em
+      # <context>/Dockerfile e o .dockerignore da raiz continua valendo.
+      context: ..
       # Host DNS is Tailscale MagicDNS (100.100.100.100), reachable only from the
       # host network namespace; Docker's default bridge can't route to it, so
       # container DNS lookups during `npm ci` hang. Building on the host network

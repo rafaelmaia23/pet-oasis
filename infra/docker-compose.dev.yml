@@ -32,7 +32,7 @@ services:
     build:
       target: dev
     container_name: pet-oasis-dev-app
-    env_file: .env.development
+    env_file: ../.env.development
     environment:
       # env_file keeps localhost/1025 for host tooling; inside the compose network
       # the container reaches the services by name.
@@ -44,8 +44,8 @@ services:
     ports:
       - "${APP_PORT:-3000}:3000"
     volumes:
-      - ./src:/app/src
-      - ./prisma:/app/prisma
+      - ../src:/app/src
+      - ../prisma:/app/prisma
       # Anonymous volume: keeps the container's generated Prisma client from being
       # masked by the host's src/ bind-mount (entrypoint runs `prisma generate`).
       - /app/src/generated

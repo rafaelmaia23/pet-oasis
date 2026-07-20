@@ -1,7 +1,7 @@
 # pet-oasis — TODO (Ciclo 1)
 
 > Estado e ordem das tarefas. Consulte antes de começar; atualize ao concluir.
-> Detalhes de decisões em `CONTEXT.md`. Regras de negócio firmadas no `CLAUDE.md`.
+> Detalhes de decisões em `docs/context.md`. Regras de negócio firmadas no `CLAUDE.md`.
 
 ## Legenda
 ✅ feito · 🔄 em andamento · ⬜ a fazer · 🔸 polimento (não bloqueia)
@@ -9,7 +9,7 @@
 ---
 
 ## Fase 2 — Autorização e perfis ✅
-> RBAC + CRUD de user com modelo de perfis. Regras e racional no `CONTEXT.md` (§1, §2).
+> RBAC + CRUD de user com modelo de perfis. Regras e racional no `docs/context.md` (§1, §2).
 - Autorização: `computeEffectiveFeatures` (pura) + `can`/`hasFeature`/`canActOnResource`; middleware `authenticate`; autorização-antes-da-busca (403 vence 404).
 - CRUD de user: POST / GET lista / GET :id / PATCH / DELETE; `createCustomer`/`createEmployee` (nested write); soft delete (`softDeleteUserAndInvalidateSessions`).
 - Módulos read-only: role (`GET /roles`, `/roles/:id`) e feature (`GET /features`, `/features/:id`).
@@ -22,7 +22,7 @@
 ---
 
 ## Fase 3 — Auth alvo (access JWT + refresh opaco rotativo) ✅
-> Migrou de "JWT-como-Session validado no banco a cada request" para "access JWT 15min validado local + refresh opaco rotativo". Design e racional no `CONTEXT.md` (§2, §3).
+> Migrou de "JWT-como-Session validado no banco a cada request" para "access JWT 15min validado local + refresh opaco rotativo". Design e racional no `docs/context.md` (§2, §3).
 - `Session` reshaped: `refreshTokenHash`/`usedAt`/`userAgent`/`ipAddress` (sem `token`). `src/lib/token.ts` (gera/hash opaco).
 - `authenticate` reescrito (valida JWT só localmente, sem hit no banco), movido de global → por-grupo-de-rota; erros via `create*Error` (idem `canAccess`).
 - Endpoints: `POST /auth/login` (sempre cria Session nova), `POST /auth/refresh` (rotação + detecção de roubo por reuso → invalida todas as sessões), `POST /auth/logout` (por refresh cookie + ownership), `GET /auth/sessions` (só vivas), `DELETE /auth/sessions/:id` (404 unificado "não existe/morta").
@@ -33,7 +33,7 @@
 
 ## Fase 4 — Email, status de conta e banimento ✅
 
-> Introduz status de conta com verificação de email obrigatória, um serviço de email genérico (nodemailer; mailpit em dev / Resend em prod), troca/recuperação de senha e banimento. Regras de negócio decididas no planejamento e registradas no `CONTEXT.md` (seção "Fase 4"). Cada seção abaixo é uma feat-branch em TDD (teste primeiro, código depois).
+> Introduz status de conta com verificação de email obrigatória, um serviço de email genérico (nodemailer; mailpit em dev / Resend em prod), troca/recuperação de senha e banimento. Regras de negócio decididas no planejamento e registradas no `docs/context.md` (seção "Fase 4"). Cada seção abaixo é uma feat-branch em TDD (teste primeiro, código depois).
 >
 > **Modelo de status (firmado):** `enum UserStatus { PENDING, ACTIVE }` + coluna `status` (default `PENDING`). Ban é **ortogonal**: colunas `bannedAt`/`bannedBy`/`banReason` no `User` (idioma timestamp-flag, como `deletedAt`). Loga só se `status == ACTIVE` **e** `bannedAt == null`. Desbanir limpa as três colunas e preserva o `status`.
 
@@ -102,8 +102,8 @@
 - ✅ Suíte (326) + `typecheck` + `lint` verdes
 
 ### ✅ Fase 4.5 — Fechos
-- ✅ Atualizado `ENDPOINTS.md` com as rotas novas (`/auth/verify-email`, `/auth/verify-email/resend`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/change-password`, `POST`/`DELETE /users/:id/ban`) + a feature `manage:user:status` (na coluna Auth das linhas de ban)
-- ✅ `CONTEXT.md`: racional da Fase 4 promovido de "planejada" a "implementada/fechada" (§2.1, §3, §4); acrescentadas as decisões da execução (reset/change 204, change-password 403 senha errada, auto-ban 409, `assertAdminForBan` via features efetivas do alvo, freeze estendido a reset/change)
+- ✅ Atualizado `docs/endpoints.md` com as rotas novas (`/auth/verify-email`, `/auth/verify-email/resend`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/change-password`, `POST`/`DELETE /users/:id/ban`) + a feature `manage:user:status` (na coluna Auth das linhas de ban)
+- ✅ `docs/context.md`: racional da Fase 4 promovido de "planejada" a "implementada/fechada" (§2.1, §3, §4); acrescentadas as decisões da execução (reset/change 204, change-password 403 senha errada, auto-ban 409, `assertAdminForBan` via features efetivas do alvo, freeze estendido a reset/change)
 - ✅ **Bug pré-existente corrigido:** `user.service.getUserById` agora autoriza ANTES de buscar (`canActOnResource` antes do `findUserById`, espelhando `deleteUser`) — 403 vence 404, não vaza existência de id. Teste de regressão adicionado (ator sem `read:user:others` → 403 igual para id existente e inexistente); teste do 404 legítimo trocado para ator com `read:user:others`. (`getUserByEmail` tem o mesmo padrão mas é código morto e não dá pra autorizar antes da busca por email — deixado como observação, fora de escopo.)
 - ✅ **Bug corrigido — request com JSON malformado → 500:** error handler central passou a mapear o `SyntaxError` do body-parser (`err instanceof SyntaxError && "body" in err`) para **400 BAD_REQUEST** (decisão firmada: 400, não 422). Testes de body malformado/`null` em endpoint representativo (`auth.test.ts` signup).
 - ✅ `npm run typecheck` + `npm run lint` + `npm run test:run` (329) limpos; **Fase 4 marcada ✅**
@@ -111,7 +111,7 @@
 ---
 
 ## Fase 5 — Documentação da API + Containerização (deploy) ✅
-> Fecha o Ciclo 1 como peça de portfólio: API documentada (OpenAPI gerado dos schemas Zod → UI Scalar → coleção Bruno) e no ar via Docker (git clone → um `docker compose up` sobe banco + app buildado, migra e semeia do zero). Decisões e racional no `CONTEXT.md` (§ a criar). Fonte única da doc: os próprios schemas Zod via `.meta()` (Zod 4 nativo, sem monkey-patch). Cada seção abaixo é uma feat-branch a partir da branch `fase-5`.
+> Fecha o Ciclo 1 como peça de portfólio: API documentada (OpenAPI gerado dos schemas Zod → UI Scalar → coleção Bruno) e no ar via Docker (git clone → um `docker compose up` sobe banco + app buildado, migra e semeia do zero). Decisões e racional no `docs/context.md` (§ a criar). Fonte única da doc: os próprios schemas Zod via `.meta()` (Zod 4 nativo, sem monkey-patch). Cada seção abaixo é uma feat-branch a partir da branch `fase-5`.
 >
 > **Decisões firmadas:** demo read-only = role `demo` (`appliesTo EMPLOYEE`) com todas as features de leitura (`read:user`, `read:user:others`, `read:session`, `read:feature`, `read:role`, `read:permission`) — GET em toda a API, escrita → 403 (RBAC ao vivo). Seed do **usuário** demo gated por `SEED_DEMO_USER=true` (ligado no Docker/prod, desligado em test/dev); a **role** `demo` é sempre semeada. `/openapi.json` e `/reference` são rotas públicas (montadas no `router` de topo, fora dos grupos protegidos). Migração em produção usa `prisma migrate deploy` (nunca `migrate dev`). Segredos via `.env` não-versionado + `.env.example`.
 
@@ -171,14 +171,14 @@
 - ✅ 🔸 Nota de infra fora do escopo da app registrada no README: reverse proxy/TLS (Caddy/nginx), backup do volume `postgres_data`, firewall. CORS ainda não configurado (é Fase 6.1) — não prometido no README.
 
 ### ✅ Fase 5.9 — Fechos
-- ✅ **`CONTEXT.md`:** nova `§2.3 Fase 5 (implementada) — Documentação + Deploy` no estilo "Por que...": fonte única Zod→OpenAPI (`.meta()` nativo, envelope via `.shape.*`, presenters sem campo sensível), demo read-only + seed gated, `migrate deploy` vs `migrate dev`, seed bundlado (`dist/seed.js`), profile `full`, `DATABASE_URL` derivada (`@db`), imagem multi-stage não-root. Antigo `§2.2 "Fase 5 (planejada)"` relabelado para `"Fase 6 (planejada)"` (+ history `Fase 5 (fechada)` no §4).
-- ✅ `ENDPOINTS.md`: seção "Docs" com `GET /openapi.json` e `GET /reference` (públicas, router de topo); cabeçalho/Mounting de-stalados (OpenAPI existe agora).
+- ✅ **`docs/context.md`:** nova `§2.3 Fase 5 (implementada) — Documentação + Deploy` no estilo "Por que...": fonte única Zod→OpenAPI (`.meta()` nativo, envelope via `.shape.*`, presenters sem campo sensível), demo read-only + seed gated, `migrate deploy` vs `migrate dev`, seed bundlado (`dist/seed.js`), profile `full`, `DATABASE_URL` derivada (`@db`), imagem multi-stage não-root. Antigo `§2.2 "Fase 5 (planejada)"` relabelado para `"Fase 6 (planejada)"` (+ history `Fase 5 (fechada)` no §4).
+- ✅ `docs/endpoints.md`: seção "Docs" com `GET /openapi.json` e `GET /reference` (públicas, router de topo); cabeçalho/Mounting de-stalados (OpenAPI existe agora).
 - ✅ `npm run typecheck` + `npm run lint` + `npm run test:run` (335) verdes; **Fase 5 marcada ✅**.
 
 ---
 
 ## Fase 6 — Ambientes, Docker por ambiente e deploy ✅
-> Reformula dev/test/prod para um **Compose base + overrides** por ambiente, corrige dois bugs de deploy (app hardcodado no mailpit em vez da Resend; prod subindo db/mailpit de dev) e adiciona **graceful shutdown**. Nenhuma regra de negócio nova. Racional no `CONTEXT.md` (§2.4) e no ADR `docs/adr/ambientes-e-deploy.md`. Branch `fase-6`.
+> Reformula dev/test/prod para um **Compose base + overrides** por ambiente, corrige dois bugs de deploy (app hardcodado no mailpit em vez da Resend; prod subindo db/mailpit de dev) e adiciona **graceful shutdown**. Nenhuma regra de negócio nova. Racional no `docs/context.md` (§2.4) e no ADR `docs/adr/environments-and-deploy.md`. Branch `fase-6`.
 
 ### ✅ Fase 6.0 — Env files + dotenv-cli
 - ✅ `.env.development`/`.env.test`/`.env.production` (fora do git) + `.env.example` versionado; `.gitignore` ampliado (`.env.*` com `!.env.example`). `dotenv-cli` (devDep).
@@ -199,13 +199,13 @@
 
 ### ✅ Fase 6.5 — Guarda + docs + fechos
 - ✅ Teste-guarda `clearDatabase.guard.test.ts` (afirma que Feature/Role/RoleFeature sobrevivem ao `clearDatabase` — não era bug) + comentário no helper.
-- ✅ ADR `docs/adr/ambientes-e-deploy.md`; `CONTEXT.md` §2.4 + renumeração da antiga "Fase 6 (planejada)" → "Fase 7 (planejada)"; `README.md`/`CLAUDE.md`/`docs/documentar-endpoint.md` atualizados; TODO renumerado (antigas Fase 6→7 Hardening, Fase 7→8 Domínio).
+- ✅ ADR `docs/adr/environments-and-deploy.md`; `docs/context.md` §2.4 + renumeração da antiga "Fase 6 (planejada)" → "Fase 7 (planejada)"; `README.md`/`CLAUDE.md`/`docs/documenting-endpoints.md` atualizados; TODO renumerado (antigas Fase 6→7 Hardening, Fase 7→8 Domínio).
 - ✅ `typecheck` + `lint` + suíte verdes; verificação ponta a ponta dos 3 ambientes (dev: boot + status 200 + demo off + SIGTERM gracioso; `npm test`: suíte + teardown; prod: bug1/bug2 + status 200 + demo login 200 + SIGTERM gracioso).
 
 ---
 
 ## Fase 7 — Hardening e polimento 🔄
-> Amplia o escopo original ("rate limiting, account lockout") para incluir também polimento de features já construídas. Decisões e racional completos no `CONTEXT.md` (§2.2). Cada seção abaixo é uma feat-branch em TDD, a partir da branch `fase-7`.
+> Amplia o escopo original ("rate limiting, account lockout") para incluir também polimento de features já construídas. Decisões e racional completos no `docs/context.md` (§2.2). Cada seção abaixo é uma feat-branch em TDD, a partir da branch `fase-7`.
 
 ### ⬜ Fase 7.0 — Fundação de infra
 - ⬜ Serviço `redis` no `infra/docker-compose.yml` (+ script `npm run` análogo aos `test:services:*`/`dev:mail`); `REDIS_URL` em `env.ts`/`env.example`; client em `src/lib/redis.ts`.
@@ -232,7 +232,7 @@
 - ⬜ Migration: model `AuditLog` (id, actorId?, action, targetType, targetId?, metadata Json?, ip?, userAgent?, createdAt).
 - ⬜ `src/lib/auditLog.ts` (`record(action, {actorId, targetType, targetId, metadata?, ip?, userAgent?})`).
 - ⬜ Chamado nos pontos: login falho, lockout disparado, conta desbloqueada, ban/unban, grant/revoke de role, grant/revoke de permission override, password reset (solicitado e concluído), password change, troca de email (solicitada e concluída), forçar troca de senha, criação e deleção de usuário.
-- ⬜ Sem endpoint de leitura nesta fase (ver racional no `CONTEXT.md`).
+- ⬜ Sem endpoint de leitura nesta fase (ver racional no `docs/context.md`).
 
 ### ⬜ Fase 7.5 — Rate limiting nas rotas de auth
 - ⬜ `rate-limiter-flexible` com `RateLimiterRedis`.
@@ -268,8 +268,8 @@
 - ⬜ Parsing de user-agent (ex. `ua-parser-js`) → `{ device: "Chrome no Windows", ipAddress, createdAt, current }`, marcando a sessão da request atual.
 
 ### ⬜ Fase 7.12 — Fechos
-- ⬜ `ENDPOINTS.md` atualizado com todas as rotas novas.
-- ⬜ `CONTEXT.md`: promover racional de "planejada" a "implementada", com as decisões efetivamente confirmadas em cada sub-fase (inclusive 7.9/7.10).
+- ⬜ `docs/endpoints.md` atualizado com todas as rotas novas.
+- ⬜ `docs/context.md`: promover racional de "planejada" a "implementada", com as decisões efetivamente confirmadas em cada sub-fase (inclusive 7.9/7.10).
 - ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 7 marcada ✅.
 
 ---

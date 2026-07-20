@@ -53,4 +53,4 @@ Proporcional para o estágio atual (pet shop, ciclo de aprendizado). O cenário 
 
 ## Onde guardar este arquivo
 
-Sugestão: `docs/adr/` (Architecture Decision Records) na raiz do projeto — ex.: `docs/adr/auth-token-revogacao.md`. Se o projeto ainda não tem pasta de docs de decisão, `docs/decisoes/` também serve. O importante é ficar fora de `src/` (não é código) mas versionado no repo, perto do CONTEXT.md/CLAUDE.md para consulta.
+Sugestão: `docs/adr/` (Architecture Decision Records) na raiz do projeto — ex.: `docs/adr/auth-token-revocation.md`. Se o projeto ainda não tem pasta de docs de decisão, `docs/decisoes/` também serve. O importante é ficar fora de `src/` (não é código) mas versionado no repo, perto do CONTEXT.md/CLAUDE.md para consulta.

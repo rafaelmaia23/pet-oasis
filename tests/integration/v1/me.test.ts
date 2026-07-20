@@ -1,12 +1,9 @@
 import { faker } from "@faker-js/faker";
+import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
+import { loginAs } from "@tests/helpers/auth";
+import { clearDatabase } from "@tests/helpers/database";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  buildCustomer,
-  buildEmployee,
-} from "@/__tests__/factories/user.factory";
-import { loginAs } from "@/__tests__/helpers/auth";
-import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
 import { meViews } from "@/modules/me/me.presenter";
 

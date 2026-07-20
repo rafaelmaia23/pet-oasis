@@ -1,4 +1,15 @@
 import { faker } from "@faker-js/faker";
+import {
+  buildCustomer,
+  buildEmployee,
+  makeEmployeeData,
+} from "@tests/factories/user.factory";
+import {
+  expectValidationError,
+  expectValidUuid,
+} from "@tests/helpers/assertions";
+import { loginAs, loginWithSession } from "@tests/helpers/auth";
+import { clearDatabase } from "@tests/helpers/database";
 import request from "supertest";
 import {
   afterEach,
@@ -10,17 +21,6 @@ import {
   vi,
 } from "vitest";
 import z from "zod";
-import {
-  buildCustomer,
-  buildEmployee,
-  makeEmployeeData,
-} from "@/__tests__/factories/user.factory";
-import {
-  expectValidationError,
-  expectValidUuid,
-} from "@/__tests__/helpers/assertions";
-import { loginAs, loginWithSession } from "@/__tests__/helpers/auth";
-import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";

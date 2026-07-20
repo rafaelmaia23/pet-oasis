@@ -1,6 +1,6 @@
+import { buildEmployee } from "@tests/factories/user.factory";
+import { clearDatabase } from "@tests/helpers/database";
 import { beforeEach, describe, expect, it } from "vitest";
-import { buildEmployee } from "@/__tests__/factories/user.factory";
-import { clearDatabase } from "@/__tests__/helpers/database";
 import { prisma } from "@/lib/prisma";
 
 // Regression guard: clearDatabase() must wipe transactional rows but preserve

@@ -1,5 +1,5 @@
+import { makeAuthUser } from "@tests/factories/user.factory";
 import { describe, expect, it } from "vitest";
-import { makeAuthUser } from "@/__tests__/factories/user.factory";
 import {
   can,
   canActOnResource,

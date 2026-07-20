@@ -13,8 +13,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    globalSetup: "./src/__tests__/setup/global.ts",
-    setupFiles: ["./src/__tests__/setup/zod-matchers.ts"],
+    globalSetup: "./tests/setup/global.ts",
+    setupFiles: ["./tests/setup/zod-matchers.ts"],
     fileParallelism: false,
     coverage: {
       provider: "v8",
@@ -25,6 +25,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@tests": path.resolve(__dirname, "./tests"),
     },
   },
 });

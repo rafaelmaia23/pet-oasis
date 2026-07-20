@@ -1,3 +1,14 @@
+import { buildCustomer, makeCustomerData } from "@tests/factories/user.factory";
+import {
+  expectValidationError,
+  expectValidUuid,
+} from "@tests/helpers/assertions";
+import {
+  extractRefreshCookie,
+  loginAs,
+  loginWithSession,
+} from "@tests/helpers/auth";
+import { clearDatabase } from "@tests/helpers/database";
 import request from "supertest";
 import {
   afterEach,
@@ -9,20 +20,6 @@ import {
   vi,
 } from "vitest";
 import { z } from "zod";
-import {
-  buildCustomer,
-  makeCustomerData,
-} from "@/__tests__/factories/user.factory";
-import {
-  expectValidationError,
-  expectValidUuid,
-} from "@/__tests__/helpers/assertions";
-import {
-  extractRefreshCookie,
-  loginAs,
-  loginWithSession,
-} from "@/__tests__/helpers/auth";
-import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";

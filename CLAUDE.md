@@ -22,7 +22,7 @@ Se estiver em dúvida se algo é regra de negócio → **trate como se fosse e p
 
 ## ⚠️ REGRA — TDD sempre, com fluxo de branches por fase
 
-Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos testes existentes (Vitest + Supertest, arquivos em `src/__tests__/integration/v1/` e `src/__tests__/unit/`). Ciclo de cada feature: escreve os testes do caso → roda e vê falhar → implementa o mínimo pra passar → refatora → commit. Nunca implemente uma feature sem teste que a guie.
+Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos testes existentes (Vitest + Supertest, arquivos em `tests/integration/v1/` e `tests/unit/`). Ciclo de cada feature: escreve os testes do caso → roda e vê falhar → implementa o mínimo pra passar → refatora → commit. Nunca implemente uma feature sem teste que a guie.
 
 **Hierarquia de branches (git-flow por fase):**
 - `main` é a base estável — **nunca** se desenvolve direto nela.

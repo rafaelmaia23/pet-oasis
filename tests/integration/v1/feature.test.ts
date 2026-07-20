@@ -1,11 +1,11 @@
 import { faker } from "@faker-js/faker";
+import { buildEmployee } from "@tests/factories/user.factory";
+import { expectValidationError } from "@tests/helpers/assertions";
+import { loginAs } from "@tests/helpers/auth";
+import { clearDatabase } from "@tests/helpers/database";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import z from "zod";
-import { buildEmployee } from "@/__tests__/factories/user.factory";
-import { expectValidationError } from "@/__tests__/helpers/assertions";
-import { loginAs } from "@/__tests__/helpers/auth";
-import { clearDatabase } from "@/__tests__/helpers/database";
 import app from "@/app";
 import { createNotFoundError } from "@/errors/errorFactory";
 import { DEFAULT_FEATURES } from "@/modules/feature/feature.constants";

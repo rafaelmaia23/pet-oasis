@@ -2,7 +2,7 @@ node_modules
 dist
 coverage
 src/generated
-src/__tests__
+tests
 .env
 .env.*
 .git

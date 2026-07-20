@@ -57,7 +57,7 @@ O **403 não é um endpoint travado**: é o RBAC calculando, em runtime, que a r
 
 ---
 
-**Projeto de portfólio, aberto e documentado.** O *porquê* de cada decisão vive no [repositório no GitHub](https://github.com/rafaelmaia23/pet-oasis) — README, ADRs e um \`CONTEXT.md\` com o raciocínio longo.
+**Projeto de portfólio, aberto e documentado.** O *porquê* de cada decisão vive no [repositório no GitHub](https://github.com/rafaelmaia23/pet-oasis) — README, ADRs e um \`docs/context.md\` com o raciocínio longo.
 
 Feito por [Rafael Maia da Fonseca](https://www.linkedin.com/in/rafaelmaiadafonseca).
 `.trim();

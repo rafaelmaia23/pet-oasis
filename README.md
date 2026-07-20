@@ -10,7 +10,7 @@
 [![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Zod](https://img.shields.io/badge/Zod-4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/)
-[![Vitest](https://img.shields.io/badge/Vitest-330%2B%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-341%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](https://spec.openapis.org/oas/v3.1.0)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#licença)
@@ -32,7 +32,7 @@
 
 Uma API REST de pet shop levada a sério: modelagem de domínio, camadas rígidas, testes escritos antes do código e cada decisão de arquitetura registrada por escrito.
 
-O projeto tem dois propósitos que se reforçam. É uma **aplicação real** — a fundação de autenticação, autorização e gestão de usuários já está completa e no ar. E é um **veículo de aprendizado deliberado** de TDD e clean architecture: nenhuma feature entra sem teste que a guie, e o *porquê* de cada escolha vive em [`docs/context.md`](docs/context.md) e nos [ADRs](docs/adr/), não só na cabeça de quem escreveu.
+O projeto tem dois propósitos que se reforçam. É uma **aplicação real** — a fundação de autenticação, autorização e gestão de usuários já está completa e no ar. E é um **veículo de aprendizado deliberado** de TDD e clean code: nenhuma feature entra sem teste que a guie, e o *porquê* de cada escolha vive em [`docs/context.md`](docs/context.md) e nos [ADRs](docs/adr/), não só na cabeça de quem escreveu.
 
 O **Ciclo 1** — a fundação — está concluído: autenticação com refresh rotativo, RBAC com overrides por usuário, perfis, verificação de email, banimento e recuperação de senha. O **Ciclo 2** abre o domínio do pet shop em si.
 
@@ -183,7 +183,7 @@ O raciocínio longo de cada uma está em [`docs/context.md`](docs/context.md); a
 
 ### Testes antes do código
 
-Toda feature nasce de um teste que falha. A suíte tem **330+ testes** (Vitest + Supertest + Faker) rodando contra um Postgres real e isolado, subido e derrubado pelo próprio `npm test` — integração de verdade, não mocks do banco. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
+Toda feature nasce de um teste que falha. A suíte tem **341 testes** (Vitest + Supertest + Faker) rodando contra um Postgres real e isolado, subido e derrubado pelo próprio `npm test` — integração de verdade, não mocks do banco. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
 
 ### Disciplina de processo
 

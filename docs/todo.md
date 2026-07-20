@@ -208,7 +208,7 @@
 > Amplia o escopo original ("rate limiting, account lockout") para incluir também polimento de features já construídas. Decisões e racional completos no `CONTEXT.md` (§2.2). Cada seção abaixo é uma feat-branch em TDD, a partir da branch `fase-7`.
 
 ### ⬜ Fase 7.0 — Fundação de infra
-- ⬜ Serviço `redis` no `docker-compose.yml` (+ script `npm run` análogo aos `services:*`/`mail:up`); `REDIS_URL` em `env.ts`/`env.example`; client em `src/lib/redis.ts`.
+- ⬜ Serviço `redis` no `infra/docker-compose.yml` (+ script `npm run` análogo aos `test:services:*`/`dev:mail`); `REDIS_URL` em `env.ts`/`env.example`; client em `src/lib/redis.ts`.
 - ⬜ `app.set("trust proxy", ...)` (assume um hop de proxy reverso — ajustar se a topologia de deploy for outra) para IP real chegar certo no rate limit/lockout.
 - ⬜ `express.json({ limit: "100kb" })` (ajustável).
 - ⬜ `pino` + `pino-http` instalados (base para 7.3).

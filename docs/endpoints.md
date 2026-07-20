@@ -1,7 +1,7 @@
 # pet-oasis — Endpoints
 
 > Índice interno das rotas existentes (1 linha por rota). O contrato formal da API é o `GET /openapi.json` (OpenAPI 3.1) + a UI interativa em `GET /reference`; este arquivo é só o índice enxuto para organização enquanto o projeto cresce.
-> Ao adicionar/alterar rotas, atualize aqui. Detalhe de decisões no `CONTEXT.md`.
+> Ao adicionar/alterar rotas, atualize aqui. Detalhe de decisões no `context.md`.
 
 ## Mounting
 

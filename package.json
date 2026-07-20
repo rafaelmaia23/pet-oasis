@@ -2,7 +2,7 @@
   "name": "pet-oasis",
   "version": "1.0.0",
   "description": "",
-  "license": "ISC",
+  "license": "MIT",
   "author": "Rafael Maia da Fonseca",
   "type": "module",
   "main": "server.js",

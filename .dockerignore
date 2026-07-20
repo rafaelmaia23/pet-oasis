@@ -2,7 +2,10 @@ node_modules
 dist
 coverage
 src/generated
-src/__tests__
+tests
+# Os entrypoints em infra/ SÃO copiados pelo Dockerfile — excluir infra/ inteiro
+# quebraria o build. Só os Compose ficam de fora (orquestram a imagem, não entram nela).
+infra/docker-compose*.yml
 .env
 .env.*
 .git

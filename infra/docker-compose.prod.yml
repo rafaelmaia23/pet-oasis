@@ -1,0 +1,38 @@
+# Prod override — app (runtime bundle) + Postgres-de-prod ONLY. No mailpit, no
+# dev/test DB. SMTP comes entirely from .env.production (e.g. Resend). The db
+# port is not published (reachable only inside the compose network); use
+# `docker exec` for maintenance/backups.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pet-oasis-prod-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - prod_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      target: runtime
+    container_name: pet-oasis-app
+    env_file: ../.env.production
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+    depends_on:
+      db:
+        condition: service_healthy
+    # > the app's graceful-shutdown timeout (10s) so draining finishes first.
+    stop_grace_period: 15s
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+volumes:
+  prod_pgdata:

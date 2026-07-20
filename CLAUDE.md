@@ -22,11 +22,11 @@ Se estiver em dúvida se algo é regra de negócio → **trate como se fosse e p
 
 ## ⚠️ REGRA — TDD sempre, com fluxo de branches por fase
 
-Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos testes existentes (Vitest + Supertest, arquivos em `src/__tests__/integration/v1/` e `src/__tests__/unit/`). Ciclo de cada feature: escreve os testes do caso → roda e vê falhar → implementa o mínimo pra passar → refatora → commit. Nunca implemente uma feature sem teste que a guie.
+Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos testes existentes (Vitest + Supertest, arquivos em `tests/integration/v1/` e `tests/unit/`). Ciclo de cada feature: escreve os testes do caso → roda e vê falhar → implementa o mínimo pra passar → refatora → commit. Nunca implemente uma feature sem teste que a guie.
 
 **Hierarquia de branches (git-flow por fase):**
 - `main` é a base estável — **nunca** se desenvolve direto nela.
-- Cada fase do roadmap (ver `TODO.md`) tem **uma branch de fase** criada a partir da `main`, nomeada `fase-<n>` (ex.: `fase-4`).
+- Cada fase do roadmap (ver `docs/todo.md`) tem **uma branch de fase** criada a partir da `main`, nomeada `fase-<n>` (ex.: `fase-4`).
 - Cada feature da fase tem **sua própria branch** criada a partir da branch da fase, nomeada `feat/fase-<n>-<m>-<slug>` (ex.: `feat/fase-4-2-password-reset`). Ao terminar a feature (testes + `typecheck` + `lint` verdes), **mergeia de volta na branch da fase** (`--no-ff`) e apaga a branch da feature.
 - Ao concluir a **fase inteira**, a branch da fase é mergeada na `main`; entre uma fase e a próxima, fica só a `main` (+ a branch da fase seguinte quando começar).
 
@@ -82,7 +82,7 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 
 ## Comandos
 
-- Ambientes via Compose base + overrides, isolados por `-p pet-oasis-{dev,test,prod}`; env por arquivo (`.env.development`/`.env.test`/`.env.production`, fora do git; `.env.example` versionado). Racional em `docs/adr/ambientes-e-deploy.md`.
+- Ambientes via Compose base + overrides (arquivos em `infra/`, junto dos entrypoints; o `Dockerfile` fica na raiz porque é a raiz do contexto de build), isolados por `-p pet-oasis-{dev,test,prod}`; env por arquivo (`.env.development`/`.env.test`/`.env.production`, na raiz, fora do git; `.env.example` versionado). Racional em `docs/adr/environments-and-deploy.md`.
 - Dev: `npm run dev` (Compose em foreground: db + mailpit + app-em-container via tsx watch; Ctrl+C = SIGTERM gracioso) · `dev:down` · `dev:reset` · `dev:mail`.
 - Teste: `npm test` (sobe o Postgres-de-test isolado, roda o Vitest no host e **sempre** derruba ao final, inclusive em falha) · `test:coverage` · `test:watch` · helpers `test:services:up`/`down`. Testar 1 arquivo (com o test-db de pé): `npx vitest run <nome>` · watch: `npx vitest <nome>` · 1 caso: `-t "nome"`.
 - Produção: `npm run prod:up` (build + só app + Postgres-de-prod, `migrate deploy` no entrypoint) · `prod:down` · `prod:logs`.
@@ -101,7 +101,7 @@ Se perceber a necessidade de um script que não existe — algo que você (ou o 
 
 ## TODO e roadmap
 
-O estado atual, a ordem das tarefas e o que vem a seguir vivem em **`TODO.md`** e no documento de contexto CONTEXT.md. Consulte-o antes de começar qualquer tarefa para saber o próximo item e o que já está feito. Mantenha-o atualizado conforme concluir tarefas.
+O estado atual, a ordem das tarefas e o que vem a seguir vivem em **`docs/todo.md`** e no documento de contexto `docs/context.md`. Consulte-o antes de começar qualquer tarefa para saber o próximo item e o que já está feito. Mantenha-o atualizado conforme concluir tarefas.
 
 ## O que o projeto planeja ser
 

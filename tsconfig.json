@@ -2,7 +2,10 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     // File Layout
-    "rootDir": "./src",
+    // `rootDir` é a raiz porque o programa abrange src/ E tests/ — fixá-lo em
+    // ./src faria os testes caírem fora dele. Não afeta o bundle: quem gera é o
+    // tsup (entradas explícitas em tsup.config.ts); o tsc só roda com --noEmit.
+    "rootDir": ".",
     "outDir": "./dist",
 
     // Environment Settings
@@ -47,9 +50,13 @@
     "skipLibCheck": true,
 
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@tests/*": ["./tests/*"]
     }
   },
 
-  "include": ["src/**/*"]
+  // tests/ precisa estar no programa: é o que mantém o typecheck cobrindo os
+  // testes e o que faz o `declare module "vitest"` de tests/setup/vitest.d.ts
+  // (matcher toMatchView) ser aplicado.
+  "include": ["src/**/*", "tests/**/*"]
 }

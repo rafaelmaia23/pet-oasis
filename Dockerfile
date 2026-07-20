@@ -30,7 +30,7 @@ COPY --from=build /app/dist ./dist
 # a production dependency (already in node_modules).
 COPY --from=build /app/prisma ./prisma
 COPY package.json prisma.config.ts ./
-COPY docker-entrypoint.sh ./
+COPY infra/docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 USER node
 EXPOSE 3000
@@ -41,7 +41,7 @@ ENTRYPOINT ["./docker-entrypoint.sh"]
 # bind-mounted src/. Stays root (no `USER node`) so writes to the bind-mount and
 # to the anonymous src/generated volume don't hit host-uid mismatches. The
 # Prisma client is generated at container start into that anon volume
-# (see docker-compose.dev.yml + docker-entrypoint.dev.sh) — not baked here.
+# (see infra/docker-compose.dev.yml + infra/docker-entrypoint.dev.sh) — not baked here.
 FROM node:22-bookworm-slim AS dev
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
@@ -49,7 +49,7 @@ RUN npm ci
 COPY prisma ./prisma
 COPY src ./src
 COPY tsconfig.json tsup.config.ts prisma.config.ts ./
-COPY docker-entrypoint.dev.sh ./
+COPY infra/docker-entrypoint.dev.sh ./
 RUN chmod +x docker-entrypoint.dev.sh
 EXPOSE 3000
 ENTRYPOINT ["./docker-entrypoint.dev.sh"]

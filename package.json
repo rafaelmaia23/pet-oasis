@@ -1,7 +1,7 @@
 {
   "name": "pet-oasis",
   "version": "1.0.0",
-  "description": "",
+  "description": "API REST de um pet shop online — autenticação, autorização RBAC e gestão de usuários construídas do zero, com TDD.",
   "license": "MIT",
   "author": "Rafael Maia da Fonseca",
   "type": "module",

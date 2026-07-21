@@ -1,10 +1,12 @@
 import {
   createConflictError,
-  createForbiddenError,
   createNotFoundError,
   createValidationError,
 } from "@/errors";
-import { computeEffectiveFeatures } from "@/lib/authorization";
+import {
+  assertActorIsAdmin,
+  computeEffectiveFeatures,
+} from "@/lib/authorization";
 import * as featureRepository from "@/modules/feature/feature.repository";
 import { PERMISSION_FEATURES } from "../role/role.constants";
 import * as roleRepository from "../role/role.repository";
@@ -30,15 +32,10 @@ async function assertAdminForPermissionFeature(
 
   const requestingUser = await userRepository.findUserById(requestingUserId);
 
-  const isAdmin =
-    requestingUser?.roles.some((r) => r.role.name === "admin") ?? false;
-
-  if (!isAdmin) {
-    throw createForbiddenError({
-      message: "Apenas administradores podem alterar features de permissão",
-      action: "Solicite a um administrador que faça essa alteração",
-    });
-  }
+  assertActorIsAdmin(requestingUser, {
+    message: "Apenas administradores podem alterar features de permissão",
+    action: "Solicite a um administrador que faça essa alteração",
+  });
 }
 
 async function assertAdminForRoleAssignment(
@@ -54,15 +51,10 @@ async function assertAdminForRoleAssignment(
 
   const requestingUser = await userRepository.findUserById(requestingUserId);
 
-  const isAdmin =
-    requestingUser?.roles.some((r) => r.role.name === "admin") ?? false;
-
-  if (!isAdmin) {
-    throw createForbiddenError({
-      message: "Apenas administradores podem atribuir roles privilegiadas",
-      action: "Solicite a um administrador que faça essa alteração",
-    });
-  }
+  assertActorIsAdmin(requestingUser, {
+    message: "Apenas administradores podem atribuir roles privilegiadas",
+    action: "Solicite a um administrador que faça essa alteração",
+  });
 }
 
 function assertRoleAppliesToActiveProfile(

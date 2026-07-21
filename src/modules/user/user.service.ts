@@ -5,6 +5,7 @@ import {
 } from "@/errors";
 import type { AuthUser } from "@/lib/authorization";
 import {
+  assertActorIsAdmin,
   canActOnResource,
   computeEffectiveFeatures,
 } from "@/lib/authorization";
@@ -174,15 +175,10 @@ async function assertAdminForBan(
 
   const requestingUser = await userRepository.findUserById(requestingUserId);
 
-  const isAdmin =
-    requestingUser?.roles.some((r) => r.role.name === "admin") ?? false;
-
-  if (!isAdmin) {
-    throw createForbiddenError({
-      message: "Apenas administradores podem banir usuários privilegiados",
-      action: "Solicite a um administrador que faça essa alteração",
-    });
-  }
+  assertActorIsAdmin(requestingUser, {
+    message: "Apenas administradores podem banir usuários privilegiados",
+    action: "Solicite a um administrador que faça essa alteração",
+  });
 }
 
 export async function banUser(

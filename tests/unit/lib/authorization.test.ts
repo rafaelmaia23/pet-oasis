@@ -1,10 +1,13 @@
 import { makeAuthUser } from "@tests/factories/user.factory";
 import { describe, expect, it } from "vitest";
+import { ForbiddenError } from "@/errors";
 import {
+  assertActorIsAdmin,
   can,
   canActOnResource,
   computeEffectiveFeatures,
   hasFeature,
+  isAdmin,
 } from "@/lib/authorization";
 import type { FeatureName } from "@/modules/feature/feature.constants";
 
@@ -354,6 +357,60 @@ describe("Authorization", () => {
       const result = computeEffectiveFeatures(user);
 
       expect(result).toEqual(new Set(["*"]));
+    });
+  });
+
+  describe("isAdmin()", () => {
+    it("should return true if the actor has the admin role", () => {
+      const actor = { roles: [{ role: { name: "admin" } }] };
+
+      expect(isAdmin(actor)).toBe(true);
+    });
+
+    it("should return false if the actor has other roles only", () => {
+      const actor = {
+        roles: [{ role: { name: "manager" } }, { role: { name: "customer" } }],
+      };
+
+      expect(isAdmin(actor)).toBe(false);
+    });
+
+    // O ator pode ter sido deletado entre a autenticação e a busca no guard.
+    it("should return false for a missing actor", () => {
+      expect(isAdmin(null)).toBe(false);
+    });
+  });
+
+  describe("assertActorIsAdmin()", () => {
+    const denial = {
+      message: "Apenas administradores podem fazer isso",
+      action: "Solicite a um administrador",
+    };
+
+    it("should not throw for an admin actor", () => {
+      const actor = { roles: [{ role: { name: "admin" } }] };
+
+      expect(() => assertActorIsAdmin(actor, denial)).not.toThrow();
+    });
+
+    it("should throw a 403 carrying the caller's message and action", () => {
+      const actor = { roles: [{ role: { name: "manager" } }] };
+
+      expect(() => assertActorIsAdmin(actor, denial)).toThrow(ForbiddenError);
+      try {
+        assertActorIsAdmin(actor, denial);
+      } catch (error) {
+        expect(error).toMatchObject({
+          statusCode: 403,
+          code: "FORBIDDEN",
+          message: denial.message,
+          action: denial.action,
+        });
+      }
+    });
+
+    it("should throw for a missing actor", () => {
+      expect(() => assertActorIsAdmin(null, denial)).toThrow(ForbiddenError);
     });
   });
 });

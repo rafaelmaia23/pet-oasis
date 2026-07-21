@@ -31,9 +31,11 @@ Emitido pelo `pino-http`, uma linha por request.
 
 **Campos:** método, rota, status, duração (ms), IP (`req.ip`), user-agent, `requestId`, `userId` quando autenticado.
 
-**Níveis:** 5xx → `error`; 4xx → `warn`; demais → `info`. Rotas de ruído (`/status`, health checks) descem para `debug`, para não consumir cota do agregador sem informação.
+**Níveis:** 5xx → `error`; 4xx → `warn`; demais → `info`. Rotas de ruído descem para `debug`, para não consumir cota do agregador sem informação. A lista efetiva (7.4): `/api/v1/status` (healthcheck do Compose, a cada 5s), `/reference`, `/openapi.json`, `/scalar/standalone.js`.
 
 **Não contém:** body da requisição ou da resposta, header `Authorization`, cookies.
+
+**Nota de implementação (7.4):** a rota logada vem do `requestContext`, não de `req.url`. O Express reescreve `req.url` ao entrar em cada router montado e a linha só é emitida no fim do request — usar `req.url` faria `/api/v1/status` aparecer como `/`, e a regra de rota-de-ruído nunca casaria.
 
 ---
 
@@ -60,11 +62,13 @@ O nível é definido pela **ação que a linha exige**, não pela gravidade que 
 
 `LOG_LEVEL` controla o piso; o pino emite aquele nível **e todos acima**.
 
-| Ambiente | `LOG_LEVEL` | Efeito |
-|---|---|---|
-| development | `debug` | tudo menos `trace`, formatado com `pino-pretty` |
-| test | `silent` (ou `error`) | suíte não polui a saída |
-| production / demo | `info` | `info`, `warn`, `error`, `fatal` — JSON puro |
+| Ambiente | `LOG_LEVEL` | Destinos | Efeito |
+|---|---|---|---|
+| development | `debug` | `pino-pretty` + ring buffer | tudo menos `trace`, formatado e colorido |
+| test | `debug` | **só o ring buffer** | suíte silenciosa **e** as linhas continuam assertáveis |
+| production / demo | `info` | stdout (JSON) + ring buffer | `info`, `warn`, `error`, `fatal` |
+
+**Por que o test não é `silent` (7.3):** silenciar a raiz do pino impediria testar qualquer linha — e a política depende de teste para valer (§10, item 7). A saída limpa vem de **não montar o stream de stdout no test**, não de desligar o logger. Os testes afirmam sobre `logBuffer.list()`, sem mock, usando o mesmo mecanismo que `GET /logs/recent` expõe.
 
 ### 3.3 Onde o application log é aplicado
 
@@ -163,6 +167,8 @@ A lista é única e compartilhada: qualquer destino novo (Axiom, Sentry, ring bu
 Todo request recebe um `requestId` no middleware de topo (`x-request-id` do cliente se vier, senão `crypto.randomUUID()`), guardado em `AsyncLocalStorage`. O `mixin` do logger raiz injeta esse id em **toda** linha, e o `auditLog.record()` lê `actorId`/`ip`/`userAgent` do mesmo store.
 
 Efeito prático: com um `requestId` você recupera a linha de access log, todas as linhas de application log e as linhas de audit daquele request, nos três destinos.
+
+**O id é devolvido ao cliente (7.5):** no header `x-request-id` de toda resposta e no campo `requestId` do corpo de **toda resposta de erro**. É o que transforma "deu erro ontem à tarde" num request localizável: o usuário cita o id. O `requestId` **não** é segredo — não revela nada sobre o sistema — e o corpo de erro nunca carrega stack.
 
 **Decisão registrada:** `AsyncLocalStorage` é uma exceção consciente ao princípio "explicit over implicit" do projeto. A alternativa — passar um `context` em toda assinatura de service — seria explícita, mas poluiria dezenas de assinaturas para entregar um valor usado só no fundo da pilha. A exceção fica limitada ao contexto de observabilidade; nenhuma regra de negócio lê do store.
 

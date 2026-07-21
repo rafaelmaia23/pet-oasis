@@ -232,7 +232,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | Sessão | Sub-fases | Tema | Por que agrupa |
 |---|---|---|---|
 | **A** ✅ | 7.0, 7.1, 7.2 | Fundação de infra + bordas + guards | Redis/env/deps, helmet+CORS+Scalar auto-hospedado e o refactor dos 3 guards. Nada aqui depende de log. |
-| **B** | 7.3, 7.4, 7.5 | Observabilidade interna | Logger + `AsyncLocalStorage` + ring buffer são inúteis sem consumidor; access e application log são os consumidores. |
+| **B** ✅ | 7.3, 7.4, 7.5 | Observabilidade interna | Logger + `AsyncLocalStorage` + ring buffer são inúteis sem consumidor; access e application log são os consumidores. |
 | **C** | 7.6 | Audit log | Migration + taxonomia + `auditLog.record` + ~18 pontos de chamada. Grande sozinha. |
 | **D** | 7.7, 7.8 | Paginação + leitura de log | 7.8 consome o helper da 7.7 (cursor em `/audit-logs`); a 7.7 já migra todas as listagens para o envelope. |
 | **E** | 7.10, 7.11 | Rate limit + lockout | Mesma infra (Redis), mesmo endpoint alvo (`/auth/login`), mesmas ações de audit. |
@@ -268,39 +268,43 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ Refactor comportamento-preservado: a suíte de escalação existente passou **sem uma linha alterada**; só entraram testes unitários do helper (inclusive ator `null` — deletado entre a autenticação e a busca do guard — contando como não-admin).
 - ✅ Nota: o helper é pré-requisito da 7.11 (`DELETE /users/:id/lock`), que seria a quarta cópia.
 
-### ⬜ [Sessão B] Fase 7.3 — Fundação de observabilidade
-> Base compartilhada pelas três categorias de log. Nenhum log novo é emitido aqui — só a infraestrutura que as 7.4/7.5/7.6 vão usar. Regras completas em `docs/logging-policy.md`.
+### ✅ [Sessão B] Fase 7.3 — Fundação de observabilidade
+> Base compartilhada pelas três categorias de log. Nenhum log novo é emitido aqui — só a infraestrutura que as 7.4/7.5/7.6 usam. Regras completas em `docs/logging-policy.md`.
 
-- ⬜ `src/lib/logger.ts`: instância raiz do `pino`, `level` vindo de `LOG_LEVEL` (default `info` em prod, `debug` em dev), `pino-pretty` só em dev.
-- ⬜ `redact` configurado com a lista de campos proibidos da política (`*.password`, `*.passwordHash`, `*.currentPassword`, `*.newPassword`, `*.token`, `*.refreshToken`, `*.accessToken`, `req.headers.authorization`, `req.headers.cookie`).
-- ⬜ `src/lib/requestContext.ts`: `AsyncLocalStorage` com `{ requestId, actorId, ip, userAgent }`; middleware no topo abre o store por request (`requestId` = header `x-request-id` se vier, senão `crypto.randomUUID()`).
-- ⬜ `mixin` no logger raiz lendo `requestId` do store → **todo** log sai correlacionado sem ninguém passar nada adiante.
-- ⬜ `src/lib/logBuffer.ts`: ring buffer (array circular de tamanho `LOG_BUFFER_SIZE`, default 500), `push`/`list`, truncando entradas acima de um `maxEntrySize`. Plugado como stream via `pino.multistream([stdout, buffer])`.
-- ⬜ Testes: `redact` esconde cada campo proibido; `requestId` aparece em log emitido de dentro de um service; ring buffer sobrescreve o mais antigo ao encher e nunca passa do teto.
-- ⬜ Decisão já registrada no `docs/context.md` §2.2 e em `docs/logging-policy.md` §6: `AsyncLocalStorage` é a **exceção consciente** ao princípio "explicit over implicit" (a alternativa era parameter drilling do contexto em toda assinatura de service).
+- ✅ `src/lib/logger.ts`: instância raiz do `pino`, `level` de `LOG_LEVEL` (dev `debug`, prod `info`).
+- ✅ **Streams por ambiente** (`pino.multistream`): prod → stdout JSON + buffer; dev → `pino-pretty` + buffer; **test → só o buffer**. É o que permitiu tirar o `silent` do `.env.test`: a suíte segue silenciosa e ainda assim afirma sobre as linhas emitidas, sem mock, pelo mesmo mecanismo que a 7.8 vai expor.
+- ✅ `redact` com a lista da política §5.1 (`password`, `currentPassword`, `newPassword`, `passwordHash`, `token`, `accessToken`, `refreshToken`, `req.headers.authorization`, `req.headers.cookie`, `set-cookie`), cada um também na forma `*.campo` — no pino os caminhos são literais, `x` só pega o topo.
+- ✅ `src/lib/requestContext.ts`: `AsyncLocalStorage` com `{ requestId, actorId, ip, userAgent, url, method }`; middleware **primeiro de todos** no `app.ts` (para uma request recusada por middleware ainda logar correlacionada), `requestId` = header `x-request-id` do cliente ou `randomUUID()`, ecoado na resposta. `authenticate` chama `setActorId` depois de validar o JWT.
+- ✅ `mixin` no logger raiz lendo o `requestId` do store → **toda** linha sai correlacionada.
+- ✅ `src/lib/logBuffer.ts`: ring buffer circular de `LOG_BUFFER_SIZE` (default 500) com `push`/`list`/`clear`, truncando entrada acima de `MAX_ENTRY_SIZE` (uma linha gigante não pode comer a memória das outras) e descartando linha malformada em silêncio — o subsistema de log nunca derruba quem loga. Serve de stream do pino guardando o objeto **já parseado**.
+- ✅ Testes: cada campo proibido some da linha; `requestId` presente dentro de um store e ausente fora; buffer sobrescreve o mais antigo, respeita o teto e trunca entrada gigante; contextos concorrentes não se misturam.
+- ✅ `AsyncLocalStorage` é a **exceção consciente** ao "explicit over implicit" (registrada no `docs/context.md` §2.2 e na política §6); o escopo é estrito: nenhuma regra de negócio lê do store.
 
-### ⬜ [Sessão B] Fase 7.4 — Access log HTTP
-- ⬜ `pino-http` **consumindo a instância de `src/lib/logger.ts`** (não criando outra) e logando toda request: método, rota, status, duração, IP (via `req.ip`), user-agent, `requestId`, `userId` quando autenticado.
-- ⬜ `customLogLevel`: 5xx → `error`, 4xx → `warn`, resto → `info`.
-- ⬜ Rotas de ruído (`/status`, health) em nível `debug`, para não inundar o Axiom.
-- ⬜ Nunca logar body, header `Authorization`, cookies ou senha (garantido pelo `redact` da 7.3 + teste).
-- ⬜ Nota: retenção/agregação fora da app é responsabilidade de infra/deploy (destinos na 7.9).
+### ✅ [Sessão B] Fase 7.4 — Access log HTTP
+- ✅ `pino-http` (`src/middlewares/access-log.middleware.ts`) **consumindo a instância de `src/lib/logger.ts`** — herda `redact`, `mixin` e os streams. Uma linha por request: método, rota, status, duração, IP, user-agent, `requestId`, `userId` quando autenticado.
+- ✅ `customLogLevel`: 5xx → `error`, 4xx → `warn`, resto → `info`.
+- ✅ Rotas de ruído em `debug`: `/api/v1/status` (é o healthcheck do Compose, bate a cada 5s em prod), `/reference`, `/openapi.json`, `/scalar/standalone.js`. Sob `LOG_LEVEL=info` elas somem sem precisar de filtro no agregador — **verificado em produção**.
+- ✅ Serializers de `req`/`res` anulados (o par cru traria os headers inteiros); os campos úteis vão por `customProps`. Nada de body, `Authorization`, cookie ou senha — com teste.
+- ✅ **Achado da implementação:** a rota tem de vir do `requestContext`, não de `req.url`. O Express **reescreve `req.url`** ao descer nos routers montados, e o access log só é emitido no fim do request — a essa altura `/api/v1/status` já virou `/`, e a regra de rota-de-ruído nunca casava. Pego pelo teste de nível das rotas de ruído.
+- ✅ Nota: retenção/agregação fora da app é responsabilidade de infra/deploy (destinos na 7.9).
 
-### ⬜ [Sessão B] Fase 7.5 — Application log
-> Não é um service novo — é o `pino` da 7.3 usado com convenção. Esta sub-fase **define as regras e aplica nos services que já existem**, não só configura.
+### ✅ [Sessão B] Fase 7.5 — Application log
+> Não é um service novo — é o `pino` da 7.3 usado com convenção. Esta sub-fase **definiu as regras e aplicou nos services que já existem**.
 
-- ⬜ Padrão `logger.child({ module: "auth" })` por módulo, documentado.
-- ⬜ Critério de nível fixado na política e aplicado: `error` = precisa de ação humana; `warn` = anomalia esperada e tratada; `info` = evento relevante de negócio/ciclo de vida; `debug` = detalhe de investigação (fora de prod).
-- ⬜ Aplicar nos services existentes (varredura módulo a módulo, sem inventar evento novo):
-  - ⬜ `auth.service` — login ok/falho, refresh, rotação de token, **detecção de reuso de refresh token** (`warn`), logout.
-  - ⬜ `password.service` — reset solicitado/concluído, change concluído, tentativa com token expirado (`warn`).
-  - ⬜ verificação de email — envio disparado, falha de envio da Resend (`error`), reenvio.
-  - ⬜ `user.service` — criação, soft delete, ban/unban.
-  - ⬜ `permission.service` — grant/revoke de role e de override.
-  - ⬜ `src/lib/shutdown.ts` + boot — start, SIGTERM recebido, conexões fechadas.
-- ⬜ Substituir qualquer `console.log`/`console.error` remanescente pelo logger.
-- ⬜ `errorHandler` loga o erro **uma única vez**, com `requestId`; 5xx em `error`, 4xx esperado em `warn`; sem stack trace no corpo da resposta em prod.
-- ⬜ Testes: log de erro não vaza campo proibido; `requestId` do access log e do application log do mesmo request batem.
+- ✅ Padrão `logger.child({ module })` por módulo: `auth`, `password`, `verification`, `user`, `permission`, `email`, `redis`, `lifecycle`, `http`.
+- ✅ Critério de nível da política §3.1 aplicado com a regra anti-inflação ("alguém vai agir ao ver isso?"): login/reset recusados e token rejeitado são `warn` (anomalia esperada e tratada); falha de envio de email é `error` (alguém precisa olhar o relay); erro de conexão do Redis é `error` (enquanto durar, rate limit e lockout ficam fail-open).
+- ✅ Aplicado nos services existentes, sem inventar evento novo:
+  - ✅ `auth.service` — login ok/falho (com `reason`), refusa por ban/status, rotação de refresh, **reuso de refresh token detectado** (`warn`, dizendo que todas as sessões caíram), logout, revogação de sessão.
+  - ✅ `password.service` — reset solicitado/concluído, change concluído, token inválido/usado/expirado (`warn`), conta banida (`warn`), senha atual errada (`warn`).
+  - ✅ `verification.service` — envio disparado, email verificado, token inválido (`warn`).
+  - ✅ `lib/email.ts` — falha de envio em `error` **antes** de virar o 503 (sem a linha, a causa se perdia).
+  - ✅ `user.service` — criação, soft delete, ban/unban (o **texto** do motivo do ban não entra na linha).
+  - ✅ `permission.service` — grant/revoke de role e de override.
+  - ✅ `shutdown.ts` + boot — start, SIGTERM, conexões fechadas (a dep injetada deixou de ser `Console` e virou `{ info, error }`).
+- ✅ Nenhum `console.*` restou em `src/`, com a única exceção que a política declara: `config/env.ts`, que reporta env inválida antes do `exit(1)` — ali o logger ainda não pode existir, porque depende do `LOG_LEVEL` que acabou de falhar na validação.
+- ✅ `errorHandler` reescrito com **ponto único de saída**: loga uma vez só (5xx `error` com stack, 4xx `warn` sem) e responde. Stack nunca vai no corpo.
+- ✅ **`requestId` no corpo do erro** (decisão desta sessão, junto do header `x-request-id`): quem reporta um problema cita o id e o request inteiro é recuperável nos três logs. `errorResponseSchema`/`validationErrorSchema` do OpenAPI acompanham. Aditivo — nenhum teste afirmava shape estrito de corpo de erro.
+- ✅ Testes: login errado em `warn` sem a senha; login certo em `info` com `userId`; soft delete em `info`; 404 legítimo **não** gera linha `error`; `requestId` do access log = do application log = do corpo do erro = do header.
 
 ### ⬜ [Sessão C] Fase 7.6 — Audit log de ações sensíveis
 - ⬜ Migration: model `AuditLog` (`id`, `actorId?`, `action`, `targetType`, `targetId?`, `metadata Json?`, `ip?`, `userAgent?`, `createdAt`); índices em `(createdAt, id)`, `action`, `actorId`, `targetId`.

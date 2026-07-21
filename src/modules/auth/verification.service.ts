@@ -1,10 +1,13 @@
 import { env } from "@/config/env";
 import { createBadRequestError } from "@/errors";
 import { send } from "@/lib/email";
+import { logger } from "@/lib/logger";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import { findUserByEmail } from "@/modules/user/user.repository";
 import { EMAIL_VERIFICATION_TTL_MS } from "./auth.constants";
 import * as authRepository from "./auth.repository";
+
+const log = logger.child({ module: "verification" });
 
 const INVALID_TOKEN_ERROR = {
   message: "Token de verificação inválido ou expirado",
@@ -34,6 +37,8 @@ export async function issueEmailVerification(userId: string, email: string) {
   const { subject, html, text } = buildVerificationEmail(rawToken);
 
   await send({ to: email, subject, html, text });
+
+  log.info({ userId }, "email verification sent");
 }
 
 export async function verifyEmail(token: string) {
@@ -47,12 +52,24 @@ export async function verifyEmail(token: string) {
     verificationToken.usedAt !== null ||
     verificationToken.expiresAt < new Date()
   ) {
+    log.warn(
+      {
+        ...(verificationToken ? { userId: verificationToken.userId } : {}),
+        reason: verificationToken ? "USED_OR_EXPIRED" : "UNKNOWN_TOKEN",
+      },
+      "email verification refused",
+    );
     throw createBadRequestError(INVALID_TOKEN_ERROR);
   }
 
   await authRepository.consumeEmailVerification(
     verificationToken.id,
     verificationToken.userId,
+  );
+
+  log.info(
+    { userId: verificationToken.userId },
+    "email verified, account activated",
   );
 }
 

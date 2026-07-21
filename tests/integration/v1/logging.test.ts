@@ -15,6 +15,16 @@ function accessLines() {
   return logBuffer.list().filter((entry) => "responseTime" in entry);
 }
 
+/** Linhas de application log — as que não vieram do access log. */
+function appLines() {
+  return logBuffer.list().filter((entry) => !("responseTime" in entry));
+}
+
+/** pino: error = 50. */
+function errorLines() {
+  return logBuffer.list().filter((entry) => entry.level === 50);
+}
+
 describe("Access log", () => {
   beforeEach(() => {
     logBuffer.clear();
@@ -99,6 +109,106 @@ describe("Access log", () => {
     await flush();
 
     expect(accessLines()[0]).toMatchObject({ requestId: "req-do-cliente-abc" });
+  });
+});
+
+describe("Application log", () => {
+  beforeEach(async () => {
+    await clearDatabase();
+    logBuffer.clear();
+  });
+
+  it("should log a failed login at warn, without the password", async () => {
+    const customer = await buildCustomer();
+    logBuffer.clear();
+
+    await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: customer.email, password: "SenhaErrada1!" });
+    await flush();
+
+    const line = appLines().find((entry) => entry.module === "auth");
+
+    expect(line).toMatchObject({ level: 40 });
+    expect(JSON.stringify(logBuffer.list())).not.toContain("SenhaErrada1!");
+  });
+
+  it("should log a successful login at info, tagged with the module", async () => {
+    const customer = await buildCustomer();
+    logBuffer.clear();
+
+    await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: customer.email, password: customer.password });
+    await flush();
+
+    expect(appLines().find((entry) => entry.module === "auth")).toMatchObject({
+      level: 30,
+      userId: customer.id,
+    });
+  });
+
+  it("should log a user soft delete at info", async () => {
+    const admin = await buildCustomer({ grants: ["delete:user:others"] });
+    const target = await buildCustomer();
+    const accessToken = await loginAs(admin.email, admin.password);
+    logBuffer.clear();
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}`)
+      .set("Authorization", `Bearer ${accessToken}`);
+    await flush();
+
+    expect(appLines().find((entry) => entry.module === "user")).toMatchObject({
+      level: 30,
+      userId: target.id,
+    });
+  });
+
+  // Política §3.1: um 404 legítimo é comportamento correto, não incidente.
+  it("should log an expected 4xx at warn and never at error", async () => {
+    await request(app).get("/api/v1/rota-que-nao-existe");
+    await flush();
+
+    expect(errorLines()).toHaveLength(0);
+  });
+
+  it("should log an unexpected error exactly once, with stack and requestId", async () => {
+    const response = await request(app)
+      .get("/api/v1/users/nao-e-uuid")
+      .set("Authorization", "Bearer token-invalido");
+    await flush();
+
+    // Erro esperado (401): nenhuma linha de error, uma resposta correlacionada.
+    expect(errorLines()).toHaveLength(0);
+    expect(response.body.requestId).toBe(response.headers[REQUEST_ID_HEADER]);
+  });
+
+  it("should carry the requestId in every error body", async () => {
+    const response = await request(app).get("/api/v1/roles");
+
+    expect(response.status).toBe(401);
+    expect(response.body).toMatchObject({
+      code: "UNAUTHORIZED",
+      requestId: response.headers[REQUEST_ID_HEADER],
+    });
+  });
+
+  it("should correlate the access log and the application log of one request", async () => {
+    const customer = await buildCustomer();
+    logBuffer.clear();
+
+    const response = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: customer.email, password: customer.password });
+    await flush();
+
+    const requestId = response.headers[REQUEST_ID_HEADER];
+    const access = accessLines()[0];
+    const application = appLines().find((entry) => entry.module === "auth");
+
+    expect(access?.requestId).toBe(requestId);
+    expect(application?.requestId).toBe(requestId);
   });
 });
 

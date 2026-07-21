@@ -1,6 +1,14 @@
+import { logger } from "@/lib/logger";
+
 type ShutdownServer = { close(callback: (err?: Error) => void): void };
 type ShutdownPrisma = { $disconnect(): Promise<void> };
 type ShutdownRedis = { quit(): Promise<unknown> };
+
+/** Logger mínimo que o handler precisa — injetável para teste. */
+type ShutdownLogger = {
+  info(obj: object, msg?: string): void;
+  error(obj: object, msg?: string): void;
+};
 
 type ShutdownDeps = {
   server: ShutdownServer;
@@ -8,7 +16,7 @@ type ShutdownDeps = {
   redis?: ShutdownRedis;
   timeoutMs?: number;
   exit?: (code: number) => void;
-  log?: Pick<Console, "log" | "error">;
+  log?: ShutdownLogger;
 };
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -32,7 +40,7 @@ export function createShutdownHandler({
   redis,
   timeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS,
   exit = (code) => process.exit(code),
-  log = console,
+  log = logger.child({ module: "lifecycle" }),
 }: ShutdownDeps): (signal: string) => Promise<void> {
   let started = false;
   let settled = false;
@@ -47,10 +55,10 @@ export function createShutdownHandler({
     if (started) return;
     started = true;
 
-    log.log(`Received ${signal}, shutting down gracefully...`);
+    log.info({ signal }, "shutting down gracefully");
 
     const forceTimer = setTimeout(() => {
-      log.error(`Shutdown timed out after ${timeoutMs}ms, forcing exit.`);
+      log.error({ timeoutMs }, "shutdown timed out, forcing exit");
       settle(1);
     }, timeoutMs);
     // Don't let the timer keep an otherwise-idle event loop alive.
@@ -66,16 +74,16 @@ export function createShutdownHandler({
         try {
           await redis.quit();
         } catch (error) {
-          log.error("Error closing the Redis connection:", error);
+          log.error({ err: error }, "error closing the redis connection");
         }
       }
 
       clearTimeout(forceTimer);
-      log.log("Shutdown complete.");
+      log.info({ signal }, "shutdown complete");
       settle(0);
     } catch (error) {
       clearTimeout(forceTimer);
-      log.error("Error during shutdown:", error);
+      log.error({ err: error }, "error during shutdown");
       settle(1);
     }
   };

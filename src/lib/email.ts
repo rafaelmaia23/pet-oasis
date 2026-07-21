@@ -1,6 +1,9 @@
 import nodemailer from "nodemailer";
 import { env } from "@/config/env";
 import { createServiceUnavailableError } from "@/errors";
+import { logger } from "@/lib/logger";
+
+const log = logger.child({ module: "email" });
 
 type SendEmailInput = {
   to: string;
@@ -33,6 +36,10 @@ async function send({
       ...(text !== undefined ? { text } : {}),
     });
   } catch (error) {
+    // `error`: o relay recusou o envio e alguém precisa olhar (chave da Resend,
+    // domínio, cota). O usuário só vê o 503; sem esta linha, a causa se perde.
+    log.error({ err: error, subject }, "email delivery failed");
+
     throw createServiceUnavailableError({
       message: "Não foi possível enviar o email no momento",
       action: "Tente novamente mais tarde",

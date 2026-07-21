@@ -15,6 +15,11 @@ export const errorResponseSchema = z
       example: "Verifique o identificador informado e tente novamente",
     }),
     code: z.string().optional().meta({ example: "NOT_FOUND" }),
+    requestId: z.string().optional().meta({
+      description:
+        "Id do request, igual ao header x-request-id. Cite-o ao reportar um problema: ele recupera o request inteiro nos logs.",
+      example: "5b1f8c2e-0d3a-4f5b-9c7d-2a1e6f4b8c90",
+    }),
   })
   .meta({ id: "ErrorResponse", description: "Formato padrão de erro da API" });
 
@@ -31,6 +36,10 @@ export const validationErrorSchema = z
     errors: z
       .record(z.string(), z.array(z.string()))
       .meta({ example: { email: ["Invalid email address"] } }),
+    requestId: z.string().optional().meta({
+      description: "Id do request, igual ao header x-request-id.",
+      example: "5b1f8c2e-0d3a-4f5b-9c7d-2a1e6f4b8c90",
+    }),
   })
   .meta({
     id: "ValidationError",

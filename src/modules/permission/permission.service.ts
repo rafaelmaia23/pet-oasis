@@ -7,12 +7,15 @@ import {
   assertActorIsAdmin,
   computeEffectiveFeatures,
 } from "@/lib/authorization";
+import { logger } from "@/lib/logger";
 import * as featureRepository from "@/modules/feature/feature.repository";
 import { PERMISSION_FEATURES } from "../role/role.constants";
 import * as roleRepository from "../role/role.repository";
 import { toRoleDTO } from "../role/role.service";
 import * as userRepository from "../user/user.repository";
 import * as permissionRepository from "./permission.repository";
+
+const log = logger.child({ module: "permission" });
 
 const PERMISSION_FEATURE_SET: Set<string> = new Set(PERMISSION_FEATURES);
 
@@ -168,6 +171,16 @@ export async function addUserRole(
 
   const userRole = await permissionRepository.addUserRole(targetUserId, roleId);
 
+  log.info(
+    {
+      userId: targetUserId,
+      actorId: requestingUserId,
+      roleId,
+      roleName: role.name,
+    },
+    "role granted",
+  );
+
   return toRoleDTO(userRole.role);
 }
 
@@ -223,7 +236,19 @@ export async function removeUserRole(
     }
   }
 
-  return permissionRepository.removeUserRole(userRole.id);
+  const removed = await permissionRepository.removeUserRole(userRole.id);
+
+  log.info(
+    {
+      userId: targetUserId,
+      actorId: requestingUserId,
+      roleId,
+      roleName: role.name,
+    },
+    "role revoked",
+  );
+
+  return removed;
 }
 
 export async function upsertUserFeature(
@@ -252,11 +277,23 @@ export async function upsertUserFeature(
     });
   }
 
-  return await permissionRepository.upsertUserFeature(
+  const userFeature = await permissionRepository.upsertUserFeature(
     targetUserId,
     featureId,
     granted,
   );
+
+  log.info(
+    {
+      userId: targetUserId,
+      actorId: requestingUserId,
+      featureName: feature.name,
+      effect: granted ? "GRANT" : "DENY",
+    },
+    "feature override set",
+  );
+
+  return userFeature;
 }
 
 export async function removeUserFeature(
@@ -293,5 +330,12 @@ export async function removeUserFeature(
     });
   }
 
-  return permissionRepository.removeUserFeature(userFeature.id);
+  const removed = await permissionRepository.removeUserFeature(userFeature.id);
+
+  log.info(
+    { userId: targetId, actorId: requesterId, featureName: feature.name },
+    "feature override removed",
+  );
+
+  return removed;
 }

@@ -6,6 +6,7 @@ import {
   createNotFoundError,
   createUnauthorizedError,
 } from "@/errors";
+import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import * as userService from "@/modules/user/user.service";
@@ -14,6 +15,8 @@ import type { CreateCustomerInput } from "../user/user.schema";
 import { REFRESH_TOKEN_TTL_MS } from "./auth.constants";
 import * as authRepository from "./auth.repository";
 import type { LoginInput } from "./auth.schema";
+
+const log = logger.child({ module: "auth" });
 
 function generateToken(userId: string): string {
   return jwt.sign({ sub: userId }, env.JWT_SECRET, {
@@ -34,6 +37,9 @@ export async function login(
   const user = await userRepository.findUserByEmail(data.email);
 
   if (!user) {
+    // Sem `userId`: não há conta. O email fica de fora de propósito — a linha
+    // não precisa dele para contar a história, e ele é PII.
+    log.warn({ reason: "UNKNOWN_EMAIL" }, "login failed");
     throw createUnauthorizedError({
       message: "Credenciais inválidas",
       action: "Verifique seu email e senha e tente novamente",
@@ -43,6 +49,7 @@ export async function login(
   const passwordMatch = await verifyPassword(data.password, user.passwordHash);
 
   if (!passwordMatch) {
+    log.warn({ userId: user.id, reason: "BAD_PASSWORD" }, "login failed");
     throw createUnauthorizedError({
       message: "Credenciais inválidas",
       action: "Verifique seu email e senha e tente novamente",
@@ -50,6 +57,7 @@ export async function login(
   }
 
   if (user.bannedAt !== null) {
+    log.warn({ userId: user.id, reason: "BANNED" }, "login refused");
     throw createForbiddenError({
       message: "Conta suspensa",
       action: "Se você acha que isso é um erro, entre em contato com o suporte",
@@ -57,6 +65,10 @@ export async function login(
   }
 
   if (user.status !== "ACTIVE") {
+    log.warn(
+      { userId: user.id, reason: "NOT_VERIFIED", status: user.status },
+      "login refused",
+    );
     throw createForbiddenError({
       message: "Conta não verificada",
       action: "Verifique seu email para ativar a conta",
@@ -73,6 +85,8 @@ export async function login(
     userAgent: context.userAgent,
     ipAddress: context.ipAddress,
   });
+
+  log.info({ userId: user.id }, "login succeeded");
 
   return { accessToken, refreshToken };
 }
@@ -99,15 +113,27 @@ export async function refresh(
   }
 
   if (session.usedAt) {
+    // Um refresh token só é apresentado uma vez; a segunda apresentação
+    // significa que alguém tem uma cópia. Anomalia tratada (todas as sessões
+    // caem) — mas é o sinal mais importante deste módulo.
+    log.warn(
+      { userId: session.userId, sessionId: session.id },
+      "refresh token reuse detected, invalidating all sessions",
+    );
     await authRepository.invalidateAllUserSessions(session.userId);
     throw createUnauthorizedError(REFRESH_INVALID_ERROR);
   }
 
   if (session.invalidatedAt) {
+    log.warn(
+      { userId: session.userId, reason: "INVALIDATED" },
+      "refresh refused",
+    );
     throw createUnauthorizedError(REFRESH_INVALID_ERROR);
   }
 
   if (session.expiresAt < new Date()) {
+    log.warn({ userId: session.userId, reason: "EXPIRED" }, "refresh refused");
     throw createUnauthorizedError(REFRESH_INVALID_ERROR);
   }
 
@@ -122,6 +148,11 @@ export async function refresh(
   });
 
   const accessToken = generateToken(session.userId);
+
+  log.info(
+    { userId: session.userId, sessionId: session.id },
+    "refresh token rotated",
+  );
 
   return { accessToken, refreshToken: newRefreshToken };
 }
@@ -148,6 +179,8 @@ export async function logout(refreshToken: string | undefined, userId: string) {
   }
 
   await authRepository.invalidateSession(session.id);
+
+  log.info({ userId, sessionId: session.id }, "logout");
 }
 
 export async function listSessions(userId: string) {
@@ -177,4 +210,6 @@ export async function revokeSession(userId: string, sessionId: string) {
   }
 
   await authRepository.invalidateSession(session.id);
+
+  log.info({ userId, sessionId: session.id }, "session revoked");
 }

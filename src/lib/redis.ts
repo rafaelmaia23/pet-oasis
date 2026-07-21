@@ -1,5 +1,8 @@
 import Redis from "ioredis";
 import { env } from "@/config/env";
+import { logger } from "@/lib/logger";
+
+const log = logger.child({ module: "redis" });
 
 /** Backoff entre tentativas de reconexão, limitado para não inundar o log. */
 const RECONNECT_BASE_DELAY_MS = 200;
@@ -16,7 +19,6 @@ const RECONNECT_MAX_DELAY_MS = 5_000;
  * O listener de `error` só loga: o Redis nunca pode derrubar o boot nem o
  * processo. Falha de conexão é anomalia observável, não motivo de crash.
  *
- * TODO(7.5): trocar o `console.error` pelo logger do módulo.
  * TODO(7.13): `connectTimeout`/`commandTimeout` entram junto com os demais
  * timeouts — sem eles, um Redis que aceita a conexão e não responde ainda
  * penduraria o request pelo timeout de socket do SO.
@@ -29,7 +31,9 @@ export const redis = new Redis(env.REDIS_URL, {
 });
 
 redis.on("error", (error: unknown) => {
-  console.error("Redis connection error:", error);
+  // `error` porque alguém precisa agir: enquanto durar, rate limit e lockout
+  // (7.10/7.11) estão fail-open — sem proteção, mas sem derrubar o login.
+  log.error({ err: error }, "redis connection error");
 });
 
 /** Encerra a conexão no shutdown gracioso. Idempotente. */

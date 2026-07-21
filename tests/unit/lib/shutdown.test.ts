@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createShutdownHandler } from "@/lib/shutdown";
 
-const silentLog = { log: vi.fn(), error: vi.fn() };
+const silentLog = { info: vi.fn(), error: vi.fn() };
 
 type CloseCb = (err?: Error) => void;
 

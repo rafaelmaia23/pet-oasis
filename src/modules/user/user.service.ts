@@ -9,6 +9,7 @@ import {
   canActOnResource,
   computeEffectiveFeatures,
 } from "@/lib/authorization";
+import { logger } from "@/lib/logger";
 import { hashPassword } from "@/lib/password";
 import * as userRepository from "@/modules/user/user.repository";
 import type {
@@ -20,6 +21,8 @@ import { validateRoles } from "@/utils/validateRoles";
 import { issueEmailVerification } from "../auth/verification.service";
 import { PERMISSION_FEATURES, type RoleName } from "../role/role.constants";
 import { getRolesByNames } from "../role/role.repository";
+
+const log = logger.child({ module: "user" });
 
 export const DEFAULT_EMPLOYEE_ROLES: RoleName[] = ["attendant"];
 export const DEFAULT_CUSTOMER_ROLES: RoleName[] = ["customer"];
@@ -41,6 +44,15 @@ export async function createEmployee(data: CreateEmployeeInput) {
     roleNames: rolesList.map((r) => r.name as RoleName),
   });
 
+  log.info(
+    {
+      userId: user.id,
+      profile: "EMPLOYEE",
+      roles: rolesList.map((r) => r.name),
+    },
+    "user created",
+  );
+
   await issueEmailVerification(user.id, user.email);
 
   return user;
@@ -60,6 +72,8 @@ export async function createCustomer(data: CreateCustomerInput) {
     passwordHash,
     roleNames: rolesList.map((r) => r.name as RoleName),
   });
+
+  log.info({ userId: user.id, profile: "CUSTOMER" }, "user created");
 
   await issueEmailVerification(user.id, user.email);
 
@@ -154,7 +168,15 @@ export async function deleteUser(requestingUser: AuthUser, targetId: string) {
     });
   }
 
-  return await userRepository.softDeleteUserAndInvalidateSessions(targetId);
+  const deleted =
+    await userRepository.softDeleteUserAndInvalidateSessions(targetId);
+
+  log.info(
+    { userId: targetId, actorId: requestingUser.id },
+    "user soft deleted, all sessions invalidated",
+  );
+
+  return deleted;
 }
 
 type UserForFeatureComputation = NonNullable<
@@ -211,11 +233,20 @@ export async function banUser(
     });
   }
 
-  return userRepository.banUserAndInvalidateSessions(
+  const banned = await userRepository.banUserAndInvalidateSessions(
     targetId,
     requestingUserId,
     reason,
   );
+
+  // O texto do motivo não entra na linha: fica no banco, para quem tem
+  // permissão de ler o usuário.
+  log.info(
+    { userId: targetId, actorId: requestingUserId },
+    "user banned, all sessions invalidated",
+  );
+
+  return banned;
 }
 
 export async function unbanUser(requestingUserId: string, targetId: string) {
@@ -244,5 +275,9 @@ export async function unbanUser(requestingUserId: string, targetId: string) {
     });
   }
 
-  return userRepository.unbanUser(targetId);
+  const unbanned = await userRepository.unbanUser(targetId);
+
+  log.info({ userId: targetId, actorId: requestingUserId }, "user unbanned");
+
+  return unbanned;
 }

@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { env } from "@/config/env";
 import { createUnauthorizedError } from "@/errors";
 import { computeEffectiveFeatures } from "@/lib/authorization";
+import { setActorId } from "@/lib/requestContext";
 import { getUserForFeatureComputation } from "@/modules/user/user.repository";
 
 export async function authenticate(
@@ -61,6 +62,10 @@ export async function authenticate(
     id: payload.sub,
     features: computeEffectiveFeatures(userForFeatureComputation),
   };
+
+  // Identidade estabelecida: o contexto de observabilidade passa a saber quem
+  // é o ator, para o access log, o application log e o audit log (7.6).
+  setActorId(payload.sub);
 
   next();
 }

@@ -24,7 +24,17 @@ function buildVerificationEmail(rawToken: string) {
   };
 }
 
-export async function issueEmailVerification(userId: string, email: string) {
+/**
+ * O que disparou o envio, para a linha de log distinguir o email inicial (na
+ * criação da conta) de um reenvio pedido pelo usuário.
+ */
+type VerificationTrigger = "ACCOUNT_CREATION" | "RESEND";
+
+export async function issueEmailVerification(
+  userId: string,
+  email: string,
+  trigger: VerificationTrigger = "ACCOUNT_CREATION",
+) {
   const rawToken = generateOpaqueToken();
 
   await authRepository.createVerificationToken({
@@ -38,7 +48,7 @@ export async function issueEmailVerification(userId: string, email: string) {
 
   await send({ to: email, subject, html, text });
 
-  log.info({ userId }, "email verification sent");
+  log.info({ userId, trigger }, "email verification sent");
 }
 
 export async function verifyEmail(token: string) {
@@ -80,5 +90,5 @@ export async function resendVerification(email: string) {
     return;
   }
 
-  await issueEmailVerification(user.id, user.email);
+  await issueEmailVerification(user.id, user.email, "RESEND");
 }

@@ -296,7 +296,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ Aplicado nos services existentes, sem inventar evento novo:
   - ✅ `auth.service` — login ok/falho (com `reason`), refusa por ban/status, rotação de refresh, **reuso de refresh token detectado** (`warn`, dizendo que todas as sessões caíram), logout, revogação de sessão.
   - ✅ `password.service` — reset solicitado/concluído, change concluído, token inválido/usado/expirado (`warn`), conta banida (`warn`), senha atual errada (`warn`).
-  - ✅ `verification.service` — envio disparado, email verificado, token inválido (`warn`).
+  - ✅ `verification.service` — envio disparado com `trigger` (`ACCOUNT_CREATION` na criação vs `RESEND` no reenvio, para os dois se distinguirem no log), email verificado, token inválido (`warn`).
   - ✅ `lib/email.ts` — falha de envio em `error` **antes** de virar o 503 (sem a linha, a causa se perdia).
   - ✅ `user.service` — criação, soft delete, ban/unban (o **texto** do motivo do ban não entra na linha).
   - ✅ `permission.service` — grant/revoke de role e de override.

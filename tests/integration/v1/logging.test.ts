@@ -1,9 +1,15 @@
-import { buildCustomer } from "@tests/factories/user.factory";
+import { buildCustomer, makeCustomerData } from "@tests/factories/user.factory";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import app from "@/app";
+
+// Sem mailpit no ambiente de teste, o envio real daria 503 antes de a linha de
+// log sair; o mock deixa o fluxo de verificação chegar ao log (como em auth.test).
+const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }));
+vi.mock("@/lib/email", () => ({ send: sendMock }));
+
 import { logBuffer } from "@/lib/logBuffer";
 import { REQUEST_ID_HEADER } from "@/lib/requestContext";
 
@@ -114,6 +120,8 @@ describe("Access log", () => {
 
 describe("Application log", () => {
   beforeEach(async () => {
+    sendMock.mockReset();
+    sendMock.mockResolvedValue(undefined);
     await clearDatabase();
     logBuffer.clear();
   });
@@ -163,6 +171,37 @@ describe("Application log", () => {
       level: 30,
       userId: target.id,
     });
+  });
+
+  it("should tag the initial verification email as ACCOUNT_CREATION", async () => {
+    await request(app).post("/api/v1/auth/signup").send(makeCustomerData());
+    await flush();
+
+    const line = appLines().find(
+      (entry) =>
+        entry.module === "verification" &&
+        entry.msg === "email verification sent",
+    );
+
+    expect(line).toMatchObject({ trigger: "ACCOUNT_CREATION" });
+  });
+
+  it("should tag a re-sent verification email as RESEND", async () => {
+    const pending = await buildCustomer({ status: "PENDING" });
+    logBuffer.clear();
+
+    await request(app)
+      .post("/api/v1/auth/verify-email/resend")
+      .send({ email: pending.email });
+    await flush();
+
+    const line = appLines().find(
+      (entry) =>
+        entry.module === "verification" &&
+        entry.msg === "email verification sent",
+    );
+
+    expect(line).toMatchObject({ trigger: "RESEND", userId: pending.id });
   });
 
   // Política §3.1: um 404 legítimo é comportamento correto, não incidente.

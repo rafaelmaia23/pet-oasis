@@ -76,7 +76,7 @@ Cobertura mínima estabelecida na Fase 7.5, revisada a cada módulo novo:
 
 - **auth** — login (sucesso e falha), refresh, rotação de token, **detecção de reuso de refresh token**, logout.
 - **password** — reset solicitado e concluído, change concluído, uso de token expirado.
-- **verificação de email** — envio disparado, falha de envio, reenvio.
+- **verificação de email** — envio disparado (com `trigger`: `ACCOUNT_CREATION` na criação da conta, `RESEND` no reenvio pedido pelo usuário), falha de envio (em `email`, `error`), token inválido.
 - **user** — criação, soft delete, ban e unban.
 - **permission** — grant e revoke de role e de override.
 - **ciclo de vida** — boot, SIGTERM, fechamento de conexões, execução de scripts de manutenção.

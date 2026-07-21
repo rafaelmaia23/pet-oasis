@@ -22,6 +22,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Sem volume: estado de teste é descartável (e o teardown roda `down -v`).
+  redis:
+    image: redis:7-alpine
+    container_name: pet-oasis-test-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   mailpit:
     image: axllent/mailpit
     container_name: pet-oasis-test-mailpit

@@ -1,9 +1,11 @@
 type ShutdownServer = { close(callback: (err?: Error) => void): void };
 type ShutdownPrisma = { $disconnect(): Promise<void> };
+type ShutdownRedis = { quit(): Promise<unknown> };
 
 type ShutdownDeps = {
   server: ShutdownServer;
   prisma: ShutdownPrisma;
+  redis?: ShutdownRedis;
   timeoutMs?: number;
   exit?: (code: number) => void;
   log?: Pick<Console, "log" | "error">;
@@ -14,14 +16,20 @@ const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
 /**
  * Builds a signal handler that shuts the process down gracefully: stop accepting
  * new connections and drain in-flight requests (`server.close`), then release the
- * DB pool (`prisma.$disconnect`), then exit. A timeout forces exit if draining
- * hangs, and a guard makes repeated signals (SIGTERM then SIGINT) a no-op.
+ * DB pool (`prisma.$disconnect`), then close the Redis connection, then exit. A
+ * timeout forces exit if draining hangs, and a guard makes repeated signals
+ * (SIGTERM then SIGINT) a no-op.
+ *
+ * Redis is optional and its failure is only logged: rate limit/lockout are
+ * fail-open (D2), so a Redis that is already down must not turn every shutdown
+ * into a non-zero exit.
  *
  * Dependencies are injected so the handler is unit-testable with fakes.
  */
 export function createShutdownHandler({
   server,
   prisma,
+  redis,
   timeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS,
   exit = (code) => process.exit(code),
   log = console,
@@ -53,6 +61,15 @@ export function createShutdownHandler({
         server.close((err) => (err ? reject(err) : resolve()));
       });
       await prisma.$disconnect();
+
+      if (redis) {
+        try {
+          await redis.quit();
+        } catch (error) {
+          log.error("Error closing the Redis connection:", error);
+        }
+      }
+
       clearTimeout(forceTimer);
       log.log("Shutdown complete.");
       settle(0);

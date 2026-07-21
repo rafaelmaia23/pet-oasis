@@ -6,6 +6,7 @@ import {
   InternalServerError,
   MethodNotAllowedError,
   NotFoundError,
+  PayloadTooLargeError,
   PresentationError,
   ServiceUnavailableError,
   UnauthorizedError,
@@ -34,6 +35,10 @@ export const createMethodNotAllowedError = (
 
 export const createConflictError = (params: OmitFixed<AppErrorParams> = {}) =>
   new ConflictError(params);
+
+export const createPayloadTooLargeError = (
+  params: OmitFixed<AppErrorParams> = {},
+) => new PayloadTooLargeError(params);
 
 export const createValidationError = (
   params: { errors?: ValidationErrorFields } & OmitFixed<AppErrorParams> = {},

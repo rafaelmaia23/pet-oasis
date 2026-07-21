@@ -80,6 +80,57 @@ describe("createShutdownHandler()", () => {
     expect(exit).toHaveBeenCalledTimes(1);
   });
 
+  it("closes redis after prisma, then exits 0", async () => {
+    const order: string[] = [];
+    const server = {
+      close: vi.fn((cb: CloseCb) => {
+        order.push("close");
+        cb();
+      }),
+    };
+    const prisma = {
+      $disconnect: vi.fn(async () => {
+        order.push("disconnect");
+      }),
+    };
+    const redis = {
+      quit: vi.fn(async () => {
+        order.push("quit");
+        return "OK";
+      }),
+    };
+    const exit = vi.fn();
+
+    await createShutdownHandler({
+      server,
+      prisma,
+      redis,
+      exit,
+      log: silentLog,
+    })("SIGTERM");
+
+    expect(order).toEqual(["close", "disconnect", "quit"]);
+    expect(exit).toHaveBeenCalledWith(0);
+  });
+
+  // Fail-open (D2): um Redis já fora do ar não deve fazer todo shutdown sair 1.
+  it("still exits 0 when redis.quit fails", async () => {
+    const server = { close: vi.fn((cb: CloseCb) => cb()) };
+    const prisma = { $disconnect: vi.fn().mockResolvedValue(undefined) };
+    const redis = { quit: vi.fn().mockRejectedValue(new Error("redis down")) };
+    const exit = vi.fn();
+
+    await createShutdownHandler({
+      server,
+      prisma,
+      redis,
+      exit,
+      log: silentLog,
+    })("SIGTERM");
+
+    expect(exit).toHaveBeenCalledWith(0);
+  });
+
   it("forces exit(1) when shutdown exceeds the timeout", async () => {
     vi.useFakeTimers();
     const server = { close: vi.fn() }; // never invokes the callback

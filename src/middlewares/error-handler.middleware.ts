@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import {
   AppError,
   createBadRequestError,
+  createPayloadTooLargeError,
   createValidationError,
   InternalServerError,
   PresentationError,
@@ -18,6 +19,15 @@ type DriverAdapterConstraintError = {
     };
   };
 };
+
+// O erro do body-parser não é exportado como classe; identifica-se pelo shape
+// (`type`/`status`), como já se faz com o SyntaxError de parse.
+function isPayloadTooLargeError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err as { type?: string }).type === "entity.too.large"
+  );
+}
 
 export function errorHandler(
   err: unknown,
@@ -36,6 +46,16 @@ export function errorHandler(
     return res
       .status(badRequestError.statusCode)
       .json(badRequestError.toJson());
+  }
+
+  // Corpo acima do teto de `express.json({ limit })` — o body-parser lança um
+  // erro com `type: "entity.too.large"`/`status: 413` que, sem isto, cairia no
+  // fallback 500. A resposta não revela o limite configurado.
+  if (isPayloadTooLargeError(err)) {
+    const payloadTooLargeError = createPayloadTooLargeError();
+    return res
+      .status(payloadTooLargeError.statusCode)
+      .json(payloadTooLargeError.toJson());
   }
 
   if (err instanceof ZodError) {

@@ -231,7 +231,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 
 | Sessão | Sub-fases | Tema | Por que agrupa |
 |---|---|---|---|
-| **A** | 7.0, 7.1, 7.2 | Fundação de infra + bordas + guards | Redis/env/deps, helmet+CORS+Scalar auto-hospedado e o refactor dos 3 guards. Nada aqui depende de log. |
+| **A** ✅ | 7.0, 7.1, 7.2 | Fundação de infra + bordas + guards | Redis/env/deps, helmet+CORS+Scalar auto-hospedado e o refactor dos 3 guards. Nada aqui depende de log. |
 | **B** | 7.3, 7.4, 7.5 | Observabilidade interna | Logger + `AsyncLocalStorage` + ring buffer são inúteis sem consumidor; access e application log são os consumidores. |
 | **C** | 7.6 | Audit log | Migration + taxonomia + `auditLog.record` + ~18 pontos de chamada. Grande sozinha. |
 | **D** | 7.7, 7.8 | Paginação + leitura de log | 7.8 consome o helper da 7.7 (cursor em `/audit-logs`); a 7.7 já migra todas as listagens para o envelope. |
@@ -241,26 +241,32 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **H** | 7.15, 7.16, 7.17 | Polimento de features de conta | As três mexem no domínio de conta/sessão. **Abre confirmando o desenho de 7.15 e 7.16.** |
 | **I** | 7.19 (+ regressão de D1) | Fechos | Docs, teste de regressão do refresh hash, suíte/typecheck/lint, fase ✅. |
 
-### ⬜ [Sessão A] Fase 7.0 — Fundação de infra
-- ⬜ Serviço `redis` no `infra/docker-compose.yml` (+ override por ambiente, análogo aos existentes); `REDIS_URL` em `env.ts`/`.env.example`; client em `src/lib/redis.ts` com reconnect e `quit()` no `shutdown.ts`.
-- ⬜ **`app.set("trust proxy", 1)`** (D7 — o deploy tem proxy reverso na frente, conforme `docs/deploy.md`), para o IP real chegar certo no rate limit/lockout/logs. Sem proxy na frente isto seria um furo: o Express passaria a confiar num `X-Forwarded-For` forjável.
-- ⬜ `express.json({ limit: "100kb" })` (ajustável).
-- ⬜ Dependências instaladas: `pino`, `pino-http`, `pino-pretty` (dev), `rate-limiter-flexible`, `helmet`, `cors` (+ `@types/cors`), client Redis.
-  - ⬜ O serviço `redis` precisa existir também no **override de test** (7.10/7.11 testam contra o Redis real), com container/porta próprios, como já se faz com o Postgres.
-- ⬜ Novas env vars registradas em `env.ts` + `.env.example`: `REDIS_URL`, `LOG_LEVEL`, `LOG_BUFFER_SIZE`.
+### ✅ [Sessão A] Fase 7.0 — Fundação de infra
+- ✅ Serviço `redis` (`redis:7-alpine`, healthcheck `redis-cli ping`) nos **três overrides**, não na base — os serviços de dado já viviam lá. Container/porta/volume próprios por ambiente: dev `6379` (volume `dev_redisdata`), **test `6380`** (sem volume — o teardown roda `down -v`), prod **sem porta publicada** (volume `prod_redisdata`). O `app` recebe `REDIS_URL: redis://redis:6379` pelo `environment` do override, mesmo idioma já usado na `DATABASE_URL`. `test:services:up` passou a subir `db redis`.
+- ✅ `src/lib/redis.ts`: client ioredis com `enableOfflineQueue: false` + `maxRetriesPerRequest: 1` — **é isto que torna o fail-open (D2) real**; sem essas opções o comando ficaria enfileirado esperando reconexão e penduraria o login em vez de deixar o chamador seguir. `retryStrategy` com backoff limitado; listener de `error` só loga (o Redis nunca derruba o boot). `connectTimeout`/`commandTimeout` anotados como TODO da 7.13.
+- ✅ `shutdown.ts` ganhou dep **opcional** `redis`, fechada depois do `prisma.$disconnect()`; falha do `quit()` só loga e **não** muda o exit code (um Redis já fora do ar não deve fazer todo shutdown sair 1).
+- ✅ **`app.set("trust proxy", 1)`** (D7).
+- ✅ `express.json({ limit: env.JSON_BODY_LIMIT })` (default `100kb`, por env var).
+- ✅ **Bug pré-existente corrigido:** corpo acima do teto virava **500** (o erro `entity.too.large` do body-parser não era mapeado, igual ao caso do JSON malformado da 4.5). Agora → **413** `PAYLOAD_TOO_LARGE` (classe + factory novas), com mensagem genérica que não revela o limite configurado.
+- ✅ Dependências instaladas de uma vez para a fase inteira: `ioredis`, `helmet`, `cors` (+ `@types/cors`), `rate-limiter-flexible`, `pino`, `pino-http`, `pino-pretty` (dev). As de log/rate limit só passam a ser usadas nas Sessões B/E.
+- ✅ Env vars novas em `env.ts` + `.env.example` + os três `.env.*`: `REDIS_URL`, `LOG_LEVEL`, `LOG_BUFFER_SIZE`, `CORS_ALLOWED_ORIGINS`, `JSON_BODY_LIMIT`.
+- ✅ Verificado em runtime: dev sobe com o Redis; **com o Redis derrubado a app segue respondendo** (`/status` 200, login 401 — nunca 5xx) e reconecta sozinha; SIGTERM fecha server + Prisma + Redis (“Shutdown complete.”); `curl` com corpo de 200 KB → 413.
 
-### ⬜ [Sessão A] Fase 7.1 — Helmet + CORS explícito
-- ⬜ `helmet()` (preset default).
-- ⬜ ⚠️ **CSP × Scalar (Fase 5.3) — resolvido por D3:** a UI em `/reference` carrega o bundle do Scalar do CDN `cdn.jsdelivr.net` client-side, e o `helmet()` default liga um `Content-Security-Policy` com `script-src 'self'` que **bloquearia** esse CDN. Solução firmada: **auto-hospedar o bundle** e servir do próprio domínio (dep npm + rota estática), mantendo a CSP estrita. Allowlistar o CDN e usar `nonce` foram considerados e preteridos (ver `docs/context.md` §2.2).
-  - ⬜ `style-src` ainda pode exigir `'unsafe-inline'` — confirmar o mínimo necessário na prática, não copiar uma diretiva permissiva por precaução.
-  - ⬜ Testar `GET /reference` **no navegador** (não só `curl`) após ligar o helmet: o `curl` retorna 200 mesmo com o bundle bloqueado pela CSP.
-- ⬜ CORS com allowlist a partir de `APP_URL` (+ eventual `CORS_ALLOWED_ORIGINS` separado por vírgula), `credentials: true`.
+### ✅ [Sessão A] Fase 7.1 — Helmet + CORS explícito
+- ✅ `helmet()` com a CSP **mais estrita que o default** (`src/config/helmet.ts`): o preset libera `https:` e `'unsafe-inline'` em `style-src`/`font-src` — folga pensada para páginas HTML, inútil numa API JSON —, então as duas caem para `'self'`.
+- ✅ **CSP × Scalar (D3) — bundle auto-hospedado:** `@scalar/api-reference` virou dep de runtime e o bundle é servido em **`GET /scalar/standalone.js`** (rota pública no router de topo, `Cache-Control` de 7 dias). O caminho é resolvido em runtime (`createRequire(...).resolve` na raiz do pacote + `browser/standalone.js`, já que o subpath não está no `exports`), então dev (tsx) e produção (bundle do tsup) usam o mesmo código — **verificado nos dois**. `reference.ts` passa `cdn: SCALAR_BUNDLE_PATH`.
+- ✅ **Nonce era obrigatório, não opcional:** o Scalar inicia por um `<script>` **inline** (`Scalar.createApiReference(...)`) que `script-src 'self'` bloquearia — a página viria 200 com a UI em branco, exatamente o que o `curl` não pega. `docsCspNonce` gera um nonce base64url por request, a `docsCsp` o injeta em `script-src` e o `referenceHandler` (montado por request) o repassa ao Scalar. Coberto por teste: o nonce do header casa com o do `<script>` servido, e muda a cada request.
+- ✅ CSP da doc escopada em `/reference` (a global segue estrita): `style-src 'unsafe-inline'` (o bundle injeta o CSS em runtime), `img-src`/`font-src` com `data:`. `script-src` **sem** `'unsafe-inline'` e sem CDN.
+- ✅ `withDefaultFonts: false` e `telemetry: false` — sem webfont de `fonts.scalar.com` nem telemetria; a página não faz chamada a terceiro por design (e funciona offline).
+- ✅ **Testado no navegador** (não só `curl`): a UI renderiza e o "try it" funciona. Restam **4 mensagens de CSP no console, esperadas e documentadas em `reference.ts`** — (1) `eval` bloqueado, que é um *feature detection* (`try { Function("") } catch {}`) com fallback; (2) um `<script>` que o bundle injeta em runtime sem repassar o nonce; (3–4) duas chamadas ao diretório público de APIs do Scalar (`api.scalar.com/vector/registry/*`). `hideSearch`/`telemetry` foram testados contra as chamadas ao registry e **não** as evitam; liberar `connect-src api.scalar.com` foi recusado (autorizaria um terceiro e mataria o offline), e `'unsafe-eval'` está fora de questão. São a CSP funcionando, não regressão.
+- ✅ CORS (`src/config/cors.ts`): allowlist `APP_URL` + `CORS_ALLOWED_ORIGINS` (CSV), `credentials: true` (o refresh viaja em cookie). Origem fora da lista → resposta **sem** headers de CORS (não erro: quem bloqueia é o navegador, e lançar viraria 500); request sem `Origin` (curl, Bruno, suíte) passa.
 
-### ⬜ [Sessão A] Fase 7.2 — Consolidar guards de escalação
-- ⬜ Extrair `assertActorIsAdmin` em `src/lib/authorization.ts`, ao lado de `can`/`hasFeature`/`canActOnResource`.
-- ⬜ `assertAdminForBan` (`user.service.ts`), `assertAdminForPermissionFeature` e `assertAdminForRoleAssignment` (`permission.service.ts`) passam a reusá-lo, mantendo seu próprio predicado de "alvo/feature/role privilegiado".
-- ⬜ Suíte de escalação existente continua verde sem alteração (refactor comportamento-preservado) + teste unitário do helper novo.
-- ⬜ Nota: o helper é pré-requisito da 7.11 (`DELETE /users/:id/lock`).
+### ✅ [Sessão A] Fase 7.2 — Consolidar guards de escalação
+- ✅ `isAdmin` + `assertActorIsAdmin` extraídos para `src/lib/authorization.ts`, ao lado de `can`/`hasFeature`/`canActOnResource`.
+- ✅ **O helper recebe o ator já buscado**, em vez de buscá-lo: `lib/` não conhece repository, e importar `userRepository` ali inverteria o corte de camadas. Sobra uma linha de `findUserById` em cada guard — o que se repetia de fato (predicado de admin + throw 403) foi eliminado.
+- ✅ `assertAdminForBan` (`user.service.ts`), `assertAdminForPermissionFeature` e `assertAdminForRoleAssignment` (`permission.service.ts`) reusam o helper, cada um mantendo seu predicado de "alvo/feature/role privilegiado" e sua mensagem.
+- ✅ Refactor comportamento-preservado: a suíte de escalação existente passou **sem uma linha alterada**; só entraram testes unitários do helper (inclusive ator `null` — deletado entre a autenticação e a busca do guard — contando como não-admin).
+- ✅ Nota: o helper é pré-requisito da 7.11 (`DELETE /users/:id/lock`), que seria a quarta cópia.
 
 ### ⬜ [Sessão B] Fase 7.3 — Fundação de observabilidade
 > Base compartilhada pelas três categorias de log. Nenhum log novo é emitido aqui — só a infraestrutura que as 7.4/7.5/7.6 vão usar. Regras completas em `docs/logging-policy.md`.

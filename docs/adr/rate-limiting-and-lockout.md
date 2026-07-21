@@ -1,0 +1,156 @@
+# Rate limiting, account lockout e a dependência do Redis
+
+> Decisão de segurança/infra registrada no planejamento da Fase 7 (sub-fases 7.0,
+> 7.10, 7.11, 7.13). Introduz um serviço novo em produção e um comportamento novo
+> no `login`. Não altera nenhuma regra de negócio já fechada.
+
+## O problema
+
+Hoje `POST /auth/login` aceita tentativas ilimitadas. As consequências são três,
+e nenhuma é mitigada pelas defesas que já existem (bcrypt + pepper encarecem o
+ataque offline, não o online):
+
+1. **Força bruta direcionada.** Uma conta específica pode ser martelada até a
+   senha cair, de um IP só ou de muitos.
+2. **Volume.** `signup`, `forgot-password` e `verify-email/resend` disparam email
+   a cada chamada — um script leva a cota da Resend embora e derruba a reputação
+   do domínio remetente.
+3. **Bombardeio de caixa alheia.** Um atacante que rotaciona IP pode pedir
+   `forgot-password` mil vezes para a *mesma vítima*: cada request vem de um IP
+   novo (limite por IP não vê nada), mas a caixa de entrada do alvo recebe tudo.
+
+## Decisão ✅
+
+### Dois mecanismos, não um
+
+**Rate limit por IP** protege contra *volume*: não se importa com qual conta está
+sendo tentada. **Lockout por conta** protege uma *credencial específica*, mesmo
+que as tentativas venham de IPs diferentes (credential stuffing distribuído).
+Um não substitui o outro — o primeiro é cego a ataque distribuído, o segundo é
+cego a scraping de rotas sem conta alvo.
+
+**Rate limit por email destinatário** é a terceira chave, e existe só para o
+problema 3: `forgot-password` e `verify-email/resend` contam também por
+email-alvo, no mesmo Redis, em namespace de chave separado.
+
+### Redis, não memória de processo
+
+`rate-limiter-flexible` com `RateLimiterRedis`. Um contador em memória
+(`express-rate-limit` puro) resolveria o caso atual — instância única — e
+quebraria **silenciosamente** no primeiro dia de scale-out horizontal: com duas
+réplicas, cada uma permitiria o limite inteiro, e nada no sistema acusaria.
+Também zera a cada restart de container, que num deploy frequente é o suficiente
+para anular o lockout. Custo aceito: um serviço a mais nos overrides do Compose
+e uma dependência a mais em produção.
+
+### Fail-open quando o Redis cai
+
+Redis indisponível → rate limit e lockout são **ignorados**, o request segue, e
+cada falha emite `error` no application log (e portanto no Sentry).
+
+O risco é real e está sendo aceito conscientemente: durante a indisponibilidade a
+API fica sem proteção contra força bruta, e um atacante capaz de derrubar o Redis
+ganha exatamente isso. A alternativa (fail-closed, 503 nas rotas de auth) troca
+esse risco por outro pior no contexto deste projeto: o Redis passaria a ser
+ponto único de falha do **login inteiro** — um `docker compose restart redis`
+derrubaria a autenticação da aplicação. Disponibilidade do fluxo principal vence,
+e a mitigação é operacional: a falha é barulhenta (`error` + Sentry), não
+silenciosa.
+
+### Lockout híbrido: janela fixa → backoff exponencial
+
+`LOCKOUT_THRESHOLD` falhas consecutivas travam a conta por `LOCKOUT_WINDOW_MS`;
+se a próxima tentativa depois da janela também errar, o tempo dobra a cada ciclo
+até `LOCKOUT_MAX_MS`. Login correto reseta **contador e nível de backoff**.
+
+Janela fixa sozinha é previsível: um atacante que espera exatamente o tempo da
+janela nunca é penalizado além dela. O backoff crescente fecha essa lacuna sem
+punir o usuário legítimo que errou a senha uma vez — só entra em jogo depois de
+ciclos repetidos de erro.
+
+A checagem entra em `auth.service.login`, ao lado dos gates de `bannedAt`/`status`
+já existentes (Fase 4).
+
+### Resposta 429 genérica
+
+Rate limit por IP e lockout por conta devolvem **o mesmo 429** ("muitas
+tentativas, tente novamente mais tarde"), sem indicar qual dos dois disparou nem
+confirmar existência de conta. Senha errada continua **401** genérico (nenhuma
+identidade estabelecida). Mesmo espírito anti-enumeração já adotado em
+`forgot-password`/`verify-email/resend` na Fase 4.
+
+### Desbloqueio manual pelo admin
+
+`DELETE /users/:id/lock` (feature `manage:user:status`, a mesma do ban/unban):
+limpa contador **e** nível de backoff — mesmo idioma do unban, que restaura o
+estado anterior sem deixar resíduo. **204** no sucesso, **409** se a conta não
+estava travada. Registra `AUTH_LOCKOUT_CLEARED` no audit log.
+
+Destravar um alvo **privilegiado** exige ator com role `admin`, reusando o helper
+consolidado na 7.2 (`src/lib/authorization.ts`). Destravar não concede privilégio
+novo, mas *remove uma proteção* da conta-alvo: um manager comprometido poderia
+destravar uma conta admin no meio de um ataque de força bruta, anulando o lockout
+bem na hora em que ele mais protege — a mesma escalação lateral que
+`assertAdminForBan` já barra.
+
+**Não existe lock manual** nesta fase (o lock só acontece automaticamente por
+tentativas erradas). Está no `docs/backlog.md`: exigiria decidir como um lock
+administrativo convive com `bannedAt` e `status`, reabrindo desenho já fechado.
+
+## Valores
+
+Todos por env var, com default. Escolhidos no planejamento sem tráfego real para
+calibrar — a expectativa é ajustá-los, e é por isso que nenhum é constante no
+código.
+
+| Item | Default | Env var |
+|---|---|---|
+| Login, por IP | 20 / 15 min | `RATE_LIMIT_LOGIN` |
+| Signup, por IP | 5 / 1 h | `RATE_LIMIT_SIGNUP` |
+| Forgot-password e resend, por IP | 5 / 1 h | `RATE_LIMIT_EMAIL` |
+| Forgot-password e resend, por email destinatário | 5 / 1 h | `RATE_LIMIT_EMAIL_TARGET` |
+| Lockout — falhas até travar | 5 | `LOCKOUT_THRESHOLD` |
+| Lockout — janela inicial | 15 min | `LOCKOUT_WINDOW_MS` |
+| Lockout — teto do backoff | 24 h | `LOCKOUT_MAX_MS` |
+
+## Timeouts (7.13)
+
+O Redis entra com `connectTimeout` e `commandTimeout`. Sem eles, o fail-open
+acima é ilusório: um Redis que não responde (mas também não recusa a conexão)
+penduraria o login pelo tempo do timeout de socket do SO, que é o pior dos dois
+mundos — nem protege, nem responde.
+
+## Observabilidade
+
+- Limite excedido → `AUTH_RATE_LIMIT_EXCEEDED` no audit log + `warn` no
+  application log.
+- Lockout disparado → `AUTH_LOCKOUT_TRIGGERED`; limpo → `AUTH_LOCKOUT_CLEARED`.
+- Falha do Redis → `error` no application log (é a evidência de que a janela de
+  fail-open aconteceu).
+
+Taxonomia e `metadata` de cada ação em `docs/logging-policy.md` §4.3.
+
+## Alternativas consideradas
+
+- **Contador em memória** (`express-rate-limit`): quebra silenciosamente em
+  scale-out e zera a cada deploy. Preterido.
+- **Fail-closed** (503 nas rotas de auth quando o Redis cai): Redis vira SPOF do
+  login. Preterido — ver acima.
+- **Fail-open no IP + fail-closed na conta** (híbrido por mecanismo): degradaria
+  cada mecanismo conforme o que protege, mas o login continua caindo junto com o
+  Redis, e passa a haver dois comportamentos para explicar, testar e documentar.
+  Preterido: paga a complexidade sem eliminar o SPOF.
+- **Só lockout, sem rate limit** (ou vice-versa): cada um é cego ao ataque que o
+  outro cobre. Preterido.
+
+## Quando revisitar
+
+- Se o projeto ganhar **mais de uma réplica**: confirmar que os contadores de fato
+  compartilham estado (é o motivo de o Redis existir) e revisar o `trust proxy`,
+  de que depende a correção do IP.
+- Se o **fail-open** for exercitado de verdade em produção (linha `error` no log):
+  reavaliar com dados se vale migrar para híbrido.
+- Se a Resend começar a **rejeitar por volume** mesmo com os limites: o furo está
+  no limite por email destinatário, não no por IP.
+- Se um lock **manual** virar necessidade operacional: sair do backlog e decidir
+  a convivência com `bannedAt`/`status`.

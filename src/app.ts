@@ -5,6 +5,7 @@ import helmet from "helmet";
 import { corsOptions } from "@/config/cors";
 import { env } from "@/config/env";
 import { helmetOptions } from "@/config/helmet";
+import { requestContextMiddleware } from "@/lib/requestContext";
 import { errorHandler } from "@/middlewares/error-handler.middleware";
 import { router } from "@/routes";
 
@@ -15,6 +16,11 @@ const app = express();
 // limit, o lockout e os logs precisam. O `1` é literal: confia em exatamente um
 // salto. Sem proxy na frente isto seria um furo (header forjável pelo cliente).
 app.set("trust proxy", 1);
+
+// Primeiro de todos: abre o contexto do request (requestId) para que qualquer
+// log emitido daqui em diante — inclusive de dentro de um middleware que
+// rejeite o request — saia correlacionado.
+app.use(requestContextMiddleware);
 
 // Headers de segurança; a CSP é a do helmet, endurecida (ver config/helmet.ts).
 // A folga que a UI do Scalar exige está escopada em `/reference`.

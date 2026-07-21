@@ -6,6 +6,7 @@ import { corsOptions } from "@/config/cors";
 import { env } from "@/config/env";
 import { helmetOptions } from "@/config/helmet";
 import { requestContextMiddleware } from "@/lib/requestContext";
+import { accessLog } from "@/middlewares/access-log.middleware";
 import { errorHandler } from "@/middlewares/error-handler.middleware";
 import { router } from "@/routes";
 
@@ -21,6 +22,10 @@ app.set("trust proxy", 1);
 // log emitido daqui em diante — inclusive de dentro de um middleware que
 // rejeite o request — saia correlacionado.
 app.use(requestContextMiddleware);
+
+// Access log — logo depois do contexto, para toda request logar (inclusive as
+// recusadas pelo CORS ou pelo limite de corpo).
+app.use(accessLog);
 
 // Headers de segurança; a CSP é a do helmet, endurecida (ver config/helmet.ts).
 // A folga que a UI do Scalar exige está escopada em `/reference`.

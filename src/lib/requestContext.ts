@@ -7,6 +7,14 @@ export type RequestContext = {
   actorId?: string;
   ip?: string;
   userAgent?: string;
+  /**
+   * Rota **original** do request. Guardada aqui porque o Express reescreve
+   * `req.url` ao entrar em cada router montado, e o access log só é emitido no
+   * fim do request — a essa altura `req.url` já virou o caminho relativo do
+   * último router (`/api/v1/status` vira `/`).
+   */
+  url?: string;
+  method?: string;
 };
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -62,6 +70,8 @@ export function requestContextMiddleware(
   runWithRequestContext(
     {
       requestId,
+      url: req.originalUrl,
+      method: req.method,
       ...(req.ip ? { ip: req.ip } : {}),
       ...(req.headers["user-agent"]
         ? { userAgent: req.headers["user-agent"] }

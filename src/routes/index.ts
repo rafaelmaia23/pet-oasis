@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { buildOpenApiDocument } from "@/docs/openapi";
-import { referenceHandler } from "@/docs/reference";
+import {
+  docsCsp,
+  docsCspNonce,
+  referenceHandler,
+  SCALAR_BUNDLE_PATH,
+  scalarBundleFile,
+} from "@/docs/reference";
 import { authenticate } from "@/middlewares/authenticate.middleware";
 import authRouter from "@/modules/auth/auth.routes";
 import featureRouter from "@/modules/feature/feature.routes";
@@ -31,6 +37,14 @@ export const router = Router();
 router.get("/openapi.json", (_req, res) => {
   res.json(buildOpenApiDocument());
 });
-router.use("/reference", referenceHandler);
+router.use("/reference", docsCspNonce, docsCsp, referenceHandler);
+
+// Bundle do Scalar servido pela própria origem (D3) — imutável por versão do
+// pacote, então cache longo. Sem isto, a CSP `script-src 'self'` bloquearia a UI.
+router.get(SCALAR_BUNDLE_PATH, (_req, res) => {
+  res.type("application/javascript");
+  res.setHeader("Cache-Control", "public, max-age=604800, immutable");
+  res.sendFile(scalarBundleFile);
+});
 
 router.use("/api/v1", v1Router);

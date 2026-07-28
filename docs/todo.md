@@ -233,7 +233,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 |---|---|---|---|
 | **A** ✅ | 7.0, 7.1, 7.2 | Fundação de infra + bordas + guards | Redis/env/deps, helmet+CORS+Scalar auto-hospedado e o refactor dos 3 guards. Nada aqui depende de log. |
 | **B** ✅ | 7.3, 7.4, 7.5 | Observabilidade interna | Logger + `AsyncLocalStorage` + ring buffer são inúteis sem consumidor; access e application log são os consumidores. |
-| **C** | 7.6 | Audit log | Migration + taxonomia + `auditLog.record` + ~18 pontos de chamada. Grande sozinha. |
+| **C** ✅ | 7.6 | Audit log | Migration + taxonomia + `auditLog.record` + ~18 pontos de chamada. Grande sozinha. |
 | **D** | 7.7, 7.8 | Paginação + leitura de log | 7.8 consome o helper da 7.7 (cursor em `/audit-logs`); a 7.7 já migra todas as listagens para o envelope. |
 | **E** | 7.10, 7.11 | Rate limit + lockout | Mesma infra (Redis), mesmo endpoint alvo (`/auth/login`), mesmas ações de audit. |
 | **F** | 7.9, 7.13 | Bordas externas e resiliência | Axiom/Sentry e os timeouts tratam o mesmo problema: dependência externa que falha ou pendura. |
@@ -306,15 +306,15 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ **`requestId` no corpo do erro** (decisão desta sessão, junto do header `x-request-id`): quem reporta um problema cita o id e o request inteiro é recuperável nos três logs. `errorResponseSchema`/`validationErrorSchema` do OpenAPI acompanham. Aditivo — nenhum teste afirmava shape estrito de corpo de erro.
 - ✅ Testes: login errado em `warn` sem a senha; login certo em `info` com `userId`; soft delete em `info`; 404 legítimo **não** gera linha `error`; `requestId` do access log = do application log = do corpo do erro = do header.
 
-### ⬜ [Sessão C] Fase 7.6 — Audit log de ações sensíveis
-- ⬜ Migration: model `AuditLog` (`id`, `actorId?`, `action`, `targetType`, `targetId?`, `metadata Json?`, `ip?`, `userAgent?`, `createdAt`); índices em `(createdAt, id)`, `action`, `actorId`, `targetId`.
-- ⬜ Taxonomia `SCREAMING_SNAKE` (`USER_BANNED`), tabela canônica de ações em `docs/logging-policy.md` — nenhuma ação nasce fora da tabela.
-- ⬜ `src/lib/auditLog.ts`: `record(action, { actorId?, targetType, targetId?, metadata?, tx? })`; `ip`/`userAgent`/`actorId` vêm do `AsyncLocalStorage` da 7.3, com **override explícito** para os casos sem request (scripts, seed, login falho antes de haver ator).
-- ⬜ **Regra de PII:** `metadata` carrega **apenas ids e enums** — nunca email, nome ou qualquer PII. É o que habilita o demo a ler a trilha na 7.8, e evita que a trilha guarde um dado que mudou depois.
-- ⬜ **Regra de transação:** ação que muda estado grava o audit na **mesma `$transaction`** (falhou o audit, desfaz a ação); evento sem transação (login falho, rate limit, lockout) grava direto, e a falha **não** derruba o request mas emite `error` no application log.
-- ⬜ Append-only: sem update, sem delete pela aplicação (só o script de retenção da 7.14).
-- ⬜ Chamado nos pontos: `AUTH_LOGIN_FAILED`, `AUTH_LOCKOUT_TRIGGERED`, `AUTH_LOCKOUT_CLEARED`, `AUTH_RATE_LIMIT_EXCEEDED`, `USER_CREATED`, `USER_DELETED`, `USER_BANNED`, `USER_UNBANNED`, `USER_ROLE_GRANTED`, `USER_ROLE_REVOKED`, `USER_PERMISSION_GRANTED`, `USER_PERMISSION_REVOKED`, `PASSWORD_RESET_REQUESTED`, `PASSWORD_RESET_COMPLETED`, `PASSWORD_CHANGED`, `PASSWORD_CHANGE_FORCED`, `EMAIL_CHANGE_REQUESTED`, `EMAIL_CHANGE_COMPLETED`.
-- ⬜ Testes: cada ponto de chamada grava exatamente uma linha com o `action` certo; rollback da transação não deixa linha órfã; `metadata` sem PII (teste de contrato).
+### ✅ [Sessão C] Fase 7.6 — Audit log de ações sensíveis
+- ✅ Migration `AuditLog` (`actorId?`/`targetId?` = uuid cru **sem FK** — evidência pode apontar para linha soft-deleted, idioma do `User.bannedBy`); índices `(createdAt, id)` (cursor da 7.8), `action`, `actorId`, `targetId`.
+- ✅ Taxonomia como **union em tempo de compilação** (`src/lib/auditLog.constants.ts`): as **18** ações da §4.3 declaradas (fecha a taxonomia sem migration por ação nova, idioma de `FeatureName`); `AuditTargetType = User | Route | System`.
+- ✅ `src/lib/auditLog.ts` — `record(descriptor, tx?)`: `actorId`/`ip`/`userAgent` do `AsyncLocalStorage` (7.3), `actorId` com override explícito. **Com `tx`** grava na transação da mutação e deixa o erro **propagar** (§4.5); **sem `tx`** grava direto e **engole+loga** a falha (§4.6 — não derruba o request).
+- ✅ **Wiring transação × camadas (decisão de abertura):** o **repository é dono da `$transaction`** e o **service passa o descritor** — honra "só o repo toca o Prisma". Cada método de escrita ganhou `audit?: AuditDescriptor`; as transações em forma-array viraram interativas.
+- ✅ **Regra de PII** aplicada: `metadata` só ids/enums; `USER_BANNED` grava `reasonProvided` (bool), **não** o texto do motivo — teste de contrato afirma que a linha não vaza motivo nem email do alvo.
+- ✅ Append-only: sem update/delete pela aplicação (a retenção é a 7.14).
+- ✅ **Escopo (decisão de abertura): 12 dos 18 pontos** — só os com código hoje: `USER_CREATED` (source `SIGNUP`/`ADMIN`), `USER_DELETED`, `USER_BANNED`, `USER_UNBANNED`, `USER_ROLE_GRANTED`/`_REVOKED`, `USER_PERMISSION_GRANTED`/`_REVOKED`, `PASSWORD_RESET_REQUESTED`/`_COMPLETED`, `PASSWORD_CHANGED`, `AUTH_LOGIN_FAILED` (direto; `targetId` do dono quando existe, `reason` `BAD_CREDENTIALS`/`BANNED`). Os 6 restantes (lockout/rate-limit → E; forçar senha/troca de email → H; demo-reset → G) entram nas suas sub-fases, como a §4.3 já atribui.
+- ✅ Testes: cada ponto grava exatamente uma linha com `action`/`target`/`actor` certos; **rollback** (força o audit dentro da tx a falhar → nem o ban nem a linha persistem); `metadata` sem PII. Runtime: login falho de email desconhecido → linha com `actor`/`target` nulos, `reason=BAD_CREDENTIALS`, `ip`/`userAgent` preenchidos do store.
 
 ### ⬜ [Sessão D] Fase 7.7 — Paginação reutilizável (offset + cursor) + filtros em `GET /users`
 > Movida para antes dos endpoints de leitura. A Fase 9 (domínio pet shop) depende deste helper. Racional completo no ADR `docs/adr/pagination.md`.

@@ -1,4 +1,5 @@
 import type { VerificationPurpose } from "@/generated/prisma/enums";
+import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 
 type CreateSessionData = {
@@ -70,8 +71,15 @@ type CreateVerificationTokenData = {
 
 export async function createVerificationToken(
   data: CreateVerificationTokenData,
+  audit?: AuditDescriptor,
 ) {
-  return prisma.verificationToken.create({ data });
+  if (!audit) return prisma.verificationToken.create({ data });
+
+  return prisma.$transaction(async (tx) => {
+    const token = await tx.verificationToken.create({ data });
+    await record(audit, tx);
+    return token;
+  });
 }
 
 export async function findVerificationTokenByHash(tokenHash: string) {
@@ -98,37 +106,41 @@ export async function consumePasswordReset(
   tokenId: string,
   userId: string,
   passwordHash: string,
+  audit?: AuditDescriptor,
 ) {
-  return prisma.$transaction([
-    prisma.verificationToken.update({
+  return prisma.$transaction(async (tx) => {
+    await tx.verificationToken.update({
       where: { id: tokenId },
       data: { usedAt: new Date() },
-    }),
-    prisma.user.update({
+    });
+    await tx.user.update({
       where: { id: userId },
       data: { passwordHash },
-    }),
-    prisma.session.updateMany({
+    });
+    await tx.session.updateMany({
       where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
       data: { invalidatedAt: new Date() },
-    }),
-  ]);
+    });
+    if (audit) await record(audit, tx);
+  });
 }
 
 export async function updatePasswordAndInvalidateSessions(
   userId: string,
   passwordHash: string,
+  audit?: AuditDescriptor,
 ) {
-  return prisma.$transaction([
-    prisma.user.update({
+  return prisma.$transaction(async (tx) => {
+    await tx.user.update({
       where: { id: userId },
       data: { passwordHash },
-    }),
-    prisma.session.updateMany({
+    });
+    await tx.session.updateMany({
       where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
       data: { invalidatedAt: new Date() },
-    }),
-  ]);
+    });
+    if (audit) await record(audit, tx);
+  });
 }
 
 export async function findLiveSessionsByUserId(userId: string) {

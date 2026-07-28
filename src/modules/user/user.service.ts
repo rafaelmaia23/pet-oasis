@@ -27,7 +27,13 @@ const log = logger.child({ module: "user" });
 export const DEFAULT_EMPLOYEE_ROLES: RoleName[] = ["attendant"];
 export const DEFAULT_CUSTOMER_ROLES: RoleName[] = ["customer"];
 
-export async function createEmployee(data: CreateEmployeeInput) {
+/** Como a conta nasceu, para o audit distinguir signup de criação por admin. */
+export type UserCreationSource = "SIGNUP" | "ADMIN";
+
+export async function createEmployee(
+  data: CreateEmployeeInput,
+  source: UserCreationSource = "ADMIN",
+) {
   const rolesList = data.roleNames
     ? await getRolesByNames(data.roleNames)
     : await getRolesByNames(DEFAULT_EMPLOYEE_ROLES);
@@ -38,11 +44,14 @@ export async function createEmployee(data: CreateEmployeeInput) {
 
   const passwordHash = await hashPassword(password);
 
-  const user = await userRepository.createEmployee({
-    ...userData,
-    passwordHash,
-    roleNames: rolesList.map((r) => r.name as RoleName),
-  });
+  const user = await userRepository.createEmployee(
+    {
+      ...userData,
+      passwordHash,
+      roleNames: rolesList.map((r) => r.name as RoleName),
+    },
+    { action: "USER_CREATED", targetType: "User", metadata: { source } },
+  );
 
   log.info(
     {
@@ -58,7 +67,10 @@ export async function createEmployee(data: CreateEmployeeInput) {
   return user;
 }
 
-export async function createCustomer(data: CreateCustomerInput) {
+export async function createCustomer(
+  data: CreateCustomerInput,
+  source: UserCreationSource = "SIGNUP",
+) {
   const rolesList = await getRolesByNames(DEFAULT_CUSTOMER_ROLES);
 
   validateRoles(rolesList, "CUSTOMER");
@@ -67,11 +79,14 @@ export async function createCustomer(data: CreateCustomerInput) {
 
   const passwordHash = await hashPassword(password);
 
-  const user = await userRepository.createCustomer({
-    ...userData,
-    passwordHash,
-    roleNames: rolesList.map((r) => r.name as RoleName),
-  });
+  const user = await userRepository.createCustomer(
+    {
+      ...userData,
+      passwordHash,
+      roleNames: rolesList.map((r) => r.name as RoleName),
+    },
+    { action: "USER_CREATED", targetType: "User", metadata: { source } },
+  );
 
   log.info({ userId: user.id, profile: "CUSTOMER" }, "user created");
 
@@ -168,8 +183,10 @@ export async function deleteUser(requestingUser: AuthUser, targetId: string) {
     });
   }
 
-  const deleted =
-    await userRepository.softDeleteUserAndInvalidateSessions(targetId);
+  const deleted = await userRepository.softDeleteUserAndInvalidateSessions(
+    targetId,
+    { action: "USER_DELETED", targetType: "User", targetId },
+  );
 
   log.info(
     { userId: targetId, actorId: requestingUser.id },
@@ -237,6 +254,13 @@ export async function banUser(
     targetId,
     requestingUserId,
     reason,
+    {
+      action: "USER_BANNED",
+      targetType: "User",
+      targetId,
+      // O texto do motivo é PII e não entra no metadata (§4.4); só o fato.
+      metadata: { reasonProvided: reason.length > 0 },
+    },
   );
 
   // O texto do motivo não entra na linha: fica no banco, para quem tem
@@ -275,7 +299,11 @@ export async function unbanUser(requestingUserId: string, targetId: string) {
     });
   }
 
-  const unbanned = await userRepository.unbanUser(targetId);
+  const unbanned = await userRepository.unbanUser(targetId, {
+    action: "USER_UNBANNED",
+    targetType: "User",
+    targetId,
+  });
 
   log.info({ userId: targetId, actorId: requestingUserId }, "user unbanned");
 

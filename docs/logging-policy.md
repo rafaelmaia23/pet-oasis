@@ -95,8 +95,9 @@ Trilha durável de ações sensíveis, em `AuditLog`. Cada linha é evidência: 
 2. **Sem endpoint de escrita.** Nenhuma rota grava audit diretamente; a gravação nasce sempre de uma ação de negócio.
 3. **Taxonomia fechada.** Toda ação vem da tabela em §4.3. Ação nova exige entrada nesta política antes do código.
 4. **`metadata` sem PII.** Apenas ids e enums. Nunca email, nome, telefone ou endereço.
-5. **Consistência transacional.** Ação que muda estado grava o audit na **mesma `$transaction`**: se o audit falha, a ação é desfeita. Uma trilha com buracos é pior que trilha nenhuma, porque induz a conclusões erradas.
-6. **Eventos sem transação** (login falho, rate limit excedido, lockout) gravam direto. Falha aqui **não** derruba o request, mas emite `error` no application log.
+5. **Consistência transacional.** Ação que muda estado grava o audit na **mesma `$transaction`**: se o audit falha, a ação é desfeita. Uma trilha com buracos é pior que trilha nenhuma, porque induz a conclusões erradas. **Como (7.6):** a transação vive no **repository** (regra "só o repo toca o Prisma"); o **service** decide a semântica e passa um `AuditDescriptor` ao método de escrita, que roda a mutação e `record(descriptor, tx)` na mesma `$transaction` interativa. Com `tx`, `record` deixa o erro **propagar** — a transação inteira reverte.
+6. **Eventos sem transação** (login falho, e futuramente rate limit e lockout) gravam direto: `record` sem `tx` escreve fora de transação, **engole** a falha e emite `error` no application log — não derruba o request.
+7. **`record` é lib de observabilidade**, a mesma classe de exceção do `logger`/`AsyncLocalStorage` (§6): pode ser chamada de qualquer camada, mas nenhuma regra de negócio lê dela.
 
 ### 4.2 Por que `metadata` não carrega PII
 

@@ -43,12 +43,19 @@ export async function requestPasswordReset(email: string) {
 
   const rawToken = generateOpaqueToken();
 
-  await authRepository.createVerificationToken({
-    userId: user.id,
-    tokenHash: hashToken(rawToken),
-    purpose: "PASSWORD_RESET",
-    expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
-  });
+  await authRepository.createVerificationToken(
+    {
+      userId: user.id,
+      tokenHash: hashToken(rawToken),
+      purpose: "PASSWORD_RESET",
+      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    },
+    {
+      action: "PASSWORD_RESET_REQUESTED",
+      targetType: "User",
+      targetId: user.id,
+    },
+  );
 
   const { subject, html, text } = buildPasswordResetEmail(rawToken);
 
@@ -99,6 +106,11 @@ export async function resetPassword(token: string, newPassword: string) {
     resetToken.id,
     resetToken.userId,
     passwordHash,
+    {
+      action: "PASSWORD_RESET_COMPLETED",
+      targetType: "User",
+      targetId: resetToken.userId,
+    },
   );
 
   log.info(
@@ -144,6 +156,7 @@ export async function changePassword(
   await authRepository.updatePasswordAndInvalidateSessions(
     userId,
     passwordHash,
+    { action: "PASSWORD_CHANGED", targetType: "User", targetId: userId },
   );
 
   log.info({ userId }, "password changed, all sessions invalidated");

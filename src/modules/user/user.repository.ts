@@ -1,3 +1,4 @@
+import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import type { RoleName } from "../role/role.constants";
 
@@ -59,8 +60,11 @@ export async function findAllUsers() {
   });
 }
 
-export async function createEmployee(data: createEmployeeData) {
-  return prisma.user.create({
+export async function createEmployee(
+  data: createEmployeeData,
+  audit?: AuditDescriptor,
+) {
+  const createArgs = {
     data: {
       name: data.name,
       cpf: data.cpf,
@@ -76,11 +80,22 @@ export async function createEmployee(data: createEmployeeData) {
       },
     },
     include: userInclude,
+  };
+
+  if (!audit) return prisma.user.create(createArgs);
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create(createArgs);
+    await record({ ...audit, targetId: user.id }, tx);
+    return user;
   });
 }
 
-export async function createCustomer(data: createCustomerData) {
-  return prisma.user.create({
+export async function createCustomer(
+  data: createCustomerData,
+  audit?: AuditDescriptor,
+) {
+  const createArgs = {
     data: {
       name: data.name,
       cpf: data.cpf,
@@ -98,6 +113,14 @@ export async function createCustomer(data: createCustomerData) {
       },
     },
     include: userInclude,
+  };
+
+  if (!audit) return prisma.user.create(createArgs);
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create(createArgs);
+    await record({ ...audit, targetId: user.id }, tx);
+    return user;
   });
 }
 
@@ -112,9 +135,12 @@ export async function updateUser(id: string, data: updateUserData) {
   });
 }
 
-export async function softDeleteUserAndInvalidateSessions(userId: string) {
-  return prisma.$transaction([
-    prisma.session.updateMany({
+export async function softDeleteUserAndInvalidateSessions(
+  userId: string,
+  audit?: AuditDescriptor,
+) {
+  return prisma.$transaction(async (tx) => {
+    await tx.session.updateMany({
       where: {
         userId,
         usedAt: null,
@@ -122,25 +148,28 @@ export async function softDeleteUserAndInvalidateSessions(userId: string) {
         expiresAt: { gt: new Date() },
       },
       data: { invalidatedAt: new Date() },
-    }),
-    prisma.user.update({
+    });
+    const user = await tx.user.update({
       where: { id: userId, deletedAt: null },
       data: { deletedAt: new Date() },
-    }),
-  ]);
+    });
+    if (audit) await record(audit, tx);
+    return user;
+  });
 }
 
 export async function banUserAndInvalidateSessions(
   userId: string,
   bannedBy: string,
   reason: string,
+  audit?: AuditDescriptor,
 ) {
-  return prisma.$transaction([
-    prisma.user.update({
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
       where: { id: userId, deletedAt: null },
       data: { bannedAt: new Date(), bannedBy, banReason: reason },
-    }),
-    prisma.session.updateMany({
+    });
+    await tx.session.updateMany({
       where: {
         userId,
         usedAt: null,
@@ -148,14 +177,24 @@ export async function banUserAndInvalidateSessions(
         expiresAt: { gt: new Date() },
       },
       data: { invalidatedAt: new Date() },
-    }),
-  ]);
+    });
+    if (audit) await record(audit, tx);
+    return user;
+  });
 }
 
-export async function unbanUser(userId: string) {
-  return prisma.user.update({
+export async function unbanUser(userId: string, audit?: AuditDescriptor) {
+  const updateArgs = {
     where: { id: userId, deletedAt: null },
     data: { bannedAt: null, bannedBy: null, banReason: null },
+  };
+
+  if (!audit) return prisma.user.update(updateArgs);
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.update(updateArgs);
+    await record(audit, tx);
+    return user;
   });
 }
 

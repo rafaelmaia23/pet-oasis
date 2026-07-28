@@ -179,3 +179,27 @@ model VerificationToken {
   @@index([userId])
   @@map("verification_tokens")
 }
+
+// ─── Auditoria ───────────────────────────────────────────────────────────────
+
+// Trilha durável de ações sensíveis (quem fez o quê, em quem, quando).
+// Append-only: sem update/delete pela aplicação (só o script de retenção 7.14).
+// actorId/targetId são uuid cru SEM FK — evidência pode apontar para linha
+// soft-deleted, mesmo idioma de User.bannedBy. Regras em docs/logging-policy.md §4.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  @map("actor_id")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String?  @map("target_id")
+  metadata   Json?
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt, id]) // cursor pagination da 7.8 (tiebreaker por id)
+  @@index([action])
+  @@index([actorId])
+  @@index([targetId])
+  @@map("audit_logs")
+}

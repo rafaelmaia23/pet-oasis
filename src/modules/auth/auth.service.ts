@@ -6,6 +6,7 @@ import {
   createNotFoundError,
   createUnauthorizedError,
 } from "@/errors";
+import { record } from "@/lib/auditLog";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
@@ -40,6 +41,12 @@ export async function login(
     // Sem `userId`: não há conta. O email fica de fora de propósito — a linha
     // não precisa dele para contar a história, e ele é PII.
     log.warn({ reason: "UNKNOWN_EMAIL" }, "login failed");
+    // Sem ator e sem alvo: evidência de tentativa de adivinhação de credencial.
+    await record({
+      action: "AUTH_LOGIN_FAILED",
+      targetType: "User",
+      metadata: { reason: "BAD_CREDENTIALS" },
+    });
     throw createUnauthorizedError({
       message: "Credenciais inválidas",
       action: "Verifique seu email e senha e tente novamente",
@@ -50,6 +57,12 @@ export async function login(
 
   if (!passwordMatch) {
     log.warn({ userId: user.id, reason: "BAD_PASSWORD" }, "login failed");
+    await record({
+      action: "AUTH_LOGIN_FAILED",
+      targetType: "User",
+      targetId: user.id,
+      metadata: { reason: "BAD_CREDENTIALS" },
+    });
     throw createUnauthorizedError({
       message: "Credenciais inválidas",
       action: "Verifique seu email e senha e tente novamente",
@@ -58,6 +71,12 @@ export async function login(
 
   if (user.bannedAt !== null) {
     log.warn({ userId: user.id, reason: "BANNED" }, "login refused");
+    await record({
+      action: "AUTH_LOGIN_FAILED",
+      targetType: "User",
+      targetId: user.id,
+      metadata: { reason: "BANNED" },
+    });
     throw createForbiddenError({
       message: "Conta suspensa",
       action: "Se você acha que isso é um erro, entre em contato com o suporte",

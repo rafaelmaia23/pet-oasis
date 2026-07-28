@@ -169,7 +169,16 @@ export async function addUserRole(
     });
   }
 
-  const userRole = await permissionRepository.addUserRole(targetUserId, roleId);
+  const userRole = await permissionRepository.addUserRole(
+    targetUserId,
+    roleId,
+    {
+      action: "USER_ROLE_GRANTED",
+      targetType: "User",
+      targetId: targetUserId,
+      metadata: { roleId, roleName: role.name },
+    },
+  );
 
   log.info(
     {
@@ -236,7 +245,12 @@ export async function removeUserRole(
     }
   }
 
-  const removed = await permissionRepository.removeUserRole(userRole.id);
+  const removed = await permissionRepository.removeUserRole(userRole.id, {
+    action: "USER_ROLE_REVOKED",
+    targetType: "User",
+    targetId: targetUserId,
+    metadata: { roleId, roleName: role.name },
+  });
 
   log.info(
     {
@@ -281,6 +295,15 @@ export async function upsertUserFeature(
     targetUserId,
     featureId,
     granted,
+    {
+      action: "USER_PERMISSION_GRANTED",
+      targetType: "User",
+      targetId: targetUserId,
+      metadata: {
+        featureName: feature.name,
+        effect: granted ? "GRANT" : "DENY",
+      },
+    },
   );
 
   log.info(
@@ -330,7 +353,12 @@ export async function removeUserFeature(
     });
   }
 
-  const removed = await permissionRepository.removeUserFeature(userFeature.id);
+  const removed = await permissionRepository.removeUserFeature(userFeature.id, {
+    action: "USER_PERMISSION_REVOKED",
+    targetType: "User",
+    targetId,
+    metadata: { featureName: feature.name },
+  });
 
   log.info(
     { userId: targetId, actorId: requesterId, featureName: feature.name },

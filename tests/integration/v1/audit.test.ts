@@ -1,6 +1,7 @@
 import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "@/app";
@@ -27,6 +28,7 @@ describe("Audit log", () => {
     sendMock.mockReset();
     sendMock.mockResolvedValue(undefined);
     await clearDatabase();
+    await flushRedis();
   });
 
   afterEach(() => {

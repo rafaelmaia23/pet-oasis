@@ -74,6 +74,7 @@ export const errorResponses = {
   404: jsonResponse("Recurso não encontrado", errorResponseSchema),
   409: jsonResponse("Conflito — valor único já em uso", errorResponseSchema),
   422: jsonResponse("Erro de validação", validationErrorSchema),
+  429: jsonResponse("Muitas tentativas — limite excedido", errorResponseSchema),
 } satisfies Record<number, ZodOpenApiResponseObject>;
 
 // Resposta de sucesso sem corpo (204).

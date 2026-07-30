@@ -105,6 +105,20 @@ export class PayloadTooLargeError extends AppError {
   }
 }
 
+// ─── 429 Too Many Requests ───────────────────────────────────────────────────
+
+export class TooManyRequestsError extends AppError {
+  constructor(params: OmitFixed<AppErrorParams> = {}) {
+    super({
+      message: "Muitas tentativas. Tente novamente mais tarde.",
+      action: "Aguarde antes de tentar novamente",
+      ...params,
+      statusCode: 429,
+      code: "TOO_MANY_REQUESTS",
+    });
+  }
+}
+
 // ─── 422 Validation Error ────────────────────────────────────────────────────
 
 type ValidationErrorParams = OmitFixed<AppErrorParams> & {

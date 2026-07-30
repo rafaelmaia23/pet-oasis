@@ -10,6 +10,7 @@ import {
 } from "@tests/helpers/assertions";
 import { loginAs, loginWithSession } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import {
   afterEach,
@@ -41,6 +42,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await clearDatabase();
+  await flushRedis();
 });
 
 describe("POST /api/v1/users", () => {

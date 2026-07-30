@@ -9,6 +9,7 @@ import {
   PayloadTooLargeError,
   PresentationError,
   ServiceUnavailableError,
+  TooManyRequestsError,
   UnauthorizedError,
   ValidationError,
   type ValidationErrorFields,
@@ -39,6 +40,10 @@ export const createConflictError = (params: OmitFixed<AppErrorParams> = {}) =>
 export const createPayloadTooLargeError = (
   params: OmitFixed<AppErrorParams> = {},
 ) => new PayloadTooLargeError(params);
+
+export const createTooManyRequestsError = (
+  params: OmitFixed<AppErrorParams> = {},
+) => new TooManyRequestsError(params);
 
 export const createValidationError = (
   params: { errors?: ValidationErrorFields } & OmitFixed<AppErrorParams> = {},

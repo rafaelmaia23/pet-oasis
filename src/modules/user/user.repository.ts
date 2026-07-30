@@ -1,3 +1,5 @@
+import type { Prisma } from "@/generated/prisma/client";
+import type { UserStatus } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import type { RoleName } from "../role/role.constants";
@@ -53,11 +55,39 @@ export async function findUserByEmail(email: string) {
   });
 }
 
-export async function findAllUsers() {
-  return prisma.user.findMany({
-    where: { deletedAt: null },
-    include: userInclude,
-  });
+export type UserListFilters = {
+  status?: UserStatus | undefined;
+  banned?: boolean | undefined;
+  role?: string | undefined;
+};
+
+export async function findAllUsers(
+  filters: UserListFilters,
+  pagination: { skip: number; take: number },
+) {
+  const where: Prisma.UserWhereInput = {
+    deletedAt: null,
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.banned === undefined
+      ? {}
+      : { bannedAt: filters.banned ? { not: null } : null }),
+    ...(filters.role
+      ? { roles: { some: { deletedAt: null, role: { name: filters.role } } } }
+      : {}),
+  };
+
+  const [users, total] = await prisma.$transaction([
+    prisma.user.findMany({
+      where,
+      include: userInclude,
+      orderBy: { createdAt: "desc" },
+      skip: pagination.skip,
+      take: pagination.take,
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return { users, total };
 }
 
 export async function createEmployee(

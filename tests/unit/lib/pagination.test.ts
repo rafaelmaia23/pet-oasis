@@ -27,7 +27,9 @@ describe("pagination", () => {
     });
 
     it("should reject a limit above MAX_LIMIT", () => {
-      const result = offsetQuerySchema.safeParse({ limit: String(MAX_LIMIT + 1) });
+      const result = offsetQuerySchema.safeParse({
+        limit: String(MAX_LIMIT + 1),
+      });
       expect(result.success).toBe(false);
     });
 
@@ -52,8 +54,14 @@ describe("pagination", () => {
 
   describe("buildOffsetArgs", () => {
     it("should translate page/limit into skip/take", () => {
-      expect(buildOffsetArgs({ page: 1, limit: 20 })).toEqual({ skip: 0, take: 20 });
-      expect(buildOffsetArgs({ page: 3, limit: 20 })).toEqual({ skip: 40, take: 20 });
+      expect(buildOffsetArgs({ page: 1, limit: 20 })).toEqual({
+        skip: 0,
+        take: 20,
+      });
+      expect(buildOffsetArgs({ page: 3, limit: 20 })).toEqual({
+        skip: 40,
+        take: 20,
+      });
     });
   });
 
@@ -75,10 +83,15 @@ describe("pagination", () => {
 
   describe("encodeCursor / decodeCursor", () => {
     it("should round-trip a (createdAt, id) pair", () => {
-      const cursor = { createdAt: new Date("2026-07-30T12:00:00.000Z"), id: "abc-123" };
+      const cursor = {
+        createdAt: new Date("2026-07-30T12:00:00.000Z"),
+        id: "abc-123",
+      };
       const decoded = decodeCursor(encodeCursor(cursor));
       expect(decoded.id).toBe(cursor.id);
-      expect(decoded.createdAt.toISOString()).toBe(cursor.createdAt.toISOString());
+      expect(decoded.createdAt.toISOString()).toBe(
+        cursor.createdAt.toISOString(),
+      );
     });
 
     it("should produce an opaque (non human-readable) token", () => {
@@ -102,9 +115,10 @@ describe("pagination", () => {
     });
 
     it("should throw when the decoded payload is missing fields", () => {
-      const bogus = Buffer.from(JSON.stringify({ foo: "bar" }), "utf8").toString(
-        "base64url",
-      );
+      const bogus = Buffer.from(
+        JSON.stringify({ foo: "bar" }),
+        "utf8",
+      ).toString("base64url");
       expect(() => decodeCursor(bogus)).toThrow();
     });
   });
@@ -131,7 +145,10 @@ describe("pagination", () => {
     const row = (id: string, iso: string) => ({ id, createdAt: new Date(iso) });
 
     it("should report hasMore=false and null cursor when rows fit the page", () => {
-      const rows = [row("a", "2026-07-30T12:00:02.000Z"), row("b", "2026-07-30T12:00:01.000Z")];
+      const rows = [
+        row("a", "2026-07-30T12:00:02.000Z"),
+        row("b", "2026-07-30T12:00:01.000Z"),
+      ];
       const env = cursorEnvelope(rows, 20);
       expect(env.data).toHaveLength(2);
       expect(env.meta).toEqual({ nextCursor: null, hasMore: false });
@@ -155,7 +172,11 @@ describe("pagination", () => {
     it("should not skip nor repeat rows that share a timestamp (tiebreaker)", () => {
       const sameTime = "2026-07-30T12:00:00.000Z";
       // three rows, identical createdAt, ordered by id desc as the query would return them
-      const rows = [row("id-3", sameTime), row("id-2", sameTime), row("id-1", sameTime)];
+      const rows = [
+        row("id-3", sameTime),
+        row("id-2", sameTime),
+        row("id-1", sameTime),
+      ];
 
       // page 1: limit 2 -> take 3, slice to 2
       const page1 = cursorEnvelope(rows, 2);

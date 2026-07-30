@@ -4,6 +4,7 @@ import type {
   ZodOpenApiResponseObject,
   ZodOpenApiSecuritySchemeObject,
 } from "zod-openapi";
+import { cursorMetaSchema, offsetMetaSchema } from "@/lib/pagination";
 
 // Formato padrão de erro da API (AppError.toJson) — vira componente reusável.
 export const errorResponseSchema = z
@@ -79,5 +80,23 @@ export const errorResponses = {
 export const noContentResponse: ZodOpenApiResponseObject = {
   description: "Sucesso, sem conteúdo",
 };
+
+// Envelope `{ data, meta }` das listagens (D4). Uma variante por estratégia de
+// paginação; `staticList` é o envelope de meta vazio das listas que não paginam.
+const emptyMetaSchema = z
+  .object({})
+  .meta({ id: "EmptyMeta", description: "Sem metadados de paginação" });
+
+export function offsetList(view: z.ZodType) {
+  return z.object({ data: z.array(view), meta: offsetMetaSchema });
+}
+
+export function cursorList(view: z.ZodType) {
+  return z.object({ data: z.array(view), meta: cursorMetaSchema });
+}
+
+export function staticList(view: z.ZodType) {
+  return z.object({ data: z.array(view), meta: emptyMetaSchema });
+}
 
 export { jsonResponse };

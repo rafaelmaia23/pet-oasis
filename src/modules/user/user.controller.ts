@@ -1,9 +1,11 @@
 import type { Request, Response } from "express";
+import { offsetEnvelope } from "@/lib/pagination";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "./user.presenter";
 import {
   banUserSchema,
   createEmployeeSchema,
+  listUsersSchema,
   updateUserSchema,
   userParamsSchema,
 } from "./user.schema";
@@ -20,10 +22,16 @@ export const createEmployee = async (req: Request, res: Response) => {
     .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
 };
 
-export const getAllUsers = async (_: Request, res: Response) => {
-  const users = await userService.getAllUsers();
+export const getAllUsers = async (req: Request, res: Response) => {
+  const { query } = listUsersSchema.parse({ query: req.query });
 
-  return res.status(200).json(userPresenter.presentMany(users, "admin"));
+  const { users, total } = await userService.getAllUsers(query);
+
+  return res
+    .status(200)
+    .json(
+      offsetEnvelope(userPresenter.presentMany(users, "admin"), query, total),
+    );
 };
 
 export const getUserById = async (req: Request, res: Response) => {

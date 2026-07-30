@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { env } from "@/config/env";
+import { listEnvelope } from "@/lib/pagination";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user/user.presenter";
 import {
@@ -137,7 +138,9 @@ export const logout = async (req: Request, res: Response) => {
 export const listSessions = async (req: Request, res: Response) => {
   const sessions = await authService.listSessions(getAuthUser(req).id);
 
-  res.status(200).json(sessionPresenter.presentMany(sessions, "default"));
+  res
+    .status(200)
+    .json(listEnvelope(sessionPresenter.presentMany(sessions, "default")));
 };
 
 export const revokeSession = async (req: Request, res: Response) => {

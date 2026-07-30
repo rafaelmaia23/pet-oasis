@@ -41,12 +41,9 @@ export const offsetQuerySchema = z.object({
 });
 
 export const cursorQuerySchema = z.object({
-  cursor: z
-    .string()
-    .optional()
-    .meta({
-      description: "Cursor opaco da página seguinte (obtido em meta.nextCursor)",
-    }),
+  cursor: z.string().optional().meta({
+    description: "Cursor opaco da página seguinte (obtido em meta.nextCursor)",
+  }),
   limit: limitField,
 });
 
@@ -98,7 +95,10 @@ export type Cursor = { createdAt: Date; id: string };
 export type CursorRow = { createdAt: Date; id: string };
 
 export function encodeCursor(cursor: Cursor): string {
-  const payload = JSON.stringify({ c: cursor.createdAt.toISOString(), i: cursor.id });
+  const payload = JSON.stringify({
+    c: cursor.createdAt.toISOString(),
+    i: cursor.id,
+  });
   return Buffer.from(payload, "utf8").toString("base64url");
 }
 
@@ -167,6 +167,9 @@ export function cursorEnvelope<T extends CursorRow>(
  * Envelope uniforme para listagens que não paginam. `meta` fica vazio de
  * propósito — ganhar paginação amanhã vira aditivo em vez de breaking (D4).
  */
-export function listEnvelope<T>(data: T[]): { data: T[]; meta: Record<string, never> } {
+export function listEnvelope<T>(data: T[]): {
+  data: T[];
+  meta: Record<string, never>;
+} {
   return { data, meta: {} };
 }

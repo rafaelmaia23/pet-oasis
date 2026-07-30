@@ -9,6 +9,7 @@ import {
   canActOnResource,
   computeEffectiveFeatures,
 } from "@/lib/authorization";
+import * as lockout from "@/lib/lockout";
 import { logger } from "@/lib/logger";
 import { buildOffsetArgs } from "@/lib/pagination";
 import { hashPassword } from "@/lib/password";
@@ -207,9 +208,16 @@ type UserForFeatureComputation = NonNullable<
   Awaited<ReturnType<typeof userRepository.getUserForFeatureComputation>>
 >;
 
-async function assertAdminForBan(
+/**
+ * Guarda de não-escalação reusada por ban/unban e lock/unlock: agir sobre um
+ * alvo privilegiado (features de `PERMISSION_FEATURES` ou `*`) exige ator
+ * admin. Cada chamador passa sua própria mensagem — o predicado é o mesmo,
+ * o texto exibido não.
+ */
+async function assertAdminForPrivilegedTarget(
   requestingUserId: string,
   target: UserForFeatureComputation,
+  guardMessage: { message: string; action: string },
 ) {
   const effectiveFeatures = computeEffectiveFeatures(target);
 
@@ -221,10 +229,7 @@ async function assertAdminForBan(
 
   const requestingUser = await userRepository.findUserById(requestingUserId);
 
-  assertActorIsAdmin(requestingUser, {
-    message: "Apenas administradores podem banir usuários privilegiados",
-    action: "Solicite a um administrador que faça essa alteração",
-  });
+  assertActorIsAdmin(requestingUser, guardMessage);
 }
 
 export async function banUser(
@@ -248,7 +253,10 @@ export async function banUser(
     });
   }
 
-  await assertAdminForBan(requestingUserId, target);
+  await assertAdminForPrivilegedTarget(requestingUserId, target, {
+    message: "Apenas administradores podem banir usuários privilegiados",
+    action: "Solicite a um administrador que faça essa alteração",
+  });
 
   if (target.bannedAt !== null) {
     throw createConflictError({
@@ -297,7 +305,10 @@ export async function unbanUser(requestingUserId: string, targetId: string) {
     });
   }
 
-  await assertAdminForBan(requestingUserId, target);
+  await assertAdminForPrivilegedTarget(requestingUserId, target, {
+    message: "Apenas administradores podem banir usuários privilegiados",
+    action: "Solicite a um administrador que faça essa alteração",
+  });
 
   if (target.bannedAt === null) {
     throw createConflictError({
@@ -315,4 +326,41 @@ export async function unbanUser(requestingUserId: string, targetId: string) {
   log.info({ userId: targetId, actorId: requestingUserId }, "user unbanned");
 
   return unbanned;
+}
+
+export async function unlockAccount(
+  requestingUserId: string,
+  targetId: string,
+) {
+  if (requestingUserId === targetId) {
+    throw createConflictError({
+      message: "Não é possível desbloquear a si mesmo",
+      action: "Peça a outro administrador que faça essa alteração",
+    });
+  }
+
+  const target = await userRepository.getUserForFeatureComputation(targetId);
+
+  if (!target) {
+    throw createNotFoundError({
+      message: "Usuário não encontrado",
+      action: "Verifique o ID e tente novamente",
+    });
+  }
+
+  await assertAdminForPrivilegedTarget(requestingUserId, target, {
+    message: "Apenas administradores podem desbloquear usuários privilegiados",
+    action: "Solicite a um administrador que faça essa alteração",
+  });
+
+  const cleared = await lockout.clearLockout(targetId, "ADMIN");
+
+  if (!cleared) {
+    throw createConflictError({
+      message: "Conta não está travada",
+      action: "Verifique o estado da conta",
+    });
+  }
+
+  log.info({ userId: targetId, actorId: requestingUserId }, "account unlocked");
 }

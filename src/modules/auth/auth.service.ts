@@ -4,9 +4,11 @@ import { env } from "@/config/env";
 import {
   createForbiddenError,
   createNotFoundError,
+  createTooManyRequestsError,
   createUnauthorizedError,
 } from "@/errors";
 import { record } from "@/lib/auditLog";
+import * as lockout from "@/lib/lockout";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
@@ -63,10 +65,29 @@ export async function login(
       targetId: user.id,
       metadata: { reason: "BAD_CREDENTIALS" },
     });
+    // Conta as falhas mesmo sem checar o estado de travamento aqui: quem não
+    // sabe a senha continua recebendo 401 igual a hoje, sem pista sobre a
+    // conta (mesmo espírito anti-enumeração do bannedAt/status abaixo). O
+    // papel do lockout é impedir que uma senha eventualmente certa complete o
+    // login dentro da janela de bloqueio — só precisa ser checado no ramo de
+    // senha correta.
+    await lockout.recordFailure(user.id);
     throw createUnauthorizedError({
       message: "Credenciais inválidas",
       action: "Verifique seu email e senha e tente novamente",
     });
+  }
+
+  const lockoutState = await lockout.getLockoutState(user.id);
+  if (lockoutState.isLocked) {
+    log.warn({ userId: user.id, reason: "LOCKED" }, "login refused");
+    await record({
+      action: "AUTH_LOGIN_FAILED",
+      targetType: "User",
+      targetId: user.id,
+      metadata: { reason: "LOCKED" },
+    });
+    throw createTooManyRequestsError();
   }
 
   if (user.bannedAt !== null) {
@@ -93,6 +114,10 @@ export async function login(
       action: "Verifique seu email para ativar a conta",
     });
   }
+
+  // Login legítimo: se havia contador/backoff de tentativas erradas, limpa.
+  // Login limpo de uma conta que nunca falhou não grava nada (no-op).
+  await lockout.clearLockout(user.id, "SUCCESSFUL_LOGIN");
 
   const accessToken = generateToken(user.id);
   const refreshToken = generateOpaqueToken();

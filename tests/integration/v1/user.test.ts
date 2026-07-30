@@ -23,6 +23,7 @@ import {
 } from "vitest";
 import z from "zod";
 import app from "@/app";
+import { env } from "@/config/env";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { userViews } from "@/modules/user/user.presenter";
@@ -1535,5 +1536,138 @@ describe("DELETE /api/v1/users/:id/ban", () => {
       password: target.password,
     });
     expect(loginResponse.status).toBe(200);
+  });
+});
+
+describe("DELETE /api/v1/users/:id/lock", () => {
+  async function lockedCustomer() {
+    const target = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: target.email,
+        password: "wrongpassword",
+      });
+    }
+
+    return target;
+  }
+
+  it("should return 401 without an access token", async () => {
+    const target = await lockedCustomer();
+
+    const response = await request(app).delete(
+      `/api/v1/users/${target.id}/lock`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 403 without the manage:user:status feature", async () => {
+    const actor = await buildEmployee({ roleNames: ["attendant"] });
+    const target = await lockedCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 422 for an invalid :id", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete("/api/v1/users/not-a-uuid/lock")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+  });
+
+  it("should return 404 for a non-existent target", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${faker.string.uuid()}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+  });
+
+  it("should return 403 when a non-admin unlocks a privileged target", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildEmployee({ roleNames: ["admin"] });
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: target.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 409 when the actor tries to unlock itself", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${actor.id}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should return 409 when the target is not locked", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should unlock the target and record AUTH_LOCKOUT_CLEARED", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await lockedCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    // confirms the target really is locked before unlocking it
+    const lockedLogin = await request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: target.password,
+    });
+    expect(lockedLogin.status).toBe(429);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: target.password,
+    });
+    expect(loginResponse.status).toBe(200);
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_LOCKOUT_CLEARED", targetId: target.id },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toEqual({ clearedBy: "ADMIN" });
   });
 });

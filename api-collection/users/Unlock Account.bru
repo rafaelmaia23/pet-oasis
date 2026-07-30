@@ -1,0 +1,16 @@
+meta {
+  name: Unlock Account
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{baseUrl}}/users/{{userId}}/lock
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:user:status. O demo não tem essa feature, retorna 403.
+  409 se a conta não estiver travada por lockout (7.10).
+}

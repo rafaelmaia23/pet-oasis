@@ -34,6 +34,17 @@ export const DEFAULT_FEATURES = [
   // User status administration features
   { name: "manage:user:status", description: "Banir e desbanir usuários" },
 
+  // Log reading features
+  { name: "read:log", description: "Ler o buffer de logs em memória" },
+  {
+    name: "read:audit-log",
+    description: "Ler a trilha de auditoria (IP mascarado)",
+  },
+  {
+    name: "read:audit-log:full",
+    description: "Ler a trilha de auditoria com o IP completo",
+  },
+
   // Wildcard feature
   { name: "*", description: "Acesso total a todas as funcionalidades" },
 ] as const;

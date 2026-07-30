@@ -1,8 +1,10 @@
 /// <reference types="zod-openapi" />
 import { createDocument, type ZodOpenApiObject } from "zod-openapi";
 import { securitySchemes } from "./components";
+import { auditLogPaths } from "./paths/audit-log";
 import { authPaths } from "./paths/auth";
 import { featurePaths } from "./paths/feature";
+import { logPaths } from "./paths/log";
 import { mePaths } from "./paths/me";
 import { permissionPaths } from "./paths/permission";
 import { profilePaths } from "./paths/profile";
@@ -127,6 +129,18 @@ const documentDefinition: ZodOpenApiObject = {
         "Catálogo de features, somente leitura. É a lista fechada de tudo " +
         "que se pode autorizar no sistema.",
     },
+    {
+      name: "Audit",
+      description:
+        "Trilha durável de ações sensíveis (append-only, só leitura). " +
+        "Paginação por cursor; o IP sai mascarado sem `read:audit-log:full`.",
+    },
+    {
+      name: "Logs",
+      description:
+        "Buffer de logs em memória do processo — volátil e por réplica. " +
+        "Leitura via `read:log`.",
+    },
   ],
   components: { securitySchemes },
   // Bearer por padrão; operações públicas sobrescrevem com `security: []`.
@@ -140,6 +154,8 @@ const documentDefinition: ZodOpenApiObject = {
     ...permissionPaths,
     ...rolePaths,
     ...featurePaths,
+    ...auditLogPaths,
+    ...logPaths,
   },
 };
 

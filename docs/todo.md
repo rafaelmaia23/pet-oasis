@@ -328,15 +328,17 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ Testes: `limit` acima do teto → **422** (não clamp silencioso); página vazia → `data: []` com 200 (lista vazia não é 404); **cursor com timestamps duplicados não pula nem repete** (teste de regressão do tiebreaker, unitário em `pagination.test.ts`); cursor inválido/corrompido → 422.
 - ✅ **Implementação:** helper `src/lib/pagination.ts` (`offsetQuerySchema`/`cursorQuerySchema`, `buildOffsetArgs`/`offsetEnvelope`, `encodeCursor`/`decodeCursor`/`buildCursorFilter`/`cursorEnvelope`, `listEnvelope`); docs via `offsetList`/`cursorList`/`staticList` (`components.ts`) + query params por `fromEnvelope`. Suíte **453** + typecheck + lint verdes. Decisões firmadas com o usuário na abertura: filtros de `/users` **estritos** (422) e `read:audit-log:full` **privilegiada** (idioma da não-escalação; aplicada na 7.8).
 
-### ⬜ [Sessão D] Fase 7.8 — Endpoints de leitura de log
-- ⬜ Features novas em `feature.constants.ts` (D5, padrão `ação:recurso:modificador`, **singular** como o resto do catálogo): **`read:log`** (buffer em memória), **`read:audit-log`** (trilha durável, `ip` mascarado) e **`read:audit-log:full`** (destrava o `ip` inteiro).
-  - ⬜ `role.constants.ts`: admin (via `*`) e manager recebem as três; a role **`demo`** recebe `read:log` e `read:audit-log` — **não** `:full`. Reseed + `db:generate`.
-- ⬜ **`GET /audit-logs`** (`read:audit-log`): paginação **cursor** (7.7); filtros `action`, `actorId`, `targetType`, `targetId`, `from`, `to`.
-  - ⬜ `ip` **mascarado** (`192.168.1.***`) para quem não tem `read:audit-log:full` — mesmo endpoint, resposta diferente por permissão (RBAC demonstrado dentro da própria resposta). Mascaramento na camada de serialização; o dado permanece íntegro no banco.
-  - ⬜ Só `GET`. Teste explícito de que `PATCH`/`DELETE` não existem (imutabilidade intencional).
-- ⬜ **`GET /logs/recent`** (`read:log`): ring buffer da 7.3, `?limit=` opcional, sem paginação (já é limitado por construção), mas **com o envelope** `{ data, meta }` (D4).
-  - ⬜ `meta` explicitando a limitação: o buffer é **por processo** e **some no restart**.
-- ⬜ Testes: 401 sem token; 403 sem a feature; demo lê os dois com 200; **demo recebe `ip` mascarado e ator com `:full` recebe inteiro** (mesma linha, duas respostas); filtros combinados.
+### ✅ [Sessão D] Fase 7.8 — Endpoints de leitura de log
+- ✅ Features novas em `feature.constants.ts` (D5, padrão `ação:recurso:modificador`, **singular** como o resto do catálogo): **`read:log`** (buffer em memória), **`read:audit-log`** (trilha durável, `ip` mascarado) e **`read:audit-log:full`** (destrava o `ip` inteiro).
+  - ✅ `role.constants.ts`: admin (via `*`) e manager recebem as três; a role **`demo`** recebe `read:log` e `read:audit-log` — **não** `:full`. Reseed + `db:generate`.
+- ✅ **`GET /audit-logs`** (`read:audit-log`): paginação **cursor** (7.7); filtros `action`, `actorId`, `targetType`, `targetId`, `from`, `to`.
+  - ✅ `ip` **mascarado** (`192.168.1.***`) para quem não tem `read:audit-log:full` — mesmo endpoint, resposta diferente por permissão (RBAC demonstrado dentro da própria resposta). Mascaramento na camada de serialização; o dado permanece íntegro no banco.
+  - ✅ Só `GET`. Teste explícito de que `PATCH`/`DELETE` não existem (imutabilidade intencional).
+- ✅ **`GET /logs/recent`** (`read:log`): ring buffer da 7.3, `?limit=` opcional, sem paginação (já é limitado por construção), mas **com o envelope** `{ data, meta }` (D4).
+  - ✅ `meta` explicitando a limitação: o buffer é **por processo** e **some no restart**.
+- ✅ Testes: 401 sem token; 403 sem a feature; demo/ator lê os dois com 200; **reader sem `:full` recebe `ip` mascarado e ator com `:full` recebe inteiro** (mesma linha, duas respostas); filtros combinados (`action`/`targetType`/`actorId`/`from`-`to`); **cursor percorre 5 linhas de timestamp igual sem pular/repetir**; cursor corrompido → 422; `limit` > 100 → 422; `PATCH`/`DELETE /audit-logs` → 404.
+- ✅ **Escalação (decisão firmada com o usuário): `read:audit-log:full` é privilegiada.** `PRIVILEGED_FEATURES = [...PERMISSION_FEATURES, "read:audit-log:full"]` (`role.constants.ts`); os dois guards de `permission.service.ts` passaram a consultá-lo (mensagem generalizada p/ "features privilegiadas"). `read:log`/`read:audit-log` são normais. Novos módulos `src/modules/audit-log/` e `src/modules/log/` (template do módulo read-only `feature`); `maskIp` na serialização; `/logs/recent` sem view (entradas já redigidas pelo `redact`). Docs (`paths/audit-log.ts`, `paths/log.ts`, tags Audit/Logs) + Bruno (`audit-logs/`, `logs/`). Suíte **471** + typecheck + lint verdes.
+  - 🔸 **Pendente p/ Sessão I (7.19):** atualizar `CLAUDE.md` (regra de não-escalação: o conjunto agora é `PRIVILEGED_FEATURES`, inclui `read:audit-log:full`), `docs/endpoints.md` e `docs/logging-policy.md` §8 — deferido ao fecho formal da fase.
 
 ### ⬜ [Sessão F] Fase 7.9 — Destinos externos: Axiom + Sentry
 - ⬜ **Axiom** como transport do pino (`@axiomhq/pino`), em **worker thread** (`pino.transport`) — chamada remota nunca no caminho síncrono do request.

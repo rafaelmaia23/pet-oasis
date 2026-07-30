@@ -1,0 +1,20 @@
+meta {
+  name: Get Recent Logs
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/logs/recent?limit=50
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 50
+}
+
+docs {
+  Exige read:log (o demo tem). Ring buffer em memória, mais recentes primeiro —
+  por processo e volátil (some no restart), como declara o meta da resposta.
+}

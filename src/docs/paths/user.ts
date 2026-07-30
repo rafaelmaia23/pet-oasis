@@ -1,13 +1,18 @@
-import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
 import { userViews } from "@/modules/user/user.presenter";
 import {
   banUserSchema,
   createEmployeeSchema,
+  listUsersSchema,
   updateUserSchema,
   userParamsSchema,
 } from "@/modules/user/user.schema";
-import { errorResponses, jsonResponse, noContentResponse } from "../components";
+import {
+  errorResponses,
+  jsonResponse,
+  noContentResponse,
+  offsetList,
+} from "../components";
 import { fromEnvelope } from "../helpers";
 
 export const userPaths: ZodOpenApiPathsObject = {
@@ -26,11 +31,14 @@ export const userPaths: ZodOpenApiPathsObject = {
     },
     get: {
       tags: ["Users"],
-      summary: "Lista todos os usuários — exige read:user:others",
+      summary:
+        "Lista usuários (paginação offset + filtros) — exige read:user:others",
+      ...fromEnvelope(listUsersSchema),
       responses: {
-        200: jsonResponse("Lista de usuários", z.array(userViews.admin)),
+        200: jsonResponse("Lista de usuários", offsetList(userViews.admin)),
         401: errorResponses[401],
         403: errorResponses[403],
+        422: errorResponses[422],
       },
     },
   },

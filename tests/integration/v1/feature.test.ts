@@ -63,9 +63,10 @@ describe("GET /api/v1/features", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body.length).toBe(DEFAULT_FEATURES.length);
+    expect(response.body.data.length).toBe(DEFAULT_FEATURES.length);
+    expect(response.body.meta).toEqual({});
 
-    expect(response.body).toMatchView(z.array(featureViews.default));
+    expect(response.body.data).toMatchView(z.array(featureViews.default));
   });
 });
 

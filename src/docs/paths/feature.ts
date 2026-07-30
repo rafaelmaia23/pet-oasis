@@ -1,8 +1,7 @@
-import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
 import { featureViews } from "@/modules/feature/feature.presenter";
 import { featureParamsSchema } from "@/modules/feature/feature.schema";
-import { errorResponses, jsonResponse } from "../components";
+import { errorResponses, jsonResponse, staticList } from "../components";
 import { fromEnvelope } from "../helpers";
 
 export const featurePaths: ZodOpenApiPathsObject = {
@@ -13,7 +12,7 @@ export const featurePaths: ZodOpenApiPathsObject = {
       responses: {
         200: jsonResponse(
           "Catálogo de features",
-          z.array(featureViews.default),
+          staticList(featureViews.default),
         ),
         401: errorResponses[401],
         403: errorResponses[403],

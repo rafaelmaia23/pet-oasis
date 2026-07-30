@@ -12,7 +12,12 @@ import {
   verifyEmailSchema,
 } from "@/modules/auth/auth.schema";
 import { userViews } from "@/modules/user/user.presenter";
-import { errorResponses, jsonResponse, noContentResponse } from "../components";
+import {
+  errorResponses,
+  jsonResponse,
+  noContentResponse,
+  staticList,
+} from "../components";
 import { fromEnvelope } from "../helpers";
 
 const accessTokenSchema = z
@@ -144,7 +149,7 @@ export const authPaths: ZodOpenApiPathsObject = {
       tags: ["Auth"],
       summary: "Lista as sessões vivas do usuário",
       responses: {
-        200: jsonResponse("Sessões vivas", z.array(sessionViews.default)),
+        200: jsonResponse("Sessões vivas", staticList(sessionViews.default)),
         401: errorResponses[401],
         403: errorResponses[403],
       },

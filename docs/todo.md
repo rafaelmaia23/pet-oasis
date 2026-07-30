@@ -316,16 +316,17 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ **Escopo (decisão de abertura): 12 dos 18 pontos** — só os com código hoje: `USER_CREATED` (source `SIGNUP`/`ADMIN`), `USER_DELETED`, `USER_BANNED`, `USER_UNBANNED`, `USER_ROLE_GRANTED`/`_REVOKED`, `USER_PERMISSION_GRANTED`/`_REVOKED`, `PASSWORD_RESET_REQUESTED`/`_COMPLETED`, `PASSWORD_CHANGED`, `AUTH_LOGIN_FAILED` (direto; `targetId` do dono quando existe, `reason` `BAD_CREDENTIALS`/`BANNED`). Os 6 restantes (lockout/rate-limit → E; forçar senha/troca de email → H; demo-reset → G) entram nas suas sub-fases, como a §4.3 já atribui.
 - ✅ Testes: cada ponto grava exatamente uma linha com `action`/`target`/`actor` certos; **rollback** (força o audit dentro da tx a falhar → nem o ban nem a linha persistem); `metadata` sem PII. Runtime: login falho de email desconhecido → linha com `actor`/`target` nulos, `reason=BAD_CREDENTIALS`, `ip`/`userAgent` preenchidos do store.
 
-### ⬜ [Sessão D] Fase 7.7 — Paginação reutilizável (offset + cursor) + filtros em `GET /users`
+### ✅ [Sessão D] Fase 7.7 — Paginação reutilizável (offset + cursor) + filtros em `GET /users`
 > Movida para antes dos endpoints de leitura. A Fase 9 (domínio pet shop) depende deste helper. Racional completo no ADR `docs/adr/pagination.md`.
 
-- ⬜ `src/lib/pagination.ts` oferecendo **as duas estratégias**; cada recurso escolhe a que fizer sentido.
-- ⬜ **Offset** (padrão para listas de CRUD): schema Zod `?page=&limit=`, `limit` **default 20 / máximo 100** (constantes no helper, não env var — fazem parte do contrato documentado), envelope `{ data, meta: { page, limit, total } }`.
-- ⬜ **Cursor/keyset** (para listas append-only ordenadas por tempo): chave composta `(campo_de_ordenação, id)` — **o tiebreaker por `id` é obrigatório**, senão registros com o mesmo timestamp são pulados ou repetidos; envelope `{ data, meta: { nextCursor, hasMore } }`; cursor opaco (base64 do par).
-- ⬜ `GET /users` migra para offset + filtros `status`, `banned` (via `bannedAt`), `role`.
-- ⬜ **D4 — envelope em todas as listagens** (breaking change assumido de uma vez): `/roles`, `/features`, `/auth/sessions`, `/users/:userId/roles`, `/users/:userId/features` passam a `{ data, meta }` mesmo sem paginar. **Exceção:** `GET /users/:userId/permissions` continua `string[]` (conjunto de capacidades computado, não coleção de recursos).
-  - ⬜ Atualizar junto, na mesma feat-branch: presenters, `src/docs/paths/*`, coleção Bruno (`api-collection/`) e os testes de integração de cada rota.
-- ⬜ Testes: `limit` acima do teto → **422** (não clamp silencioso); página vazia → `data: []` com 200 (lista vazia não é 404); **cursor com timestamps duplicados não pula nem repete** (teste de regressão do tiebreaker); cursor inválido/corrompido → 422.
+- ✅ `src/lib/pagination.ts` oferecendo **as duas estratégias**; cada recurso escolhe a que fizer sentido.
+- ✅ **Offset** (padrão para listas de CRUD): schema Zod `?page=&limit=`, `limit` **default 20 / máximo 100** (constantes no helper, não env var — fazem parte do contrato documentado), envelope `{ data, meta: { page, limit, total } }`.
+- ✅ **Cursor/keyset** (para listas append-only ordenadas por tempo): chave composta `(campo_de_ordenação, id)` — **o tiebreaker por `id` é obrigatório**, senão registros com o mesmo timestamp são pulados ou repetidos; envelope `{ data, meta: { nextCursor, hasMore } }`; cursor opaco (base64 do par).
+- ✅ `GET /users` migra para offset + filtros `status`, `banned` (via `bannedAt`), `role`.
+- ✅ **D4 — envelope em todas as listagens** (breaking change assumido de uma vez): `/roles`, `/features`, `/auth/sessions`, `/users/:userId/roles`, `/users/:userId/features` passam a `{ data, meta }` mesmo sem paginar. **Exceção:** `GET /users/:userId/permissions` continua `string[]` (conjunto de capacidades computado, não coleção de recursos).
+  - ✅ Atualizar junto, na mesma feat-branch: presenters, `src/docs/paths/*`, coleção Bruno (`api-collection/`) e os testes de integração de cada rota.
+- ✅ Testes: `limit` acima do teto → **422** (não clamp silencioso); página vazia → `data: []` com 200 (lista vazia não é 404); **cursor com timestamps duplicados não pula nem repete** (teste de regressão do tiebreaker, unitário em `pagination.test.ts`); cursor inválido/corrompido → 422.
+- ✅ **Implementação:** helper `src/lib/pagination.ts` (`offsetQuerySchema`/`cursorQuerySchema`, `buildOffsetArgs`/`offsetEnvelope`, `encodeCursor`/`decodeCursor`/`buildCursorFilter`/`cursorEnvelope`, `listEnvelope`); docs via `offsetList`/`cursorList`/`staticList` (`components.ts`) + query params por `fromEnvelope`. Suíte **453** + typecheck + lint verdes. Decisões firmadas com o usuário na abertura: filtros de `/users` **estritos** (422) e `read:audit-log:full` **privilegiada** (idioma da não-escalação; aplicada na 7.8).
 
 ### ⬜ [Sessão D] Fase 7.8 — Endpoints de leitura de log
 - ⬜ Features novas em `feature.constants.ts` (D5, padrão `ação:recurso:modificador`, **singular** como o resto do catálogo): **`read:log`** (buffer em memória), **`read:audit-log`** (trilha durável, `ip` mascarado) e **`read:audit-log:full`** (destrava o `ip` inteiro).

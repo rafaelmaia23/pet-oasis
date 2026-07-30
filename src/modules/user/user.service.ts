@@ -10,11 +10,13 @@ import {
   computeEffectiveFeatures,
 } from "@/lib/authorization";
 import { logger } from "@/lib/logger";
+import { buildOffsetArgs } from "@/lib/pagination";
 import { hashPassword } from "@/lib/password";
 import * as userRepository from "@/modules/user/user.repository";
 import type {
   CreateCustomerInput,
   CreateEmployeeInput,
+  ListUsersQuery,
   UpdateUserInput,
 } from "@/modules/user/user.schema";
 import { validateRoles } from "@/utils/validateRoles";
@@ -138,8 +140,13 @@ export async function getUserByEmail(
   return user;
 }
 
-export async function getAllUsers() {
-  return userRepository.findAllUsers();
+export async function getAllUsers(query: ListUsersQuery) {
+  const { skip, take } = buildOffsetArgs(query);
+
+  return userRepository.findAllUsers(
+    { status: query.status, banned: query.banned, role: query.role },
+    { skip, take },
+  );
 }
 
 export async function updateUser(

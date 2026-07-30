@@ -313,7 +313,9 @@ describe("GET /api/v1/users", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toMatchView(z.array(userViews.admin));
+    expect(response.body.data).toMatchView(z.array(userViews.admin));
+    expect(response.body.meta).toMatchObject({ page: 1, limit: 20 });
+    expect(response.body.meta.total).toBeGreaterThanOrEqual(1);
   });
 
   it("should return 200 with all users if user has feature: `read: user: others`", async () => {
@@ -327,8 +329,135 @@ describe("GET /api/v1/users", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(200);
-    expect(response.body).toBeInstanceOf(Array);
-    expect(response.body.length).toBeGreaterThanOrEqual(3);
+    expect(response.body.data).toBeInstanceOf(Array);
+    expect(response.body.data.length).toBeGreaterThanOrEqual(3);
+    expect(response.body.meta.total).toBeGreaterThanOrEqual(3);
+  });
+
+  it("should paginate with page/limit and report total in meta", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+    await buildEmployee({ roleNames: ["attendant"] });
+    await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?page=1&limit=2")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(2);
+    expect(response.body.meta).toMatchObject({ page: 1, limit: 2 });
+    expect(response.body.meta.total).toBeGreaterThanOrEqual(3);
+  });
+
+  it("should return an empty page (200, data: []) past the last page", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?page=999&limit=20")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual([]);
+    expect(response.body.meta.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it("should reject a limit above the maximum with 422", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?limit=101")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["limit"]);
+  });
+
+  it("should filter by status", async () => {
+    // buildEmployee defaults to ACTIVE; the customer below is PENDING
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+    const pendingUser = await buildCustomer({ status: "PENDING" });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?status=PENDING")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    const ids = response.body.data.map((u: { id: string }) => u.id);
+    expect(ids).toContain(pendingUser.id);
+    expect(ids).not.toContain(admin.id);
+  });
+
+  it("should filter by banned via bannedAt", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildCustomer();
+
+    const token = await loginAs(admin.email, admin.password);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ reason: "spam" });
+
+    const banned = await request(app)
+      .get("/api/v1/users?banned=true")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(banned.status).toBe(200);
+    const bannedIds = banned.body.data.map((u: { id: string }) => u.id);
+    expect(bannedIds).toContain(target.id);
+
+    const notBanned = await request(app)
+      .get("/api/v1/users?banned=false")
+      .set("Authorization", `Bearer ${token}`);
+
+    const notBannedIds = notBanned.body.data.map((u: { id: string }) => u.id);
+    expect(notBannedIds).not.toContain(target.id);
+  });
+
+  it("should filter by role", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+    await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?role=manager")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    const ids = response.body.data.map((u: { id: string }) => u.id);
+    expect(ids).toContain(admin.id);
+  });
+
+  it("should reject an unknown role value with 422", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?role=does-not-exist")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["role"]);
+  });
+
+  it("should reject an unknown status value with 422", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?status=NOPE")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["status"]);
   });
 });
 

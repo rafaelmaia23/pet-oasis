@@ -121,7 +121,7 @@ describe("GET /api/v1/users/:userId/features", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toMatchView(z.array(userFeatureViews.default));
+    expect(response.body.data).toMatchView(z.array(userFeatureViews.default));
   });
 
   it("should return 200 and features of another user if request has feature: `read:permission`", async () => {
@@ -141,7 +141,7 @@ describe("GET /api/v1/users/:userId/features", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toMatchView(z.array(userFeatureViews.default));
+    expect(response.body.data).toMatchView(z.array(userFeatureViews.default));
   });
 });
 
@@ -247,9 +247,9 @@ describe("GET /api/v1/users/:userId/roles", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toMatchView(z.array(roleViews.default));
+    expect(response.body.data).toMatchView(z.array(roleViews.default));
 
-    expect(response.body).toEqual(
+    expect(response.body.data).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "manager" })]),
     );
   });
@@ -271,9 +271,9 @@ describe("GET /api/v1/users/:userId/roles", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toMatchView(z.array(roleViews.default));
+    expect(response.body.data).toMatchView(z.array(roleViews.default));
 
-    expect(response.body).toEqual(
+    expect(response.body.data).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "attendant" })]),
     );
   });

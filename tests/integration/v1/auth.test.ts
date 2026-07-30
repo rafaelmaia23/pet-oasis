@@ -657,9 +657,10 @@ describe("GET /api/v1/auth/sessions", () => {
       .set("Authorization", `Bearer ${live1.accessToken}`);
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchView(z.array(sessionViews.default));
+    expect(response.body.data).toMatchView(z.array(sessionViews.default));
+    expect(response.body.meta).toEqual({});
 
-    const ids = (response.body as Array<{ id: string }>).map((s) => s.id);
+    const ids = (response.body.data as Array<{ id: string }>).map((s) => s.id);
 
     expect(ids).toHaveLength(3);
     expect(ids).toEqual(
@@ -684,7 +685,7 @@ describe("GET /api/v1/auth/sessions", () => {
 
     expect(response.status).toBe(200);
 
-    const ids = (response.body as Array<{ id: string }>).map((s) => s.id);
+    const ids = (response.body.data as Array<{ id: string }>).map((s) => s.id);
     expect(ids).not.toContain(sessionBId);
   });
 });
@@ -1386,8 +1387,9 @@ describe("End-to-end: signup -> login -> me -> refresh -> sessions -> logout", (
       .get("/api/v1/auth/sessions")
       .set("Authorization", `Bearer ${newAccessToken}`);
     expect(sessionsResponse.status).toBe(200);
-    expect(sessionsResponse.body).toHaveLength(1);
-    const sessionId = (sessionsResponse.body as Array<{ id: string }>)[0]?.id;
+    expect(sessionsResponse.body.data).toHaveLength(1);
+    const sessionId = (sessionsResponse.body.data as Array<{ id: string }>)[0]
+      ?.id;
     assert(sessionId !== undefined, "Session id should be defined");
 
     const logoutResponse = await request(app)

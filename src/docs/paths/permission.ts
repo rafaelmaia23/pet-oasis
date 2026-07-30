@@ -1,4 +1,3 @@
-import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
 import {
   effectiveFeaturesViews,
@@ -14,7 +13,12 @@ import {
   upsertPermissionParamsSchema,
 } from "@/modules/permission/permission.schema";
 import { roleViews } from "@/modules/role/role.presenter";
-import { errorResponses, jsonResponse, noContentResponse } from "../components";
+import {
+  errorResponses,
+  jsonResponse,
+  noContentResponse,
+  staticList,
+} from "../components";
 import { fromEnvelope } from "../helpers";
 
 const readErrors = {
@@ -37,7 +41,7 @@ export const permissionPaths: ZodOpenApiPathsObject = {
       summary: "Overrides de feature de um usuário — exige read:permission",
       ...fromEnvelope(getPermissionParamsSchema),
       responses: {
-        200: jsonResponse("Overrides", z.array(userFeatureViews.default)),
+        200: jsonResponse("Overrides", staticList(userFeatureViews.default)),
         ...readErrors,
       },
     },
@@ -48,7 +52,7 @@ export const permissionPaths: ZodOpenApiPathsObject = {
       summary: "Roles ativas de um usuário — exige read:permission",
       ...fromEnvelope(getUserRolesParamsSchema),
       responses: {
-        200: jsonResponse("Roles do usuário", z.array(roleViews.default)),
+        200: jsonResponse("Roles do usuário", staticList(roleViews.default)),
         ...readErrors,
       },
     },

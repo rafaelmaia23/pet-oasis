@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { listEnvelope } from "@/lib/pagination";
 import {
   deleteUserRoleParamsSchema,
   getPermissionParamsSchema,
@@ -21,7 +22,9 @@ export const getUserFeatures = async (req: Request, res: Response) => {
 
   const features = await permissionService.getUserFeatures(params.userId);
 
-  res.status(200).json(userFeaturePresenter.presentMany(features, "default"));
+  res
+    .status(200)
+    .json(listEnvelope(userFeaturePresenter.presentMany(features, "default")));
 };
 
 export const getUserRoles = async (req: Request, res: Response) => {
@@ -31,7 +34,9 @@ export const getUserRoles = async (req: Request, res: Response) => {
 
   const roles = await permissionService.getUserRoles(params.userId);
 
-  res.status(200).json(rolePresenter.presentMany(roles, "default"));
+  res
+    .status(200)
+    .json(listEnvelope(rolePresenter.presentMany(roles, "default")));
 };
 
 export const getUserPermissions = async (req: Request, res: Response) => {

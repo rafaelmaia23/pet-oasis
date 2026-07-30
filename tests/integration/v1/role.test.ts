@@ -61,9 +61,10 @@ describe("GET /api/v1/roles", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body.length).toBe(DEFAULT_ROLES.length);
+    expect(response.body.data.length).toBe(DEFAULT_ROLES.length);
+    expect(response.body.meta).toEqual({});
 
-    expect(response.body).toMatchView(z.array(roleViews.default));
+    expect(response.body.data).toMatchView(z.array(roleViews.default));
   });
 });
 

@@ -43,6 +43,7 @@ export const authPaths: ZodOpenApiPathsObject = {
         201: jsonResponse("Usuário criado", userViews.owner),
         409: errorResponses[409],
         422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },
@@ -57,6 +58,7 @@ export const authPaths: ZodOpenApiPathsObject = {
         401: errorResponses[401],
         403: errorResponses[403],
         422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },
@@ -93,6 +95,7 @@ export const authPaths: ZodOpenApiPathsObject = {
       responses: {
         200: jsonResponse("Resposta genérica", messageSchema),
         422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },
@@ -105,6 +108,7 @@ export const authPaths: ZodOpenApiPathsObject = {
       responses: {
         200: jsonResponse("Resposta genérica", messageSchema),
         422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },

@@ -2,6 +2,7 @@ import { faker } from "@faker-js/faker";
 import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import app from "@/app";
@@ -9,6 +10,7 @@ import { meViews } from "@/modules/me/me.presenter";
 
 afterEach(async () => {
   await clearDatabase();
+  await flushRedis();
 });
 
 describe("GET /api/v1/me", () => {

@@ -42,6 +42,37 @@ const envSchema = z.object({
 
   // Teto do corpo JSON aceito pelo body-parser (sintaxe do pacote `bytes`).
   JSON_BODY_LIMIT: z.string().default("100kb"),
+
+  // Rate limiting (7.9) — janela deslizante por IP e por email-alvo, contada
+  // no Redis via `rate-limiter-flexible`. Duas vars por regra (MAX + WINDOW_MS)
+  // em vez de uma string composta: mesmo idioma do LOCKOUT_* abaixo, sem
+  // parser novo no projeto.
+  RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().positive().default(20),
+  RATE_LIMIT_LOGIN_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
+  RATE_LIMIT_SIGNUP_MAX: z.coerce.number().int().positive().default(5),
+  RATE_LIMIT_SIGNUP_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60 * 60 * 1000),
+  // Compartilhado entre forgot-password e verify-email/resend (mesma linha no
+  // ADR de rate limiting: um contador só por IP para as duas rotas).
+  RATE_LIMIT_EMAIL_MAX: z.coerce.number().int().positive().default(5),
+  RATE_LIMIT_EMAIL_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60 * 60 * 1000),
+  RATE_LIMIT_EMAIL_TARGET_MAX: z.coerce.number().int().positive().default(5),
+  RATE_LIMIT_EMAIL_TARGET_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60 * 60 * 1000),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

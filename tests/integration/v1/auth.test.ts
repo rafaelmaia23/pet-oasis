@@ -9,6 +9,7 @@ import {
   loginWithSession,
 } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import {
   afterEach,
@@ -21,6 +22,7 @@ import {
 } from "vitest";
 import { z } from "zod";
 import app from "@/app";
+import { env } from "@/config/env";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
@@ -88,6 +90,7 @@ async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
 
 afterEach(async () => {
   await clearDatabase();
+  await flushRedis();
 });
 
 describe("POST /api/v1/auth/signup", () => {
@@ -1328,6 +1331,151 @@ describe("POST /api/v1/auth/change-password", () => {
       .send({ currentPassword: user.password, newPassword: NEW_PASSWORD });
 
     expect(response.status).toBe(403);
+  });
+});
+
+describe("Rate limiting (7.9)", () => {
+  it("allows login attempts within RATE_LIMIT_LOGIN_MAX", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_LOGIN_MAX; i++) {
+      const response = await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+      expect(response.status).toBe(401);
+    }
+  });
+
+  it("returns a generic 429 with Retry-After once RATE_LIMIT_LOGIN_MAX is exceeded, by IP", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_LOGIN_MAX; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: "wrongpassword",
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.headers["retry-after"]).toBeDefined();
+    // Genérico: não revela qual regra disparou nem confirma a conta.
+    expect(response.body).not.toHaveProperty("rule");
+  });
+
+  it("keeps login rate limit counters isolated per IP", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_LOGIN_MAX; i++) {
+      await request(app)
+        .post("/api/v1/auth/login")
+        .set("X-Forwarded-For", "203.0.113.10")
+        .send({ email: user.email, password: "wrongpassword" });
+    }
+
+    const sameIp = await request(app)
+      .post("/api/v1/auth/login")
+      .set("X-Forwarded-For", "203.0.113.10")
+      .send({ email: user.email, password: "wrongpassword" });
+    expect(sameIp.status).toBe(429);
+
+    const otherIp = await request(app)
+      .post("/api/v1/auth/login")
+      .set("X-Forwarded-For", "203.0.113.99")
+      .send({ email: user.email, password: "wrongpassword" });
+    expect(otherIp.status).toBe(401);
+  });
+
+  it("records AUTH_RATE_LIMIT_EXCEEDED in the audit log without PII", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i <= env.RATE_LIMIT_LOGIN_MAX; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_RATE_LIMIT_EXCEEDED" },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.targetType).toBe("Route");
+    expect(rows[0]?.metadata).toEqual({ rule: "login", scope: "IP" });
+  });
+
+  it("returns 429 once RATE_LIMIT_SIGNUP_MAX is exceeded, by IP", async () => {
+    for (let i = 0; i < env.RATE_LIMIT_SIGNUP_MAX; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/signup")
+        .send(makeCustomerData());
+      expect(response.status).toBe(201);
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/signup")
+      .send(makeCustomerData());
+
+    expect(response.status).toBe(429);
+  });
+
+  it("returns 429 on forgot-password once the per-IP email limit is exceeded", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_MAX; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/forgot-password")
+        .send({ email: user.email });
+      expect(response.status).toBe(200);
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: user.email });
+
+    expect(response.status).toBe(429);
+  });
+
+  it("returns 429 on forgot-password once the per-email-target limit is exceeded, even from different IPs", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_TARGET_MAX; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/forgot-password")
+        .set("X-Forwarded-For", `198.51.100.${i}`)
+        .send({ email: user.email });
+      expect(response.status).toBe(200);
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .set("X-Forwarded-For", "198.51.100.250")
+      .send({ email: user.email });
+
+    expect(response.status).toBe(429);
+  });
+
+  it("returns 429 on verify-email/resend once the per-IP email limit is exceeded", async () => {
+    const user = await buildCustomer({ status: "PENDING" });
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_MAX; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/verify-email/resend")
+        .send({ email: user.email });
+      expect(response.status).toBe(200);
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/verify-email/resend")
+      .send({ email: user.email });
+
+    expect(response.status).toBe(429);
   });
 });
 

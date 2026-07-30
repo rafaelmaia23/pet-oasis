@@ -3,6 +3,7 @@ import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import z from "zod";
@@ -17,6 +18,7 @@ import { findUserById } from "@/modules/user/user.repository";
 
 afterEach(async () => {
   await clearDatabase();
+  await flushRedis();
 });
 
 describe("GET /api/v1/users/:userId/features", () => {

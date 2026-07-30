@@ -340,16 +340,18 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ **Escalação (decisão firmada com o usuário): `read:audit-log:full` é privilegiada.** `PRIVILEGED_FEATURES = [...PERMISSION_FEATURES, "read:audit-log:full"]` (`role.constants.ts`); os dois guards de `permission.service.ts` passaram a consultá-lo (mensagem generalizada p/ "features privilegiadas"). `read:log`/`read:audit-log` são normais. Novos módulos `src/modules/audit-log/` e `src/modules/log/` (template do módulo read-only `feature`); `maskIp` na serialização; `/logs/recent` sem view (entradas já redigidas pelo `redact`). Docs (`paths/audit-log.ts`, `paths/log.ts`, tags Audit/Logs) + Bruno (`audit-logs/`, `logs/`). Suíte **471** + typecheck + lint verdes.
   - ✅ **Docs atualizados junto** (não deferidos): `CLAUDE.md` (regra de não-escalação agora descreve `PRIVILEGED_FEATURES`, incluindo `read:audit-log:full`), `docs/endpoints.md` (rotas `/audit-logs` e `/logs/recent` + nota do envelope) e `docs/logging-policy.md` §8 (concessão de `:full` é privilegiada).
 
-### ⬜ [Sessão E] Fase 7.9 — Rate limiting nas rotas de auth
+### ✅ [Sessão E] Fase 7.9 — Rate limiting nas rotas de auth
 > Valores e racional firmados no ADR `docs/adr/rate-limiting-and-lockout.md`.
 
-- ⬜ `rate-limiter-flexible` com `RateLimiterRedis`.
-- ⬜ Regras **por IP** (D8 — defaults por env var): `login` 20/15min (`RATE_LIMIT_LOGIN`); `signup` 5/1h (`RATE_LIMIT_SIGNUP`); `forgot-password` e `verify-email/resend` 5/1h (`RATE_LIMIT_EMAIL`).
-- ⬜ Regras **por email destinatário** (`RATE_LIMIT_EMAIL_TARGET`, 5/1h — fecha o furo do atacante que rotaciona IP para bombardear a caixa de uma vítima específica e queimar a reputação do domínio remetente): `forgot-password` e `verify-email/resend` limitados também por email-alvo (mesmo Redis, namespace de chave diferente).
-- ⬜ **Fail-open (D2):** Redis indisponível → o limitador é ignorado e o request segue, emitindo `error` no application log. Teste com o Redis derrubado: login continua 200.
-- ⬜ Resposta 429 genérica (não revela qual regra disparou nem confirma existência de conta).
-- ⬜ Excedido → `AUTH_RATE_LIMIT_EXCEEDED` no audit log + `warn` no application log.
-- ⬜ Testes com o Redis real do ambiente de teste (serviço no override de test, 7.0); contador isolado por teste.
+- ✅ `rate-limiter-flexible` com `RateLimiterRedis` (`src/lib/rateLimit.ts`).
+- ✅ Regras **por IP**: `login`, `signup`, `forgot-password`+`verify-email/resend` (um contador só, compartilhado pelas duas rotas — mesma linha do ADR).
+- ✅ Regra **por email destinatário** (`forgot-password`+`verify-email/resend`, mesmo par de rotas, chave = email em vez de IP) — fecha o furo do atacante que rotaciona IP para bombardear a caixa de uma vítima específica.
+- ✅ **Fail-open (D2):** rejeição do `consume()` que não é `RateLimiterRes` (falha de conexão) → `log.error` + o request segue. Coberto por teste unitário (`tests/unit/lib/rateLimit.test.ts`, limitador fake rejeitando com erro genérico) em vez de derrubar o Redis de verdade em teste de integração.
+- ✅ Resposta 429 genérica (`TooManyRequestsError`, mesmo molde do `PayloadTooLargeError` da 7.0) — não revela qual regra disparou nem confirma existência de conta. `Retry-After` no header (`msBeforeNext` do limitador).
+- ✅ Excedido → `AUTH_RATE_LIMIT_EXCEEDED` no audit log (`targetType: "Route"`, `metadata: { rule, scope }`) + `warn` no application log.
+- ✅ Testes com o Redis real do ambiente de teste (serviço no override de test, 7.0); contador isolado por teste — `flushRedis()` (`tests/helpers/redis.ts`) no `afterEach` de cada arquivo de teste de integração que autentica. **Decisão de execução:** não é um `setupFile` global — um `afterEach` global corria na frente da conexão real do ioredis terminar o handshake nos testes unitários (rápidos, ms), derrubando-os com "enableOfflineQueue"; escopado por arquivo, no mesmo idioma explícito do `clearDatabase()`.
+- ✅ **Decisão de execução (env vars, D8):** duas vars por regra (`RATE_LIMIT_<REGRA>_MAX` + `_WINDOW_MS`) em vez de uma string composta — mesmo idioma do `LOCKOUT_*` da 7.10, sem parser novo no projeto. Confirmado com o usuário na abertura da sessão (o ADR listava um nome só por regra, mas D8 exige a janela configurável também).
+- ✅ Suíte (485) + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão E] Fase 7.10 — Account lockout + desbloqueio pelo admin
 - ⬜ Contador de falhas por conta em Redis (D8, por env var): **`LOCKOUT_THRESHOLD` 5 falhas → `LOCKOUT_WINDOW_MS` 15min**, dobrando a cada ciclo seguinte até o teto `LOCKOUT_MAX_MS` (24h).

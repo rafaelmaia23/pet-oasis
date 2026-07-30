@@ -1317,7 +1317,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     expect(response.body).toMatchObject({
       code: "FORBIDDEN",
-      message: "Apenas administradores podem alterar features de permissão",
+      message: "Apenas administradores podem alterar features privilegiadas",
       action: "Solicite a um administrador que faça essa alteração",
     });
 
@@ -1330,7 +1330,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     expect(response2.body).toMatchObject({
       code: "FORBIDDEN",
-      message: "Apenas administradores podem alterar features de permissão",
+      message: "Apenas administradores podem alterar features privilegiadas",
       action: "Solicite a um administrador que faça essa alteração",
     });
   });
@@ -1409,6 +1409,74 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
       .send({ granted: false });
 
     expect(response2.status).toBe(403);
+  });
+
+  it("should return 403 if a non admin manager tries to grant the privileged `read:audit-log:full` override", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const feature = await getFeatureByName("read:audit-log:full");
+
+    if (!feature) {
+      throw createNotFoundError({ message: "Feature não encontrada" });
+    }
+
+    const response = await request(app)
+      .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Apenas administradores podem alterar features privilegiadas",
+      action: "Solicite a um administrador que faça essa alteração",
+    });
+  });
+
+  it("should return 200 if a manager grants the non-privileged `read:audit-log` override", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const feature = await getFeatureByName("read:audit-log");
+
+    if (!feature) {
+      throw createNotFoundError({ message: "Feature não encontrada" });
+    }
+
+    const response = await request(app)
+      .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchView(userFeatureViews.default);
+  });
+
+  it("should return 200 if an admin grants the privileged `read:audit-log:full` override", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const feature = await getFeatureByName("read:audit-log:full");
+
+    if (!feature) {
+      throw createNotFoundError({ message: "Feature não encontrada" });
+    }
+
+    const response = await request(app)
+      .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchView(userFeatureViews.default);
   });
 });
 
@@ -1738,7 +1806,7 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     expect(response.body).toMatchObject({
       code: "FORBIDDEN",
-      message: "Apenas administradores podem alterar features de permissão",
+      message: "Apenas administradores podem alterar features privilegiadas",
       action: "Solicite a um administrador que faça essa alteração",
     });
 
@@ -1750,7 +1818,7 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     expect(response2.body).toMatchObject({
       code: "FORBIDDEN",
-      message: "Apenas administradores podem alterar features de permissão",
+      message: "Apenas administradores podem alterar features privilegiadas",
       action: "Solicite a um administrador que faça essa alteração",
     });
   });

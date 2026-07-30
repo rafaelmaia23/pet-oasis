@@ -9,7 +9,7 @@ import {
 } from "@/lib/authorization";
 import { logger } from "@/lib/logger";
 import * as featureRepository from "@/modules/feature/feature.repository";
-import { PERMISSION_FEATURES } from "../role/role.constants";
+import { PRIVILEGED_FEATURES } from "../role/role.constants";
 import * as roleRepository from "../role/role.repository";
 import { toRoleDTO } from "../role/role.service";
 import * as userRepository from "../user/user.repository";
@@ -17,7 +17,9 @@ import * as permissionRepository from "./permission.repository";
 
 const log = logger.child({ module: "permission" });
 
-const PERMISSION_FEATURE_SET: Set<string> = new Set(PERMISSION_FEATURES);
+// Features cuja concessão/atribuição exige role admin (não-escalação): as de
+// permissão + `read:audit-log:full`. Ver `PRIVILEGED_FEATURES`.
+const PRIVILEGED_FEATURE_SET: Set<string> = new Set(PRIVILEGED_FEATURES);
 
 type RoleWithFeatures = NonNullable<
   Awaited<ReturnType<typeof roleRepository.getRoleById>>
@@ -31,12 +33,12 @@ async function assertAdminForPermissionFeature(
   requestingUserId: string,
   featureName: string,
 ) {
-  if (!PERMISSION_FEATURE_SET.has(featureName)) return;
+  if (!PRIVILEGED_FEATURE_SET.has(featureName)) return;
 
   const requestingUser = await userRepository.findUserById(requestingUserId);
 
   assertActorIsAdmin(requestingUser, {
-    message: "Apenas administradores podem alterar features de permissão",
+    message: "Apenas administradores podem alterar features privilegiadas",
     action: "Solicite a um administrador que faça essa alteração",
   });
 }
@@ -47,7 +49,7 @@ async function assertAdminForRoleAssignment(
 ) {
   const isPrivilegedRole = role.features.some(
     (rf) =>
-      rf.feature.name === "*" || PERMISSION_FEATURE_SET.has(rf.feature.name),
+      rf.feature.name === "*" || PRIVILEGED_FEATURE_SET.has(rf.feature.name),
   );
 
   if (!isPrivilegedRole) return;

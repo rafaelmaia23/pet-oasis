@@ -34,6 +34,17 @@ export const PERMISSION_FEATURES: FeatureName[] = [
   "manage:permission",
 ];
 
+// Leitura de log — features "normais" (concedíveis por override sem ser admin).
+const LOG_READ_FEATURES: FeatureName[] = ["read:log", "read:audit-log"];
+
+// Features cuja concessão via override — ou atribuição via role que as contenha —
+// exige role admin (não-escalação). Além das de permissão, `read:audit-log:full`
+// destrava o IP inteiro no audit log (dado semi-sensível), então entra aqui.
+export const PRIVILEGED_FEATURES: FeatureName[] = [
+  ...PERMISSION_FEATURES,
+  "read:audit-log:full",
+];
+
 // Combinações de features para cada Role
 const CUSTOMER_FEATURES: FeatureName[] = [
   ...new Set<FeatureName>([
@@ -51,6 +62,8 @@ const MANAGER_FEATURES: FeatureName[] = [
     ...SELF_MANAGEMENT_FEATURES,
     ...USER_ADMINISTRATION_FEATURES,
     ...PERMISSION_FEATURES,
+    ...LOG_READ_FEATURES,
+    "read:audit-log:full",
   ]),
 ];
 
@@ -63,6 +76,9 @@ const DEMO_READ_FEATURES: FeatureName[] = [
     "read:feature",
     "read:role",
     "read:permission",
+    // Lê a trilha e o buffer — mas **não** `read:audit-log:full`: o demo vê o IP
+    // mascarado (RBAC demonstrado dentro da própria resposta).
+    ...LOG_READ_FEATURES,
   ]),
 ];
 

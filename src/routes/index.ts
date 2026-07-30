@@ -8,8 +8,10 @@ import {
   scalarBundleFile,
 } from "@/docs/reference";
 import { authenticate } from "@/middlewares/authenticate.middleware";
+import auditLogRouter from "@/modules/audit-log/audit-log.routes";
 import authRouter from "@/modules/auth/auth.routes";
 import featureRouter from "@/modules/feature/feature.routes";
+import logRouter from "@/modules/log/log.routes";
 import meRouter from "@/modules/me/me.routes";
 import permissionRouter from "@/modules/permission/permission.routes";
 import roleRouter from "@/modules/role/role.routes";
@@ -30,6 +32,8 @@ v1Router.use("/users/:userId", authenticate, userProfileRouter);
 v1Router.use("/users/:userId", authenticate, permissionRouter);
 v1Router.use("/features", authenticate, featureRouter);
 v1Router.use("/roles", authenticate, roleRouter);
+v1Router.use("/audit-logs", authenticate, auditLogRouter);
+v1Router.use("/logs", authenticate, logRouter);
 
 export const router = Router();
 

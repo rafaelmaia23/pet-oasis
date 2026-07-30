@@ -30,7 +30,7 @@ No signup e no change-password, consultar a API de range do Have I Been Pwned po
 Hoje a troca do segredo invalida todas as sessões de uma vez. Suportar múltiplas chaves com `kid` no header permite rotacionar sem derrubar ninguém. Só vale quando houver usuário real; até lá, o procedimento manual de rotação documentado já basta.
 
 ### Lock manual de conta pelo admin — **M**
-A Fase 7.11 entrega só o *desbloqueio*; o lock acontece apenas automaticamente por tentativas erradas. Um lock manual (suspensão temporária sem o peso do ban) é um degrau intermediário útil, mas exige decidir como convive com `bannedAt` e `status` — o que reabre desenho de negócio já fechado.
+A Fase 7.10 entrega só o *desbloqueio*; o lock acontece apenas automaticamente por tentativas erradas. Um lock manual (suspensão temporária sem o peso do ban) é um degrau intermediário útil, mas exige decidir como convive com `bannedAt` e `status` — o que reabre desenho de negócio já fechado.
 
 ### Auditar a leitura do audit log — **P**
 Em ambiente regulado, consultar a trilha também gera linha na trilha. Aqui foi deixado de fora por ser ruído desproporcional ao risco (e porque a role `demo` lê a trilha por design). Retomar se o projeto ganhar dado real.
@@ -56,7 +56,7 @@ Dump agendado do banco do deploy, com um *restore* de fato testado — backup nu
 ## Produto e domínio
 
 ### Dummy data para a demo — **M**
-Hoje o seed cria o mínimo (roles, usuário demo). Um conjunto de dados fictício e coerente — clientes, pets, produtos, histórico — faz a demo mostrar a API funcionando em vez de mostrar listas vazias. Vira pré-requisito natural do `demo-reset` (Fase 7.18), que passaria a restaurar esse estado. Depende do domínio da Fase 9 existir.
+Hoje o seed cria o mínimo (roles, usuário demo). Um conjunto de dados fictício e coerente — clientes, pets, produtos, histórico — faz a demo mostrar a API funcionando em vez de mostrar listas vazias. Vira pré-requisito natural do `demo-reset` (Fase 7.14), que passaria a restaurar esse estado. Depende do domínio da Fase 9 existir.
 
 ### Ordenação configurável nas listagens — **P**
 `?sort=` nas listas paginadas por offset. Simples com o helper da Fase 7.7; complexo no cursor (a chave do cursor teria que codificar o campo de ordenação). Fazer só para offset, e documentar a limitação.

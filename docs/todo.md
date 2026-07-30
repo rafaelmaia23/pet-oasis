@@ -214,7 +214,7 @@
 
 | # | Decisão | Escolha |
 |---|---|---|
-| D1 | 7.12 "refresh token hasheado" | **Já implementado desde a Fase 3** (`Session.refreshTokenHash` = sha256, `src/lib/token.ts`). Rebaixada a teste de regressão na 7.19. HMAC com PEPPER analisado e recusado → `docs/backlog.md`. |
+| D1 | 7.18 "refresh token hasheado" | **Já implementado desde a Fase 3** (`Session.refreshTokenHash` = sha256, `src/lib/token.ts`). Rebaixada a teste de regressão na 7.19. HMAC com PEPPER analisado e recusado → `docs/backlog.md`. |
 | D2 | Redis indisponível | **Fail-open.** Rate limit e lockout são ignorados, o request segue, a falha emite `error` (+ Sentry). O Redis não vira SPOF do login. |
 | D3 | CSP × Scalar | **Auto-hospedar o bundle** do Scalar → `script-src 'self'` de verdade, `/reference` funciona offline. |
 | D4 | Envelope de paginação | `{ data, meta }` em **todas** as listagens (breaking change assumido de uma vez). Exceção: `GET /users/:userId/permissions` segue `string[]`. |
@@ -235,15 +235,15 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **B** ✅ | 7.3, 7.4, 7.5 | Observabilidade interna | Logger + `AsyncLocalStorage` + ring buffer são inúteis sem consumidor; access e application log são os consumidores. |
 | **C** ✅ | 7.6 | Audit log | Migration + taxonomia + `auditLog.record` + ~18 pontos de chamada. Grande sozinha. |
 | **D** | 7.7, 7.8 | Paginação + leitura de log | 7.8 consome o helper da 7.7 (cursor em `/audit-logs`); a 7.7 já migra todas as listagens para o envelope. |
-| **E** | 7.10, 7.11 | Rate limit + lockout | Mesma infra (Redis), mesmo endpoint alvo (`/auth/login`), mesmas ações de audit. |
-| **F** | 7.9, 7.13 | Bordas externas e resiliência | Axiom/Sentry e os timeouts tratam o mesmo problema: dependência externa que falha ou pendura. |
-| **G** | 7.14, 7.18 | Scripts de manutenção + agendamento | `cleanup-sessions`, `cleanup-audit-log` e `demo-reset` compartilham `--dry-run`, transação, log de resultado e systemd timer. |
+| **E** | 7.9, 7.10 | Rate limit + lockout | Mesma infra (Redis), mesmo endpoint alvo (`/auth/login`), mesmas ações de audit. |
+| **F** | 7.11, 7.12 | Bordas externas e resiliência | Axiom/Sentry e os timeouts tratam o mesmo problema: dependência externa que falha ou pendura. |
+| **G** | 7.13, 7.14 | Scripts de manutenção + agendamento | `cleanup-sessions`, `cleanup-audit-log` e `demo-reset` compartilham `--dry-run`, transação, log de resultado e systemd timer. |
 | **H** | 7.15, 7.16, 7.17 | Polimento de features de conta | As três mexem no domínio de conta/sessão. **Abre confirmando o desenho de 7.15 e 7.16.** |
 | **I** | 7.19 (+ regressão de D1) | Fechos | Docs, teste de regressão do refresh hash, suíte/typecheck/lint, fase ✅. |
 
 ### ✅ [Sessão A] Fase 7.0 — Fundação de infra
 - ✅ Serviço `redis` (`redis:7-alpine`, healthcheck `redis-cli ping`) nos **três overrides**, não na base — os serviços de dado já viviam lá. Container/porta/volume próprios por ambiente: dev `6379` (volume `dev_redisdata`), **test `6380`** (sem volume — o teardown roda `down -v`), prod **sem porta publicada** (volume `prod_redisdata`). O `app` recebe `REDIS_URL: redis://redis:6379` pelo `environment` do override, mesmo idioma já usado na `DATABASE_URL`. `test:services:up` passou a subir `db redis`.
-- ✅ `src/lib/redis.ts`: client ioredis com `enableOfflineQueue: false` + `maxRetriesPerRequest: 1` — **é isto que torna o fail-open (D2) real**; sem essas opções o comando ficaria enfileirado esperando reconexão e penduraria o login em vez de deixar o chamador seguir. `retryStrategy` com backoff limitado; listener de `error` só loga (o Redis nunca derruba o boot). `connectTimeout`/`commandTimeout` anotados como TODO da 7.13.
+- ✅ `src/lib/redis.ts`: client ioredis com `enableOfflineQueue: false` + `maxRetriesPerRequest: 1` — **é isto que torna o fail-open (D2) real**; sem essas opções o comando ficaria enfileirado esperando reconexão e penduraria o login em vez de deixar o chamador seguir. `retryStrategy` com backoff limitado; listener de `error` só loga (o Redis nunca derruba o boot). `connectTimeout`/`commandTimeout` anotados como TODO da 7.12.
 - ✅ `shutdown.ts` ganhou dep **opcional** `redis`, fechada depois do `prisma.$disconnect()`; falha do `quit()` só loga e **não** muda o exit code (um Redis já fora do ar não deve fazer todo shutdown sair 1).
 - ✅ **`app.set("trust proxy", 1)`** (D7).
 - ✅ `express.json({ limit: env.JSON_BODY_LIMIT })` (default `100kb`, por env var).
@@ -266,7 +266,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ **O helper recebe o ator já buscado**, em vez de buscá-lo: `lib/` não conhece repository, e importar `userRepository` ali inverteria o corte de camadas. Sobra uma linha de `findUserById` em cada guard — o que se repetia de fato (predicado de admin + throw 403) foi eliminado.
 - ✅ `assertAdminForBan` (`user.service.ts`), `assertAdminForPermissionFeature` e `assertAdminForRoleAssignment` (`permission.service.ts`) reusam o helper, cada um mantendo seu predicado de "alvo/feature/role privilegiado" e sua mensagem.
 - ✅ Refactor comportamento-preservado: a suíte de escalação existente passou **sem uma linha alterada**; só entraram testes unitários do helper (inclusive ator `null` — deletado entre a autenticação e a busca do guard — contando como não-admin).
-- ✅ Nota: o helper é pré-requisito da 7.11 (`DELETE /users/:id/lock`), que seria a quarta cópia.
+- ✅ Nota: o helper é pré-requisito da 7.10 (`DELETE /users/:id/lock`), que seria a quarta cópia.
 
 ### ✅ [Sessão B] Fase 7.3 — Fundação de observabilidade
 > Base compartilhada pelas três categorias de log. Nenhum log novo é emitido aqui — só a infraestrutura que as 7.4/7.5/7.6 usam. Regras completas em `docs/logging-policy.md`.
@@ -286,7 +286,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ Rotas de ruído em `debug`: `/api/v1/status` (é o healthcheck do Compose, bate a cada 5s em prod), `/reference`, `/openapi.json`, `/scalar/standalone.js`. Sob `LOG_LEVEL=info` elas somem sem precisar de filtro no agregador — **verificado em produção**.
 - ✅ Serializers de `req`/`res` anulados (o par cru traria os headers inteiros); os campos úteis vão por `customProps`. Nada de body, `Authorization`, cookie ou senha — com teste.
 - ✅ **Achado da implementação:** a rota tem de vir do `requestContext`, não de `req.url`. O Express **reescreve `req.url`** ao descer nos routers montados, e o access log só é emitido no fim do request — a essa altura `/api/v1/status` já virou `/`, e a regra de rota-de-ruído nunca casava. Pego pelo teste de nível das rotas de ruído.
-- ✅ Nota: retenção/agregação fora da app é responsabilidade de infra/deploy (destinos na 7.9).
+- ✅ Nota: retenção/agregação fora da app é responsabilidade de infra/deploy (destinos na 7.11).
 
 ### ✅ [Sessão B] Fase 7.5 — Application log
 > Não é um service novo — é o `pino` da 7.3 usado com convenção. Esta sub-fase **definiu as regras e aplicou nos services que já existem**.
@@ -312,7 +312,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ `src/lib/auditLog.ts` — `record(descriptor, tx?)`: `actorId`/`ip`/`userAgent` do `AsyncLocalStorage` (7.3), `actorId` com override explícito. **Com `tx`** grava na transação da mutação e deixa o erro **propagar** (§4.5); **sem `tx`** grava direto e **engole+loga** a falha (§4.6 — não derruba o request).
 - ✅ **Wiring transação × camadas (decisão de abertura):** o **repository é dono da `$transaction`** e o **service passa o descritor** — honra "só o repo toca o Prisma". Cada método de escrita ganhou `audit?: AuditDescriptor`; as transações em forma-array viraram interativas.
 - ✅ **Regra de PII** aplicada: `metadata` só ids/enums; `USER_BANNED` grava `reasonProvided` (bool), **não** o texto do motivo — teste de contrato afirma que a linha não vaza motivo nem email do alvo.
-- ✅ Append-only: sem update/delete pela aplicação (a retenção é a 7.14).
+- ✅ Append-only: sem update/delete pela aplicação (a retenção é a 7.13).
 - ✅ **Escopo (decisão de abertura): 12 dos 18 pontos** — só os com código hoje: `USER_CREATED` (source `SIGNUP`/`ADMIN`), `USER_DELETED`, `USER_BANNED`, `USER_UNBANNED`, `USER_ROLE_GRANTED`/`_REVOKED`, `USER_PERMISSION_GRANTED`/`_REVOKED`, `PASSWORD_RESET_REQUESTED`/`_COMPLETED`, `PASSWORD_CHANGED`, `AUTH_LOGIN_FAILED` (direto; `targetId` do dono quando existe, `reason` `BAD_CREDENTIALS`/`BANNED`). Os 6 restantes (lockout/rate-limit → E; forçar senha/troca de email → H; demo-reset → G) entram nas suas sub-fases, como a §4.3 já atribui.
 - ✅ Testes: cada ponto grava exatamente uma linha com `action`/`target`/`actor` certos; **rollback** (força o audit dentro da tx a falhar → nem o ban nem a linha persistem); `metadata` sem PII. Runtime: login falho de email desconhecido → linha com `actor`/`target` nulos, `reason=BAD_CREDENTIALS`, `ip`/`userAgent` preenchidos do store.
 
@@ -338,18 +338,9 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
   - ✅ `meta` explicitando a limitação: o buffer é **por processo** e **some no restart**.
 - ✅ Testes: 401 sem token; 403 sem a feature; demo/ator lê os dois com 200; **reader sem `:full` recebe `ip` mascarado e ator com `:full` recebe inteiro** (mesma linha, duas respostas); filtros combinados (`action`/`targetType`/`actorId`/`from`-`to`); **cursor percorre 5 linhas de timestamp igual sem pular/repetir**; cursor corrompido → 422; `limit` > 100 → 422; `PATCH`/`DELETE /audit-logs` → 404.
 - ✅ **Escalação (decisão firmada com o usuário): `read:audit-log:full` é privilegiada.** `PRIVILEGED_FEATURES = [...PERMISSION_FEATURES, "read:audit-log:full"]` (`role.constants.ts`); os dois guards de `permission.service.ts` passaram a consultá-lo (mensagem generalizada p/ "features privilegiadas"). `read:log`/`read:audit-log` são normais. Novos módulos `src/modules/audit-log/` e `src/modules/log/` (template do módulo read-only `feature`); `maskIp` na serialização; `/logs/recent` sem view (entradas já redigidas pelo `redact`). Docs (`paths/audit-log.ts`, `paths/log.ts`, tags Audit/Logs) + Bruno (`audit-logs/`, `logs/`). Suíte **471** + typecheck + lint verdes.
-  - 🔸 **Pendente p/ Sessão I (7.19):** atualizar `CLAUDE.md` (regra de não-escalação: o conjunto agora é `PRIVILEGED_FEATURES`, inclui `read:audit-log:full`), `docs/endpoints.md` e `docs/logging-policy.md` §8 — deferido ao fecho formal da fase.
+  - ✅ **Docs atualizados junto** (não deferidos): `CLAUDE.md` (regra de não-escalação agora descreve `PRIVILEGED_FEATURES`, incluindo `read:audit-log:full`), `docs/endpoints.md` (rotas `/audit-logs` e `/logs/recent` + nota do envelope) e `docs/logging-policy.md` §8 (concessão de `:full` é privilegiada).
 
-### ⬜ [Sessão F] Fase 7.9 — Destinos externos: Axiom + Sentry
-- ⬜ **Axiom** como transport do pino (`@axiomhq/pino`), em **worker thread** (`pino.transport`) — chamada remota nunca no caminho síncrono do request.
-- ⬜ `flush` do transport no `shutdown.ts` (senão os últimos logs antes do SIGTERM se perdem — justamente quando mais importam).
-- ⬜ Só ativa com `AXIOM_TOKEN`/`AXIOM_DATASET` presentes; ausente → degrada para stdout, **nunca** derruba o boot.
-- ⬜ **Sentry** capturando apenas falha de verdade: `AppError` com status ≥ 500, erro não-tratado, `unhandledRejection`, `uncaughtException`. 4xx esperado (404/422/403) **não** vai pro Sentry — é comportamento, não falha.
-- ⬜ `sendDefaultPii: false` + `beforeSend` scrubbando a mesma lista de campos proibidos da política (senão vaza pela porta dos fundos o que o `redact` protege).
-- ⬜ `release`/`environment` setados, para agrupar por deploy.
-- ⬜ Env vars novas: `AXIOM_TOKEN`, `AXIOM_DATASET`, `SENTRY_DSN`.
-
-### ⬜ [Sessão E] Fase 7.10 — Rate limiting nas rotas de auth
+### ⬜ [Sessão E] Fase 7.9 — Rate limiting nas rotas de auth
 > Valores e racional firmados no ADR `docs/adr/rate-limiting-and-lockout.md`.
 
 - ⬜ `rate-limiter-flexible` com `RateLimiterRedis`.
@@ -360,7 +351,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ⬜ Excedido → `AUTH_RATE_LIMIT_EXCEEDED` no audit log + `warn` no application log.
 - ⬜ Testes com o Redis real do ambiente de teste (serviço no override de test, 7.0); contador isolado por teste.
 
-### ⬜ [Sessão E] Fase 7.11 — Account lockout + desbloqueio pelo admin
+### ⬜ [Sessão E] Fase 7.10 — Account lockout + desbloqueio pelo admin
 - ⬜ Contador de falhas por conta em Redis (D8, por env var): **`LOCKOUT_THRESHOLD` 5 falhas → `LOCKOUT_WINDOW_MS` 15min**, dobrando a cada ciclo seguinte até o teto `LOCKOUT_MAX_MS` (24h).
 - ⬜ Reset completo (contador + nível de backoff) no login certo.
 - ⬜ Checagem entra em `auth.service.login`, ao lado dos gates de `bannedAt`/`status`. **Fail-open (D2)** também aqui.
@@ -368,12 +359,16 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ⬜ Lockout disparado → `AUTH_LOCKOUT_TRIGGERED` no audit log.
 - ⬜ Sem lock manual pelo admin nesta fase (só o desbloqueio) — fora de escopo, registrado no `docs/backlog.md`.
 
-### ✅ Fase 7.12 — Refresh token hasheado em repouso *(D1 — já implementado desde a Fase 3)*
-> Item levantado na reformulação e resolvido na análise do planejamento, **sem código novo**: `Session.refreshTokenHash` já guarda `sha256(token)` (`src/lib/token.ts`, `hashToken`) desde a Fase 3 — o token opaco nunca foi persistido em plaintext. A comparação em tempo constante que o item pedia não se aplica: o lookup é `findUnique` pelo hash, não comparação byte a byte de segredo. Trocar sha256 por HMAC com `PEPPER` foi considerado e **recusado** (ganho marginal com token de 32 bytes de entropia; custo = migration invalidando todas as sessões) — registrado no `docs/backlog.md`.
->
-> Resta apenas formalizar em teste de regressão, na **Sessão I** (7.19): a coluna nunca contém o token entregue ao cliente; token adulterado → 401.
+### ⬜ [Sessão F] Fase 7.11 — Destinos externos: Axiom + Sentry
+- ⬜ **Axiom** como transport do pino (`@axiomhq/pino`), em **worker thread** (`pino.transport`) — chamada remota nunca no caminho síncrono do request.
+- ⬜ `flush` do transport no `shutdown.ts` (senão os últimos logs antes do SIGTERM se perdem — justamente quando mais importam).
+- ⬜ Só ativa com `AXIOM_TOKEN`/`AXIOM_DATASET` presentes; ausente → degrada para stdout, **nunca** derruba o boot.
+- ⬜ **Sentry** capturando apenas falha de verdade: `AppError` com status ≥ 500, erro não-tratado, `unhandledRejection`, `uncaughtException`. 4xx esperado (404/422/403) **não** vai pro Sentry — é comportamento, não falha.
+- ⬜ `sendDefaultPii: false` + `beforeSend` scrubbando a mesma lista de campos proibidos da política (senão vaza pela porta dos fundos o que o `redact` protege).
+- ⬜ `release`/`environment` setados, para agrupar por deploy.
+- ⬜ Env vars novas: `AXIOM_TOKEN`, `AXIOM_DATASET`, `SENTRY_DSN`.
 
-### ⬜ [Sessão F] Fase 7.13 — Timeouts em tudo
+### ⬜ [Sessão F] Fase 7.12 — Timeouts em tudo
 > Sem timeout, uma dependência pendurada exaure o pool e derruba a app inteira — o modo de falha mais comum em prod e o menos exercitado em teste.
 
 - ⬜ HTTP server: `server.requestTimeout`, `server.headersTimeout` (também mitiga slowloris), `server.keepAliveTimeout`.
@@ -382,12 +377,25 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ⬜ **SMTP (nodemailer, `src/lib/email.ts`)**: `connectionTimeout`, `greetingTimeout` e `socketTimeout` no transporter — o envio é SMTP, não a API HTTP da Resend, então `AbortSignal.timeout` não se aplica. Falha/timeout vira `error` no application log sem quebrar o fluxo do usuário.
 - ⬜ Valores por env com defaults conservadores; registrados no `docs/context.md`.
 
-### ⬜ [Sessão G] Fase 7.14 — Teto de sessões vivas + faxina de registros mortos
+### ⬜ [Sessão G] Fase 7.13 — Teto de sessões vivas + faxina de registros mortos
 - ⬜ Teto de sessões vivas simultâneas por usuário: **`MAX_LIVE_SESSIONS` 5** (D8); evict da mais antiga ao exceder (login nunca é recusado).
 - ⬜ `src/scripts/cleanup-sessions.ts`: hard delete de `Session`/`VerificationToken` mortos há mais de `SESSION_RETENTION_DAYS` (default 30).
 - ⬜ `src/scripts/cleanup-audit-log.ts`: hard delete de `AuditLog` acima de `AUDIT_LOG_RETENTION_DAYS` (**21 dias no demo, 365 em prod**) — **único** lugar autorizado a deletar audit log.
 - ⬜ Ambos com `--dry-run` (conta e loga, não apaga), execução em transação, resultado (linhas por tabela + duração) no application log.
 - ⬜ Rodados via `npm run` script, nunca dentro do ciclo request/response.
+
+### ⬜ [Sessão G] Fase 7.14 — Reset do ambiente demo
+> Higiene do deploy de portfólio. **Não** é o que garante o demo read-only — isso é RBAC (role `demo`, Fase 5). São duas defesas independentes: a autorização impede a escrita do usuário demo, a faxina limpa o que os outros usuários criaram.
+
+- ⬜ `src/scripts/demo-reset.ts`: **truncate + reseed** (determinístico e não cresce a cada model novo da Fase 9 — ao contrário de "deletar o que não é seed", que exigiria um marcador em toda tabela).
+- ⬜ Seed idempotente e reaproveitado (já bundlado em `dist/seed.js` desde a Fase 5).
+- ⬜ **Guarda:** só executa com `DEMO_MODE=true` explícito. **Não** inferir de `NODE_ENV` — o deploy demo *é* production. Sem a flag: erro barulhento, exit ≠ 0, nada apagado.
+- ⬜ `--dry-run` obrigatório antes do primeiro uso real; execução em transação.
+- ⬜ Resultado no application log + `DEMO_RESET_EXECUTED` no audit log (contagem por tabela, duração).
+- ⬜ Agendamento **diário** (não a cada 3 dias: evita que um recrutador encontre a bagunça do anterior) via **systemd timer** versionado em `infra/cron/` — preferido a cron por dar `journalctl`, `Persistent=` e proteção contra sobreposição.
+  - ⬜ Corte de responsabilidade: **`src/scripts/`** = código (importa Prisma/`env`/`logger`, é bundlado pelo tsup); **`infra/`** = agendamento e como o container roda.
+- ⬜ Horário publicado na doc/`/reference` ("ambiente demo resetado diariamente às 04:00 UTC") — transforma o logout inesperado em comportamento documentado.
+- ⬜ Quando existir dummy data (Fase 9+), o reseed passa a restaurá-lo.
 
 ### ⬜ [Sessão H] Fase 7.15 — Troca de email *(desenho a confirmar no início da feature)*
 - ⬜ Reabre a decisão de `user.schema.ts:56` (hoje bloqueada). Proposta a validar: endpoint próprio autenticado, senha atual exigida (como change-password), fluxo de 2 passos com verificação no email novo antes de efetivar (`pendingEmail` + `VerificationPurpose.EMAIL_CHANGE`).
@@ -402,21 +410,13 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 ### ⬜ [Sessão H] Fase 7.17 — Polir `GET /auth/sessions`
 - ⬜ Parsing de user-agent (ex. `ua-parser-js`) → `{ device: "Chrome no Windows", ipAddress, createdAt, current }`, marcando a sessão da request atual.
 
-### ⬜ [Sessão G] Fase 7.18 — Reset do ambiente demo
-> Higiene do deploy de portfólio. **Não** é o que garante o demo read-only — isso é RBAC (role `demo`, Fase 5). São duas defesas independentes: a autorização impede a escrita do usuário demo, a faxina limpa o que os outros usuários criaram.
-
-- ⬜ `src/scripts/demo-reset.ts`: **truncate + reseed** (determinístico e não cresce a cada model novo da Fase 9 — ao contrário de "deletar o que não é seed", que exigiria um marcador em toda tabela).
-- ⬜ Seed idempotente e reaproveitado (já bundlado em `dist/seed.js` desde a Fase 5).
-- ⬜ **Guarda:** só executa com `DEMO_MODE=true` explícito. **Não** inferir de `NODE_ENV` — o deploy demo *é* production. Sem a flag: erro barulhento, exit ≠ 0, nada apagado.
-- ⬜ `--dry-run` obrigatório antes do primeiro uso real; execução em transação.
-- ⬜ Resultado no application log + `DEMO_RESET_EXECUTED` no audit log (contagem por tabela, duração).
-- ⬜ Agendamento **diário** (não a cada 3 dias: evita que um recrutador encontre a bagunça do anterior) via **systemd timer** versionado em `infra/cron/` — preferido a cron por dar `journalctl`, `Persistent=` e proteção contra sobreposição.
-  - ⬜ Corte de responsabilidade: **`src/scripts/`** = código (importa Prisma/`env`/`logger`, é bundlado pelo tsup); **`infra/`** = agendamento e como o container roda.
-- ⬜ Horário publicado na doc/`/reference` ("ambiente demo resetado diariamente às 04:00 UTC") — transforma o logout inesperado em comportamento documentado.
-- ⬜ Quando existir dummy data (Fase 9+), o reseed passa a restaurá-lo.
+### ✅ Fase 7.18 — Refresh token hasheado em repouso *(D1 — já implementado desde a Fase 3)*
+> Item levantado na reformulação e resolvido na análise do planejamento, **sem código novo**: `Session.refreshTokenHash` já guarda `sha256(token)` (`src/lib/token.ts`, `hashToken`) desde a Fase 3 — o token opaco nunca foi persistido em plaintext. A comparação em tempo constante que o item pedia não se aplica: o lookup é `findUnique` pelo hash, não comparação byte a byte de segredo. Trocar sha256 por HMAC com `PEPPER` foi considerado e **recusado** (ganho marginal com token de 32 bytes de entropia; custo = migration invalidando todas as sessões) — registrado no `docs/backlog.md`.
+>
+> Resta apenas formalizar em teste de regressão, na **Sessão I** (7.19): a coluna nunca contém o token entregue ao cliente; token adulterado → 401.
 
 ### ⬜ [Sessão I] Fase 7.19 — Fechos
-- ⬜ **Teste de regressão do refresh hash (D1 / 7.12):** a coluna `Session.refreshTokenHash` nunca contém o token entregue ao cliente; refresh válido → 200; token adulterado → 401.
+- ⬜ **Teste de regressão do refresh hash (D1 / 7.18):** a coluna `Session.refreshTokenHash` nunca contém o token entregue ao cliente; refresh válido → 200; token adulterado → 401.
 - ⬜ `docs/endpoints.md` atualizado com as rotas novas (`GET /audit-logs`, `GET /logs/recent`, `DELETE /users/:id/lock`, troca de email, forçar troca de senha) + as features novas (`read:log`, `read:audit-log`, `read:audit-log:full`) e o envelope `{ data, meta }` nas listagens (D4).
 - ⬜ `docs/logging-policy.md` revisado com os valores efetivamente escolhidos em cada sub-fase.
 - ⬜ `docs/context.md`: promover a §2.2 de "planejada" a "implementada", com as decisões confirmadas em cada sub-fase (inclusive 7.15/7.16, fechadas na Sessão H).

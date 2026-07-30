@@ -1,7 +1,7 @@
 # Rate limiting, account lockout e a dependência do Redis
 
 > Decisão de segurança/infra registrada no planejamento da Fase 7 (sub-fases 7.0,
-> 7.10, 7.11, 7.13). Introduz um serviço novo em produção e um comportamento novo
+> 7.9, 7.10, 7.12). Introduz um serviço novo em produção e um comportamento novo
 > no `login`. Não altera nenhuma regra de negócio já fechada.
 
 ## O problema
@@ -113,7 +113,7 @@ código.
 | Lockout — janela inicial | 15 min | `LOCKOUT_WINDOW_MS` |
 | Lockout — teto do backoff | 24 h | `LOCKOUT_MAX_MS` |
 
-## Timeouts (7.13)
+## Timeouts (7.12)
 
 O Redis entra com `connectTimeout` e `commandTimeout`. Sem eles, o fail-open
 acima é ilusório: um Redis que não responde (mas também não recusa a conexão)

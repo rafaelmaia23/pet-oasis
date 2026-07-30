@@ -113,7 +113,7 @@ existe, só não tem elementos.
 - Quando a **Fase 9** trouxer o primeiro recurso de domínio: confirmar que o
   helper serve sem fork (é o motivo de ele ser extraído antes dos endpoints).
 - Se alguma lista "sem paginação" crescer (ex. `/auth/sessions` com o teto de
-  sessões da 7.14 elevado): ela já tem o envelope, então ganhar `meta` de offset é
+  sessões da 7.13 elevado): ela já tem o envelope, então ganhar `meta` de offset é
   aditivo, não breaking. Era o objetivo.
 - Se `?sort=` sair do backlog: implementar só para offset e documentar a
   limitação no cursor.

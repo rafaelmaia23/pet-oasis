@@ -8,12 +8,14 @@
 As rotas de negócio ficam sob **`/api/v1`** (`src/routes/index.ts`). `authenticate` é aplicado **por grupo de rota**, não global:
 
 - **Públicas** (sem `authenticate`): `/status`, `/auth`.
-- **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/features`, `/roles`.
+- **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/features`, `/roles`, `/audit-logs`, `/logs`.
 - Exceção: 3 rotas dentro de `/auth` (público) aplicam `authenticate` **inline** na própria definição (`logout`, `GET /sessions`, `DELETE /sessions/:id`).
 
 As rotas de **documentação** (`/openapi.json`, `/reference`) ficam no router de topo, **fora** de `/api/v1` e de `authenticate` — são públicas.
 
 Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado; `feature` = exige a feature via `canAccess(...)`.
+
+**Envelope de listagem (Fase 7.7 / D4):** toda rota de **lista** devolve `{ data, meta }` — `meta { page, limit, total }` no offset (`GET /users`), `meta { nextCursor, hasMore }` no cursor (`GET /audit-logs`), `meta {}` nas que não paginam. Exceção: `GET /users/:userId/permissions` segue `string[]` cru.
 
 ---
 
@@ -59,7 +61,7 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | Método + Path | Auth | Descrição |
 |---|---|---|
 | POST `/api/v1/users` | `create:user` | Cria um usuário employee |
-| GET `/api/v1/users` | `read:user:others` | Lista todos os usuários |
+| GET `/api/v1/users` | `read:user:others` | Lista usuários (offset `?page=&limit=` + filtros `status`/`banned`/`role`) |
 | GET `/api/v1/users/:id` | `read:user` | Busca um usuário por id |
 | PATCH `/api/v1/users/:id` | `update:user` | Atualiza um usuário |
 | DELETE `/api/v1/users/:id` | `delete:user` | Soft delete do usuário + invalida sessões |
@@ -100,3 +102,15 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 |---|---|---|
 | GET `/api/v1/roles` | `read:role` | Lista todas as roles |
 | GET `/api/v1/roles/:id` | `read:role` | Busca uma role por id |
+
+## Audit log — `src/modules/audit-log/audit-log.routes.ts`
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/audit-logs` | `read:audit-log` | Trilha de auditoria (cursor; filtros `action`/`actorId`/`targetType`/`targetId`/`from`/`to`); `ip` mascarado sem `read:audit-log:full`. Só GET (append-only) |
+
+## Log — `src/modules/log/log.routes.ts`
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/logs/recent` | `read:log` | Linhas recentes do ring buffer em memória (`?limit=`; mais novas primeiro; `meta` declara por-processo/volátil) |

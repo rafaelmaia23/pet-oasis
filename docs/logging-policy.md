@@ -1,6 +1,6 @@
 # Política de Logs — pet-oasis
 
-> Status: definida na Fase 7, implementada nas sub-fases 7.3–7.9.
+> Status: definida na Fase 7, implementada nas sub-fases 7.3–7.6 e 7.11.
 > Escopo: o que a aplicação emite, com qual formato, para onde vai, por quanto tempo fica e quem pode ler.
 > Fora de escopo: retenção e agregação a nível de infraestrutura (responsabilidade do deploy), backup e SIEM.
 
@@ -114,9 +114,9 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | Ação | `targetType` | `metadata` (só ids/enums) | Sub-fase |
 |---|---|---|---|
 | `AUTH_LOGIN_FAILED` | `User` | `reason` (enum: `BAD_CREDENTIALS`, `BANNED`, `LOCKED`) | 7.6 |
-| `AUTH_LOCKOUT_TRIGGERED` | `User` | `failureCount`, `backoffLevel`, `unlockAt` | 7.11 |
-| `AUTH_LOCKOUT_CLEARED` | `User` | `clearedBy` (enum: `ADMIN`, `SUCCESSFUL_LOGIN`) | 7.11 |
-| `AUTH_RATE_LIMIT_EXCEEDED` | `Route` | `rule`, `scope` (enum: `IP`, `EMAIL`) | 7.10 |
+| `AUTH_LOCKOUT_TRIGGERED` | `User` | `failureCount`, `backoffLevel`, `unlockAt` | 7.10 |
+| `AUTH_LOCKOUT_CLEARED` | `User` | `clearedBy` (enum: `ADMIN`, `SUCCESSFUL_LOGIN`) | 7.10 |
+| `AUTH_RATE_LIMIT_EXCEEDED` | `Route` | `rule`, `scope` (enum: `IP`, `EMAIL`) | 7.9 |
 | `USER_CREATED` | `User` | `source` (enum: `SIGNUP`, `ADMIN`, `SEED`) | 7.6 |
 | `USER_DELETED` | `User` | — | 7.6 |
 | `USER_BANNED` | `User` | `reasonProvided` (bool — o texto **não** entra) | 7.6 |
@@ -131,7 +131,7 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `PASSWORD_CHANGE_FORCED` | `User` | — | 7.16 |
 | `EMAIL_CHANGE_REQUESTED` | `User` | — | 7.15 |
 | `EMAIL_CHANGE_COMPLETED` | `User` | — | 7.15 |
-| `DEMO_RESET_EXECUTED` | `System` | `tablesTruncated`, `rowsDeleted`, `durationMs` | 7.18 |
+| `DEMO_RESET_EXECUTED` | `System` | `tablesTruncated`, `rowsDeleted`, `durationMs` | 7.14 |
 
 `actorId` é nulo quando não há ator identificado (login falho de email inexistente, script automatizado). `AUTH_LOGIN_FAILED` de conta existente registra o `targetId` do dono, mesmo sem ator.
 
@@ -199,6 +199,8 @@ O descarte do `AuditLog` acontece **exclusivamente** em `src/scripts/cleanup-aud
 | Sentry | conta do provedor | mantenedor | fora do RBAC da aplicação |
 
 O acesso do usuário demo é intencional: é o que torna a trilha de auditoria visível para quem avalia o projeto sem ter acesso às contas do mantenedor. É seguro porque §4.2 garante que não há PII no payload e §5.3 mascara o IP.
+
+**Concessão de `read:audit-log:full` é privilegiada (Fase 7.8):** como destrava o IP inteiro, `read:audit-log:full` entra em `PRIVILEGED_FEATURES` (`role.constants.ts`) — concedê-la via override, ou atribuir uma role que a contenha, exige role **admin**, no mesmo idioma de não-escalação das features de permissão. `read:log`/`read:audit-log` são normais (concedíveis por um manager sem ser admin).
 
 Não existe rota de escrita, edição ou remoção de log. Ausência de `PATCH`/`DELETE` em `/audit-logs` é coberta por teste.
 

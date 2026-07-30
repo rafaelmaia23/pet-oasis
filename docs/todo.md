@@ -235,7 +235,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **B** ✅ | 7.3, 7.4, 7.5 | Observabilidade interna | Logger + `AsyncLocalStorage` + ring buffer são inúteis sem consumidor; access e application log são os consumidores. |
 | **C** ✅ | 7.6 | Audit log | Migration + taxonomia + `auditLog.record` + ~18 pontos de chamada. Grande sozinha. |
 | **D** | 7.7, 7.8 | Paginação + leitura de log | 7.8 consome o helper da 7.7 (cursor em `/audit-logs`); a 7.7 já migra todas as listagens para o envelope. |
-| **E** | 7.9, 7.10 | Rate limit + lockout | Mesma infra (Redis), mesmo endpoint alvo (`/auth/login`), mesmas ações de audit. |
+| **E** ✅ | 7.9, 7.10 | Rate limit + lockout | Mesma infra (Redis), mesmo endpoint alvo (`/auth/login`), mesmas ações de audit. |
 | **F** | 7.11, 7.12 | Bordas externas e resiliência | Axiom/Sentry e os timeouts tratam o mesmo problema: dependência externa que falha ou pendura. |
 | **G** | 7.13, 7.14 | Scripts de manutenção + agendamento | `cleanup-sessions`, `cleanup-audit-log` e `demo-reset` compartilham `--dry-run`, transação, log de resultado e systemd timer. |
 | **H** | 7.15, 7.16, 7.17 | Polimento de features de conta | As três mexem no domínio de conta/sessão. **Abre confirmando o desenho de 7.15 e 7.16.** |
@@ -353,13 +353,14 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ **Decisão de execução (env vars, D8):** duas vars por regra (`RATE_LIMIT_<REGRA>_MAX` + `_WINDOW_MS`) em vez de uma string composta — mesmo idioma do `LOCKOUT_*` da 7.10, sem parser novo no projeto. Confirmado com o usuário na abertura da sessão (o ADR listava um nome só por regra, mas D8 exige a janela configurável também).
 - ✅ Suíte (485) + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão E] Fase 7.10 — Account lockout + desbloqueio pelo admin
-- ⬜ Contador de falhas por conta em Redis (D8, por env var): **`LOCKOUT_THRESHOLD` 5 falhas → `LOCKOUT_WINDOW_MS` 15min**, dobrando a cada ciclo seguinte até o teto `LOCKOUT_MAX_MS` (24h).
-- ⬜ Reset completo (contador + nível de backoff) no login certo.
-- ⬜ Checagem entra em `auth.service.login`, ao lado dos gates de `bannedAt`/`status`. **Fail-open (D2)** também aqui.
-- ⬜ **`DELETE /users/:id/lock`** (`manage:user:status`; guarda de privilegiado reusando o helper da 7.2) — desbloqueia, reset completo, 204 sucesso, 409 se não estava travada; registra `AUTH_LOCKOUT_CLEARED`.
-- ⬜ Lockout disparado → `AUTH_LOCKOUT_TRIGGERED` no audit log.
-- ⬜ Sem lock manual pelo admin nesta fase (só o desbloqueio) — fora de escopo, registrado no `docs/backlog.md`.
+### ✅ [Sessão E] Fase 7.10 — Account lockout + desbloqueio pelo admin
+- ✅ Contador de falhas por conta em Redis (D8, por env var): **`LOCKOUT_THRESHOLD` 5 falhas → `LOCKOUT_WINDOW_MS` 15min**, dobrando a cada ciclo seguinte até o teto `LOCKOUT_MAX_MS` (24h). Estado (`failures`/`backoffLevel`/`lockedUntil`) num hash Redis (`lockout:{userId}`), sem coluna nova no `User`. Transição de estado extraída como função **pura** (`applyFailure`, `src/lib/lockout.ts`) — mesmo idioma de `computeEffectiveFeatures` — testada por unidade sem tocar Redis; a leitura/escrita fica em wrappers finos ao redor.
+- ✅ Reset completo (contador + nível de backoff) no login certo (`clearLockout(..., "SUCCESSFUL_LOGIN")`) — no-op (sem escrita, sem audit) se a conta nunca falhou.
+- ✅ Checagem entra em `auth.service.login`, **no ramo de senha correta** (não antes de verificar a senha): quem erra a senha continua recebendo 401 igual a hoje, sem pista sobre o estado da conta — o rate limit por IP/email (7.9) já cobre o volume de tentativas; o papel do lockout é impedir que uma senha eventualmente certa complete o login dentro da janela. **Fail-open (D2)** também aqui — falha do Redis loga `error` e a conta segue destravada.
+- ✅ **`DELETE /users/:id/lock`** (`manage:user:status`; guarda de privilegiado reusando o helper da 7.2, generalizado de `assertAdminForBan` para `assertAdminForPrivilegedTarget` — agora serve ban/unban **e** lock/unlock) — desbloqueia, reset completo, 204 sucesso, 409 auto-unlock, 409 se não estava travada; registra `AUTH_LOCKOUT_CLEARED` (`clearedBy: "ADMIN"`).
+- ✅ Lockout disparado → `AUTH_LOCKOUT_TRIGGERED` no audit log; tentativa (mesmo com senha certa) durante o travamento → `AUTH_LOGIN_FAILED` com `reason: "LOCKED"` + **429** (mesma resposta genérica do rate limit, D2/ADR).
+- ✅ Sem lock manual pelo admin nesta fase (só o desbloqueio) — fora de escopo, registrado no `docs/backlog.md`.
+- ✅ Suíte (516) + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão F] Fase 7.11 — Destinos externos: Axiom + Sentry
 - ⬜ **Axiom** como transport do pino (`@axiomhq/pino`), em **worker thread** (`pino.transport`) — chamada remota nunca no caminho síncrono do request.

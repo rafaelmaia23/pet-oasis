@@ -19,5 +19,10 @@ userRouter.delete(
   canAccess("manage:user:status"),
   userController.unbanUser,
 );
+userRouter.delete(
+  "/:id/lock",
+  canAccess("manage:user:status"),
+  userController.unlockAccount,
+);
 
 export default userRouter;

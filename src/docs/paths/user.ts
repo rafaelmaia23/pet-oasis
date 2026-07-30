@@ -105,4 +105,19 @@ export const userPaths: ZodOpenApiPathsObject = {
       },
     },
   },
+  "/users/{id}/lock": {
+    delete: {
+      tags: ["Users"],
+      summary:
+        "Desbloqueia uma conta travada por lockout — exige manage:user:status",
+      ...fromEnvelope(userParamsSchema),
+      responses: {
+        204: noContentResponse,
+        401: errorResponses[401],
+        403: errorResponses[403],
+        404: errorResponses[404],
+        409: errorResponses[409],
+      },
+    },
+  },
 };

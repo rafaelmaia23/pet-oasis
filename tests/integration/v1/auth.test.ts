@@ -1479,6 +1479,130 @@ describe("Rate limiting (7.9)", () => {
   });
 });
 
+describe("Account lockout (7.10)", () => {
+  it("does not lock the account before LOCKOUT_THRESHOLD wrong attempts", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD - 1; i++) {
+      const response = await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+      expect(response.status).toBe(401);
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("returns 429 for the correct password once LOCKOUT_THRESHOLD is reached", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(429);
+  });
+
+  it("keeps returning 401 (not 429) for wrong attempts made while locked", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    // wrong password never leaks lock state — no hint before the credential
+    // is proven correct.
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: "wrongpassword",
+    });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("records AUTH_LOCKOUT_TRIGGERED once the threshold is reached", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_LOCKOUT_TRIGGERED", targetId: user.id },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toMatchObject({
+      failureCount: env.LOCKOUT_THRESHOLD,
+      backoffLevel: 1,
+    });
+  });
+
+  it("records AUTH_LOGIN_FAILED with reason LOCKED for the correct password while locked", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_LOGIN_FAILED", targetId: user.id },
+    });
+
+    const lockedRows = rows.filter(
+      (row) =>
+        row.metadata !== null &&
+        typeof row.metadata === "object" &&
+        (row.metadata as { reason?: string }).reason === "LOCKED",
+    );
+
+    expect(lockedRows).toHaveLength(1);
+  });
+
+  it("resets the failure counter on a successful login, without recording AUTH_LOCKOUT_CLEARED for a clean account", async () => {
+    const user = await buildCustomer();
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+    expect(response.status).toBe(200);
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_LOCKOUT_CLEARED", targetId: user.id },
+    });
+    expect(rows).toHaveLength(0);
+  });
+});
+
 describe("End-to-end: signup -> login -> me -> refresh -> sessions -> logout", () => {
   it("should support the full auth lifecycle for a freshly signed-up customer", async () => {
     const data = makeCustomerData();

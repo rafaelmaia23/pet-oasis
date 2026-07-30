@@ -85,3 +85,11 @@ export const unbanUser = async (req: Request, res: Response) => {
 
   return res.status(204).send();
 };
+
+export const unlockAccount = async (req: Request, res: Response) => {
+  const { params } = userParamsSchema.parse({ params: req.params });
+
+  await userService.unlockAccount(getAuthUser(req).id, params.id);
+
+  return res.status(204).send();
+};

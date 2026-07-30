@@ -73,6 +73,20 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(60 * 60 * 1000),
+
+  // Account lockout (7.10) — janela fixa inicial, dobrando a cada ciclo até o
+  // teto. Contador vive no Redis (`src/lib/lockout.ts`), sem coluna nova no User.
+  LOCKOUT_THRESHOLD: z.coerce.number().int().positive().default(5),
+  LOCKOUT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
+  LOCKOUT_MAX_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(24 * 60 * 60 * 1000),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

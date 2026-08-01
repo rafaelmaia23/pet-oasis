@@ -19,13 +19,15 @@ const RECONNECT_MAX_DELAY_MS = 5_000;
  * O listener de `error` só loga: o Redis nunca pode derrubar o boot nem o
  * processo. Falha de conexão é anomalia observável, não motivo de crash.
  *
- * TODO(7.13): `connectTimeout`/`commandTimeout` entram junto com os demais
- * timeouts — sem eles, um Redis que aceita a conexão e não responde ainda
- * penduraria o request pelo timeout de socket do SO.
+ * `connectTimeout`/`commandTimeout` (7.12) fecham a última lacuna do
+ * fail-open: sem eles, um Redis que aceita a conexão TCP mas nunca responde
+ * pendura pelo timeout de socket do SO em vez de falhar rápido.
  */
 export const redis = new Redis(env.REDIS_URL, {
   enableOfflineQueue: false,
   maxRetriesPerRequest: 1,
+  connectTimeout: env.REDIS_CONNECT_TIMEOUT_MS,
+  commandTimeout: env.REDIS_COMMAND_TIMEOUT_MS,
   retryStrategy: (times) =>
     Math.min(times * RECONNECT_BASE_DELAY_MS, RECONNECT_MAX_DELAY_MS),
 });

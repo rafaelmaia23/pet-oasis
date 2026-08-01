@@ -94,6 +94,33 @@ const envSchema = z.object({
   AXIOM_TOKEN: z.string().optional(),
   AXIOM_DATASET: z.string().optional(),
   SENTRY_DSN: z.url().optional(),
+
+  // Timeouts (7.12) — sem eles, uma dependência pendurada (Redis que aceita a
+  // conexão mas não responde, relay SMTP morto, pool sem conexão livre) trava
+  // o request pelo timeout de socket do SO em vez de falhar rápido. Todos
+  // configuráveis, defaults conservadores.
+  SERVER_HEADERS_TIMEOUT_MS: z.coerce.number().int().positive().default(65_000),
+  SERVER_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(70_000),
+  SERVER_KEEP_ALIVE_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(61_000),
+
+  PRISMA_TX_MAX_WAIT_MS: z.coerce.number().int().positive().default(5_000),
+  PRISMA_TX_TIMEOUT_MS: z.coerce.number().int().positive().default(8_000),
+  DB_POOL_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+
+  REDIS_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(2_000),
+  REDIS_COMMAND_TIMEOUT_MS: z.coerce.number().int().positive().default(2_000),
+
+  SMTP_CONNECTION_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10_000),
+  SMTP_GREETING_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+  SMTP_SOCKET_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

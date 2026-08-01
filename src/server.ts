@@ -20,6 +20,17 @@ const server = app.listen(env.PORT, () => {
   );
 });
 
+// 7.12 — set right after listen() (not inside the callback) to close the race
+// window before the first connection. Node requires requestTimeout >
+// headersTimeout; D7 already puts a reverse proxy in front in production, so
+// keepAliveTimeout is kept above what proxies typically hold a connection
+// open for (~60s) to avoid the classic "backend closes an idle socket the
+// proxy just reused" 502 race, and headersTimeout above that mitigates
+// slowloris.
+server.headersTimeout = env.SERVER_HEADERS_TIMEOUT_MS;
+server.requestTimeout = env.SERVER_REQUEST_TIMEOUT_MS;
+server.keepAliveTimeout = env.SERVER_KEEP_ALIVE_TIMEOUT_MS;
+
 // Graceful shutdown: Compose sends SIGTERM on stop; SIGINT covers Ctrl+C.
 const shutdown = createShutdownHandler({
   server,

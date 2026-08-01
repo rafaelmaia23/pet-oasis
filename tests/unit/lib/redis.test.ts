@@ -39,6 +39,18 @@ describe("Redis client", () => {
     expect(options.maxRetriesPerRequest).toBe(1);
   });
 
+  // 7.12 — sem timeout, um Redis que aceita a conexão TCP mas nunca responde
+  // pendura pelo timeout de socket do SO em vez de falhar rápido.
+  it("configures connect/command timeouts from env", () => {
+    const options = redisConstructorMock.mock.calls[0]?.[1] as Record<
+      string,
+      unknown
+    >;
+
+    expect(options.connectTimeout).toBe(env.REDIS_CONNECT_TIMEOUT_MS);
+    expect(options.commandTimeout).toBe(env.REDIS_COMMAND_TIMEOUT_MS);
+  });
+
   it("registers an error listener so a Redis failure never crashes the process", () => {
     expect(onMock).toHaveBeenCalledWith("error", expect.any(Function));
   });

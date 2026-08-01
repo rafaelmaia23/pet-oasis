@@ -12,10 +12,16 @@ type SendEmailInput = {
   text?: string;
 };
 
+// 7.12 — os defaults do nodemailer são generosos demais pra um `await`
+// síncrono no caminho de request (`connectionTimeout` default de 2min): um
+// relay morto penduraria signup/forgot-password por até esse tempo.
 const transporter = nodemailer.createTransport({
   host: env.SMTP_HOST,
   port: env.SMTP_PORT,
   secure: env.NODE_ENV === "production",
+  connectionTimeout: env.SMTP_CONNECTION_TIMEOUT_MS,
+  greetingTimeout: env.SMTP_GREETING_TIMEOUT_MS,
+  socketTimeout: env.SMTP_SOCKET_TIMEOUT_MS,
   ...(env.SMTP_USER
     ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASS } }
     : {}),

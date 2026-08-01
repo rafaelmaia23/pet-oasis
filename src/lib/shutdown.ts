@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 type ShutdownServer = { close(callback: (err?: Error) => void): void };
 type ShutdownPrisma = { $disconnect(): Promise<void> };
 type ShutdownRedis = { quit(): Promise<unknown> };
+type ShutdownSentry = { close(timeoutMs?: number): Promise<boolean> };
 
 /** Logger mínimo que o handler precisa — injetável para teste. */
 type ShutdownLogger = {
@@ -14,12 +15,18 @@ type ShutdownDeps = {
   server: ShutdownServer;
   prisma: ShutdownPrisma;
   redis?: ShutdownRedis;
+  sentry?: ShutdownSentry;
+  flushLogger?: () => Promise<void>;
   timeoutMs?: number;
   exit?: (code: number) => void;
   log?: ShutdownLogger;
 };
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
+// Orçamento curto e fixo (não é env var — detalhe interno, não contrato
+// documentado): drenar o Sentry nunca deve comer boa parte dos 10s de budget
+// do shutdown inteiro.
+const SENTRY_CLOSE_TIMEOUT_MS = 2_000;
 
 /**
  * Builds a signal handler that shuts the process down gracefully: stop accepting
@@ -38,6 +45,8 @@ export function createShutdownHandler({
   server,
   prisma,
   redis,
+  sentry,
+  flushLogger,
   timeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS,
   exit = (code) => process.exit(code),
   log = logger.child({ module: "lifecycle" }),
@@ -49,6 +58,29 @@ export function createShutdownHandler({
     if (settled) return;
     settled = true;
     exit(code);
+  };
+
+  // Drena Sentry e o transport do Axiom (7.11) — best-effort, igual ao
+  // `redis.quit()` acima: um destino externo já degradado não deve fazer o
+  // shutdown inteiro sair com código de erro. Chamado só nos caminhos de
+  // sucesso/falha "normais"; **não** no timeout forçado, que existe
+  // justamente para limitar o pior caso — um flush assíncrono ali derrotaria
+  // o propósito do timeout.
+  const finalizeObservability = async () => {
+    if (sentry) {
+      try {
+        await sentry.close(SENTRY_CLOSE_TIMEOUT_MS);
+      } catch (error) {
+        log.error({ err: error }, "error closing sentry");
+      }
+    }
+    if (flushLogger) {
+      try {
+        await flushLogger();
+      } catch (error) {
+        log.error({ err: error }, "error flushing the logger");
+      }
+    }
   };
 
   return async (signal: string) => {
@@ -80,10 +112,12 @@ export function createShutdownHandler({
 
       clearTimeout(forceTimer);
       log.info({ signal }, "shutdown complete");
+      await finalizeObservability();
       settle(0);
     } catch (error) {
       clearTimeout(forceTimer);
       log.error({ err: error }, "error during shutdown");
+      await finalizeObservability();
       settle(1);
     }
   };

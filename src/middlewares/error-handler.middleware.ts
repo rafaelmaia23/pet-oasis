@@ -11,6 +11,7 @@ import {
 import { PrismaClientKnownRequestError } from "@/generated/prisma/internal/prismaNamespace";
 import { logger } from "@/lib/logger";
 import { getRequestContext } from "@/lib/requestContext";
+import { Sentry } from "@/lib/sentry";
 
 const log = logger.child({ module: "http" });
 
@@ -54,6 +55,9 @@ function respond(
 
   if (statusCode >= 500) {
     log.error({ err: error, statusCode }, "request failed with server error");
+    // 7.11: só falha de verdade vai pro Sentry — 4xx é comportamento correto
+    // da API, não incidente. No-op seguro quando SENTRY_DSN não está setado.
+    Sentry.captureException(error);
   } else {
     log.warn({ statusCode, code: body.code }, "request rejected");
   }

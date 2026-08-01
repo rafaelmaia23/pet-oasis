@@ -362,14 +362,16 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ Sem lock manual pelo admin nesta fase (só o desbloqueio) — fora de escopo, registrado no `docs/backlog.md`.
 - ✅ Suíte (516) + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão F] Fase 7.11 — Destinos externos: Axiom + Sentry
-- ⬜ **Axiom** como transport do pino (`@axiomhq/pino`), em **worker thread** (`pino.transport`) — chamada remota nunca no caminho síncrono do request.
-- ⬜ `flush` do transport no `shutdown.ts` (senão os últimos logs antes do SIGTERM se perdem — justamente quando mais importam).
-- ⬜ Só ativa com `AXIOM_TOKEN`/`AXIOM_DATASET` presentes; ausente → degrada para stdout, **nunca** derruba o boot.
-- ⬜ **Sentry** capturando apenas falha de verdade: `AppError` com status ≥ 500, erro não-tratado, `unhandledRejection`, `uncaughtException`. 4xx esperado (404/422/403) **não** vai pro Sentry — é comportamento, não falha.
-- ⬜ `sendDefaultPii: false` + `beforeSend` scrubbando a mesma lista de campos proibidos da política (senão vaza pela porta dos fundos o que o `redact` protege).
-- ⬜ `release`/`environment` setados, para agrupar por deploy.
-- ⬜ Env vars novas: `AXIOM_TOKEN`, `AXIOM_DATASET`, `SENTRY_DSN`.
+### ✅ [Sessão F] Fase 7.11 — Destinos externos: Axiom + Sentry
+- ✅ **Axiom** como transport do pino (`@axiomhq/pino`), em **worker thread** (`pino.transport`) — chamada remota nunca no caminho síncrono do request. Decisão pura de ativação extraída (`resolveAxiomConfig`, `logger.ts`) — testável sem tocar `pino.transport` nem a rede.
+- ✅ `flushLogger()` (`logger.ts`) dá `.flush()` no `ThreadStream` do Axiom antes do SIGTERM — `pino.multistream()` não expõe um flush agregado (verificado em `node_modules/pino`), por isso a referência ao stream é guardada em escopo de módulo. Chamado pelo `shutdown.ts` nos caminhos de sucesso/erro normais, **não** no timeout forçado (defeitaria o propósito do timeout).
+- ✅ Só ativa com `AXIOM_TOKEN`/`AXIOM_DATASET` presentes; ausente → degrada para stdout, **nunca** derruba o boot — confirmado com boot real do container `runtime` (ver checkpoint abaixo).
+- ✅ **Sentry** (`src/lib/sentry.ts`) capturando apenas falha de verdade: `Sentry.captureException` no branch `statusCode >= 500` já existente de `error-handler.middleware.ts` (`respond()`), cobrindo `AppError` ≥500 e o catch-all `InternalServerError`; **não** `Sentry.setupExpressErrorHandler` (o projeto já tem seu próprio ponto único de saída de erro). `unhandledRejection`/`uncaughtException` capturados em `server.ts` e reaproveitam o `shutdown.ts` existente em vez de um caminho de saída novo.
+- ✅ `sendDefaultPii: false` + `beforeSend: scrubEvent` — função pura que censura os mesmos campos/headers proibidos do pino, reaproveitando `FORBIDDEN_FIELD_NAMES`/`FORBIDDEN_HEADER_NAMES` exportados de `logger.ts` (fonte única, sem cópia divergente).
+- ✅ `environment: env.NODE_ENV` + `release` lido do `package.json` via `process.cwd()` (não caminho relativo ao módulo — o tsup achata `src/lib/sentry.ts` num `dist/server.js` só, e `process.cwd()` é o único ponto estável entre dev/test/prod). Sem git SHA/CI nesta fase — registrado como possível refinamento futuro, não backlog bloqueante.
+- ✅ Env vars novas: `AXIOM_TOKEN`, `AXIOM_DATASET`, `SENTRY_DSN` — todas opcionais.
+- ✅ **Checkpoint:** build do stage `runtime` + boot real com `AXIOM_TOKEN`/`AXIOM_DATASET`/`SENTRY_DSN` fake — o worker thread do Axiom resolve e roda a partir do bundle (chegou a tentar ingest de verdade e recebeu `403 forbidden` do token fake, não um crash de resolução); boot **sem** as três vars segue normal (`GET /status` → 200); SIGTERM gracioso nos dois casos. Suíte (537) + `typecheck` + `lint` verdes.
+- 🔸 **Pendente para o usuário:** criar as contas reais (Axiom + Sentry) e confirmar visualmente que uma linha de log e um erro 5xx chegam nos dashboards — roteiro em `docs/fase-7-f-external-setup.md` (temporário, não commitado, apagar depois de usar).
 
 ### ⬜ [Sessão F] Fase 7.12 — Timeouts em tudo
 > Sem timeout, uma dependência pendurada exaure o pool e derruba a app inteira — o modo de falha mais comum em prod e o menos exercitado em teste.

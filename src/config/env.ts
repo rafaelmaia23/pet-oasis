@@ -87,6 +87,13 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(24 * 60 * 60 * 1000),
+
+  // Destinos externos (7.11) — ambos ativam só quando as próprias vars estão
+  // presentes; ausentes, a app degrada para stdout/ring buffer (Axiom) ou
+  // captureException vira no-op (Sentry), nunca bloqueia o boot (D6).
+  AXIOM_TOKEN: z.string().optional(),
+  AXIOM_DATASET: z.string().optional(),
+  SENTRY_DSN: z.url().optional(),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

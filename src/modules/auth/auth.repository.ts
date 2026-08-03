@@ -10,13 +10,44 @@ type CreateSessionData = {
   ipAddress?: string | undefined;
 };
 
-export async function createSession(data: CreateSessionData) {
-  return prisma.session.create({
-    data: {
-      ...data,
-      userAgent: data.userAgent ?? null,
-      ipAddress: data.ipAddress ?? null,
-    },
+/**
+ * Creates a session, evicting the oldest live ones first if the user is at
+ * or above the live session cap (7.13). Login is never refused because of
+ * the cap — the oldest sessions are just invalidated to make room.
+ */
+export async function createSessionAndEvictOldest(
+  data: CreateSessionData,
+  maxLiveSessions: number,
+) {
+  return prisma.$transaction(async (tx) => {
+    const liveSessions = await tx.session.findMany({
+      where: {
+        userId: data.userId,
+        usedAt: null,
+        invalidatedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    const overflow = liveSessions.length - (maxLiveSessions - 1);
+    if (overflow > 0) {
+      await tx.session.updateMany({
+        where: { id: { in: liveSessions.slice(0, overflow).map((s) => s.id) } },
+        data: { invalidatedAt: new Date() },
+      });
+    }
+
+    const session = await tx.session.create({
+      data: {
+        ...data,
+        userAgent: data.userAgent ?? null,
+        ipAddress: data.ipAddress ?? null,
+      },
+    });
+
+    return { session, evictedCount: Math.max(overflow, 0) };
   });
 }
 

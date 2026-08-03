@@ -599,6 +599,68 @@ describe("POST /api/v1/auth/logout", () => {
   });
 });
 
+describe("session cap (MAX_LIVE_SESSIONS)", () => {
+  it("should never refuse a login even after exceeding the live session cap", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.MAX_LIVE_SESSIONS + 1; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/login")
+        .send({ email: user.email, password: user.password });
+
+      expect(response.status).toBe(200);
+    }
+  });
+
+  it("should evict the oldest live session once the cap is exceeded", async () => {
+    const user = await buildCustomer();
+
+    const logins: Array<{ accessToken: string; refreshCookie: string }> = [];
+    for (let i = 0; i < env.MAX_LIVE_SESSIONS + 1; i++) {
+      logins.push(await loginWithSession(user.email, user.password));
+    }
+
+    const liveSessions = await prisma.session.findMany({
+      where: {
+        userId: user.id,
+        usedAt: null,
+        invalidatedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+    expect(liveSessions).toHaveLength(env.MAX_LIVE_SESSIONS);
+
+    const oldestLogin = logins[0] as { refreshCookie: string };
+    const oldestId = await sessionIdFromCookie(oldestLogin.refreshCookie);
+    const oldestSession = await prisma.session.findUniqueOrThrow({
+      where: { id: oldestId },
+    });
+    expect(oldestSession.invalidatedAt).not.toBeNull();
+
+    const newestLogin = logins.at(-1) as { refreshCookie: string };
+    const newestId = await sessionIdFromCookie(newestLogin.refreshCookie);
+    const liveIds = liveSessions.map((s) => s.id);
+    expect(liveIds).toContain(newestId);
+    expect(liveIds).not.toContain(oldestId);
+  });
+
+  it("should reject a refresh using the evicted session's refresh token", async () => {
+    const user = await buildCustomer();
+
+    const logins: Array<{ accessToken: string; refreshCookie: string }> = [];
+    for (let i = 0; i < env.MAX_LIVE_SESSIONS + 1; i++) {
+      logins.push(await loginWithSession(user.email, user.password));
+    }
+
+    const evicted = logins[0] as { refreshCookie: string };
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", evicted.refreshCookie);
+
+    expect(response.status).toBe(401);
+  });
+});
+
 describe("GET /api/v1/auth/sessions", () => {
   it("should return 401 if no access token is provided", async () => {
     const response = await request(app).get("/api/v1/auth/sessions");

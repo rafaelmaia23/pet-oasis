@@ -28,7 +28,9 @@
     "db:deploy": "dotenv -e .env.development -- prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:seed": "dotenv -e .env.development -- prisma db seed",
-    "db:studio": "dotenv -e .env.development -- prisma studio"
+    "db:studio": "dotenv -e .env.development -- prisma studio",
+    "db:cleanup-sessions": "dotenv -e .env.development -- tsx src/scripts/cleanup-sessions.ts",
+    "db:cleanup-audit-log": "dotenv -e .env.development -- tsx src/scripts/cleanup-audit-log.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",

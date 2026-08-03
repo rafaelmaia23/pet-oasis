@@ -122,13 +122,23 @@ export async function login(
   const accessToken = generateToken(user.id);
   const refreshToken = generateOpaqueToken();
 
-  await authRepository.createSession({
-    userId: user.id,
-    refreshTokenHash: hashToken(refreshToken),
-    expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
-    userAgent: context.userAgent,
-    ipAddress: context.ipAddress,
-  });
+  const { evictedCount } = await authRepository.createSessionAndEvictOldest(
+    {
+      userId: user.id,
+      refreshTokenHash: hashToken(refreshToken),
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+      userAgent: context.userAgent,
+      ipAddress: context.ipAddress,
+    },
+    env.MAX_LIVE_SESSIONS,
+  );
+
+  if (evictedCount > 0) {
+    log.info(
+      { userId: user.id, evictedCount },
+      "oldest live session(s) evicted (live session cap exceeded)",
+    );
+  }
 
   log.info({ userId: user.id }, "login succeeded");
 

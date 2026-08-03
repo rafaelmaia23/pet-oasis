@@ -1,0 +1,10 @@
+[Unit]
+Description=Agenda diária do cleanup-sessions (04:10 UTC)
+
+[Timer]
+OnCalendar=*-*-* 04:10:00 UTC
+# Roda ao religar a máquina se a janela foi perdida (host desligado à noite).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

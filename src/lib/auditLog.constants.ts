@@ -6,9 +6,9 @@
  * (§4.1.3). Fechá-la como union em tempo de compilação — no idioma de
  * `FeatureName`/`RoleName` — evita uma migration a cada ação nova.
  *
- * As 18 estão declaradas mesmo que a sub-fase 7.6 ligue só 12 pontos; as 6
- * restantes (lockout, rate limit, forçar senha, troca de email, demo-reset) são
- * ligadas nas suas próprias sub-fases (E, H, G) e já validam desde agora.
+ * Declaradas mesmo antes de cada ponto ser ligado — evita reabrir este
+ * arquivo a cada sub-fase nova. `DEMO_RESET_EXECUTED` (7.14) é a mais
+ * recente; forçar senha/troca de email (Sessão H) ainda não têm call site.
  */
 export const AUDIT_ACTIONS = [
   "AUTH_LOGIN_FAILED",
@@ -29,6 +29,7 @@ export const AUDIT_ACTIONS = [
   "PASSWORD_CHANGE_FORCED",
   "EMAIL_CHANGE_REQUESTED",
   "EMAIL_CHANGE_COMPLETED",
+  "DEMO_RESET_EXECUTED",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

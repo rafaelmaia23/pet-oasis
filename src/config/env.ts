@@ -131,6 +131,11 @@ const envSchema = z.object({
   MAX_LIVE_SESSIONS: z.coerce.number().int().positive().default(5),
   SESSION_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   AUDIT_LOG_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
+
+  // Guarda explícita do demo-reset.ts (truncate + reseed, 7.14) — NUNCA
+  // inferida de NODE_ENV, porque o deploy demo *é* production. Só true no
+  // .env.production de um deploy demo de verdade.
+  DEMO_MODE: z.stringbool().default(false),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

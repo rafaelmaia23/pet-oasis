@@ -9,6 +9,12 @@ systemd timer em vez de cron: dá `journalctl -u <serviço>` para depurar
 execuções, `Persistent=true` (recupera a janela perdida se o host estava
 desligado) e não sobrepõe execuções do mesmo timer.
 
+`pet-oasis-demo-reset` só faz sentido num deploy demo — o próprio script se
+recusa a rodar sem `DEMO_MODE=true` no `.env.production` do host (guarda
+explícita, nunca inferida de `NODE_ENV`). Instalar o timer num deploy que não
+é o demo é inofensivo (o `.service` falha alto todo dia, sem apagar nada),
+mas não tem por que instalar.
+
 ## Instalar (no servidor, como root)
 
 ```sh
@@ -16,6 +22,8 @@ sudo cp infra/cron/*.service infra/cron/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now pet-oasis-cleanup-sessions.timer
 sudo systemctl enable --now pet-oasis-cleanup-audit-log.timer
+# Só no deploy demo (DEMO_MODE=true):
+sudo systemctl enable --now pet-oasis-demo-reset.timer
 ```
 
 ## Verificar

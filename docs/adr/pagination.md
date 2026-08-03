@@ -117,3 +117,8 @@ existe, só não tem elementos.
   aditivo, não breaking. Era o objetivo.
 - Se `?sort=` sair do backlog: implementar só para offset e documentar a
   limitação no cursor.
+
+**O que a Fase 7 mostrou até aqui (7.19):** nenhum recurso novo usou o helper
+desde a 7.7/7.8 — o único consumidor de cursor continua sendo `GET /audit-logs`
+e o único de offset é `GET /users`. A hipótese de "servir sem fork" só será
+testada de fato quando a Fase 9 chegar; até lá, nada a revisar aqui.

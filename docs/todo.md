@@ -204,7 +204,7 @@
 
 ---
 
-## Fase 7 — Hardening e polimento 🔄
+## Fase 7 — Hardening e polimento ✅
 
 > Amplia o escopo original ("rate limiting, account lockout") para incluir também observabilidade e polimento de features já construídas. Decisões e racional completos no `docs/context.md` (§2.2), em `docs/logging-policy.md` e nos ADRs `rate-limiting-and-lockout.md` / `pagination.md`. Cada sub-fase é uma feat-branch em TDD (`feat/fase-7-<m>-<slug>` → merge `--no-ff` na `fase-7`).
 >
@@ -239,7 +239,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **F** ✅ | 7.11, 7.12 | Bordas externas e resiliência | Axiom/Sentry e os timeouts tratam o mesmo problema: dependência externa que falha ou pendura. |
 | **G** ✅ | 7.13, 7.14 | Scripts de manutenção + agendamento | `cleanup-sessions`, `cleanup-audit-log` e `demo-reset` compartilham `--dry-run`, transação, log de resultado e systemd timer. |
 | **H** ✅ | 7.15, 7.16, 7.17 | Polimento de features de conta | As três mexem no domínio de conta/sessão. **Abre confirmando o desenho de 7.15 e 7.16.** |
-| **I** | 7.19 (+ regressão de D1) | Fechos | Docs, teste de regressão do refresh hash, suíte/typecheck/lint, fase ✅. |
+| **I** ✅ | 7.19 (+ regressão de D1) | Fechos | Docs, teste de regressão do refresh hash, suíte/typecheck/lint, fase ✅. |
 
 ### ✅ [Sessão A] Fase 7.0 — Fundação de infra
 - ✅ Serviço `redis` (`redis:7-alpine`, healthcheck `redis-cli ping`) nos **três overrides**, não na base — os serviços de dado já viviam lá. Container/porta/volume próprios por ambiente: dev `6379` (volume `dev_redisdata`), **test `6380`** (sem volume — o teardown roda `down -v`), prod **sem porta publicada** (volume `prod_redisdata`). O `app` recebe `REDIS_URL: redis://redis:6379` pelo `environment` do override, mesmo idioma já usado na `DATABASE_URL`. `test:services:up` passou a subir `db redis`.
@@ -440,15 +440,15 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 >
 > Resta apenas formalizar em teste de regressão, na **Sessão I** (7.19): a coluna nunca contém o token entregue ao cliente; token adulterado → 401.
 
-### ⬜ [Sessão I] Fase 7.19 — Fechos
-- ⬜ **Teste de regressão do refresh hash (D1 / 7.18):** a coluna `Session.refreshTokenHash` nunca contém o token entregue ao cliente; refresh válido → 200; token adulterado → 401.
-- ⬜ `docs/endpoints.md` atualizado com as rotas novas (`GET /audit-logs`, `GET /logs/recent`, `DELETE /users/:id/lock`, `POST /auth/change-email` + `POST /auth/confirm-email-change`, `POST /users/:id/force-password-reset`) + as features novas (`read:log`, `read:audit-log`, `read:audit-log:full`) + o novo shape de `GET /auth/sessions` (`device`/`current` no lugar de `userAgent` cru) + o envelope `{ data, meta }` nas listagens (D4).
-- ⬜ `docs/logging-policy.md` revisado com os valores efetivamente escolhidos em cada sub-fase.
-- ⬜ `docs/context.md`: promover a §2.2 de "planejada" a "implementada", com as decisões confirmadas em cada sub-fase (inclusive 7.15/7.16/7.17, fechadas na Sessão H).
-- ⬜ ADRs `rate-limiting-and-lockout.md` e `pagination.md`: revisar a seção "Quando revisitar" com o que a implementação de fato mostrou.
-- ⬜ `docs/backlog.md` revisado (o que saiu do backlog, o que entrou).
-- ⬜ `README.md`: mencionar o Redis como serviço novo e o horário do reset do demo.
-- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 7 marcada ✅.
+### ✅ [Sessão I] Fase 7.19 — Fechos
+- ✅ **Teste de regressão do refresh hash (D1 / 7.18):** 2 casos novos em `auth.test.ts` (`describe("POST /api/v1/auth/refresh")`) — `refreshTokenHash` nunca é igual ao token cru (e é igual a `hashToken(token)`); token adulterado por 1 caractere → 401.
+- ✅ `docs/endpoints.md` atualizado com as 4 rotas que faltavam (`DELETE /users/:id/lock`, `POST /users/:id/force-password-reset`, `POST /auth/change-email`, `POST /auth/confirm-email-change`) — o resto (`/audit-logs`, `/logs/recent`, envelope `{data,meta}`) já estava documentado desde a 7.7/7.8.
+- ✅ `docs/logging-policy.md`: cabeçalho de status atualizado para refletir todas as sub-fases que de fato contribuíram (7.3–7.6, 7.9–7.11, 7.14–7.16); valores de retenção/buffer conferidos contra `env.ts`, sem divergência.
+- ✅ `docs/context.md`: §2.2 promovida de "planejada" a "implementada"; acrescentado o fecho do D1 (teste de regressão) e um parágrafo "Fase 7 (fechada)" em §4 resumindo as 9 sessões.
+- ✅ ADRs `rate-limiting-and-lockout.md` e `pagination.md`: seção "Quando revisitar" ganhou "O que a Fase 7 mostrou até aqui" — nenhum dos gatilhos previstos ocorreu de fato ainda (fail-open só exercitado artificialmente, nenhum recurso novo usou o helper de paginação).
+- ✅ `docs/backlog.md` revisado: nenhum item resolvido pela fase, nenhuma entrada nova — arquivo já preciso.
+- ✅ `README.md`: Redis mencionado em "Rodar localmente"; roadmap promove a Fase 7 a ✅ (saindo de "A seguir"); contagem de testes atualizada (341 → 606, badge + texto).
+- ✅ `npm run typecheck` + `npm run lint` + suíte completa (606 testes) verdes; Fase 7 marcada ✅.
 
 ---
 

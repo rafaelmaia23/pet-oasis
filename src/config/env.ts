@@ -121,6 +121,16 @@ const envSchema = z.object({
     .default(10_000),
   SMTP_GREETING_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
   SMTP_SOCKET_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+
+  // Manutenção e faxina (7.13) — teto de sessões vivas por usuário (evict da
+  // mais antiga ao logar, login nunca é recusado) e retenção de registros
+  // técnicos mortos, apagados só pelos scripts em src/scripts/ (nunca no
+  // ciclo request/response). AUDIT_LOG_RETENTION_DAYS usa 365 (produção) como
+  // default conservador; o deploy demo sobrescreve para 21 no seu próprio
+  // .env.production.
+  MAX_LIVE_SESSIONS: z.coerce.number().int().positive().default(5),
+  SESSION_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  AUDIT_LOG_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

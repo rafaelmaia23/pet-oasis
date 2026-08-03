@@ -4,10 +4,13 @@ import { createPresenter } from "@/utils/presenter";
 const defaultView = z
   .object({
     id: z.uuid(),
+    device: z.string().meta({ example: "Chrome no Windows" }),
+    ipAddress: z.string().nullable().meta({ example: "203.0.113.42" }),
     createdAt: z.coerce.date(),
     expiresAt: z.coerce.date(),
-    userAgent: z.string().nullable().meta({ example: "Mozilla/5.0" }),
-    ipAddress: z.string().nullable().meta({ example: "203.0.113.42" }),
+    current: z
+      .boolean()
+      .meta({ description: "Se é a sessão da própria request atual" }),
   })
   .meta({
     id: "Session",

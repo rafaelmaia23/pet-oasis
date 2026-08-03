@@ -238,7 +238,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **E** ✅ | 7.9, 7.10 | Rate limit + lockout | Mesma infra (Redis), mesmo endpoint alvo (`/auth/login`), mesmas ações de audit. |
 | **F** ✅ | 7.11, 7.12 | Bordas externas e resiliência | Axiom/Sentry e os timeouts tratam o mesmo problema: dependência externa que falha ou pendura. |
 | **G** ✅ | 7.13, 7.14 | Scripts de manutenção + agendamento | `cleanup-sessions`, `cleanup-audit-log` e `demo-reset` compartilham `--dry-run`, transação, log de resultado e systemd timer. |
-| **H** | 7.15, 7.16, 7.17 | Polimento de features de conta | As três mexem no domínio de conta/sessão. **Abre confirmando o desenho de 7.15 e 7.16.** |
+| **H** ✅ | 7.15, 7.16, 7.17 | Polimento de features de conta | As três mexem no domínio de conta/sessão. **Abre confirmando o desenho de 7.15 e 7.16.** |
 | **I** | 7.19 (+ regressão de D1) | Fechos | Docs, teste de regressão do refresh hash, suíte/typecheck/lint, fase ✅. |
 
 ### ✅ [Sessão A] Fase 7.0 — Fundação de infra
@@ -430,8 +430,10 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ `PASSWORD_CHANGE_FORCED` no audit log — `actorId` = admin, `targetId` = alvo, sem PII.
 - ✅ **Implementação:** testes de regressão cobrindo o fluxo ponta-a-ponta (força → captura o token do email → `reset-password` → login com a senha nova) e o `forgot-password` de sempre continuando intacto (`consumePasswordReset` agora é compartilhada pelas duas origens). Suíte (596) + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão H] Fase 7.17 — Polir `GET /auth/sessions`
-- ⬜ Parsing de user-agent (ex. `ua-parser-js`) → `{ device: "Chrome no Windows", ipAddress, createdAt, current }`, marcando a sessão da request atual.
+### ✅ [Sessão H] Fase 7.17 — Polir `GET /auth/sessions`
+- ✅ Parsing de user-agent via `ua-parser-js` (`src/lib/userAgent.ts`, `describeUserAgent` — função pura, testada por unidade) → `device: "Chrome no Windows"` (fallback `"Dispositivo desconhecido"` quando o UA falta ou não é reconhecido). A view (`sessionViews.default`) troca o `userAgent` cru por `device` já formatado e ganha `current: boolean`.
+- ✅ `current` é calculado comparando o hash do refresh token do cookie da própria request (`req.cookies[REFRESH_TOKEN_COOKIE_NAME]`, lido no controller e passado ao `authService.listSessions`) contra `refreshTokenHash` de cada sessão — sem cookie (ex. acesso só com o access token), nenhuma sessão é marcada como atual.
+- ✅ Suíte (604) + `typecheck` + `lint` verdes.
 
 ### ✅ Fase 7.18 — Refresh token hasheado em repouso *(D1 — já implementado desde a Fase 3)*
 > Item levantado na reformulação e resolvido na análise do planejamento, **sem código novo**: `Session.refreshTokenHash` já guarda `sha256(token)` (`src/lib/token.ts`, `hashToken`) desde a Fase 3 — o token opaco nunca foi persistido em plaintext. A comparação em tempo constante que o item pedia não se aplica: o lookup é `findUnique` pelo hash, não comparação byte a byte de segredo. Trocar sha256 por HMAC com `PEPPER` foi considerado e **recusado** (ganho marginal com token de 32 bytes de entropia; custo = migration invalidando todas as sessões) — registrado no `docs/backlog.md`.
@@ -440,9 +442,9 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 
 ### ⬜ [Sessão I] Fase 7.19 — Fechos
 - ⬜ **Teste de regressão do refresh hash (D1 / 7.18):** a coluna `Session.refreshTokenHash` nunca contém o token entregue ao cliente; refresh válido → 200; token adulterado → 401.
-- ⬜ `docs/endpoints.md` atualizado com as rotas novas (`GET /audit-logs`, `GET /logs/recent`, `DELETE /users/:id/lock`, troca de email, forçar troca de senha) + as features novas (`read:log`, `read:audit-log`, `read:audit-log:full`) e o envelope `{ data, meta }` nas listagens (D4).
+- ⬜ `docs/endpoints.md` atualizado com as rotas novas (`GET /audit-logs`, `GET /logs/recent`, `DELETE /users/:id/lock`, `POST /auth/change-email` + `POST /auth/confirm-email-change`, `POST /users/:id/force-password-reset`) + as features novas (`read:log`, `read:audit-log`, `read:audit-log:full`) + o novo shape de `GET /auth/sessions` (`device`/`current` no lugar de `userAgent` cru) + o envelope `{ data, meta }` nas listagens (D4).
 - ⬜ `docs/logging-policy.md` revisado com os valores efetivamente escolhidos em cada sub-fase.
-- ⬜ `docs/context.md`: promover a §2.2 de "planejada" a "implementada", com as decisões confirmadas em cada sub-fase (inclusive 7.15/7.16, fechadas na Sessão H).
+- ⬜ `docs/context.md`: promover a §2.2 de "planejada" a "implementada", com as decisões confirmadas em cada sub-fase (inclusive 7.15/7.16/7.17, fechadas na Sessão H).
 - ⬜ ADRs `rate-limiting-and-lockout.md` e `pagination.md`: revisar a seção "Quando revisitar" com o que a implementação de fato mostrou.
 - ⬜ `docs/backlog.md` revisado (o que saiu do backlog, o que entrou).
 - ⬜ `README.md`: mencionar o Redis como serviço novo e o horário do reset do demo.

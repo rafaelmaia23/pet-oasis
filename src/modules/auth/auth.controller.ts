@@ -159,7 +159,14 @@ export const logout = async (req: Request, res: Response) => {
 };
 
 export const listSessions = async (req: Request, res: Response) => {
-  const sessions = await authService.listSessions(getAuthUser(req).id);
+  const currentRefreshToken = req.cookies[REFRESH_TOKEN_COOKIE_NAME] as
+    | string
+    | undefined;
+
+  const sessions = await authService.listSessions(
+    getAuthUser(req).id,
+    currentRefreshToken,
+  );
 
   res
     .status(200)

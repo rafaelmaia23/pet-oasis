@@ -12,6 +12,7 @@ import * as lockout from "@/lib/lockout";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
+import { describeUserAgent } from "@/lib/userAgent";
 import * as userService from "@/modules/user/user.service";
 import * as userRepository from "../user/user.repository";
 import type { CreateCustomerInput } from "../user/user.schema";
@@ -248,8 +249,20 @@ export async function logout(refreshToken: string | undefined, userId: string) {
   log.info({ userId, sessionId: session.id }, "logout");
 }
 
-export async function listSessions(userId: string) {
-  return authRepository.findLiveSessionsByUserId(userId);
+export async function listSessions(
+  userId: string,
+  currentRefreshToken?: string,
+) {
+  const sessions = await authRepository.findLiveSessionsByUserId(userId);
+  const currentHash = currentRefreshToken
+    ? hashToken(currentRefreshToken)
+    : null;
+
+  return sessions.map((session) => ({
+    ...session,
+    device: describeUserAgent(session.userAgent),
+    current: currentHash !== null && session.refreshTokenHash === currentHash,
+  }));
 }
 
 const REVOKE_SESSION_NOT_FOUND_ERROR = {

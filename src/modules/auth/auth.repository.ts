@@ -98,6 +98,7 @@ type CreateVerificationTokenData = {
   tokenHash: string;
   purpose: VerificationPurpose;
   expiresAt: Date;
+  newEmail?: string;
 };
 
 export async function createVerificationToken(
@@ -151,6 +152,75 @@ export async function consumePasswordReset(
     await tx.session.updateMany({
       where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
       data: { invalidatedAt: new Date() },
+    });
+    if (audit) await record(audit, tx);
+  });
+}
+
+type RequestEmailChangeData = {
+  userId: string;
+  tokenHash: string;
+  newEmail: string;
+  expiresAt: Date;
+};
+
+/**
+ * Invalidates any pending EMAIL_CHANGE token for the user before creating the
+ * new one — at most one live pending email change per user (same "unicidade
+ * do ativo por código" idiom already used by UserFeature/UserRole), which
+ * also doubles as the implicit cancel mechanism for a change in progress.
+ */
+export async function requestEmailChange(
+  data: RequestEmailChangeData,
+  audit?: AuditDescriptor,
+) {
+  return prisma.$transaction(async (tx) => {
+    await tx.verificationToken.updateMany({
+      where: { userId: data.userId, purpose: "EMAIL_CHANGE", usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    await tx.user.update({
+      where: { id: data.userId },
+      data: { pendingEmail: data.newEmail },
+    });
+    const token = await tx.verificationToken.create({
+      data: {
+        userId: data.userId,
+        tokenHash: data.tokenHash,
+        purpose: "EMAIL_CHANGE",
+        expiresAt: data.expiresAt,
+        newEmail: data.newEmail,
+      },
+    });
+    if (audit) await record(audit, tx);
+    return token;
+  });
+}
+
+/**
+ * No pre-check for a last-minute conflict here: if someone else took
+ * `newEmail` between the request and the confirmation, this `user.update`
+ * throws P2002, which the error handler already maps to 409 — same idiom
+ * used everywhere else unique constraints are the backstop.
+ */
+export async function consumeEmailChange(
+  tokenId: string,
+  userId: string,
+  newEmail: string,
+  oldEmail: string,
+  audit?: AuditDescriptor,
+) {
+  return prisma.$transaction(async (tx) => {
+    await tx.verificationToken.update({
+      where: { id: tokenId },
+      data: { usedAt: new Date() },
+    });
+    await tx.user.update({
+      where: { id: userId },
+      data: { email: newEmail, pendingEmail: null },
+    });
+    await tx.previousEmail.create({
+      data: { userId, email: oldEmail, replacedAt: new Date() },
     });
     if (audit) await record(audit, tx);
   });

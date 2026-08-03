@@ -14,6 +14,7 @@ const defaultView = z
 const ownerView = defaultView
   .extend({
     email: z.email(),
+    pendingEmail: z.email().nullable(),
     cpf: z.string().meta({ example: "12345678901" }),
     customer: z
       .object({

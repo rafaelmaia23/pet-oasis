@@ -10,7 +10,9 @@ import {
 } from "./auth.constants";
 import { sessionPresenter } from "./auth.presenter";
 import {
+  changeEmailSchema,
   changePasswordSchema,
+  confirmEmailChangeSchema,
   forgotPasswordSchema,
   loginSchema,
   resendVerificationSchema,
@@ -20,6 +22,7 @@ import {
   verifyEmailSchema,
 } from "./auth.schema";
 import * as authService from "./auth.service";
+import * as emailChangeService from "./emailChange.service";
 import * as passwordService from "./password.service";
 import * as verificationService from "./verification.service";
 
@@ -77,6 +80,26 @@ export const changePassword = async (req: Request, res: Response) => {
     body.currentPassword,
     body.newPassword,
   );
+
+  res.status(204).send();
+};
+
+export const changeEmail = async (req: Request, res: Response) => {
+  const { body } = changeEmailSchema.parse({ body: req.body });
+
+  await emailChangeService.changeEmail(
+    getAuthUser(req).id,
+    body.currentPassword,
+    body.newEmail,
+  );
+
+  res.status(204).send();
+};
+
+export const confirmEmailChange = async (req: Request, res: Response) => {
+  const { body } = confirmEmailChangeSchema.parse({ body: req.body });
+
+  await emailChangeService.confirmEmailChange(body.token);
 
   res.status(204).send();
 };

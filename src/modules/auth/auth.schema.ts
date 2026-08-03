@@ -66,6 +66,27 @@ export const changePasswordSchema = z.object({
   }),
 });
 
+export const changeEmailSchema = z.object({
+  body: z.object({
+    currentPassword: z
+      .string()
+      .min(1, "Current password is required")
+      .meta({ example: "SenhaAtual1!" }),
+    newEmail: z
+      .email("Invalid email address")
+      .meta({ example: "novo@example.com" }),
+  }),
+});
+
+export const confirmEmailChangeSchema = z.object({
+  body: z.object({
+    token: z.string().min(1, "Token is required").meta({
+      description: "Token recebido por email",
+      example: "a1b2c3d4...",
+    }),
+  }),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>["body"];
 
 export type SessionParams = z.infer<typeof sessionParamsSchema>["params"];
@@ -81,3 +102,9 @@ export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>["body"];
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>["body"];
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>["body"];
+
+export type ChangeEmailInput = z.infer<typeof changeEmailSchema>["body"];
+
+export type ConfirmEmailChangeInput = z.infer<
+  typeof confirmEmailChangeSchema
+>["body"];

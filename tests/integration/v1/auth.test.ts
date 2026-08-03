@@ -57,9 +57,10 @@ function tokenFromLastEmail(): string {
 async function seedVerificationToken(
   userId: string,
   overrides?: {
-    purpose?: "EMAIL_VERIFICATION" | "PASSWORD_RESET";
+    purpose?: "EMAIL_VERIFICATION" | "PASSWORD_RESET" | "EMAIL_CHANGE";
     expiresAt?: Date;
     usedAt?: Date | null;
+    newEmail?: string;
   },
 ): Promise<string> {
   const rawToken = generateOpaqueToken();
@@ -70,6 +71,7 @@ async function seedVerificationToken(
       purpose: overrides?.purpose ?? "EMAIL_VERIFICATION",
       expiresAt: overrides?.expiresAt ?? new Date(Date.now() + 60 * 60 * 1000),
       usedAt: overrides?.usedAt ?? null,
+      newEmail: overrides?.newEmail ?? null,
     },
   });
   return rawToken;
@@ -174,6 +176,28 @@ describe("POST /api/v1/auth/signup", () => {
     const response = await request(app)
       .post("/api/v1/auth/signup")
       .send(makeCustomerData({ email: banned.email }));
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      message: "O email informado já está em uso",
+      code: "CONFLICT",
+    });
+  });
+
+  it("should return the same generic 409 when the email was previously used by another account", async () => {
+    const other = await buildCustomer();
+    const reservedEmail = other.email;
+    await prisma.user.update({
+      where: { id: other.id },
+      data: { email: `changed-${other.id}@example.com` },
+    });
+    await prisma.previousEmail.create({
+      data: { userId: other.id, email: reservedEmail, replacedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/signup")
+      .send(makeCustomerData({ email: reservedEmail }));
 
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
@@ -1393,6 +1417,333 @@ describe("POST /api/v1/auth/change-password", () => {
       .send({ currentPassword: user.password, newPassword: NEW_PASSWORD });
 
     expect(response.status).toBe(403);
+  });
+});
+
+describe("POST /api/v1/auth/change-email", () => {
+  it("should return 401 without an access token", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .send({ currentPassword: "Whatever@1", newEmail: "new@example.com" });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 403 without the update:user feature", async () => {
+    const user = await buildCustomer({ denies: ["update:user"] });
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: "new@example.com" });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 422 when currentPassword is missing", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ newEmail: "new@example.com" });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["currentPassword"]);
+  });
+
+  it("should return 422 when newEmail is not a valid email", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: "not-an-email" });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["newEmail"]);
+  });
+
+  it("should return 403 when the current password is incorrect", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: "WrongPass@1", newEmail: "new@example.com" });
+
+    expect(response.status).toBe(403);
+
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.pendingEmail).toBeNull();
+  });
+
+  it("should return 409 when newEmail is the same as the current email", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: user.email });
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should return 409 when newEmail is already active on another account", async () => {
+    const user = await buildCustomer();
+    const other = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: other.email });
+
+    expect(response.status).toBe(409);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("should return 409 when newEmail was previously used by another account", async () => {
+    const user = await buildCustomer();
+    const other = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+    const reservedEmail = "reserved@example.com";
+    await prisma.previousEmail.create({
+      data: { userId: other.id, email: reservedEmail, replacedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: reservedEmail });
+
+    expect(response.status).toBe(409);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("should return 403 for a banned account", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { bannedAt: new Date(), banReason: "abuse" },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: "new@example.com" });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should set pendingEmail, create the token and notify the OLD email on success", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+    const newEmail = "new@example.com";
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail });
+
+    expect(response.status).toBe(204);
+
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.pendingEmail).toBe(newEmail);
+    expect(userInDb?.email).toBe(user.email);
+
+    const tokenInDb = await prisma.verificationToken.findFirst({
+      where: { userId: user.id, purpose: "EMAIL_CHANGE" },
+    });
+    expect(tokenInDb?.newEmail).toBe(newEmail);
+    expect(tokenInDb?.usedAt).toBeNull();
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: user.email }),
+    );
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "EMAIL_CHANGE_REQUESTED", targetId: user.id },
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("should invalidate the previous pending token when a new change is requested", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: "first@example.com" });
+    const firstToken = tokenFromLastEmail();
+
+    await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        currentPassword: user.password,
+        newEmail: "second@example.com",
+      });
+
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.pendingEmail).toBe("second@example.com");
+
+    const confirmResponse = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token: firstToken });
+
+    expect(confirmResponse.status).toBe(400);
+  });
+});
+
+describe("POST /api/v1/auth/confirm-email-change", () => {
+  it("should return 422 when token is missing", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({});
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["token"]);
+  });
+
+  it("should return 400 for an unknown token", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token: generateOpaqueToken() });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("should return 400 for a token with the wrong purpose", async () => {
+    const user = await buildCustomer();
+    const token = await seedVerificationToken(user.id, {
+      purpose: "PASSWORD_RESET",
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("should return 400 for an expired token and not change the email", async () => {
+    const user = await buildCustomer();
+    const token = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_CHANGE",
+      newEmail: "new@example.com",
+      expiresAt: new Date(Date.now() - 1000),
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+
+    expect(response.status).toBe(400);
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.email).toBe(user.email);
+  });
+
+  it("should return 400 for an already used token", async () => {
+    const user = await buildCustomer();
+    const token = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_CHANGE",
+      newEmail: "new@example.com",
+      usedAt: new Date(),
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("should complete the email change, record PreviousEmail and the audit log", async () => {
+    const user = await buildCustomer();
+    const newEmail = "new@example.com";
+    const token = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_CHANGE",
+      newEmail,
+    });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { pendingEmail: newEmail },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+
+    expect(response.status).toBe(204);
+
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.email).toBe(newEmail);
+    expect(userInDb?.pendingEmail).toBeNull();
+
+    const previous = await prisma.previousEmail.findFirst({
+      where: { userId: user.id },
+    });
+    expect(previous?.email).toBe(user.email);
+
+    const tokenInDb = await prisma.verificationToken.findUnique({
+      where: { tokenHash: hashToken(token) },
+    });
+    expect(tokenInDb?.usedAt).not.toBeNull();
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "EMAIL_CHANGE_COMPLETED", targetId: user.id },
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("should return 400 when reusing an already-confirmed token", async () => {
+    const user = await buildCustomer();
+    const newEmail = "new@example.com";
+    const token = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_CHANGE",
+      newEmail,
+    });
+
+    const first = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+    expect(first.status).toBe(204);
+
+    const second = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+    expect(second.status).toBe(400);
+  });
+
+  it("should return 409 when the email got taken right before confirmation", async () => {
+    const user = await buildCustomer();
+    const other = await buildCustomer();
+    const newEmail = "raced@example.com";
+    const token = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_CHANGE",
+      newEmail,
+    });
+
+    // race: someone else grabs the target email between request and confirm
+    await prisma.user.update({
+      where: { id: other.id },
+      data: { email: newEmail },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+
+    expect(response.status).toBe(409);
   });
 });
 

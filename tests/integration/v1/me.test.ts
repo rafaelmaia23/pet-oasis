@@ -6,6 +6,7 @@ import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import app from "@/app";
+import { prisma } from "@/lib/prisma";
 import { meViews } from "@/modules/me/me.presenter";
 
 afterEach(async () => {
@@ -225,6 +226,35 @@ describe("GET /api/v1/me", () => {
     expect(response.body.features).toEqual(
       expect.arrayContaining(["read:role"]),
     );
+  });
+
+  it("should expose pendingEmail as null by default", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/me")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.pendingEmail).toBeNull();
+  });
+
+  it("should expose the pending email when a change is in progress", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { pendingEmail: "new@example.com" },
+    });
+
+    const response = await request(app)
+      .get("/api/v1/me")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.pendingEmail).toBe("new@example.com");
   });
 
   it("should return 200 with the wildcard feature for an admin user", async () => {

@@ -33,6 +33,21 @@ export const DEFAULT_CUSTOMER_ROLES: RoleName[] = ["customer"];
 /** Como a conta nasceu, para o audit distinguir signup de criação por admin. */
 export type UserCreationSource = "SIGNUP" | "ADMIN";
 
+/**
+ * Um email trocado (7.15) fica reservado para sempre em `PreviousEmail` —
+ * sem esta checagem, a reserva seria furável simplesmente criando uma conta
+ * nova em vez de pedir a troca. O conflito com o email ATIVO de outra conta
+ * continua vindo do unique constraint de `User.email` (P2002 → 409).
+ */
+async function assertEmailAvailable(email: string) {
+  if (await userRepository.findPreviousEmailByEmail(email)) {
+    throw createConflictError({
+      message: "O email informado já está em uso",
+      action: "Tente outro valor para o campo email",
+    });
+  }
+}
+
 export async function createEmployee(
   data: CreateEmployeeInput,
   source: UserCreationSource = "ADMIN",
@@ -42,6 +57,8 @@ export async function createEmployee(
     : await getRolesByNames(DEFAULT_EMPLOYEE_ROLES);
 
   validateRoles(rolesList, "EMPLOYEE");
+
+  await assertEmailAvailable(data.email);
 
   const { password, ...userData } = data;
 
@@ -77,6 +94,8 @@ export async function createCustomer(
   const rolesList = await getRolesByNames(DEFAULT_CUSTOMER_ROLES);
 
   validateRoles(rolesList, "CUSTOMER");
+
+  await assertEmailAvailable(data.email);
 
   const { password, ...userData } = data;
 

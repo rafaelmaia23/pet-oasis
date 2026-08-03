@@ -44,6 +44,13 @@ authRouter.post(
   authController.changePassword,
 );
 authRouter.post(
+  "/change-email",
+  authenticate,
+  canAccess("update:user"),
+  authController.changeEmail,
+);
+authRouter.post("/confirm-email-change", authController.confirmEmailChange);
+authRouter.post(
   "/logout",
   authenticate,
   canAccess("manage:session"),

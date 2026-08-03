@@ -1,0 +1,26 @@
+meta {
+  name: Change Email
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/auth/change-email
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "currentPassword": "DemoOasis2026!",
+    "newEmail": "novo@example.com"
+  }
+}
+
+docs {
+  Requer Bearer. Solicita a troca de email — exige a senha atual. O email antigo continua ativo até a troca ser confirmada via /auth/confirm-email-change, e recebe um aviso de segurança com o link de confirmação. ⚠️ Não rode com o usuário demo.
+}

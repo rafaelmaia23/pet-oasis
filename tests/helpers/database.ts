@@ -14,6 +14,7 @@ export async function clearDatabase() {
   await prisma.userRole.deleteMany();
   await prisma.session.deleteMany();
   await prisma.verificationToken.deleteMany();
+  await prisma.previousEmail.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.user.deleteMany();

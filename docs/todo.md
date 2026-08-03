@@ -223,7 +223,7 @@
 | D7 | Trust proxy | Deploy tem proxy reverso na frente → `app.set("trust proxy", 1)`. |
 | D8 | Valores numéricos | Aceitos os propostos, **todos por env var** (tabela no ADR de rate limiting; `limit` de paginação no ADR de paginação). |
 
-Continuam **deferidas por design**: o desenho de 7.15 (troca de email) e 7.16 (forçar troca de senha) é confirmado na abertura da Sessão H.
+O desenho de 7.15 (troca de email) e 7.16 (forçar troca de senha) foi **confirmado com o usuário antes da implementação** (2026-08-03) — decisões completas nas seções abaixo; racional em `docs/context.md` §2.2.
 
 ### Sessões de trabalho
 
@@ -405,15 +405,31 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ Testes de integração (`tests/integration/scripts/demo-reset.test.ts`): guarda pura, truncate+reseed com `Role`/`Feature` preservadas, dry-run não escreve nada, audit só na execução real. Suíte (561) + `typecheck` + `lint` verdes.
 - 🔸 Quando existir dummy data (Fase 9+), o reseed passa a restaurá-lo.
 
-### ⬜ [Sessão H] Fase 7.15 — Troca de email *(desenho a confirmar no início da feature)*
-- ⬜ Reabre a decisão de `user.schema.ts:56` (hoje bloqueada). Proposta a validar: endpoint próprio autenticado, senha atual exigida (como change-password), fluxo de 2 passos com verificação no email novo antes de efetivar (`pendingEmail` + `VerificationPurpose.EMAIL_CHANGE`).
-- ⬜ Pontos a decidir na feature: notifica o email antigo da troca? o que acontece se o novo email já existe (conflito)? TTL do pending?
-- ⬜ `EMAIL_CHANGE_REQUESTED` / `EMAIL_CHANGE_COMPLETED` no audit log (só ids — o email não entra em `metadata`).
+### ✅ [Sessão H] Fase 7.15 — Troca de email
+> Desenho firmado com o usuário em 2026-08-03, antes da implementação.
 
-### ⬜ [Sessão H] Fase 7.16 — Forçar troca de senha, ação do admin *(desenho a confirmar)*
-- ⬜ Proposta: flag `mustChangePassword` no `User`; endpoint que a ativa + invalida sessões do alvo (feature a decidir na abertura da Sessão H — provável `manage:user:status`).
-- ⬜ Ponto a decidir na feature: login com a flag ativa bloqueia acesso até trocar, ou deixa entrar sinalizando pro front forçar a troca?
-- ⬜ `PASSWORD_CHANGE_FORCED` no audit log.
+- ✅ **Migration** (`add_email_change_and_previous_emails`): `VerificationPurpose` ganhou `EMAIL_CHANGE`. `VerificationToken` ganhou coluna `newEmail String?` (só usada nesse purpose — o token carrega o próprio alvo, não depende de reler `User.pendingEmail` no confirm). `User` ganhou `pendingEmail String? @map("pending_email")`, **não-único**. Tabela nova `PreviousEmail` (`id`, `userId` FK, `email` **unique global**, `replacedAt`, `createdAt`, índice em `userId`).
+- ✅ **`POST /auth/change-email`** (`authenticate` + `canAccess("update:user")`, sem feature nova): body `{ currentPassword, newEmail }`. Reabre a decisão de `user.schema.ts:56` (`email: z.never(...)` no `PATCH /users/:id`) — a troca é endpoint próprio, fora do update genérico. Exige a senha atual, recusa se `newEmail` for igual ao ativo, checa conflito contra `User.email` **e** `PreviousEmail` → 409 revelando o conflito. Gera token opaco (`purpose: EMAIL_CHANGE`, TTL = `EMAIL_VERIFICATION_TTL_MS` reaproveitada), grava `newEmail` na própria linha do token e seta `pendingEmail`. Uma nova chamada invalida o token `EMAIL_CHANGE` pendente anterior e sobrescreve `pendingEmail` (mesmo idioma de "unicidade do ativo por código" de `UserFeature`/`UserRole`) — dobra como cancelamento implícito. Dispara, na mesma operação, o aviso de segurança para o email **antigo** (com o link de confirmação — é quem ainda tem acesso à caixa real). Sem rate limit dedicado.
+- ✅ **`POST /auth/confirm-email-change`** (público): body `{ token }`. Em transação: `User.email = token.newEmail`, `pendingEmail = null`, insere `PreviousEmail`, marca o token usado, audit `EMAIL_CHANGE_COMPLETED`. Sem pré-checagem de conflito de última hora — o próprio `user.update` estoura P2002 → 409 pelo handler já existente.
+- ✅ **Email trocado fica reservado para sempre** (`PreviousEmail`, unique global) — mesmo idioma do email "preso" de conta deletada (nota da Fase 8). `createCustomer`/`createEmployee` (`user.service.ts`) ganharam `assertEmailAvailable`, checando `PreviousEmail` além do unique de `User.email` — senão a reserva seria furável simplesmente criando conta nova.
+- ✅ `GET /me` e a view `owner`/`admin` de `GET /users/:id` passam a expor `pendingEmail`.
+- ✅ `EMAIL_CHANGE_REQUESTED` (no pedido) / `EMAIL_CHANGE_COMPLETED` (na confirmação) no audit log — só ids/enum, email nunca em `metadata`.
+- ✅ **Implementação:** terceiro service do módulo auth, `src/modules/auth/emailChange.service.ts` (ao lado de `password.service.ts`/`verification.service.ts`); `authRepository.requestEmailChange`/`consumeEmailChange` (transação interativa, mesmo idioma de `consumePasswordReset`); `userRepository.findPreviousEmailByEmail`. `clearDatabase()` e o guard de regressão (`clearDatabase.guard.test.ts`) atualizados para a tabela nova. Suíte (584) + `typecheck` + `lint` verdes.
+- ✅ **Achado à parte, corrigido junto:** o script `db:generate` (`package.json`) estava quebrado quando rodado isolado — faltava o prefixo `dotenv -e .env.development` que os demais scripts de banco já usam (sem ele, o `prisma.config.ts` não resolvia `DATABASE_URL`). Ajustado para o mesmo padrão de `db:migrate`/`db:deploy`.
+
+### ⬜ [Sessão H] Fase 7.16 — Forçar troca de senha, ação do admin
+> Desenho firmado com o usuário em 2026-08-03, antes da implementação.
+
+- ⬜ **Migration:** `User` ganha `mustChangePassword Boolean @default(false) @map("must_change_password")`.
+- ⬜ **`POST /users/:id/force-password-reset`** (mesma convenção de verbo de `/ban`): `canAccess("manage:user:status")` (decisão firmada — reaproveita a feature de ban/lock, sem feature nova) + `assertAdminForPrivilegedTarget` (mesmo guard de não-escalação do ban/lock) + recusa auto-alvo (mesmo idioma do self-ban — "não é possível forçar a própria troca de senha", usa `POST /auth/change-password` para isso). **409** se `mustChangePassword` já estiver ativo (mesmo idioma idempotente de "já banido"/"não travada").
+  - Em transação (repository dono, service passa o descritor de audit, mesmo wiring da 7.6): seta `mustChangePassword = true`, invalida todas as sessões vivas do alvo (mesmo helper do ban), cria `VerificationToken` (`purpose: PASSWORD_RESET`, mesmo `PASSWORD_RESET_TTL_MS`), audit `PASSWORD_CHANGE_FORCED`.
+  - Fora da transação: envia o mesmo email de `forgot-password` (`buildPasswordResetEmail`, reaproveitado) para o alvo — decisão firmada: o admin dispara o email na hora, não fica esperando o usuário pedir "esqueci minha senha" sozinho.
+  - Resposta **204** (mesmo padrão de ban/unban/lock).
+- ⬜ **Login totalmente bloqueado enquanto `mustChangePassword=true`** (decisão firmada): o único caminho de volta é o link do email — deixar entrar, mesmo sinalizando pro front forçar a troca, reabriria a janela que o reset foi feito pra fechar (quem tem a senha atual pode ser exatamente quem a comprometeu).
+  - Checagem em `auth.service.login`, no ramo de senha correta, **depois do `bannedAt` e antes do `status !== ACTIVE`** (decisão firmada sobre a ordem: banido é o estado mais severo/terminal e vence se as duas condições coexistirem — a mensagem de banido é a que aparece).
+  - Mensagem própria (403, mesmo molde de "conta não verificada"): algo como "Você precisa definir uma nova senha" / ação "Verifique seu email para o link de redefinição".
+- ⬜ `resetPassword` (consumo do token, já existente) passa a também **limpar `mustChangePassword`** quando true — é o mesmo endpoint/fluxo de `forgot-password` de ponta a ponta, só a origem do token muda (admin vs. o próprio usuário). Nenhum endpoint novo de confirmação é necessário.
+- ⬜ `PASSWORD_CHANGE_FORCED` no audit log — `actorId` = admin, `targetId` = alvo, sem PII.
 
 ### ⬜ [Sessão H] Fase 7.17 — Polir `GET /auth/sessions`
 - ⬜ Parsing de user-agent (ex. `ua-parser-js`) → `{ device: "Chrome no Windows", ipAddress, createdAt, current }`, marcando a sessão da request atual.
@@ -436,5 +452,5 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 ---
 
 ## Fases seguintes (resumo)
-- **Fase 8 — Reativação de conta deletada (soft delete):** serviço para reativar contas que tenham sido deletada. Hoje quando acontece um delete de uma conta, a conta entra no soft delete o que prende o email e os dados que são unicos na tabela. Essa fase tem como objetivo permitir que usuarios que tenham deletado a sua conta recuperem a conta e atualizem para novos dados (usuario pode ter mudado email e etc) - um ponto de atenção é não recuperar perfis errados, ex: um usuario que era employee e customer, deixou de ser employee e teve a conta deletada, mas quer "criar" uma conta de customer (signup), teria o cpf preso na conta antigo, ele deve ser capaz de recuperar a conta, mas apenas customer - sem o perfil de employee que deve permanecer soft delete.
+- **Fase 8 — Reativação de conta deletada (soft delete):** serviço para reativar contas que tenham sido deletada. Hoje quando acontece um delete de uma conta, a conta entra no soft delete o que prende o email e os dados que são unicos na tabela. Essa fase tem como objetivo permitir que usuarios que tenham deletado a sua conta recuperem a conta e atualizem para novos dados (usuario pode ter mudado email e etc) - um ponto de atenção é não recuperar perfis errados, ex: um usuario que era employee e customer, deixou de ser employee e teve a conta deletada, mas quer "criar" uma conta de customer (signup), teria o cpf preso na conta antigo, ele deve ser capaz de recuperar a conta, mas apenas customer - sem o perfil de employee que deve permanecer soft delete. A feature de troca de email criou uma tabela de emails antigos de um usuario - hoje, um email antigo de usuario, deixa o email trabalho que nem o soft delete de um usuario faz. A partir desse momento, emails antigos não devem deixar o email preso e ele deve ser capaz de criar uma conta nova no app.
 - **Fase 9 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.

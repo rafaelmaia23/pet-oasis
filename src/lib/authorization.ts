@@ -1,7 +1,34 @@
+import { createForbiddenError } from "@/errors";
+
 export type AuthUser = {
   id: string;
   features: Set<string>;
 };
+
+/** Ator já buscado no banco; `null` = não encontrado (ex.: deletado). */
+type ActorWithRoles = { roles: { role: { name: string } }[] } | null;
+
+export function isAdmin(actor: ActorWithRoles): boolean {
+  return actor?.roles.some((r) => r.role.name === "admin") ?? false;
+}
+
+/**
+ * Guarda de não-escalação compartilhada: exige que o **ator** seja admin.
+ *
+ * Cada caso de uso continua dono do seu próprio predicado de "o alvo é
+ * privilegiado" e da sua mensagem — o que se repetia entre `assertAdminForBan`,
+ * `assertAdminForPermissionFeature` e `assertAdminForRoleAssignment` era só
+ * este miolo. Recebe o ator já buscado em vez de buscá-lo: `lib/` não conhece
+ * repository (isso inverteria o corte de camadas do projeto).
+ */
+export function assertActorIsAdmin(
+  actor: ActorWithRoles,
+  { message, action }: { message: string; action: string },
+): void {
+  if (isAdmin(actor)) return;
+
+  throw createForbiddenError({ message, action });
+}
 
 type FeatureRef = { feature: { name: string } };
 

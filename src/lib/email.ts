@@ -1,6 +1,9 @@
 import nodemailer from "nodemailer";
 import { env } from "@/config/env";
 import { createServiceUnavailableError } from "@/errors";
+import { logger } from "@/lib/logger";
+
+const log = logger.child({ module: "email" });
 
 type SendEmailInput = {
   to: string;
@@ -9,10 +12,16 @@ type SendEmailInput = {
   text?: string;
 };
 
+// 7.12 — os defaults do nodemailer são generosos demais pra um `await`
+// síncrono no caminho de request (`connectionTimeout` default de 2min): um
+// relay morto penduraria signup/forgot-password por até esse tempo.
 const transporter = nodemailer.createTransport({
   host: env.SMTP_HOST,
   port: env.SMTP_PORT,
   secure: env.NODE_ENV === "production",
+  connectionTimeout: env.SMTP_CONNECTION_TIMEOUT_MS,
+  greetingTimeout: env.SMTP_GREETING_TIMEOUT_MS,
+  socketTimeout: env.SMTP_SOCKET_TIMEOUT_MS,
   ...(env.SMTP_USER
     ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASS } }
     : {}),
@@ -33,6 +42,10 @@ async function send({
       ...(text !== undefined ? { text } : {}),
     });
   } catch (error) {
+    // `error`: o relay recusou o envio e alguém precisa olhar (chave da Resend,
+    // domínio, cota). O usuário só vê o 503; sem esta linha, a causa se perde.
+    log.error({ err: error, subject }, "email delivery failed");
+
     throw createServiceUnavailableError({
       message: "Não foi possível enviar o email no momento",
       action: "Tente novamente mais tarde",

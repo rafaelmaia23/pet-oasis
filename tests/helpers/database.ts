@@ -7,10 +7,14 @@ import { prisma } from "@/lib/prisma";
 // buildCustomer) connect users to roles/features by name. Deleting them here
 // would break every test that grants a role. Guarded by clearDatabase.guard.test.ts.
 export async function clearDatabase() {
+  // Sem FK: pode ir a qualquer momento. Append-only na app, mas o teardown de
+  // teste faz hard delete para isolar cada teste.
+  await prisma.auditLog.deleteMany();
   await prisma.userFeature.deleteMany();
   await prisma.userRole.deleteMany();
   await prisma.session.deleteMany();
   await prisma.verificationToken.deleteMany();
+  await prisma.previousEmail.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.user.deleteMany();

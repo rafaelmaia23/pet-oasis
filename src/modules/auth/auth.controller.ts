@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { env } from "@/config/env";
+import { listEnvelope } from "@/lib/pagination";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user/user.presenter";
 import {
@@ -9,7 +10,9 @@ import {
 } from "./auth.constants";
 import { sessionPresenter } from "./auth.presenter";
 import {
+  changeEmailSchema,
   changePasswordSchema,
+  confirmEmailChangeSchema,
   forgotPasswordSchema,
   loginSchema,
   resendVerificationSchema,
@@ -19,6 +22,7 @@ import {
   verifyEmailSchema,
 } from "./auth.schema";
 import * as authService from "./auth.service";
+import * as emailChangeService from "./emailChange.service";
 import * as passwordService from "./password.service";
 import * as verificationService from "./verification.service";
 
@@ -80,6 +84,26 @@ export const changePassword = async (req: Request, res: Response) => {
   res.status(204).send();
 };
 
+export const changeEmail = async (req: Request, res: Response) => {
+  const { body } = changeEmailSchema.parse({ body: req.body });
+
+  await emailChangeService.changeEmail(
+    getAuthUser(req).id,
+    body.currentPassword,
+    body.newEmail,
+  );
+
+  res.status(204).send();
+};
+
+export const confirmEmailChange = async (req: Request, res: Response) => {
+  const { body } = confirmEmailChangeSchema.parse({ body: req.body });
+
+  await emailChangeService.confirmEmailChange(body.token);
+
+  res.status(204).send();
+};
+
 export const login = async (req: Request, res: Response) => {
   const { body } = loginSchema.parse({ body: req.body });
 
@@ -135,9 +159,18 @@ export const logout = async (req: Request, res: Response) => {
 };
 
 export const listSessions = async (req: Request, res: Response) => {
-  const sessions = await authService.listSessions(getAuthUser(req).id);
+  const currentRefreshToken = req.cookies[REFRESH_TOKEN_COOKIE_NAME] as
+    | string
+    | undefined;
 
-  res.status(200).json(sessionPresenter.presentMany(sessions, "default"));
+  const sessions = await authService.listSessions(
+    getAuthUser(req).id,
+    currentRefreshToken,
+  );
+
+  res
+    .status(200)
+    .json(listEnvelope(sessionPresenter.presentMany(sessions, "default")));
 };
 
 export const revokeSession = async (req: Request, res: Response) => {

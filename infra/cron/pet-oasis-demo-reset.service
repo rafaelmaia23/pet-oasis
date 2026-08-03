@@ -1,0 +1,9 @@
+[Unit]
+Description=pet-oasis - reset diário do ambiente demo (truncate + reseed, 7.14)
+# Só faz sentido num deploy demo (DEMO_MODE=true no .env.production do host);
+# em qualquer outro deploy o próprio script se recusa a rodar.
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec pet-oasis-app node dist/demo-reset.js

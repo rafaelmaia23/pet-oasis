@@ -91,6 +91,34 @@ export class ConflictError extends AppError {
   }
 }
 
+// ─── 413 Payload Too Large ───────────────────────────────────────────────────
+
+export class PayloadTooLargeError extends AppError {
+  constructor(params: OmitFixed<AppErrorParams> = {}) {
+    super({
+      message: "Corpo da requisição excede o tamanho máximo permitido",
+      action: "Reduza o tamanho dos dados enviados e tente novamente",
+      ...params,
+      statusCode: 413,
+      code: "PAYLOAD_TOO_LARGE",
+    });
+  }
+}
+
+// ─── 429 Too Many Requests ───────────────────────────────────────────────────
+
+export class TooManyRequestsError extends AppError {
+  constructor(params: OmitFixed<AppErrorParams> = {}) {
+    super({
+      message: "Muitas tentativas. Tente novamente mais tarde.",
+      action: "Aguarde antes de tentar novamente",
+      ...params,
+      statusCode: 429,
+      code: "TOO_MANY_REQUESTS",
+    });
+  }
+}
+
 // ─── 422 Validation Error ────────────────────────────────────────────────────
 
 type ValidationErrorParams = OmitFixed<AppErrorParams> & {

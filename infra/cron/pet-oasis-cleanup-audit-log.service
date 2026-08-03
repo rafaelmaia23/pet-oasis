@@ -1,0 +1,7 @@
+[Unit]
+Description=pet-oasis - hard delete de AuditLog acima da retenção (7.13)
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec pet-oasis-app node dist/cleanup-audit-log.js

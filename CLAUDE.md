@@ -62,7 +62,7 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 
 **Roles read-only via API** (definidas em código, seed). Só o vínculo user↔role é gerenciável. `appliesTo` (EMPLOYEE/CUSTOMER/null) valida compatibilidade role↔perfil.
 
-**Não-escalação:** mexer em PERMISSION_FEATURES (read:feature, read:role, read:permission, manage:permission) via override exige role **admin** (não só a feature). Checado no service buscando a role do ator.
+**Não-escalação:** conceder via override — ou atribuir uma role que contenha — uma feature de PRIVILEGED_FEATURES exige role **admin** (não só a feature). O conjunto é `PERMISSION_FEATURES` (read:feature, read:role, read:permission, manage:permission) **+ `read:audit-log:full`** (que destrava o IP inteiro no audit log; Fase 7.8). Definido em `role.constants.ts` (`PRIVILEGED_FEATURES`), checado no `permission.service` buscando a role do ator. `read:log`/`read:audit-log` são normais (concedíveis sem ser admin).
 
 **Soft delete** (preserva histórico para auditoria): User, Customer, Employee, UserRole, UserFeature têm `deletedAt`. Sem reativação no ciclo 1 (email/cpf/perfil de deletado ficam "presos"; recovery é futuro). TODAS as queries de leitura filtram `deletedAt: null` — incluindo `getUserForFeatureComputation` (é o que mata o token de deletado e ignora overrides removidos). Hard delete só em teardown de teste. UserFeature/UserRole usam `id` próprio como PK (não par composto) + unicidade do ativo controlada por código (busca ativo → update ou create).
 
@@ -102,6 +102,10 @@ Se perceber a necessidade de um script que não existe — algo que você (ou o 
 ## TODO e roadmap
 
 O estado atual, a ordem das tarefas e o que vem a seguir vivem em **`docs/todo.md`** e no documento de contexto `docs/context.md`. Consulte-o antes de começar qualquer tarefa para saber o próximo item e o que já está feito. Mantenha-o atualizado conforme concluir tarefas.
+
+## ⚠️ REGRA — Anotação de pendência vai no LOCAL DA EXECUÇÃO, nunca para trás
+
+Quando terminar um trabalho e sobrar algo pendente para uma etapa/sessão **futura**, a anotação (`🔸 Pendente...`, `Nota p/ ...`, TODO) deve ficar **onde a pendência vai ser executada** — na seção da sessão/sub-fase futura que vai resolvê-la —, **nunca** ao fim da seção que você acabou de fechar. Anotar para trás (na etapa já concluída) garante que, ao chegar na etapa futura, ninguém lê a nota e a pendência se perde. Regra prática: antes de escrever "fica para a Sessão X", vá até a seção da Sessão X no `docs/todo.md` e escreva a nota **lá**. Se a seção futura ainda não existe, crie o placeholder dela.
 
 ## O que o projeto planeja ser
 

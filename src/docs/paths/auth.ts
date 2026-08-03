@@ -2,7 +2,9 @@ import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
 import { sessionViews } from "@/modules/auth/auth.presenter";
 import {
+  changeEmailSchema,
   changePasswordSchema,
+  confirmEmailChangeSchema,
   forgotPasswordSchema,
   loginSchema,
   resendVerificationSchema,
@@ -12,7 +14,12 @@ import {
   verifyEmailSchema,
 } from "@/modules/auth/auth.schema";
 import { userViews } from "@/modules/user/user.presenter";
-import { errorResponses, jsonResponse, noContentResponse } from "../components";
+import {
+  errorResponses,
+  jsonResponse,
+  noContentResponse,
+  staticList,
+} from "../components";
 import { fromEnvelope } from "../helpers";
 
 const accessTokenSchema = z
@@ -38,6 +45,7 @@ export const authPaths: ZodOpenApiPathsObject = {
         201: jsonResponse("Usuário criado", userViews.owner),
         409: errorResponses[409],
         422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },
@@ -52,6 +60,7 @@ export const authPaths: ZodOpenApiPathsObject = {
         401: errorResponses[401],
         403: errorResponses[403],
         422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },
@@ -88,6 +97,7 @@ export const authPaths: ZodOpenApiPathsObject = {
       responses: {
         200: jsonResponse("Resposta genérica", messageSchema),
         422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },
@@ -100,6 +110,7 @@ export const authPaths: ZodOpenApiPathsObject = {
       responses: {
         200: jsonResponse("Resposta genérica", messageSchema),
         422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },
@@ -129,6 +140,35 @@ export const authPaths: ZodOpenApiPathsObject = {
       },
     },
   },
+  "/auth/change-email": {
+    post: {
+      tags: ["Auth"],
+      summary:
+        "Solicita a troca de email (logado, exige a senha atual) — 2 passos, confirma via /auth/confirm-email-change",
+      ...fromEnvelope(changeEmailSchema),
+      responses: {
+        204: noContentResponse,
+        401: errorResponses[401],
+        403: errorResponses[403],
+        409: errorResponses[409],
+        422: errorResponses[422],
+      },
+    },
+  },
+  "/auth/confirm-email-change": {
+    post: {
+      tags: ["Auth"],
+      summary: "Confirma a troca de email via token",
+      security: [],
+      ...fromEnvelope(confirmEmailChangeSchema),
+      responses: {
+        204: noContentResponse,
+        400: errorResponses[400],
+        409: errorResponses[409],
+        422: errorResponses[422],
+      },
+    },
+  },
   "/auth/logout": {
     post: {
       tags: ["Auth"],
@@ -144,7 +184,7 @@ export const authPaths: ZodOpenApiPathsObject = {
       tags: ["Auth"],
       summary: "Lista as sessões vivas do usuário",
       responses: {
-        200: jsonResponse("Sessões vivas", z.array(sessionViews.default)),
+        200: jsonResponse("Sessões vivas", staticList(sessionViews.default)),
         401: errorResponses[401],
         403: errorResponses[403],
       },

@@ -3,6 +3,7 @@ import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import z from "zod";
@@ -17,6 +18,7 @@ import { findUserById } from "@/modules/user/user.repository";
 
 afterEach(async () => {
   await clearDatabase();
+  await flushRedis();
 });
 
 describe("GET /api/v1/users/:userId/features", () => {
@@ -121,7 +123,7 @@ describe("GET /api/v1/users/:userId/features", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toMatchView(z.array(userFeatureViews.default));
+    expect(response.body.data).toMatchView(z.array(userFeatureViews.default));
   });
 
   it("should return 200 and features of another user if request has feature: `read:permission`", async () => {
@@ -141,7 +143,7 @@ describe("GET /api/v1/users/:userId/features", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toMatchView(z.array(userFeatureViews.default));
+    expect(response.body.data).toMatchView(z.array(userFeatureViews.default));
   });
 });
 
@@ -247,9 +249,9 @@ describe("GET /api/v1/users/:userId/roles", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toMatchView(z.array(roleViews.default));
+    expect(response.body.data).toMatchView(z.array(roleViews.default));
 
-    expect(response.body).toEqual(
+    expect(response.body.data).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "manager" })]),
     );
   });
@@ -271,9 +273,9 @@ describe("GET /api/v1/users/:userId/roles", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toMatchView(z.array(roleViews.default));
+    expect(response.body.data).toMatchView(z.array(roleViews.default));
 
-    expect(response.body).toEqual(
+    expect(response.body.data).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "attendant" })]),
     );
   });
@@ -1317,7 +1319,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     expect(response.body).toMatchObject({
       code: "FORBIDDEN",
-      message: "Apenas administradores podem alterar features de permissão",
+      message: "Apenas administradores podem alterar features privilegiadas",
       action: "Solicite a um administrador que faça essa alteração",
     });
 
@@ -1330,7 +1332,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     expect(response2.body).toMatchObject({
       code: "FORBIDDEN",
-      message: "Apenas administradores podem alterar features de permissão",
+      message: "Apenas administradores podem alterar features privilegiadas",
       action: "Solicite a um administrador que faça essa alteração",
     });
   });
@@ -1409,6 +1411,74 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
       .send({ granted: false });
 
     expect(response2.status).toBe(403);
+  });
+
+  it("should return 403 if a non admin manager tries to grant the privileged `read:audit-log:full` override", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const feature = await getFeatureByName("read:audit-log:full");
+
+    if (!feature) {
+      throw createNotFoundError({ message: "Feature não encontrada" });
+    }
+
+    const response = await request(app)
+      .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Apenas administradores podem alterar features privilegiadas",
+      action: "Solicite a um administrador que faça essa alteração",
+    });
+  });
+
+  it("should return 200 if a manager grants the non-privileged `read:audit-log` override", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const feature = await getFeatureByName("read:audit-log");
+
+    if (!feature) {
+      throw createNotFoundError({ message: "Feature não encontrada" });
+    }
+
+    const response = await request(app)
+      .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchView(userFeatureViews.default);
+  });
+
+  it("should return 200 if an admin grants the privileged `read:audit-log:full` override", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const feature = await getFeatureByName("read:audit-log:full");
+
+    if (!feature) {
+      throw createNotFoundError({ message: "Feature não encontrada" });
+    }
+
+    const response = await request(app)
+      .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchView(userFeatureViews.default);
   });
 });
 
@@ -1738,7 +1808,7 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     expect(response.body).toMatchObject({
       code: "FORBIDDEN",
-      message: "Apenas administradores podem alterar features de permissão",
+      message: "Apenas administradores podem alterar features privilegiadas",
       action: "Solicite a um administrador que faça essa alteração",
     });
 
@@ -1750,7 +1820,7 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     expect(response2.body).toMatchObject({
       code: "FORBIDDEN",
-      message: "Apenas administradores podem alterar features de permissão",
+      message: "Apenas administradores podem alterar features privilegiadas",
       action: "Solicite a um administrador que faça essa alteração",
     });
   });

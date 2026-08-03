@@ -1,0 +1,21 @@
+meta {
+  name: List Audit Logs
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/audit-logs?limit=20
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 20
+}
+
+docs {
+  Exige read:audit-log (o demo tem). Paginação por cursor — use meta.nextCursor
+  na querystring (?cursor=...) para a próxima página. O IP sai mascarado sem
+  read:audit-log:full (o demo não tem; um manager/admin vê inteiro).
+}

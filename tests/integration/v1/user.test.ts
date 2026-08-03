@@ -10,6 +10,7 @@ import {
 } from "@tests/helpers/assertions";
 import { loginAs, loginWithSession } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import {
   afterEach,
@@ -22,6 +23,7 @@ import {
 } from "vitest";
 import z from "zod";
 import app from "@/app";
+import { env } from "@/config/env";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { userViews } from "@/modules/user/user.presenter";
@@ -41,6 +43,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await clearDatabase();
+  await flushRedis();
 });
 
 describe("POST /api/v1/users", () => {
@@ -128,6 +131,33 @@ describe("POST /api/v1/users", () => {
       .post("/api/v1/users")
       .set("Authorization", `Bearer ${token}`)
       .send(makeEmployeeData({ email: user.email }));
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: "CONFLICT",
+      message: "O email informado já está em uso",
+      action: "Tente outro valor para o campo email",
+    });
+  });
+
+  it("should return the same generic 409 when the email was previously used by another account", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(user.email, user.password);
+
+    const other = await buildCustomer();
+    const reservedEmail = other.email;
+    await prisma.user.update({
+      where: { id: other.id },
+      data: { email: `changed-${other.id}@example.com` },
+    });
+    await prisma.previousEmail.create({
+      data: { userId: other.id, email: reservedEmail, replacedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeEmployeeData({ email: reservedEmail }));
 
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
@@ -313,7 +343,9 @@ describe("GET /api/v1/users", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body).toMatchView(z.array(userViews.admin));
+    expect(response.body.data).toMatchView(z.array(userViews.admin));
+    expect(response.body.meta).toMatchObject({ page: 1, limit: 20 });
+    expect(response.body.meta.total).toBeGreaterThanOrEqual(1);
   });
 
   it("should return 200 with all users if user has feature: `read: user: others`", async () => {
@@ -327,8 +359,135 @@ describe("GET /api/v1/users", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(200);
-    expect(response.body).toBeInstanceOf(Array);
-    expect(response.body.length).toBeGreaterThanOrEqual(3);
+    expect(response.body.data).toBeInstanceOf(Array);
+    expect(response.body.data.length).toBeGreaterThanOrEqual(3);
+    expect(response.body.meta.total).toBeGreaterThanOrEqual(3);
+  });
+
+  it("should paginate with page/limit and report total in meta", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+    await buildEmployee({ roleNames: ["attendant"] });
+    await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?page=1&limit=2")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(2);
+    expect(response.body.meta).toMatchObject({ page: 1, limit: 2 });
+    expect(response.body.meta.total).toBeGreaterThanOrEqual(3);
+  });
+
+  it("should return an empty page (200, data: []) past the last page", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?page=999&limit=20")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual([]);
+    expect(response.body.meta.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it("should reject a limit above the maximum with 422", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?limit=101")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["limit"]);
+  });
+
+  it("should filter by status", async () => {
+    // buildEmployee defaults to ACTIVE; the customer below is PENDING
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+    const pendingUser = await buildCustomer({ status: "PENDING" });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?status=PENDING")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    const ids = response.body.data.map((u: { id: string }) => u.id);
+    expect(ids).toContain(pendingUser.id);
+    expect(ids).not.toContain(admin.id);
+  });
+
+  it("should filter by banned via bannedAt", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildCustomer();
+
+    const token = await loginAs(admin.email, admin.password);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/ban`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ reason: "spam" });
+
+    const banned = await request(app)
+      .get("/api/v1/users?banned=true")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(banned.status).toBe(200);
+    const bannedIds = banned.body.data.map((u: { id: string }) => u.id);
+    expect(bannedIds).toContain(target.id);
+
+    const notBanned = await request(app)
+      .get("/api/v1/users?banned=false")
+      .set("Authorization", `Bearer ${token}`);
+
+    const notBannedIds = notBanned.body.data.map((u: { id: string }) => u.id);
+    expect(notBannedIds).not.toContain(target.id);
+  });
+
+  it("should filter by role", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+    await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?role=manager")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    const ids = response.body.data.map((u: { id: string }) => u.id);
+    expect(ids).toContain(admin.id);
+  });
+
+  it("should reject an unknown role value with 422", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?role=does-not-exist")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["role"]);
+  });
+
+  it("should reject an unknown status value with 422", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?status=NOPE")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["status"]);
   });
 });
 
@@ -1404,5 +1563,278 @@ describe("DELETE /api/v1/users/:id/ban", () => {
       password: target.password,
     });
     expect(loginResponse.status).toBe(200);
+  });
+});
+
+describe("DELETE /api/v1/users/:id/lock", () => {
+  async function lockedCustomer() {
+    const target = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: target.email,
+        password: "wrongpassword",
+      });
+    }
+
+    return target;
+  }
+
+  it("should return 401 without an access token", async () => {
+    const target = await lockedCustomer();
+
+    const response = await request(app).delete(
+      `/api/v1/users/${target.id}/lock`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 403 without the manage:user:status feature", async () => {
+    const actor = await buildEmployee({ roleNames: ["attendant"] });
+    const target = await lockedCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 422 for an invalid :id", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete("/api/v1/users/not-a-uuid/lock")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+  });
+
+  it("should return 404 for a non-existent target", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${faker.string.uuid()}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+  });
+
+  it("should return 403 when a non-admin unlocks a privileged target", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildEmployee({ roleNames: ["admin"] });
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: target.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 409 when the actor tries to unlock itself", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${actor.id}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should return 409 when the target is not locked", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should unlock the target and record AUTH_LOCKOUT_CLEARED", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await lockedCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    // confirms the target really is locked before unlocking it
+    const lockedLogin = await request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: target.password,
+    });
+    expect(lockedLogin.status).toBe(429);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/lock`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: target.password,
+    });
+    expect(loginResponse.status).toBe(200);
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_LOCKOUT_CLEARED", targetId: target.id },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toEqual({ clearedBy: "ADMIN" });
+  });
+});
+
+describe("POST /api/v1/users/:id/force-password-reset", () => {
+  async function forcedTarget() {
+    const target = await buildCustomer();
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { mustChangePassword: true },
+    });
+    return target;
+  }
+
+  it("should return 401 without an access token", async () => {
+    const target = await buildCustomer();
+
+    const response = await request(app).post(
+      `/api/v1/users/${target.id}/force-password-reset`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 403 without the manage:user:status feature", async () => {
+    const actor = await buildEmployee({ roleNames: ["attendant"] });
+    const target = await buildCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 422 for an invalid :id", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post("/api/v1/users/not-a-uuid/force-password-reset")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+  });
+
+  it("should return 404 for a non-existent target", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${faker.string.uuid()}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+  });
+
+  it("should return 403 when a non-admin forces a privileged target", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+
+    const targetInDb = await findUserById(target.id);
+    expect(targetInDb?.mustChangePassword).toBe(false);
+  });
+
+  it("should return 409 when the actor tries to force its own password reset", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${actor.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should return 409 when a reset is already pending for the target", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await forcedTarget();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should force the reset, invalidate sessions, send the email and record the audit log", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(
+      target.email,
+      target.password,
+    );
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const targetInDb = await findUserById(target.id);
+    expect(targetInDb?.mustChangePassword).toBe(true);
+
+    const refreshResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(refreshResponse.status).toBe(401);
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: target.email }),
+    );
+
+    const tokenInDb = await prisma.verificationToken.findFirst({
+      where: { userId: target.id, purpose: "PASSWORD_RESET" },
+    });
+    expect(tokenInDb?.usedAt).toBeNull();
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "PASSWORD_CHANGE_FORCED", targetId: target.id },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.actorId).toBe(actor.id);
+
+    // login with the correct (still old) password is refused, not accepted
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: target.password,
+    });
+    expect(loginResponse.status).toBe(403);
   });
 });

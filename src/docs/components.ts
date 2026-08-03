@@ -4,6 +4,7 @@ import type {
   ZodOpenApiResponseObject,
   ZodOpenApiSecuritySchemeObject,
 } from "zod-openapi";
+import { cursorMetaSchema, offsetMetaSchema } from "@/lib/pagination";
 
 // Formato padrão de erro da API (AppError.toJson) — vira componente reusável.
 export const errorResponseSchema = z
@@ -15,6 +16,11 @@ export const errorResponseSchema = z
       example: "Verifique o identificador informado e tente novamente",
     }),
     code: z.string().optional().meta({ example: "NOT_FOUND" }),
+    requestId: z.string().optional().meta({
+      description:
+        "Id do request, igual ao header x-request-id. Cite-o ao reportar um problema: ele recupera o request inteiro nos logs.",
+      example: "5b1f8c2e-0d3a-4f5b-9c7d-2a1e6f4b8c90",
+    }),
   })
   .meta({ id: "ErrorResponse", description: "Formato padrão de erro da API" });
 
@@ -31,6 +37,10 @@ export const validationErrorSchema = z
     errors: z
       .record(z.string(), z.array(z.string()))
       .meta({ example: { email: ["Invalid email address"] } }),
+    requestId: z.string().optional().meta({
+      description: "Id do request, igual ao header x-request-id.",
+      example: "5b1f8c2e-0d3a-4f5b-9c7d-2a1e6f4b8c90",
+    }),
   })
   .meta({
     id: "ValidationError",
@@ -64,11 +74,30 @@ export const errorResponses = {
   404: jsonResponse("Recurso não encontrado", errorResponseSchema),
   409: jsonResponse("Conflito — valor único já em uso", errorResponseSchema),
   422: jsonResponse("Erro de validação", validationErrorSchema),
+  429: jsonResponse("Muitas tentativas — limite excedido", errorResponseSchema),
 } satisfies Record<number, ZodOpenApiResponseObject>;
 
 // Resposta de sucesso sem corpo (204).
 export const noContentResponse: ZodOpenApiResponseObject = {
   description: "Sucesso, sem conteúdo",
 };
+
+// Envelope `{ data, meta }` das listagens (D4). Uma variante por estratégia de
+// paginação; `staticList` é o envelope de meta vazio das listas que não paginam.
+const emptyMetaSchema = z
+  .object({})
+  .meta({ id: "EmptyMeta", description: "Sem metadados de paginação" });
+
+export function offsetList(view: z.ZodType) {
+  return z.object({ data: z.array(view), meta: offsetMetaSchema });
+}
+
+export function cursorList(view: z.ZodType) {
+  return z.object({ data: z.array(view), meta: cursorMetaSchema });
+}
+
+export function staticList(view: z.ZodType) {
+  return z.object({ data: z.array(view), meta: emptyMetaSchema });
+}
 
 export { jsonResponse };

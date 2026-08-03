@@ -1,0 +1,8 @@
+[Unit]
+Description=pet-oasis - hard delete de Session/VerificationToken mortos (7.13)
+# Depende só do container já estar de pé (docker exec falha alto se não estiver).
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec pet-oasis-app node dist/cleanup-sessions.js

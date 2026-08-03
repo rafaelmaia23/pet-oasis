@@ -19,6 +19,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Porta não publicada: alcançável só dentro da rede do compose.
+  redis:
+    image: redis:7-alpine
+    container_name: pet-oasis-prod-redis
+    restart: unless-stopped
+    volumes:
+      - prod_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   app:
     build:
       target: runtime
@@ -26,8 +39,11 @@ services:
     env_file: ../.env.production
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      REDIS_URL: "redis://redis:6379"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     # > the app's graceful-shutdown timeout (10s) so draining finishes first.
     stop_grace_period: 15s
@@ -36,3 +52,4 @@ services:
 
 volumes:
   prod_pgdata:
+  prod_redisdata:

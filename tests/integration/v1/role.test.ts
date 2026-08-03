@@ -3,6 +3,7 @@ import { buildEmployee } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import z from "zod";
@@ -14,6 +15,7 @@ import { getRoleByName } from "@/modules/role/role.repository";
 
 afterEach(async () => {
   await clearDatabase();
+  await flushRedis();
 });
 
 describe("GET /api/v1/roles", () => {
@@ -61,9 +63,10 @@ describe("GET /api/v1/roles", () => {
 
     expect(response.status).toBe(200);
 
-    expect(response.body.length).toBe(DEFAULT_ROLES.length);
+    expect(response.body.data.length).toBe(DEFAULT_ROLES.length);
+    expect(response.body.meta).toEqual({});
 
-    expect(response.body).toMatchView(z.array(roleViews.default));
+    expect(response.body.data).toMatchView(z.array(roleViews.default));
   });
 });
 

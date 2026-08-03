@@ -1,4 +1,8 @@
-import { buildCustomer, makeCustomerData } from "@tests/factories/user.factory";
+import {
+  buildCustomer,
+  buildEmployee,
+  makeCustomerData,
+} from "@tests/factories/user.factory";
 import {
   expectValidationError,
   expectValidUuid,
@@ -9,6 +13,7 @@ import {
   loginWithSession,
 } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import {
   afterEach,
@@ -21,6 +26,7 @@ import {
 } from "vitest";
 import { z } from "zod";
 import app from "@/app";
+import { env } from "@/config/env";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
@@ -55,9 +61,10 @@ function tokenFromLastEmail(): string {
 async function seedVerificationToken(
   userId: string,
   overrides?: {
-    purpose?: "EMAIL_VERIFICATION" | "PASSWORD_RESET";
+    purpose?: "EMAIL_VERIFICATION" | "PASSWORD_RESET" | "EMAIL_CHANGE";
     expiresAt?: Date;
     usedAt?: Date | null;
+    newEmail?: string;
   },
 ): Promise<string> {
   const rawToken = generateOpaqueToken();
@@ -68,6 +75,7 @@ async function seedVerificationToken(
       purpose: overrides?.purpose ?? "EMAIL_VERIFICATION",
       expiresAt: overrides?.expiresAt ?? new Date(Date.now() + 60 * 60 * 1000),
       usedAt: overrides?.usedAt ?? null,
+      newEmail: overrides?.newEmail ?? null,
     },
   });
   return rawToken;
@@ -88,6 +96,7 @@ async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
 
 afterEach(async () => {
   await clearDatabase();
+  await flushRedis();
 });
 
 describe("POST /api/v1/auth/signup", () => {
@@ -171,6 +180,28 @@ describe("POST /api/v1/auth/signup", () => {
     const response = await request(app)
       .post("/api/v1/auth/signup")
       .send(makeCustomerData({ email: banned.email }));
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      message: "O email informado já está em uso",
+      code: "CONFLICT",
+    });
+  });
+
+  it("should return the same generic 409 when the email was previously used by another account", async () => {
+    const other = await buildCustomer();
+    const reservedEmail = other.email;
+    await prisma.user.update({
+      where: { id: other.id },
+      data: { email: `changed-${other.id}@example.com` },
+    });
+    await prisma.previousEmail.create({
+      data: { userId: other.id, email: reservedEmail, replacedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/signup")
+      .send(makeCustomerData({ email: reservedEmail }));
 
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
@@ -343,6 +374,98 @@ describe("POST /api/v1/auth/login", () => {
   });
 });
 
+describe("login refused by mustChangePassword (7.16)", () => {
+  it("should return 403 with the correct password when a reset was forced", async () => {
+    const user = await buildCustomer();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { mustChangePassword: true },
+    });
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toBe("Você precisa definir uma nova senha");
+  });
+
+  it("should prioritize the banned message when both banned and mustChangePassword are set (order regression)", async () => {
+    const user = await buildCustomer();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        mustChangePassword: true,
+        bannedAt: new Date(),
+        banReason: "abuse",
+      },
+    });
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toBe("Conta suspensa");
+  });
+
+  it("should complete the end-to-end forced reset flow (force -> reset -> login)", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildCustomer();
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    const forceResponse = await request(app)
+      .post(`/api/v1/users/${target.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(forceResponse.status).toBe(204);
+
+    const rawToken = tokenFromLastEmail();
+    const newPassword = "BrandNewPass@1";
+
+    const resetResponse = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword });
+    expect(resetResponse.status).toBe(204);
+
+    const targetInDb = await findUserById(target.id);
+    expect(targetInDb?.mustChangePassword).toBe(false);
+
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: newPassword,
+    });
+    expect(loginResponse.status).toBe(200);
+  });
+
+  it("should keep the regular forgot-password flow unaffected (regression)", async () => {
+    const user = await buildCustomer();
+
+    const forgotResponse = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: user.email });
+    expect(forgotResponse.status).toBe(200);
+
+    const rawToken = tokenFromLastEmail();
+    const newPassword = "AnotherPass@1";
+
+    const resetResponse = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword });
+    expect(resetResponse.status).toBe(204);
+
+    const targetInDb = await findUserById(user.id);
+    expect(targetInDb?.mustChangePassword).toBe(false);
+
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: newPassword,
+    });
+    expect(loginResponse.status).toBe(200);
+  });
+});
+
 describe("POST /api/v1/auth/refresh", () => {
   it("should return 401 if no refresh cookie is sent", async () => {
     const response = await request(app).post("/api/v1/auth/refresh");
@@ -440,6 +563,32 @@ describe("POST /api/v1/auth/refresh", () => {
       .set("Authorization", `Bearer ${response.body.accessToken}`);
 
     expect(meResponse.status).toBe(200);
+  });
+
+  it("should never persist the raw refresh token in refreshTokenHash (D1 regression)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const session = await prisma.session.findUniqueOrThrow({
+      where: { id: await sessionIdFromCookie(refreshCookie) },
+    });
+
+    expect(session.refreshTokenHash).not.toBe(rawToken);
+    expect(session.refreshTokenHash).toBe(hashToken(rawToken));
+  });
+
+  it("should return 401 when the refresh token is tampered with (D1 regression)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+    const tamperedToken = `${rawToken.slice(0, -1)}${rawToken.endsWith("0") ? "1" : "0"}`;
+
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", `${REFRESH_TOKEN_COOKIE_NAME}=${tamperedToken}`);
+
+    expect(response.status).toBe(401);
   });
 });
 
@@ -596,6 +745,68 @@ describe("POST /api/v1/auth/logout", () => {
   });
 });
 
+describe("session cap (MAX_LIVE_SESSIONS)", () => {
+  it("should never refuse a login even after exceeding the live session cap", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.MAX_LIVE_SESSIONS + 1; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/login")
+        .send({ email: user.email, password: user.password });
+
+      expect(response.status).toBe(200);
+    }
+  });
+
+  it("should evict the oldest live session once the cap is exceeded", async () => {
+    const user = await buildCustomer();
+
+    const logins: Array<{ accessToken: string; refreshCookie: string }> = [];
+    for (let i = 0; i < env.MAX_LIVE_SESSIONS + 1; i++) {
+      logins.push(await loginWithSession(user.email, user.password));
+    }
+
+    const liveSessions = await prisma.session.findMany({
+      where: {
+        userId: user.id,
+        usedAt: null,
+        invalidatedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+    expect(liveSessions).toHaveLength(env.MAX_LIVE_SESSIONS);
+
+    const oldestLogin = logins[0] as { refreshCookie: string };
+    const oldestId = await sessionIdFromCookie(oldestLogin.refreshCookie);
+    const oldestSession = await prisma.session.findUniqueOrThrow({
+      where: { id: oldestId },
+    });
+    expect(oldestSession.invalidatedAt).not.toBeNull();
+
+    const newestLogin = logins.at(-1) as { refreshCookie: string };
+    const newestId = await sessionIdFromCookie(newestLogin.refreshCookie);
+    const liveIds = liveSessions.map((s) => s.id);
+    expect(liveIds).toContain(newestId);
+    expect(liveIds).not.toContain(oldestId);
+  });
+
+  it("should reject a refresh using the evicted session's refresh token", async () => {
+    const user = await buildCustomer();
+
+    const logins: Array<{ accessToken: string; refreshCookie: string }> = [];
+    for (let i = 0; i < env.MAX_LIVE_SESSIONS + 1; i++) {
+      logins.push(await loginWithSession(user.email, user.password));
+    }
+
+    const evicted = logins[0] as { refreshCookie: string };
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", evicted.refreshCookie);
+
+    expect(response.status).toBe(401);
+  });
+});
+
 describe("GET /api/v1/auth/sessions", () => {
   it("should return 401 if no access token is provided", async () => {
     const response = await request(app).get("/api/v1/auth/sessions");
@@ -657,9 +868,10 @@ describe("GET /api/v1/auth/sessions", () => {
       .set("Authorization", `Bearer ${live1.accessToken}`);
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchView(z.array(sessionViews.default));
+    expect(response.body.data).toMatchView(z.array(sessionViews.default));
+    expect(response.body.meta).toEqual({});
 
-    const ids = (response.body as Array<{ id: string }>).map((s) => s.id);
+    const ids = (response.body.data as Array<{ id: string }>).map((s) => s.id);
 
     expect(ids).toHaveLength(3);
     expect(ids).toEqual(
@@ -684,8 +896,76 @@ describe("GET /api/v1/auth/sessions", () => {
 
     expect(response.status).toBe(200);
 
-    const ids = (response.body as Array<{ id: string }>).map((s) => s.id);
+    const ids = (response.body.data as Array<{ id: string }>).map((s) => s.id);
     expect(ids).not.toContain(sessionBId);
+  });
+
+  it("should describe the session's device from its User-Agent (7.17)", async () => {
+    const user = await buildCustomer();
+
+    const loginResponse = await request(app)
+      .post("/api/v1/auth/login")
+      .set(
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      )
+      .send({ email: user.email, password: user.password });
+    const accessToken = loginResponse.body.accessToken as string;
+
+    const response = await request(app)
+      .get("/api/v1/auth/sessions")
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    expect(response.status).toBe(200);
+    const [session] = response.body.data as Array<{ device: string }>;
+    expect(session?.device).toBe("Chrome no Windows");
+  });
+
+  it("should fall back to a generic device label when the User-Agent is missing/unrecognized", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/auth/sessions")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    const [session] = response.body.data as Array<{ device: string }>;
+    expect(session?.device).toBe("Dispositivo desconhecido");
+  });
+
+  it("should mark only the session of the current request as current", async () => {
+    const user = await buildCustomer();
+    const live1 = await loginWithSession(user.email, user.password);
+    await loginWithSession(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/auth/sessions")
+      .set("Authorization", `Bearer ${live1.accessToken}`)
+      .set("Cookie", live1.refreshCookie);
+
+    expect(response.status).toBe(200);
+    const sessions = response.body.data as Array<{
+      id: string;
+      current: boolean;
+    }>;
+    const live1Id = await sessionIdFromCookie(live1.refreshCookie);
+
+    expect(sessions.filter((s) => s.current)).toHaveLength(1);
+    expect(sessions.find((s) => s.current)?.id).toBe(live1Id);
+  });
+
+  it("should mark no session as current when no refresh cookie is sent", async () => {
+    const user = await buildCustomer();
+    const { accessToken } = await loginWithSession(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/auth/sessions")
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    expect(response.status).toBe(200);
+    const sessions = response.body.data as Array<{ current: boolean }>;
+    expect(sessions.every((s) => !s.current)).toBe(true);
   });
 });
 
@@ -1330,6 +1610,602 @@ describe("POST /api/v1/auth/change-password", () => {
   });
 });
 
+describe("POST /api/v1/auth/change-email", () => {
+  it("should return 401 without an access token", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .send({ currentPassword: "Whatever@1", newEmail: "new@example.com" });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 403 without the update:user feature", async () => {
+    const user = await buildCustomer({ denies: ["update:user"] });
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: "new@example.com" });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 422 when currentPassword is missing", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ newEmail: "new@example.com" });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["currentPassword"]);
+  });
+
+  it("should return 422 when newEmail is not a valid email", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: "not-an-email" });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["newEmail"]);
+  });
+
+  it("should return 403 when the current password is incorrect", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: "WrongPass@1", newEmail: "new@example.com" });
+
+    expect(response.status).toBe(403);
+
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.pendingEmail).toBeNull();
+  });
+
+  it("should return 409 when newEmail is the same as the current email", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: user.email });
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should return 409 when newEmail is already active on another account", async () => {
+    const user = await buildCustomer();
+    const other = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: other.email });
+
+    expect(response.status).toBe(409);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("should return 409 when newEmail was previously used by another account", async () => {
+    const user = await buildCustomer();
+    const other = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+    const reservedEmail = "reserved@example.com";
+    await prisma.previousEmail.create({
+      data: { userId: other.id, email: reservedEmail, replacedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: reservedEmail });
+
+    expect(response.status).toBe(409);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("should return 403 for a banned account", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { bannedAt: new Date(), banReason: "abuse" },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: "new@example.com" });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should set pendingEmail, create the token and notify the OLD email on success", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+    const newEmail = "new@example.com";
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail });
+
+    expect(response.status).toBe(204);
+
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.pendingEmail).toBe(newEmail);
+    expect(userInDb?.email).toBe(user.email);
+
+    const tokenInDb = await prisma.verificationToken.findFirst({
+      where: { userId: user.id, purpose: "EMAIL_CHANGE" },
+    });
+    expect(tokenInDb?.newEmail).toBe(newEmail);
+    expect(tokenInDb?.usedAt).toBeNull();
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: user.email }),
+    );
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "EMAIL_CHANGE_REQUESTED", targetId: user.id },
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("should invalidate the previous pending token when a new change is requested", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ currentPassword: user.password, newEmail: "first@example.com" });
+    const firstToken = tokenFromLastEmail();
+
+    await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        currentPassword: user.password,
+        newEmail: "second@example.com",
+      });
+
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.pendingEmail).toBe("second@example.com");
+
+    const confirmResponse = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token: firstToken });
+
+    expect(confirmResponse.status).toBe(400);
+  });
+});
+
+describe("POST /api/v1/auth/confirm-email-change", () => {
+  it("should return 422 when token is missing", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({});
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["token"]);
+  });
+
+  it("should return 400 for an unknown token", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token: generateOpaqueToken() });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("should return 400 for a token with the wrong purpose", async () => {
+    const user = await buildCustomer();
+    const token = await seedVerificationToken(user.id, {
+      purpose: "PASSWORD_RESET",
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("should return 400 for an expired token and not change the email", async () => {
+    const user = await buildCustomer();
+    const token = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_CHANGE",
+      newEmail: "new@example.com",
+      expiresAt: new Date(Date.now() - 1000),
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+
+    expect(response.status).toBe(400);
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.email).toBe(user.email);
+  });
+
+  it("should return 400 for an already used token", async () => {
+    const user = await buildCustomer();
+    const token = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_CHANGE",
+      newEmail: "new@example.com",
+      usedAt: new Date(),
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("should complete the email change, record PreviousEmail and the audit log", async () => {
+    const user = await buildCustomer();
+    const newEmail = "new@example.com";
+    const token = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_CHANGE",
+      newEmail,
+    });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { pendingEmail: newEmail },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+
+    expect(response.status).toBe(204);
+
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.email).toBe(newEmail);
+    expect(userInDb?.pendingEmail).toBeNull();
+
+    const previous = await prisma.previousEmail.findFirst({
+      where: { userId: user.id },
+    });
+    expect(previous?.email).toBe(user.email);
+
+    const tokenInDb = await prisma.verificationToken.findUnique({
+      where: { tokenHash: hashToken(token) },
+    });
+    expect(tokenInDb?.usedAt).not.toBeNull();
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "EMAIL_CHANGE_COMPLETED", targetId: user.id },
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("should return 400 when reusing an already-confirmed token", async () => {
+    const user = await buildCustomer();
+    const newEmail = "new@example.com";
+    const token = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_CHANGE",
+      newEmail,
+    });
+
+    const first = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+    expect(first.status).toBe(204);
+
+    const second = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+    expect(second.status).toBe(400);
+  });
+
+  it("should return 409 when the email got taken right before confirmation", async () => {
+    const user = await buildCustomer();
+    const other = await buildCustomer();
+    const newEmail = "raced@example.com";
+    const token = await seedVerificationToken(user.id, {
+      purpose: "EMAIL_CHANGE",
+      newEmail,
+    });
+
+    // race: someone else grabs the target email between request and confirm
+    await prisma.user.update({
+      where: { id: other.id },
+      data: { email: newEmail },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token });
+
+    expect(response.status).toBe(409);
+  });
+});
+
+describe("Rate limiting (7.9)", () => {
+  it("allows login attempts within RATE_LIMIT_LOGIN_MAX", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_LOGIN_MAX; i++) {
+      const response = await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+      expect(response.status).toBe(401);
+    }
+  });
+
+  it("returns a generic 429 with Retry-After once RATE_LIMIT_LOGIN_MAX is exceeded, by IP", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_LOGIN_MAX; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: "wrongpassword",
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.headers["retry-after"]).toBeDefined();
+    // Genérico: não revela qual regra disparou nem confirma a conta.
+    expect(response.body).not.toHaveProperty("rule");
+  });
+
+  it("keeps login rate limit counters isolated per IP", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_LOGIN_MAX; i++) {
+      await request(app)
+        .post("/api/v1/auth/login")
+        .set("X-Forwarded-For", "203.0.113.10")
+        .send({ email: user.email, password: "wrongpassword" });
+    }
+
+    const sameIp = await request(app)
+      .post("/api/v1/auth/login")
+      .set("X-Forwarded-For", "203.0.113.10")
+      .send({ email: user.email, password: "wrongpassword" });
+    expect(sameIp.status).toBe(429);
+
+    const otherIp = await request(app)
+      .post("/api/v1/auth/login")
+      .set("X-Forwarded-For", "203.0.113.99")
+      .send({ email: user.email, password: "wrongpassword" });
+    expect(otherIp.status).toBe(401);
+  });
+
+  it("records AUTH_RATE_LIMIT_EXCEEDED in the audit log without PII", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i <= env.RATE_LIMIT_LOGIN_MAX; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_RATE_LIMIT_EXCEEDED" },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.targetType).toBe("Route");
+    expect(rows[0]?.metadata).toEqual({ rule: "login", scope: "IP" });
+  });
+
+  it("returns 429 once RATE_LIMIT_SIGNUP_MAX is exceeded, by IP", async () => {
+    for (let i = 0; i < env.RATE_LIMIT_SIGNUP_MAX; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/signup")
+        .send(makeCustomerData());
+      expect(response.status).toBe(201);
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/signup")
+      .send(makeCustomerData());
+
+    expect(response.status).toBe(429);
+  });
+
+  it("returns 429 on forgot-password once the per-IP email limit is exceeded", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_MAX; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/forgot-password")
+        .send({ email: user.email });
+      expect(response.status).toBe(200);
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: user.email });
+
+    expect(response.status).toBe(429);
+  });
+
+  it("returns 429 on forgot-password once the per-email-target limit is exceeded, even from different IPs", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_TARGET_MAX; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/forgot-password")
+        .set("X-Forwarded-For", `198.51.100.${i}`)
+        .send({ email: user.email });
+      expect(response.status).toBe(200);
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .set("X-Forwarded-For", "198.51.100.250")
+      .send({ email: user.email });
+
+    expect(response.status).toBe(429);
+  });
+
+  it("returns 429 on verify-email/resend once the per-IP email limit is exceeded", async () => {
+    const user = await buildCustomer({ status: "PENDING" });
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_MAX; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/verify-email/resend")
+        .send({ email: user.email });
+      expect(response.status).toBe(200);
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/verify-email/resend")
+      .send({ email: user.email });
+
+    expect(response.status).toBe(429);
+  });
+});
+
+describe("Account lockout (7.10)", () => {
+  it("does not lock the account before LOCKOUT_THRESHOLD wrong attempts", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD - 1; i++) {
+      const response = await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+      expect(response.status).toBe(401);
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("returns 429 for the correct password once LOCKOUT_THRESHOLD is reached", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(429);
+  });
+
+  it("keeps returning 401 (not 429) for wrong attempts made while locked", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    // wrong password never leaks lock state — no hint before the credential
+    // is proven correct.
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: "wrongpassword",
+    });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("records AUTH_LOCKOUT_TRIGGERED once the threshold is reached", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_LOCKOUT_TRIGGERED", targetId: user.id },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toMatchObject({
+      failureCount: env.LOCKOUT_THRESHOLD,
+      backoffLevel: 1,
+    });
+  });
+
+  it("records AUTH_LOGIN_FAILED with reason LOCKED for the correct password while locked", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_LOGIN_FAILED", targetId: user.id },
+    });
+
+    const lockedRows = rows.filter(
+      (row) =>
+        row.metadata !== null &&
+        typeof row.metadata === "object" &&
+        (row.metadata as { reason?: string }).reason === "LOCKED",
+    );
+
+    expect(lockedRows).toHaveLength(1);
+  });
+
+  it("resets the failure counter on a successful login, without recording AUTH_LOCKOUT_CLEARED for a clean account", async () => {
+    const user = await buildCustomer();
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+    expect(response.status).toBe(200);
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_LOCKOUT_CLEARED", targetId: user.id },
+    });
+    expect(rows).toHaveLength(0);
+  });
+});
+
 describe("End-to-end: signup -> login -> me -> refresh -> sessions -> logout", () => {
   it("should support the full auth lifecycle for a freshly signed-up customer", async () => {
     const data = makeCustomerData();
@@ -1386,8 +2262,9 @@ describe("End-to-end: signup -> login -> me -> refresh -> sessions -> logout", (
       .get("/api/v1/auth/sessions")
       .set("Authorization", `Bearer ${newAccessToken}`);
     expect(sessionsResponse.status).toBe(200);
-    expect(sessionsResponse.body).toHaveLength(1);
-    const sessionId = (sessionsResponse.body as Array<{ id: string }>)[0]?.id;
+    expect(sessionsResponse.body.data).toHaveLength(1);
+    const sessionId = (sessionsResponse.body.data as Array<{ id: string }>)[0]
+      ?.id;
     assert(sessionId !== undefined, "Session id should be defined");
 
     const logoutResponse = await request(app)

@@ -1,8 +1,7 @@
-import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
 import { roleViews } from "@/modules/role/role.presenter";
 import { roleParamsSchema } from "@/modules/role/role.schema";
-import { errorResponses, jsonResponse } from "../components";
+import { errorResponses, jsonResponse, staticList } from "../components";
 import { fromEnvelope } from "../helpers";
 
 export const rolePaths: ZodOpenApiPathsObject = {
@@ -11,7 +10,7 @@ export const rolePaths: ZodOpenApiPathsObject = {
       tags: ["Roles"],
       summary: "Lista os papéis do sistema — exige read:role",
       responses: {
-        200: jsonResponse("Catálogo de papéis", z.array(roleViews.default)),
+        200: jsonResponse("Catálogo de papéis", staticList(roleViews.default)),
         401: errorResponses[401],
         403: errorResponses[403],
       },

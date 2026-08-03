@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { UserStatus } from "@/generated/prisma/enums";
+import { offsetQuerySchema } from "@/lib/pagination";
 import { ROLE_NAMES } from "@/modules/role/role.constants";
 
 export const passwordSchema = z
@@ -89,6 +91,28 @@ export const userParamsSchema = z.object({
   }),
 });
 
+export const forcePasswordResetSchema = userParamsSchema;
+
+export const listUsersSchema = z.object({
+  query: offsetQuerySchema.extend({
+    status: z
+      .enum(UserStatus)
+      .optional()
+      .meta({ description: "Filtra pelo status da conta", example: "ACTIVE" }),
+    banned: z
+      .stringbool({ truthy: ["true"], falsy: ["false"] })
+      .optional()
+      .meta({
+        description: "true = apenas banidos; false = apenas não banidos",
+        example: false,
+      }),
+    role: z
+      .enum(ROLE_NAMES)
+      .optional()
+      .meta({ description: "Filtra por nome de role", example: "manager" }),
+  }),
+});
+
 export const banUserSchema = z.object({
   params: z.object({
     id: z.uuid("Invalid user ID"),
@@ -102,6 +126,7 @@ export const banUserSchema = z.object({
   }),
 });
 
+export type ListUsersQuery = z.infer<typeof listUsersSchema>["query"];
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>["body"];
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>["body"];
 export type UpdateUserInput = z.infer<typeof updateUserSchema>["body"];

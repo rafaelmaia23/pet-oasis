@@ -14,11 +14,13 @@ model User {
   name         String
   cpf          String   @unique
   email        String   @unique
+  pendingEmail String?  @map("pending_email")
   passwordHash String   @map("password_hash")
   status       UserStatus @default(PENDING)
   bannedAt     DateTime?  @map("banned_at")
   bannedBy     String?    @map("banned_by")
   banReason    String?    @map("ban_reason")
+  mustChangePassword Boolean @default(false) @map("must_change_password")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
@@ -34,6 +36,7 @@ model User {
   // autenticação
   sessions           Session[]
   verificationTokens VerificationToken[]
+  previousEmails     PreviousEmail[]
 
   @@map("users")
 }
@@ -163,6 +166,7 @@ model Session {
 enum VerificationPurpose {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+  EMAIL_CHANGE
 }
 
 model VerificationToken {
@@ -172,10 +176,51 @@ model VerificationToken {
   purpose   VerificationPurpose
   expiresAt DateTime            @map("expires_at")
   usedAt    DateTime?           @map("used_at")
+  newEmail  String?             @map("new_email")
   createdAt DateTime            @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("verification_tokens")
+}
+
+// Histórico de emails que já foram ativos numa conta. Unique global: um email
+// só pode ter sido ativo de uma conta na história do sistema (reserva
+// permanente, mesmo idioma do email "preso" de conta soft-deletada).
+model PreviousEmail {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  email      String   @unique
+  replacedAt DateTime @map("replaced_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("previous_emails")
+}
+
+// ─── Auditoria ───────────────────────────────────────────────────────────────
+
+// Trilha durável de ações sensíveis (quem fez o quê, em quem, quando).
+// Append-only: sem update/delete pela aplicação (só o script de retenção 7.14).
+// actorId/targetId são uuid cru SEM FK — evidência pode apontar para linha
+// soft-deleted, mesmo idioma de User.bannedBy. Regras em docs/logging-policy.md §4.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  @map("actor_id")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String?  @map("target_id")
+  metadata   Json?
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt, id]) // cursor pagination da 7.8 (tiebreaker por id)
+  @@index([action])
+  @@index([actorId])
+  @@index([targetId])
+  @@map("audit_logs")
 }

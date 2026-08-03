@@ -5,11 +5,14 @@ import {
   createUnauthorizedError,
 } from "@/errors";
 import { send } from "@/lib/email";
+import { logger } from "@/lib/logger";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import { findUserByEmail, findUserById } from "@/modules/user/user.repository";
 import { PASSWORD_RESET_TTL_MS } from "./auth.constants";
 import * as authRepository from "./auth.repository";
+
+const log = logger.child({ module: "password" });
 
 const INVALID_TOKEN_ERROR = {
   message: "Token de redefinição inválido ou expirado",
@@ -21,7 +24,7 @@ const BANNED_ACCOUNT_ERROR = {
   action: "Se você acha que isso é um erro, entre em contato com o suporte",
 };
 
-function buildPasswordResetEmail(rawToken: string) {
+export function buildPasswordResetEmail(rawToken: string) {
   const link = `${env.APP_URL}/reset-password?token=${rawToken}`;
 
   return {
@@ -40,16 +43,25 @@ export async function requestPasswordReset(email: string) {
 
   const rawToken = generateOpaqueToken();
 
-  await authRepository.createVerificationToken({
-    userId: user.id,
-    tokenHash: hashToken(rawToken),
-    purpose: "PASSWORD_RESET",
-    expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
-  });
+  await authRepository.createVerificationToken(
+    {
+      userId: user.id,
+      tokenHash: hashToken(rawToken),
+      purpose: "PASSWORD_RESET",
+      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    },
+    {
+      action: "PASSWORD_RESET_REQUESTED",
+      targetType: "User",
+      targetId: user.id,
+    },
+  );
 
   const { subject, html, text } = buildPasswordResetEmail(rawToken);
 
   await send({ to: user.email, subject, html, text });
+
+  log.info({ userId: user.id }, "password reset requested");
 }
 
 export async function resetPassword(token: string, newPassword: string) {
@@ -63,6 +75,17 @@ export async function resetPassword(token: string, newPassword: string) {
     resetToken.usedAt !== null ||
     resetToken.expiresAt < new Date()
   ) {
+    log.warn(
+      {
+        ...(resetToken ? { userId: resetToken.userId } : {}),
+        reason: !resetToken
+          ? "UNKNOWN_TOKEN"
+          : resetToken.usedAt
+            ? "ALREADY_USED"
+            : "EXPIRED_OR_WRONG_PURPOSE",
+      },
+      "password reset refused",
+    );
     throw createBadRequestError(INVALID_TOKEN_ERROR);
   }
 
@@ -73,6 +96,7 @@ export async function resetPassword(token: string, newPassword: string) {
   }
 
   if (user.bannedAt !== null) {
+    log.warn({ userId: user.id }, "password reset refused for banned account");
     throw createForbiddenError(BANNED_ACCOUNT_ERROR);
   }
 
@@ -82,6 +106,16 @@ export async function resetPassword(token: string, newPassword: string) {
     resetToken.id,
     resetToken.userId,
     passwordHash,
+    {
+      action: "PASSWORD_RESET_COMPLETED",
+      targetType: "User",
+      targetId: resetToken.userId,
+    },
+  );
+
+  log.info(
+    { userId: user.id },
+    "password reset completed, all sessions invalidated",
   );
 }
 
@@ -100,6 +134,7 @@ export async function changePassword(
   }
 
   if (user.bannedAt !== null) {
+    log.warn({ userId }, "password change refused for banned account");
     throw createForbiddenError(BANNED_ACCOUNT_ERROR);
   }
 
@@ -109,6 +144,7 @@ export async function changePassword(
   );
 
   if (!passwordMatch) {
+    log.warn({ userId }, "password change refused, wrong current password");
     throw createForbiddenError({
       message: "Senha atual incorreta",
       action: "Verifique a senha atual e tente novamente",
@@ -120,5 +156,8 @@ export async function changePassword(
   await authRepository.updatePasswordAndInvalidateSessions(
     userId,
     passwordHash,
+    { action: "PASSWORD_CHANGED", targetType: "User", targetId: userId },
   );
+
+  log.info({ userId }, "password changed, all sessions invalidated");
 }

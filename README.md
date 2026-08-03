@@ -10,7 +10,7 @@
 [![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Zod](https://img.shields.io/badge/Zod-4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/)
-[![Vitest](https://img.shields.io/badge/Vitest-341%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-606%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](https://spec.openapis.org/oas/v3.1.0)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#licença)
@@ -60,6 +60,8 @@ Existe um usuário público **read-only** com permissão de leitura de *administ
 |---|---|
 | Email | `demo@petoasis.dev` |
 | Senha | `DemoOasis2026!` |
+
+O ambiente demo é resetado diariamente às **04:00 UTC** (dados de teste voltam ao estado inicial) — é higiene do deploy de portfólio, não o que garante o read-only (isso é o RBAC acima).
 
 1. Abra a **[referência interativa](https://pet-oasis.maiahub.com.br/reference)**.
 2. Chame `POST /auth/login` com as credenciais acima e copie o `accessToken` da resposta.
@@ -183,7 +185,7 @@ O raciocínio longo de cada uma está em [`docs/context.md`](docs/context.md); a
 
 ### Testes antes do código
 
-Toda feature nasce de um teste que falha. A suíte tem **341 testes** (Vitest + Supertest + Faker) rodando contra um Postgres real e isolado, subido e derrubado pelo próprio `npm test` — integração de verdade, não mocks do banco. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
+Toda feature nasce de um teste que falha. A suíte tem **606 testes** (Vitest + Supertest + Faker) rodando contra um Postgres e um Redis reais e isolados, subidos e derrubados pelo próprio `npm test` — integração de verdade, não mocks de banco ou de infra. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
 
 ### Disciplina de processo
 
@@ -193,7 +195,7 @@ Cada fase do roadmap tem sua branch, cada feature a sua, e nada é desenvolvido 
 
 ## Rodar localmente
 
-Sobe inteiro com Docker — banco, mail-catcher e app com hot-reload:
+Sobe inteiro com Docker — banco, Redis, mail-catcher e app com hot-reload:
 
 ```bash
 git clone https://github.com/rafaelmaia23/pet-oasis.git && cd pet-oasis
@@ -221,12 +223,12 @@ Há também uma coleção [Bruno](https://www.usebruno.com/) versionada em [`api
 | ✅ | 4 | Email, status de conta, recuperação de senha e banimento |
 | ✅ | 5 | OpenAPI + Scalar, coleção Bruno, containerização |
 | ✅ | 6 | Ambientes dev/test/prod, deploy e graceful shutdown |
+| ✅ | 7 | Hardening: rate limiting, account lockout, observabilidade (access/application/audit log), paginação e filtros, teto de sessões, troca de email, timeouts |
 
 **A seguir**
 
 | | Fase | Entrega |
 |---|---|---|
-| 🔜 | 7 — Hardening | Rate limiting, account lockout, audit log, paginação e filtros, teto de sessões simultâneas, troca de email |
 | 🔜 | 8 — Domínio pet shop | Pets ligados a Customers, CRUD aninhado, escopos *own*/*others* — e, adiante, vendas e pedidos |
 
 Detalhe atômico de cada item em [`docs/todo.md`](docs/todo.md).

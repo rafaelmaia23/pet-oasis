@@ -1,13 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { env } from "@/config/env";
 import { ServiceUnavailableError } from "@/errors";
 
-const { sendMailMock } = vi.hoisted(() => ({ sendMailMock: vi.fn() }));
-
-vi.mock("nodemailer", () => ({
-  default: { createTransport: vi.fn(() => ({ sendMail: sendMailMock })) },
+const { sendMailMock, createTransportMock } = vi.hoisted(() => ({
+  sendMailMock: vi.fn(),
+  createTransportMock: vi.fn((_options: Record<string, unknown>) => ({
+    sendMail: vi.fn(),
+  })),
 }));
 
+vi.mock("nodemailer", () => ({
+  default: { createTransport: createTransportMock },
+}));
+
+createTransportMock.mockReturnValue({ sendMail: sendMailMock });
+
 const { send } = await import("@/lib/email");
+
+// 7.12 — sem timeout, um relay morto pendura o `await send()` de um request
+// (signup, forgot-password) pelo default generoso do nodemailer.
+describe("SMTP transporter timeouts (7.12)", () => {
+  it("configures connection/greeting/socket timeouts from env", () => {
+    const options = createTransportMock.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+
+    expect(options.connectionTimeout).toBe(env.SMTP_CONNECTION_TIMEOUT_MS);
+    expect(options.greetingTimeout).toBe(env.SMTP_GREETING_TIMEOUT_MS);
+    expect(options.socketTimeout).toBe(env.SMTP_SOCKET_TIMEOUT_MS);
+  });
+});
 
 describe("Email", () => {
   beforeEach(() => {

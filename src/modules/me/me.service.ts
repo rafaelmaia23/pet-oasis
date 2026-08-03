@@ -37,6 +37,7 @@ export async function getMe(authUser: AuthUser) {
     id: user.id,
     name: user.name,
     email: user.email,
+    pendingEmail: user.pendingEmail,
     cpf: user.cpf,
     customer:
       user.customer && !user.customer.deletedAt

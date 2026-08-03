@@ -12,7 +12,14 @@ describe("clearDatabase() reference-data preservation", () => {
   beforeEach(async () => {
     // Create transactional rows (a user with a role + profile) so we can prove
     // they are removed while the reference data stays.
-    await buildEmployee({ roleNames: ["manager"] });
+    const user = await buildEmployee({ roleNames: ["manager"] });
+    await prisma.previousEmail.create({
+      data: {
+        userId: user.id,
+        email: `old-${user.id}@example.com`,
+        replacedAt: new Date(),
+      },
+    });
   });
 
   it("removes transactional rows but keeps features, roles and role_features", async () => {
@@ -38,5 +45,6 @@ describe("clearDatabase() reference-data preservation", () => {
     expect(await prisma.user.count()).toBe(0);
     expect(await prisma.userRole.count()).toBe(0);
     expect(await prisma.employee.count()).toBe(0);
+    expect(await prisma.previousEmail.count()).toBe(0);
   });
 });

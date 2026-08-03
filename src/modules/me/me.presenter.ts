@@ -16,6 +16,7 @@ const defaultView = z
     id: z.uuid(),
     name: z.string().meta({ example: "Maria Silva" }),
     email: z.email(),
+    pendingEmail: z.email().nullable(),
     cpf: z.string().meta({ example: "12345678901" }),
     customer: z
       .object({

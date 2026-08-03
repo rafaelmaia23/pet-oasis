@@ -11,8 +11,8 @@ get {
 }
 
 script:post-response {
-  if (res.getStatus() === 200 && res.getBody().length > 0) {
-    bru.setVar("userId", res.getBody()[0].id);
+  if (res.getStatus() === 200 && res.getBody().data.length > 0) {
+    bru.setVar("userId", res.getBody().data[0].id);
   }
 }
 

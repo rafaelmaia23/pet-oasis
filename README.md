@@ -61,6 +61,8 @@ Existe um usuário público **read-only** com permissão de leitura de *administ
 | Email | `demo@petoasis.dev` |
 | Senha | `DemoOasis2026!` |
 
+O ambiente demo é resetado diariamente às **04:00 UTC** (dados de teste voltam ao estado inicial) — é higiene do deploy de portfólio, não o que garante o read-only (isso é o RBAC acima).
+
 1. Abra a **[referência interativa](https://pet-oasis.maiahub.com.br/reference)**.
 2. Chame `POST /auth/login` com as credenciais acima e copie o `accessToken` da resposta.
 3. Cole o token no botão **Authorize** (canto superior) — a partir daí todas as chamadas vão autenticadas.

@@ -873,6 +873,74 @@ describe("GET /api/v1/auth/sessions", () => {
     const ids = (response.body.data as Array<{ id: string }>).map((s) => s.id);
     expect(ids).not.toContain(sessionBId);
   });
+
+  it("should describe the session's device from its User-Agent (7.17)", async () => {
+    const user = await buildCustomer();
+
+    const loginResponse = await request(app)
+      .post("/api/v1/auth/login")
+      .set(
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      )
+      .send({ email: user.email, password: user.password });
+    const accessToken = loginResponse.body.accessToken as string;
+
+    const response = await request(app)
+      .get("/api/v1/auth/sessions")
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    expect(response.status).toBe(200);
+    const [session] = response.body.data as Array<{ device: string }>;
+    expect(session?.device).toBe("Chrome no Windows");
+  });
+
+  it("should fall back to a generic device label when the User-Agent is missing/unrecognized", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/auth/sessions")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    const [session] = response.body.data as Array<{ device: string }>;
+    expect(session?.device).toBe("Dispositivo desconhecido");
+  });
+
+  it("should mark only the session of the current request as current", async () => {
+    const user = await buildCustomer();
+    const live1 = await loginWithSession(user.email, user.password);
+    await loginWithSession(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/auth/sessions")
+      .set("Authorization", `Bearer ${live1.accessToken}`)
+      .set("Cookie", live1.refreshCookie);
+
+    expect(response.status).toBe(200);
+    const sessions = response.body.data as Array<{
+      id: string;
+      current: boolean;
+    }>;
+    const live1Id = await sessionIdFromCookie(live1.refreshCookie);
+
+    expect(sessions.filter((s) => s.current)).toHaveLength(1);
+    expect(sessions.find((s) => s.current)?.id).toBe(live1Id);
+  });
+
+  it("should mark no session as current when no refresh cookie is sent", async () => {
+    const user = await buildCustomer();
+    const { accessToken } = await loginWithSession(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/auth/sessions")
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    expect(response.status).toBe(200);
+    const sessions = response.body.data as Array<{ current: boolean }>;
+    expect(sessions.every((s) => !s.current)).toBe(true);
+  });
 });
 
 describe("DELETE /api/v1/auth/sessions/:id", () => {

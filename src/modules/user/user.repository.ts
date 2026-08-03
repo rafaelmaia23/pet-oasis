@@ -217,6 +217,34 @@ export async function banUserAndInvalidateSessions(
   });
 }
 
+export async function forcePasswordResetAndInvalidateSessions(
+  userId: string,
+  tokenHash: string,
+  expiresAt: Date,
+  audit?: AuditDescriptor,
+) {
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id: userId, deletedAt: null },
+      data: { mustChangePassword: true },
+    });
+    await tx.session.updateMany({
+      where: {
+        userId,
+        usedAt: null,
+        invalidatedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { invalidatedAt: new Date() },
+    });
+    await tx.verificationToken.create({
+      data: { userId, tokenHash, purpose: "PASSWORD_RESET", expiresAt },
+    });
+    if (audit) await record(audit, tx);
+    return user;
+  });
+}
+
 export async function unbanUser(userId: string, audit?: AuditDescriptor) {
   const updateArgs = {
     where: { id: userId, deletedAt: null },

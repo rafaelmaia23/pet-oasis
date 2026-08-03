@@ -24,5 +24,10 @@ userRouter.delete(
   canAccess("manage:user:status"),
   userController.unlockAccount,
 );
+userRouter.post(
+  "/:id/force-password-reset",
+  canAccess("manage:user:status"),
+  userController.forcePasswordReset,
+);
 
 export default userRouter;

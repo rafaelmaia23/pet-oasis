@@ -24,7 +24,7 @@ const BANNED_ACCOUNT_ERROR = {
   action: "Se você acha que isso é um erro, entre em contato com o suporte",
 };
 
-function buildPasswordResetEmail(rawToken: string) {
+export function buildPasswordResetEmail(rawToken: string) {
   const link = `${env.APP_URL}/reset-password?token=${rawToken}`;
 
   return {

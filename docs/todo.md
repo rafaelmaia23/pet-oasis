@@ -417,19 +417,18 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ **Implementação:** terceiro service do módulo auth, `src/modules/auth/emailChange.service.ts` (ao lado de `password.service.ts`/`verification.service.ts`); `authRepository.requestEmailChange`/`consumeEmailChange` (transação interativa, mesmo idioma de `consumePasswordReset`); `userRepository.findPreviousEmailByEmail`. `clearDatabase()` e o guard de regressão (`clearDatabase.guard.test.ts`) atualizados para a tabela nova. Suíte (584) + `typecheck` + `lint` verdes.
 - ✅ **Achado à parte, corrigido junto:** o script `db:generate` (`package.json`) estava quebrado quando rodado isolado — faltava o prefixo `dotenv -e .env.development` que os demais scripts de banco já usam (sem ele, o `prisma.config.ts` não resolvia `DATABASE_URL`). Ajustado para o mesmo padrão de `db:migrate`/`db:deploy`.
 
-### ⬜ [Sessão H] Fase 7.16 — Forçar troca de senha, ação do admin
+### ✅ [Sessão H] Fase 7.16 — Forçar troca de senha, ação do admin
 > Desenho firmado com o usuário em 2026-08-03, antes da implementação.
 
-- ⬜ **Migration:** `User` ganha `mustChangePassword Boolean @default(false) @map("must_change_password")`.
-- ⬜ **`POST /users/:id/force-password-reset`** (mesma convenção de verbo de `/ban`): `canAccess("manage:user:status")` (decisão firmada — reaproveita a feature de ban/lock, sem feature nova) + `assertAdminForPrivilegedTarget` (mesmo guard de não-escalação do ban/lock) + recusa auto-alvo (mesmo idioma do self-ban — "não é possível forçar a própria troca de senha", usa `POST /auth/change-password` para isso). **409** se `mustChangePassword` já estiver ativo (mesmo idioma idempotente de "já banido"/"não travada").
-  - Em transação (repository dono, service passa o descritor de audit, mesmo wiring da 7.6): seta `mustChangePassword = true`, invalida todas as sessões vivas do alvo (mesmo helper do ban), cria `VerificationToken` (`purpose: PASSWORD_RESET`, mesmo `PASSWORD_RESET_TTL_MS`), audit `PASSWORD_CHANGE_FORCED`.
-  - Fora da transação: envia o mesmo email de `forgot-password` (`buildPasswordResetEmail`, reaproveitado) para o alvo — decisão firmada: o admin dispara o email na hora, não fica esperando o usuário pedir "esqueci minha senha" sozinho.
+- ✅ **Migration** (`add_must_change_password`): `User` ganhou `mustChangePassword Boolean @default(false) @map("must_change_password")`.
+- ✅ **`POST /users/:id/force-password-reset`** (mesma convenção de verbo de `/ban`): `canAccess("manage:user:status")` (reaproveita a feature de ban/lock, sem feature nova) + `assertAdminForPrivilegedTarget` (mesmo guard de não-escalação do ban/lock) + recusa auto-alvo (409, mesmo idioma do self-ban). **409** se `mustChangePassword` já estiver ativo.
+  - Em transação (`user.repository.forcePasswordResetAndInvalidateSessions`, mesmo wiring da 7.6): seta `mustChangePassword = true`, invalida todas as sessões vivas do alvo, cria `VerificationToken` (`purpose: PASSWORD_RESET`, mesmo `PASSWORD_RESET_TTL_MS`), audit `PASSWORD_CHANGE_FORCED`.
+  - Fora da transação: envia o mesmo email de `forgot-password` (`buildPasswordResetEmail`, exportado de `password.service.ts` e reaproveitado em `user.service.ts`) para o alvo.
   - Resposta **204** (mesmo padrão de ban/unban/lock).
-- ⬜ **Login totalmente bloqueado enquanto `mustChangePassword=true`** (decisão firmada): o único caminho de volta é o link do email — deixar entrar, mesmo sinalizando pro front forçar a troca, reabriria a janela que o reset foi feito pra fechar (quem tem a senha atual pode ser exatamente quem a comprometeu).
-  - Checagem em `auth.service.login`, no ramo de senha correta, **depois do `bannedAt` e antes do `status !== ACTIVE`** (decisão firmada sobre a ordem: banido é o estado mais severo/terminal e vence se as duas condições coexistirem — a mensagem de banido é a que aparece).
-  - Mensagem própria (403, mesmo molde de "conta não verificada"): algo como "Você precisa definir uma nova senha" / ação "Verifique seu email para o link de redefinição".
-- ⬜ `resetPassword` (consumo do token, já existente) passa a também **limpar `mustChangePassword`** quando true — é o mesmo endpoint/fluxo de `forgot-password` de ponta a ponta, só a origem do token muda (admin vs. o próprio usuário). Nenhum endpoint novo de confirmação é necessário.
-- ⬜ `PASSWORD_CHANGE_FORCED` no audit log — `actorId` = admin, `targetId` = alvo, sem PII.
+- ✅ **Login totalmente bloqueado enquanto `mustChangePassword=true`**: checagem em `auth.service.login`, no ramo de senha correta, **depois do `bannedAt` e antes do `status !== ACTIVE`** — coberto por teste de regressão de ordem (banido + `mustChangePassword` juntos → mensagem de banido vence). Mensagem própria (403): "Você precisa definir uma nova senha" / "Verifique seu email para o link de redefinição de senha".
+- ✅ `consumePasswordReset` (`auth.repository.ts`, usado por `resetPassword`) passa a também **limpar `mustChangePassword`** ao trocar a senha — mesmo endpoint/fluxo de `forgot-password` de ponta a ponta, só a origem do token muda (admin vs. o próprio usuário). Nenhum endpoint novo de confirmação.
+- ✅ `PASSWORD_CHANGE_FORCED` no audit log — `actorId` = admin, `targetId` = alvo, sem PII.
+- ✅ **Implementação:** testes de regressão cobrindo o fluxo ponta-a-ponta (força → captura o token do email → `reset-password` → login com a senha nova) e o `forgot-password` de sempre continuando intacto (`consumePasswordReset` agora é compartilhada pelas duas origens). Suíte (596) + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão H] Fase 7.17 — Polir `GET /auth/sessions`
 - ⬜ Parsing de user-agent (ex. `ua-parser-js`) → `{ device: "Chrome no Windows", ipAddress, createdAt, current }`, marcando a sessão da request atual.

@@ -1,4 +1,8 @@
-import { buildCustomer, makeCustomerData } from "@tests/factories/user.factory";
+import {
+  buildCustomer,
+  buildEmployee,
+  makeCustomerData,
+} from "@tests/factories/user.factory";
 import {
   expectValidationError,
   expectValidUuid,
@@ -367,6 +371,98 @@ describe("POST /api/v1/auth/login", () => {
     expect(sessions[0]?.refreshTokenHash).not.toBe(
       sessions[1]?.refreshTokenHash,
     );
+  });
+});
+
+describe("login refused by mustChangePassword (7.16)", () => {
+  it("should return 403 with the correct password when a reset was forced", async () => {
+    const user = await buildCustomer();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { mustChangePassword: true },
+    });
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toBe("Você precisa definir uma nova senha");
+  });
+
+  it("should prioritize the banned message when both banned and mustChangePassword are set (order regression)", async () => {
+    const user = await buildCustomer();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        mustChangePassword: true,
+        bannedAt: new Date(),
+        banReason: "abuse",
+      },
+    });
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toBe("Conta suspensa");
+  });
+
+  it("should complete the end-to-end forced reset flow (force -> reset -> login)", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildCustomer();
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    const forceResponse = await request(app)
+      .post(`/api/v1/users/${target.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(forceResponse.status).toBe(204);
+
+    const rawToken = tokenFromLastEmail();
+    const newPassword = "BrandNewPass@1";
+
+    const resetResponse = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword });
+    expect(resetResponse.status).toBe(204);
+
+    const targetInDb = await findUserById(target.id);
+    expect(targetInDb?.mustChangePassword).toBe(false);
+
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: newPassword,
+    });
+    expect(loginResponse.status).toBe(200);
+  });
+
+  it("should keep the regular forgot-password flow unaffected (regression)", async () => {
+    const user = await buildCustomer();
+
+    const forgotResponse = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: user.email });
+    expect(forgotResponse.status).toBe(200);
+
+    const rawToken = tokenFromLastEmail();
+    const newPassword = "AnotherPass@1";
+
+    const resetResponse = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, newPassword });
+    expect(resetResponse.status).toBe(204);
+
+    const targetInDb = await findUserById(user.id);
+    expect(targetInDb?.mustChangePassword).toBe(false);
+
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: newPassword,
+    });
+    expect(loginResponse.status).toBe(200);
   });
 });
 

@@ -140,6 +140,33 @@ describe("POST /api/v1/users", () => {
     });
   });
 
+  it("should return the same generic 409 when the email was previously used by another account", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(user.email, user.password);
+
+    const other = await buildCustomer();
+    const reservedEmail = other.email;
+    await prisma.user.update({
+      where: { id: other.id },
+      data: { email: `changed-${other.id}@example.com` },
+    });
+    await prisma.previousEmail.create({
+      data: { userId: other.id, email: reservedEmail, replacedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeEmployeeData({ email: reservedEmail }));
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: "CONFLICT",
+      message: "O email informado já está em uso",
+      action: "Tente outro valor para o campo email",
+    });
+  });
+
   it("should return 409 if cpf is already in use", async () => {
     const user = await buildEmployee({ roleNames: ["manager"] });
 

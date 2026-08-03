@@ -2,7 +2,9 @@ import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
 import { sessionViews } from "@/modules/auth/auth.presenter";
 import {
+  changeEmailSchema,
   changePasswordSchema,
+  confirmEmailChangeSchema,
   forgotPasswordSchema,
   loginSchema,
   resendVerificationSchema,
@@ -134,6 +136,35 @@ export const authPaths: ZodOpenApiPathsObject = {
         204: noContentResponse,
         401: errorResponses[401],
         403: errorResponses[403],
+        422: errorResponses[422],
+      },
+    },
+  },
+  "/auth/change-email": {
+    post: {
+      tags: ["Auth"],
+      summary:
+        "Solicita a troca de email (logado, exige a senha atual) — 2 passos, confirma via /auth/confirm-email-change",
+      ...fromEnvelope(changeEmailSchema),
+      responses: {
+        204: noContentResponse,
+        401: errorResponses[401],
+        403: errorResponses[403],
+        409: errorResponses[409],
+        422: errorResponses[422],
+      },
+    },
+  },
+  "/auth/confirm-email-change": {
+    post: {
+      tags: ["Auth"],
+      summary: "Confirma a troca de email via token",
+      security: [],
+      ...fromEnvelope(confirmEmailChangeSchema),
+      responses: {
+        204: noContentResponse,
+        400: errorResponses[400],
+        409: errorResponses[409],
         422: errorResponses[422],
       },
     },

@@ -1,0 +1,21 @@
+meta {
+  name: Confirm Email Change
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/auth/confirm-email-change
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "token": "cole-aqui-o-token-do-email"
+  }
+}

@@ -26,7 +26,7 @@
     "format": "biome format . --write",
     "db:migrate": "dotenv -e .env.development -- prisma migrate dev",
     "db:deploy": "dotenv -e .env.development -- prisma migrate deploy",
-    "db:generate": "prisma generate",
+    "db:generate": "dotenv -e .env.development -- prisma generate",
     "db:seed": "dotenv -e .env.development -- prisma db seed",
     "db:studio": "dotenv -e .env.development -- prisma studio",
     "db:cleanup-sessions": "dotenv -e .env.development -- tsx src/scripts/cleanup-sessions.ts",

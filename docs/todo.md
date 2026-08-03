@@ -237,7 +237,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **D** | 7.7, 7.8 | Paginação + leitura de log | 7.8 consome o helper da 7.7 (cursor em `/audit-logs`); a 7.7 já migra todas as listagens para o envelope. |
 | **E** ✅ | 7.9, 7.10 | Rate limit + lockout | Mesma infra (Redis), mesmo endpoint alvo (`/auth/login`), mesmas ações de audit. |
 | **F** ✅ | 7.11, 7.12 | Bordas externas e resiliência | Axiom/Sentry e os timeouts tratam o mesmo problema: dependência externa que falha ou pendura. |
-| **G** | 7.13, 7.14 | Scripts de manutenção + agendamento | `cleanup-sessions`, `cleanup-audit-log` e `demo-reset` compartilham `--dry-run`, transação, log de resultado e systemd timer. |
+| **G** ✅ | 7.13, 7.14 | Scripts de manutenção + agendamento | `cleanup-sessions`, `cleanup-audit-log` e `demo-reset` compartilham `--dry-run`, transação, log de resultado e systemd timer. |
 | **H** | 7.15, 7.16, 7.17 | Polimento de features de conta | As três mexem no domínio de conta/sessão. **Abre confirmando o desenho de 7.15 e 7.16.** |
 | **I** | 7.19 (+ regressão de D1) | Fechos | Docs, teste de regressão do refresh hash, suíte/typecheck/lint, fase ✅. |
 
@@ -383,25 +383,27 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ Valores por env com defaults conservadores, registrados em `docs/context.md` (§2.2 "Observabilidade"): `SERVER_HEADERS_TIMEOUT_MS=65000`/`SERVER_REQUEST_TIMEOUT_MS=70000`/`SERVER_KEEP_ALIVE_TIMEOUT_MS=61000`, `PRISMA_TX_MAX_WAIT_MS=5000`/`PRISMA_TX_TIMEOUT_MS=8000`, `DB_POOL_CONNECT_TIMEOUT_MS=5000`, `REDIS_CONNECT_TIMEOUT_MS=2000`/`REDIS_COMMAND_TIMEOUT_MS=2000`, `SMTP_CONNECTION_TIMEOUT_MS=10000`/`SMTP_GREETING_TIMEOUT_MS=5000`/`SMTP_SOCKET_TIMEOUT_MS=20000`.
 - ✅ Testes por asserção de argumentos de construtor/opções (mesmo padrão de `redis.test.ts`: mock do módulo, assert nas opções passadas), sem esperar timeouts reais — cobre Redis, Prisma (`PrismaPg`/`PrismaClient` mockados) e SMTP (`nodemailer.createTransport` mockado). HTTP server verificado por boot real (local + Docker), sem teste unitário dedicado (não há precedente de testar `server.ts` isoladamente no projeto). Suíte (541) + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão G] Fase 7.13 — Teto de sessões vivas + faxina de registros mortos
-- ⬜ Teto de sessões vivas simultâneas por usuário: **`MAX_LIVE_SESSIONS` 5** (D8); evict da mais antiga ao exceder (login nunca é recusado).
-- ⬜ `src/scripts/cleanup-sessions.ts`: hard delete de `Session`/`VerificationToken` mortos há mais de `SESSION_RETENTION_DAYS` (default 30).
-- ⬜ `src/scripts/cleanup-audit-log.ts`: hard delete de `AuditLog` acima de `AUDIT_LOG_RETENTION_DAYS` (**21 dias no demo, 365 em prod**) — **único** lugar autorizado a deletar audit log.
-- ⬜ Ambos com `--dry-run` (conta e loga, não apaga), execução em transação, resultado (linhas por tabela + duração) no application log.
-- ⬜ Rodados via `npm run` script, nunca dentro do ciclo request/response.
+### ✅ [Sessão G] Fase 7.13 — Teto de sessões vivas + faxina de registros mortos
+- ✅ Teto de sessões vivas simultâneas por usuário: **`MAX_LIVE_SESSIONS` 5** (D8, env var); evict da mais antiga ao exceder (login nunca é recusado) — `authRepository.createSessionAndEvictOldest` (transação interativa, mesmo padrão de `rotateSession`), chamada por `auth.service.login()`. Log de aplicação em `info` quando evicta; sem ação de audit nova (higiene, não evento de segurança).
+- ✅ `src/scripts/cleanup-sessions.ts`: hard delete de `Session`/`VerificationToken` mortos há mais de `SESSION_RETENTION_DAYS` (default 30). **Critério de "morto" firmado com o usuário:** conta a partir de **qualquer** timestamp de morte (`expiresAt` vencido, OU `usedAt`, OU `invalidatedAt` — checados independentemente via `OR`), não só do `expiresAt` natural — uma sessão invalidada/usada há muito tempo já é lixo mesmo com `expiresAt` ainda no futuro.
+- ✅ `src/scripts/cleanup-audit-log.ts`: hard delete de `AuditLog` acima de `AUDIT_LOG_RETENTION_DAYS` (default 365, produção; demo sobrescreve para 21 no próprio `.env.production`) — **único** lugar autorizado a deletar audit log.
+- ✅ Ambos com `--dry-run` (`count()` em vez de `deleteMany()`, mesmo `where`), execução em transação, resultado (linhas por tabela + duração) no application log (`logger.child({ module: ... })`).
+- ✅ Bundlados pelo tsup (`dist/cleanup-sessions.js`/`dist/cleanup-audit-log.js`), `npm run db:cleanup-sessions`/`db:cleanup-audit-log` (dev), agendados via **systemd timer diário** (`infra/cron/`, 04:10/04:20 UTC) — nunca dentro do ciclo request/response.
+- ✅ Testes de integração (`tests/integration/scripts/`) contra o Postgres de teste real; teto de sessões testado em `auth.test.ts` (login nunca recusado, sessão mais antiga invalidada, refresh com token evictado → 401). Suíte (556) + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão G] Fase 7.14 — Reset do ambiente demo
+### ✅ [Sessão G] Fase 7.14 — Reset do ambiente demo
 > Higiene do deploy de portfólio. **Não** é o que garante o demo read-only — isso é RBAC (role `demo`, Fase 5). São duas defesas independentes: a autorização impede a escrita do usuário demo, a faxina limpa o que os outros usuários criaram.
 
-- ⬜ `src/scripts/demo-reset.ts`: **truncate + reseed** (determinístico e não cresce a cada model novo da Fase 9 — ao contrário de "deletar o que não é seed", que exigiria um marcador em toda tabela).
-- ⬜ Seed idempotente e reaproveitado (já bundlado em `dist/seed.js` desde a Fase 5).
-- ⬜ **Guarda:** só executa com `DEMO_MODE=true` explícito. **Não** inferir de `NODE_ENV` — o deploy demo *é* production. Sem a flag: erro barulhento, exit ≠ 0, nada apagado.
-- ⬜ `--dry-run` obrigatório antes do primeiro uso real; execução em transação.
-- ⬜ Resultado no application log + `DEMO_RESET_EXECUTED` no audit log (contagem por tabela, duração).
-- ⬜ Agendamento **diário** (não a cada 3 dias: evita que um recrutador encontre a bagunça do anterior) via **systemd timer** versionado em `infra/cron/` — preferido a cron por dar `journalctl`, `Persistent=` e proteção contra sobreposição.
-  - ⬜ Corte de responsabilidade: **`src/scripts/`** = código (importa Prisma/`env`/`logger`, é bundlado pelo tsup); **`infra/`** = agendamento e como o container roda.
-- ⬜ Horário publicado na doc/`/reference` ("ambiente demo resetado diariamente às 04:00 UTC") — transforma o logout inesperado em comportamento documentado.
-- ⬜ Quando existir dummy data (Fase 9+), o reseed passa a restaurá-lo.
+- ✅ `src/scripts/demo-reset.ts`: **truncate + reseed** (determinístico e não cresce a cada model novo da Fase 9). Trunca as mesmas 8 tabelas transacionais e na mesma ordem FK-safe de `tests/helpers/database.ts` (`clearDatabase`), preservando `Role`/`Feature`/`RoleFeature` (referência, recriada pelo reseed).
+- ✅ Seed extraído para `src/lib/seedDatabase.ts` (`runSeed`, sem nenhuma auto-execução de nível de módulo) e reaproveitado por `prisma/seed.ts` (CLI) e por `demo-reset.ts`. **Achado na implementação:** importar `runSeed` diretamente de `prisma/seed.ts` (que tinha `main()` guardado por `import.meta.url === argv[1]`) colidia depois que o tsup bundlava os dois scripts juntos — o bundle vira um módulo só, então os dois guards comparavam contra o **mesmo** `import.meta.url`/`argv[1]` e ambos disparavam, fazendo `demo-reset.js` também rodar (e desconectar) o `main()` do seed por baixo. Resolvido extraindo a lógica reaproveitável para um módulo sem nenhum código auto-executável.
+- ✅ **Guarda:** só executa com `DEMO_MODE=true` explícito (`assertDemoModeEnabled`, função pura testada isoladamente). **Não** infere de `NODE_ENV` — o deploy demo *é* production. Sem a flag: erro barulhento, exit ≠ 0, nada apagado. Guarda aplicada tanto ao dry-run quanto à execução real (mesmo mental model nos dois modos).
+- ✅ `--dry-run` (contagens via `count()`, reseed também não roda — usa o tamanho estático dos catálogos como prévia); execução real em transação.
+- ✅ Resultado no application log + `DEMO_RESET_EXECUTED` no audit log (`targetType: "System"`, `actorId: null`, contagem por tabela + duração) — só na execução real, nunca no dry-run.
+- ✅ Agendamento **diário** via **systemd timer** versionado em `infra/cron/` (04:00 UTC, `infra/cron/README.md` com o passo de instalação) — preferido a cron por dar `journalctl`, `Persistent=` e proteção contra sobreposição.
+  - ✅ Corte de responsabilidade: **`src/scripts/`** = código (importa Prisma/`env`/`logger`, é bundlado pelo tsup); **`infra/`** = agendamento e como o container roda.
+- ✅ Horário publicado no `README.md` ("ambiente demo resetado diariamente às 04:00 UTC") — transforma o logout inesperado em comportamento documentado.
+- ✅ Testes de integração (`tests/integration/scripts/demo-reset.test.ts`): guarda pura, truncate+reseed com `Role`/`Feature` preservadas, dry-run não escreve nada, audit só na execução real. Suíte (561) + `typecheck` + `lint` verdes.
+- 🔸 Quando existir dummy data (Fase 9+), o reseed passa a restaurá-lo.
 
 ### ⬜ [Sessão H] Fase 7.15 — Troca de email *(desenho a confirmar no início da feature)*
 - ⬜ Reabre a decisão de `user.schema.ts:56` (hoje bloqueada). Proposta a validar: endpoint próprio autenticado, senha atual exigida (como change-password), fluxo de 2 passos com verificação no email novo antes de efetivar (`pendingEmail` + `VerificationPurpose.EMAIL_CHANGE`).

@@ -104,6 +104,17 @@ export async function login(
     });
   }
 
+  if (user.mustChangePassword) {
+    log.warn(
+      { userId: user.id, reason: "MUST_CHANGE_PASSWORD" },
+      "login refused",
+    );
+    throw createForbiddenError({
+      message: "Você precisa definir uma nova senha",
+      action: "Verifique seu email para o link de redefinição de senha",
+    });
+  }
+
   if (user.status !== "ACTIVE") {
     log.warn(
       { userId: user.id, reason: "NOT_VERIFIED", status: user.status },

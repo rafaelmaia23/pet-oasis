@@ -3,6 +3,7 @@ import { userViews } from "@/modules/user/user.presenter";
 import {
   banUserSchema,
   createEmployeeSchema,
+  forcePasswordResetSchema,
   listUsersSchema,
   updateUserSchema,
   userParamsSchema,
@@ -117,6 +118,22 @@ export const userPaths: ZodOpenApiPathsObject = {
         403: errorResponses[403],
         404: errorResponses[404],
         409: errorResponses[409],
+      },
+    },
+  },
+  "/users/{id}/force-password-reset": {
+    post: {
+      tags: ["Users"],
+      summary:
+        "Força a troca de senha de um usuário (login bloqueado até o reset via email) — exige manage:user:status",
+      ...fromEnvelope(forcePasswordResetSchema),
+      responses: {
+        204: noContentResponse,
+        401: errorResponses[401],
+        403: errorResponses[403],
+        404: errorResponses[404],
+        409: errorResponses[409],
+        422: errorResponses[422],
       },
     },
   },

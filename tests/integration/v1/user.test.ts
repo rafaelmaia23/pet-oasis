@@ -1698,3 +1698,143 @@ describe("DELETE /api/v1/users/:id/lock", () => {
     expect(rows[0]?.metadata).toEqual({ clearedBy: "ADMIN" });
   });
 });
+
+describe("POST /api/v1/users/:id/force-password-reset", () => {
+  async function forcedTarget() {
+    const target = await buildCustomer();
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { mustChangePassword: true },
+    });
+    return target;
+  }
+
+  it("should return 401 without an access token", async () => {
+    const target = await buildCustomer();
+
+    const response = await request(app).post(
+      `/api/v1/users/${target.id}/force-password-reset`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 403 without the manage:user:status feature", async () => {
+    const actor = await buildEmployee({ roleNames: ["attendant"] });
+    const target = await buildCustomer();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 422 for an invalid :id", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post("/api/v1/users/not-a-uuid/force-password-reset")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+  });
+
+  it("should return 404 for a non-existent target", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${faker.string.uuid()}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+  });
+
+  it("should return 403 when a non-admin forces a privileged target", async () => {
+    const actor = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+
+    const targetInDb = await findUserById(target.id);
+    expect(targetInDb?.mustChangePassword).toBe(false);
+  });
+
+  it("should return 409 when the actor tries to force its own password reset", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${actor.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should return 409 when a reset is already pending for the target", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await forcedTarget();
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should force the reset, invalidate sessions, send the email and record the audit log", async () => {
+    const actor = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(
+      target.email,
+      target.password,
+    );
+    const token = await loginAs(actor.email, actor.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/force-password-reset`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const targetInDb = await findUserById(target.id);
+    expect(targetInDb?.mustChangePassword).toBe(true);
+
+    const refreshResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(refreshResponse.status).toBe(401);
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: target.email }),
+    );
+
+    const tokenInDb = await prisma.verificationToken.findFirst({
+      where: { userId: target.id, purpose: "PASSWORD_RESET" },
+    });
+    expect(tokenInDb?.usedAt).toBeNull();
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "PASSWORD_CHANGE_FORCED", targetId: target.id },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.actorId).toBe(actor.id);
+
+    // login with the correct (still old) password is refused, not accepted
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: target.password,
+    });
+    expect(loginResponse.status).toBe(403);
+  });
+});

@@ -91,6 +91,8 @@ export const userParamsSchema = z.object({
   }),
 });
 
+export const forcePasswordResetSchema = userParamsSchema;
+
 export const listUsersSchema = z.object({
   query: offsetQuerySchema.extend({
     status: z

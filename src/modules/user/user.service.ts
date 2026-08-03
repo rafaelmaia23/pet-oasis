@@ -9,10 +9,12 @@ import {
   canActOnResource,
   computeEffectiveFeatures,
 } from "@/lib/authorization";
+import { send } from "@/lib/email";
 import * as lockout from "@/lib/lockout";
 import { logger } from "@/lib/logger";
 import { buildOffsetArgs } from "@/lib/pagination";
 import { hashPassword } from "@/lib/password";
+import { generateOpaqueToken, hashToken } from "@/lib/token";
 import * as userRepository from "@/modules/user/user.repository";
 import type {
   CreateCustomerInput,
@@ -21,6 +23,8 @@ import type {
   UpdateUserInput,
 } from "@/modules/user/user.schema";
 import { validateRoles } from "@/utils/validateRoles";
+import { PASSWORD_RESET_TTL_MS } from "../auth/auth.constants";
+import { buildPasswordResetEmail } from "../auth/password.service";
 import { issueEmailVerification } from "../auth/verification.service";
 import { PERMISSION_FEATURES, type RoleName } from "../role/role.constants";
 import { getRolesByNames } from "../role/role.repository";
@@ -382,4 +386,56 @@ export async function unlockAccount(
   }
 
   log.info({ userId: targetId, actorId: requestingUserId }, "account unlocked");
+}
+
+export async function forcePasswordReset(
+  requestingUserId: string,
+  targetId: string,
+) {
+  if (requestingUserId === targetId) {
+    throw createConflictError({
+      message: "Não é possível forçar a própria troca de senha",
+      action: "Use POST /auth/change-password para trocar sua própria senha",
+    });
+  }
+
+  const target = await userRepository.getUserForFeatureComputation(targetId);
+
+  if (!target) {
+    throw createNotFoundError({
+      message: "Usuário não encontrado",
+      action: "Verifique o ID e tente novamente",
+    });
+  }
+
+  await assertAdminForPrivilegedTarget(requestingUserId, target, {
+    message:
+      "Apenas administradores podem forçar troca de senha de usuários privilegiados",
+    action: "Solicite a um administrador que faça essa alteração",
+  });
+
+  if (target.mustChangePassword) {
+    throw createConflictError({
+      message: "Troca de senha já foi forçada para este usuário",
+      action: "Verifique o estado do usuário",
+    });
+  }
+
+  const rawToken = generateOpaqueToken();
+
+  await userRepository.forcePasswordResetAndInvalidateSessions(
+    targetId,
+    hashToken(rawToken),
+    new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    { action: "PASSWORD_CHANGE_FORCED", targetType: "User", targetId },
+  );
+
+  const { subject, html, text } = buildPasswordResetEmail(rawToken);
+
+  await send({ to: target.email, subject, html, text });
+
+  log.info(
+    { userId: targetId, actorId: requestingUserId },
+    "password change forced, all sessions invalidated",
+  );
 }

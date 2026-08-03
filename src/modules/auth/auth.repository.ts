@@ -147,7 +147,7 @@ export async function consumePasswordReset(
     });
     await tx.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: { passwordHash, mustChangePassword: false },
     });
     await tx.session.updateMany({
       where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },

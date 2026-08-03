@@ -27,6 +27,21 @@ const envSchema = z.object({
   DEMO_EMAIL: z.email().default("demo@petoasis.dev"),
   DEMO_PASSWORD: z.string().default("DemoOasis2026!"),
 
+  // Dataset de usuários fake (customers/employees/híbridos + exemplos de
+  // ban/pendência/soft delete) — para popular dev e o demo público com dado
+  // de verdade. Uma senha única e conhecida para todo o dataset (não o
+  // admin, que tem a própria) — dá pra logar como qualquer um pra testar.
+  SEED_FAKE_DATA: z.stringbool().default(false),
+  SEED_FAKE_USER_PASSWORD: z.string().default("FakeOasis2026!"),
+
+  // Usuário admin de teste com acesso total (não-readonly) — flag
+  // independente de SEED_FAKE_DATA. NUNCA true em produção/demo: diferente
+  // do usuário demo (só leitura), este teria escrita irrestrita exposta na
+  // internet. Só para dev/local.
+  SEED_ADMIN_USER: z.stringbool().default(false),
+  SEED_ADMIN_EMAIL: z.email().default("admin@petoasis.dev"),
+  SEED_ADMIN_PASSWORD: z.string().default("AdminOasis2026!"),
+
   // Forma HOST (localhost) — o container recebe `redis://redis:6379` pelo
   // override do Compose, mesmo idioma da DATABASE_URL.
   REDIS_URL: z.url().default("redis://localhost:6379"),

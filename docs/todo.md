@@ -264,7 +264,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
   - ✅ Corte de responsabilidade: **`src/scripts/`** = código (importa Prisma/`env`/`logger`, é bundlado pelo tsup); **`infra/`** = agendamento e como o container roda.
 - ✅ Horário publicado no `README.md` ("ambiente demo resetado diariamente às 04:00 UTC") — transforma o logout inesperado em comportamento documentado.
 - ✅ Testes de integração (`tests/integration/scripts/demo-reset.test.ts`): guarda pura, truncate+reseed com `Role`/`Feature` preservadas, dry-run não escreve nada, audit só na execução real. Suíte (561) + `typecheck` + `lint` verdes.
-- 🔸 Quando existir dummy data (Fase 9+), o reseed passa a restaurá-lo.
+- ✅ Quando existir dummy data, o reseed passa a restaurá-lo — feito para usuários na seção "Seed de dados fake" (abaixo, antes da Fase 8). Pets/produtos continuam pendentes, dependendo do domínio da Fase 9.
 
 ### ✅ [Sessão H] Fase 7.15 — Troca de email
 > Desenho firmado com o usuário em 2026-08-03, antes da implementação.
@@ -310,6 +310,24 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ `docs/backlog.md` revisado: nenhum item resolvido pela fase, nenhuma entrada nova — arquivo já preciso.
 - ✅ `README.md`: Redis mencionado em "Rodar localmente"; roadmap promove a Fase 7 a ✅ (saindo de "A seguir"); contagem de testes atualizada (341 → 606, badge + texto).
 - ✅ `npm run typecheck` + `npm run lint` + suíte completa (606 testes) verdes; Fase 7 marcada ✅.
+
+---
+
+## Seed de dados fake (usuários) ✅
+
+> Trabalho pontual entre a Fase 7 e a Fase 8 — não é uma fase numerada (não pertence à reativação de conta nem ao domínio pet shop). Branch `feat/seed-fake-data-users`, direto a partir da `main` (sem branch-de-fase intermediária), mergeada `--no-ff`. Decisões e racional completos no `docs/context.md`.
+>
+> Motivação: faltava dado de verdade tanto em dev quanto no demo público para exercitar RBAC, soft delete e as features já construídas — só existiam o catálogo de referência (roles/features) e o usuário demo read-only.
+
+- ✅ Duas flags novas, independentes uma da outra: **`SEED_FAKE_DATA`** (dataset de 20 usuários fake — customers, employees, híbridos, e cenários de banido/pendente-de-verificação/soft-deletado, todos com a senha compartilhada `SEED_FAKE_USER_PASSWORD`) e **`SEED_ADMIN_USER`** (usuário de teste com acesso total, role `admin`, credenciais em `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`).
+- ✅ **`SEED_ADMIN_USER` nunca liga em produção/demo** (decisão firmada com o usuário) — diferente do usuário demo (só leitura), uma conta admin teria escrita irrestrita exposta na internet. `.env.development` liga os dois; `.env.production` do deploy demo só liga `SEED_FAKE_DATA`.
+- ✅ `src/lib/seed/fakeUsers.constants.ts` — roster declarativo (email fixo por papel = chave de idempotência; nome/telefone de uma instância própria de Faker, não o singleton global usado pelos testes). `src/lib/seed/seedFakeUsers.ts` e `seedAdminUser.ts` reaproveitam `userRepository.createCustomer`/`createEmployee` (bypassa `user.service` de propósito — sem isso, cada seed dispararia um email de verificação de verdade) e os serviços reais de perfil (`userProfileService.createEmployeeProfile`/`deleteEmployeeProfile`) e de ban/soft-delete (`userRepository.banUserAndInvalidateSessions`/`softDeleteUserAndInvalidateSessions`) — nenhuma escrita crua nova além de forçar `status`, mesma técnica de `tests/factories/user.factory.ts`.
+- ✅ Idempotência por email **ignorando `deletedAt`** (`prisma.user.findFirst({ where: { email } })`, não o `findUserByEmail` do repository, que filtra soft-deleted) — necessário para o cenário `DELETED_USER` não tentar recriar (e colidir em unique) a cada rerun. O entrypoint de produção roda `migrate deploy → seed → start` a cada boot do container, sem truncate antes.
+- ✅ **Achado, corrigido junto:** `demo-reset.ts` truncava 8 tabelas e esquecia `previousEmail` (a tabela nasceu na 7.15, depois da 7.14) — sem o fix, um email trocado no demo ficava preso para sempre mesmo após o reset diário. Alinhado com `tests/helpers/database.ts`.
+- ✅ `@faker-js/faker` e `cpf-cnpj-validator` movidos de `devDependencies` para `dependencies` — passaram a ser usados por código de produção (bundlado em `dist/seed.js`/`dist/demo-reset.js` pelo tsup), não só em teste.
+- ✅ Testes de integração (`tests/integration/lib/seed/`): roster inteiro criado na primeira execução, segunda execução não duplica nada, senha compartilhada verificável, híbrido com os dois perfis ativos, os quatro cenários (`PENDING`/`BANNED`/`DELETED_USER`/`DELETED_EMPLOYEE_PROFILE`) no estado certo, `attendant`+`manager` distribuídos entre os employees simples. `demo-reset.test.ts` estendido para o fix do `previousEmail`.
+- ✅ Verificado manualmente com o bundle de produção real (`dist/seed.js`/`dist/demo-reset.js`): primeira execução cria os 21 usuários (20 fake + admin), segunda execução não duplica, `demo-reset` real restaura o mesmo estado.
+- ✅ Suíte (618) + `typecheck` + `lint` verdes.
 
 ---
 

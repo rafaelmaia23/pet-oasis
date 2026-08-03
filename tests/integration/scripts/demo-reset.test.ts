@@ -45,6 +45,13 @@ describe("runDemoReset", () => {
         targetId: customer.id,
       },
     });
+    await prisma.previousEmail.create({
+      data: {
+        userId: customer.id,
+        email: `old-${customer.email}`,
+        replacedAt: new Date(),
+      },
+    });
 
     const rolesBefore = await prisma.role.count();
     const featuresBefore = await prisma.feature.count();
@@ -56,6 +63,7 @@ describe("runDemoReset", () => {
     expect(await prisma.employee.count()).toBe(0);
     expect(await prisma.session.count()).toBe(0);
     expect(await prisma.verificationToken.count()).toBe(0);
+    expect(await prisma.previousEmail.count()).toBe(0);
     expect(
       await prisma.auditLog.count({ where: { targetId: customer.id } }),
     ).toBe(0);
@@ -65,18 +73,34 @@ describe("runDemoReset", () => {
     expect(result.seed.featuresCount).toBe(featuresBefore);
     expect(result.counts.customer).toBeGreaterThanOrEqual(1);
     expect(result.counts.employee).toBeGreaterThanOrEqual(1);
+    expect(result.counts.previousEmail).toBeGreaterThanOrEqual(1);
+    // SEED_FAKE_DATA/SEED_ADMIN_USER ficam desligados em teste (não sujam a
+    // suíte) — guarda contra alguém ligar os dois sem querer no .env.test.
+    expect(result.seed.adminUserSeeded).toBe(false);
+    expect(result.seed.fakeUsersCreated).toBe(0);
     void employee;
   });
 
   it("does not touch anything in dry-run mode, and reports the counts that would be wiped", async () => {
     const customer = await buildCustomer();
+    await prisma.previousEmail.create({
+      data: {
+        userId: customer.id,
+        email: `old-${customer.email}`,
+        replacedAt: new Date(),
+      },
+    });
 
     const result = await runDemoReset({ dryRun: true });
 
     expect(result.counts.customer).toBeGreaterThanOrEqual(1);
+    expect(result.counts.previousEmail).toBeGreaterThanOrEqual(1);
     await expect(
       prisma.user.findUnique({ where: { id: customer.id } }),
     ).resolves.not.toBeNull();
+    await expect(
+      prisma.previousEmail.count({ where: { userId: customer.id } }),
+    ).resolves.toBe(1);
   });
 
   it("records DEMO_RESET_EXECUTED in the audit log only on a real run", async () => {

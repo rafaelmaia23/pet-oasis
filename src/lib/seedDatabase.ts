@@ -2,6 +2,8 @@ import { env } from "@/config/env";
 import { UserStatus } from "@/generated/prisma/enums";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { seedAdminUser } from "@/lib/seed/seedAdminUser";
+import { seedFakeUsers } from "@/lib/seed/seedFakeUsers";
 import { DEFAULT_FEATURES } from "@/modules/feature/feature.constants";
 import { DEFAULT_ROLES } from "@/modules/role/role.constants";
 
@@ -15,6 +17,8 @@ export type SeedResult = {
   featuresCount: number;
   rolesCount: number;
   demoUserSeeded: boolean;
+  adminUserSeeded: boolean;
+  fakeUsersCreated: number;
 };
 
 /**
@@ -109,9 +113,27 @@ export async function runSeed(): Promise<SeedResult> {
     demoUserSeeded = true;
   }
 
+  // Usuário admin de teste, acesso total — NUNCA true em produção/demo
+  // (diferente do demo, que é só leitura). Só dev/local.
+  let adminUserSeeded = false;
+  if (env.SEED_ADMIN_USER) {
+    await seedAdminUser();
+    adminUserSeeded = true;
+  }
+
+  // Dataset de usuários fake (customers/employees/híbridos + cenários de
+  // ban/pendência/soft delete) — popula dev e o demo público.
+  let fakeUsersCreated = 0;
+  if (env.SEED_FAKE_DATA) {
+    const fakeUsersResult = await seedFakeUsers();
+    fakeUsersCreated = fakeUsersResult.createdCount;
+  }
+
   return {
     featuresCount: DEFAULT_FEATURES.length,
     rolesCount: DEFAULT_ROLES.length,
     demoUserSeeded,
+    adminUserSeeded,
+    fakeUsersCreated,
   };
 }

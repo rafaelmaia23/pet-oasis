@@ -23,6 +23,7 @@ export type DemoResetCounts = {
   userRole: number;
   session: number;
   verificationToken: number;
+  previousEmail: number;
   employee: number;
   customer: number;
   user: number;
@@ -59,6 +60,7 @@ export async function runDemoReset(options: {
         userRole: await prisma.userRole.count(),
         session: await prisma.session.count(),
         verificationToken: await prisma.verificationToken.count(),
+        previousEmail: await prisma.previousEmail.count(),
         employee: await prisma.employee.count(),
         customer: await prisma.customer.count(),
         user: await prisma.user.count(),
@@ -70,6 +72,7 @@ export async function runDemoReset(options: {
         const session = (await tx.session.deleteMany()).count;
         const verificationToken = (await tx.verificationToken.deleteMany())
           .count;
+        const previousEmail = (await tx.previousEmail.deleteMany()).count;
         const employee = (await tx.employee.deleteMany()).count;
         const customer = (await tx.customer.deleteMany()).count;
         const user = (await tx.user.deleteMany()).count;
@@ -79,6 +82,7 @@ export async function runDemoReset(options: {
           userRole,
           session,
           verificationToken,
+          previousEmail,
           employee,
           customer,
           user,
@@ -93,6 +97,8 @@ export async function runDemoReset(options: {
         featuresCount: DEFAULT_FEATURES.length,
         rolesCount: DEFAULT_ROLES.length,
         demoUserSeeded: false,
+        adminUserSeeded: false,
+        fakeUsersCreated: 0,
       }
     : await runSeed();
   const durationMs = Date.now() - start;

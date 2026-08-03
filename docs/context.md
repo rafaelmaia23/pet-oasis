@@ -247,6 +247,24 @@ cpf aparece em `owner` (dado próprio) e `admin` (gerente vê — normal em pet 
 
 ---
 
+## 2.5 Seed de dados fake (implementado) — usuários
+
+> Trabalho pontual entre a Fase 7 e a Fase 8 (não é fase numerada). Passo-a-passo no `docs/todo.md`, seção "Seed de dados fake (usuários)".
+
+**Por que duas flags independentes (`SEED_FAKE_DATA` e `SEED_ADMIN_USER`), e não uma só:** o dataset fake (customers/employees/híbridos) é seguro no demo público — mesmo com escrita disponível via roles `manager`, o dano fica contido ao próprio dataset fake e o `demo-reset` diário restaura. Já o usuário admin de teste tem acesso total (`*`), e diferente do usuário demo (só leitura, já com credencial pública assumida como risco baixo), uma conta de escrita irrestrita exposta na internet é uma superfície de ataque real, mesmo que os dados voltem todo dia. Separar as flags permite ligar o dataset fake em produção/demo sem nunca ligar o admin lá — decisão confirmada com o usuário antes da implementação: `SEED_ADMIN_USER` só existe em `.env.development`.
+
+**Por que o dataset fake inclui roles com escrita (`manager`) mesmo sabendo do risco:** sinalizado explicitamente ao usuário antes de implementar (mesmo racional de "credencial pública, risco baixo, dado sempre restaurável" já usado para o `DEMO_PASSWORD`) — sem isso, o dataset não demonstraria as features de gestão de usuário (ban, force-password-reset, permission override) na prática. Aceito conscientemente, não por omissão.
+
+**Por que a idempotência depende só do email fixo, não de dado determinístico ponta-a-ponta:** a primeira versão do design cogitava semear nome/cpf/telefone com um `faker.seed()` fixo para que o dataset fosse idêntico a cada reseed. Na implementação, ficou claro que isso não é necessário: a checagem de idempotência é "existe um user com este email? se sim, pula" — uma vez criado, reruns nunca voltam a tocar CPF/nome/telefone daquele registro. `cpf-cnpj-validator` (`cpf.generate()`) também não é determinístico via seed do Faker (usa `Math.random` internamente, biblioteca própria), então perseguir determinismo total exigiria mais uma dependência tratável — descartado por não comprar nada: ninguém depende do CPF exato de um usuário fake. Nome/telefone ainda usam uma instância própria de Faker com seed fixo (mais consistente entre execuções, sem custo), mas isso é estética, não a garantia de idempotência.
+
+**Por que uma instância própria de Faker, não o `faker` singleton dos testes:** `@faker-js/faker` exporta um singleton compartilhado; chamar `.seed()` nele mudaria o stream de valores consumido por qualquer teste que rode no mesmo processo depois do módulo de seed ser importado — flakiness sutil dependente de ordem de import. `new Faker({ locale: [en] })` isola completamente o gerador do dataset fake do gerador usado pelas factories de teste.
+
+**Por que o dataset fake é criado direto via `userRepository`, não via `user.service`:** `user.service.createCustomer`/`createEmployee` dispara `issueEmailVerification` (email real, via SMTP). Rodando o seed a cada boot do container (entrypoint `migrate deploy → seed → start`), isso bombardearia o relay de emails de verificação inúteis a cada restart. O repository (mesma técnica de `tests/factories/user.factory.ts`) cria o usuário sem esse efeito colateral, e o `status` é forçado direto por `prisma.user.update` depois — idêntico ao que os testes já faziam.
+
+**Achado, corrigido junto (não era objetivo original):** `demo-reset.ts` truncava 8 tabelas na mesma ordem FK-safe de `clearDatabase()`, mas esqueceu `previousEmail` — a tabela só nasceu na Fase 7.15, depois da 7.14 ter sido escrita, e ninguém voltou para atualizar a lista. Sem o fix, um email trocado via `change-email` no ambiente demo ficaria **preso para sempre** mesmo após o reset diário (`PreviousEmail.email` é unique global, sem reativação no ciclo 1).
+
+---
+
 ## 3. Schema — pontos de atenção
 
 - **User**: id, name, cpf @unique, email @unique, passwordHash, createdAt, updatedAt, deletedAt?. Relações: employee?, customer?, roles[], features[], sessions[].

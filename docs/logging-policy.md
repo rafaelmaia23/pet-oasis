@@ -1,6 +1,6 @@
 # Política de Logs — pet-oasis
 
-> Status: definida na Fase 7, implementada nas sub-fases 7.3–7.6 e 7.11.
+> Status: definida na Fase 7, implementada nas sub-fases 7.3–7.6, 7.9–7.11, 7.14–7.16; fechada na 7.19.
 > Escopo: o que a aplicação emite, com qual formato, para onde vai, por quanto tempo fica e quem pode ler.
 > Fora de escopo: retenção e agregação a nível de infraestrutura (responsabilidade do deploy), backup e SIEM.
 

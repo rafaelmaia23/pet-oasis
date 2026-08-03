@@ -154,3 +154,10 @@ Taxonomia e `metadata` de cada ação em `docs/logging-policy.md` §4.3.
   no limite por email destinatário, não no por IP.
 - Se um lock **manual** virar necessidade operacional: sair do backlog e decidir
   a convivência com `bannedAt`/`status`.
+
+**O que a Fase 7 mostrou até aqui (7.19):** o fail-open só foi exercitado
+artificialmente — derrubando o container do Redis em dev/teste (7.0) — nunca
+por uma falha real em produção; segue sem dado de produção para reavaliar o
+ponto acima. Single-instance segue valendo (nenhuma réplica nova), e nenhum
+volume de envio chegou perto de pressionar o limite por email destinatário.
+Os quatro gatilhos acima continuam de pé, sem novidade a registrar ainda.

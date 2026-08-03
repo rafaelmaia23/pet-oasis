@@ -564,6 +564,32 @@ describe("POST /api/v1/auth/refresh", () => {
 
     expect(meResponse.status).toBe(200);
   });
+
+  it("should never persist the raw refresh token in refreshTokenHash (D1 regression)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const session = await prisma.session.findUniqueOrThrow({
+      where: { id: await sessionIdFromCookie(refreshCookie) },
+    });
+
+    expect(session.refreshTokenHash).not.toBe(rawToken);
+    expect(session.refreshTokenHash).toBe(hashToken(rawToken));
+  });
+
+  it("should return 401 when the refresh token is tampered with (D1 regression)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+    const tamperedToken = `${rawToken.slice(0, -1)}${rawToken.endsWith("0") ? "1" : "0"}`;
+
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", `${REFRESH_TOKEN_COOKIE_NAME}=${tamperedToken}`);
+
+    expect(response.status).toBe(401);
+  });
 });
 
 describe("POST /api/v1/auth/logout", () => {

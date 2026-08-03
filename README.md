@@ -10,7 +10,7 @@
 [![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Zod](https://img.shields.io/badge/Zod-4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/)
-[![Vitest](https://img.shields.io/badge/Vitest-606%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-618%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](https://spec.openapis.org/oas/v3.1.0)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#licença)
@@ -185,7 +185,7 @@ O raciocínio longo de cada uma está em [`docs/context.md`](docs/context.md); a
 
 ### Testes antes do código
 
-Toda feature nasce de um teste que falha. A suíte tem **606 testes** (Vitest + Supertest + Faker) rodando contra um Postgres e um Redis reais e isolados, subidos e derrubados pelo próprio `npm test` — integração de verdade, não mocks de banco ou de infra. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
+Toda feature nasce de um teste que falha. A suíte tem **618 testes** (Vitest + Supertest + Faker) rodando contra um Postgres e um Redis reais e isolados, subidos e derrubados pelo próprio `npm test` — integração de verdade, não mocks de banco ou de infra. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
 
 ### Disciplina de processo
 
@@ -210,6 +210,15 @@ API em `http://localhost:3000/api/v1`, referência interativa em `/reference` e 
 
 Há também uma coleção [Bruno](https://www.usebruno.com/) versionada em [`api-collection/`](api-collection/), organizada por módulo, com environments `local` e `prod` e o login já encadeando o token nas demais requests.
 
+### Dados de exemplo (seed)
+
+Além do catálogo de referência (roles/features, sempre semeado), o seed pode povoar dev e o próprio demo público com dados fictícios:
+
+- **`SEED_FAKE_DATA=true`** — 20 usuários fake (customers, employees, híbridos customer+employee, e cenários de banido/pendente-de-verificação/soft-deletado), todos com a mesma senha conhecida (`SEED_FAKE_USER_PASSWORD`, default `FakeOasis2026!`) — dá para logar como qualquer um pra explorar RBAC e soft delete na prática. Ligado por padrão em dev **e** no demo público.
+- **`SEED_ADMIN_USER=true`** — um usuário de teste com acesso total (role `admin`, diferente do usuário demo read-only), credenciais em `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`. **Só em dev** — nunca ligado no demo público, para não expor uma conta de escrita irrestrita na internet.
+
+Ambos são idempotentes (`npm run db:seed` não duplica nada) e restaurados todo dia pelo reset do ambiente demo.
+
 ---
 
 ## Roadmap
@@ -229,7 +238,8 @@ Há também uma coleção [Bruno](https://www.usebruno.com/) versionada em [`api
 
 | | Fase | Entrega |
 |---|---|---|
-| 🔜 | 8 — Domínio pet shop | Pets ligados a Customers, CRUD aninhado, escopos *own*/*others* — e, adiante, vendas e pedidos |
+| 🔜 | 8 — Reativação de conta deletada | Recuperar contas soft-deletadas sem prender perfis/emails que não deveriam voltar |
+| 🔜 | 9 — Domínio pet shop | Pets ligados a Customers, CRUD aninhado, escopos *own*/*others* — e, adiante, vendas e pedidos |
 
 Detalhe atômico de cada item em [`docs/todo.md`](docs/todo.md).
 

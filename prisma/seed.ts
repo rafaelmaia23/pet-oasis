@@ -12,6 +12,16 @@ async function main() {
   if (result.demoUserSeeded) {
     console.log(`Usuário demo (${env.DEMO_EMAIL}) sincronizado com sucesso.`);
   }
+  if (result.adminUserSeeded) {
+    console.log(
+      `Usuário admin de teste (${env.SEED_ADMIN_EMAIL}) sincronizado com sucesso.`,
+    );
+  }
+  if (result.fakeUsersCreated > 0) {
+    console.log(
+      `${result.fakeUsersCreated} usuários fake criados (dataset de demonstração).`,
+    );
+  }
 
   console.log("SEEDING COMPLETED!");
 }

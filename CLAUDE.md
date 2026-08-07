@@ -25,12 +25,15 @@ Se estiver em dúvida se algo é regra de negócio → **trate como se fosse e p
 Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos testes existentes (Vitest + Supertest, arquivos em `tests/integration/v1/` e `tests/unit/`). Ciclo de cada feature: escreve os testes do caso → roda e vê falhar → implementa o mínimo pra passar → refatora → commit. Nunca implemente uma feature sem teste que a guie.
 
 **Hierarquia de branches (git-flow por fase):**
-- `main` é a base estável — **nunca** se desenvolve direto nela.
-- Cada fase do roadmap (ver `docs/todo.md`) tem **uma branch de fase** criada a partir da `main`, nomeada `fase-<n>` (ex.: `fase-4`).
+- **`main` é produção.** **NENHUM** commit é feito direto nela — nunca, em hipótese alguma, nem mesmo commit de documentação ou de planejamento. `main` só recebe merge vindo de `dev`. No futuro esse merge dispara **deploy automático**, então tratar `main` como intocável não é preciosismo: é o que impede um commit de doc de virar um deploy.
+- **`dev` é a base de integração** e existe sempre. Toda branch de fase sai dela.
+- Cada fase do roadmap (ver `docs/todo.md`) tem **uma branch de fase** criada a partir da `dev`, nomeada `fase-<n>` (ex.: `fase-4`). O commit de **planejamento** da fase (o passo-a-passo no `docs/todo.md`) é o primeiro commit dessa branch — nunca vai direto na `dev` nem na `main`.
 - Cada feature da fase tem **sua própria branch** criada a partir da branch da fase, nomeada `feat/fase-<n>-<m>-<slug>` (ex.: `feat/fase-4-2-password-reset`). Ao terminar a feature (testes + `typecheck` + `lint` verdes), **mergeia de volta na branch da fase** (`--no-ff`) e apaga a branch da feature.
-- Ao concluir a **fase inteira**, a branch da fase é mergeada na `main`; entre uma fase e a próxima, fica só a `main` (+ a branch da fase seguinte quando começar).
+- Ao concluir a **fase inteira**, a branch da fase é mergeada na `dev` (`--no-ff`).
+- Depois de a suíte completa passar na `dev`, ela é mergeada na `main` e **uma `dev` nova é aberta a partir da `main`**.
+- Trabalho que não pertence a nenhuma fase (correção pontual, mudança de doc, ajuste de processo) também sai da `dev`, em branch própria com nome descritivo (ex.: `docs/branch-workflow`, `fix/<slug>`), e volta pra `dev` por merge `--no-ff`.
 
-Resumo do fluxo: `main` → `fase-<n>` → `feat/fase-<n>-<m>-<slug>` → merge na `fase-<n>` → (fim da fase) merge na `main`.
+Resumo do fluxo: `dev` → `fase-<n>` → `feat/fase-<n>-<m>-<slug>` → merge na `fase-<n>` → (fim da fase) merge na `dev` → (suíte verde) merge na `main` + nova `dev`.
 
 ## Commits em ingles
 

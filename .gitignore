@@ -5,3 +5,7 @@ src/generated
 .env
 .env.*
 !.env.example
+
+# Backup local da Fase 8 original (branch backup/fase-8-original é a cópia
+# durável). Temporário — remover junto com o diretório ao fechar a Fase 8.
+.fase-8-backup

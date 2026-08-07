@@ -331,6 +331,152 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 
 ---
 
+## Fase 8 — Autorização com escopo, cascata de deleção e reativação ⬜
+
+> **Esta fase já foi implementada uma vez e foi revertida.** O desenho original estava conceitualmente errado: construiu a máquina de reativação em cima de dois bugs pré-existentes (deleção de usuário que não cascateia, e override de feature sem escopo), e boa parte da complexidade que produziu existia só para contornar esses bugs. O código foi revertido para `d1b8478` em 2026-08-07 e a fase é refeita do zero com o modelo correto.
+>
+> **Desenho completo e racional em `docs/fase-8-redesign.md`** (documento de trabalho temporário — dissolve-se em `docs/context.md` e ADRs conforme as sub-fases fecham, e é apagado na 8.9). Backup da implementação antiga fica **fora do git**: branch local `backup/fase-8-original` e patches em `.fase-8-backup/` (gitignored).
+>
+> **O escopo cresceu:** não é mais só reativação. A fase agora conserta o modelo de autorização (escopo de override, unicidade de `UserRole`), o ciclo de vida de deleção (cascata), e só então constrói a reativação em cima de um modelo consistente. Mais o bug de produção do lockout da conta demo.
+>
+> Branch da fase: `fase-8`, a partir da `main`. Uma branch por sub-fase (`feat/fase-8-<n>-<slug>`).
+
+### Decisões firmadas no redesenho (2026-08-07)
+
+| # | Decisão | Escolha |
+|---|---|---|
+| D1 | Cascata de deleção | Total e sempre: `User` → perfis → `UserRole` → `UserFeature`. **Nunca existe filho ativo de pai morto** — estado inconsistente no banco é proibido, mesmo que não fosse computado. |
+| D2 | Escopo do override | `UserFeature` ganha FK para `UserRole`. Todo override pertence a uma atribuição de role, não ao usuário solto. Motivo: escopo por perfil é grosso demais — não captura mudança de função (funcionário deixa de ser estoquista mas continua funcionário; o override de estoquista tem que morrer). |
+| D3 | Unicidade de `UserRole` | `@@unique([userId, roleId])` no banco. Uma linha por par, para sempre; re-conceder **reusa** a linha (`deletedAt = null`). Tira a invariante do código e põe no banco. |
+| D4 | Correlação de restauração | Por `deletedAt`, com **um único timestamp por transação** propagado por toda a cascata. Sem coluna de "motivo da deleção" (avaliada e recusada — a data já resolve, e mantém a tabela limpa). |
+| D5 | Regra de restauração | Restaura o filho cujo `deletedAt` é **igual** ao do pai. Recursivo nos três níveis. |
+| D6 | Re-conceder role | Restaura os overrides daquela role. Tirar e devolver um cargo **não** zera os ajustes finos dele. |
+| D7 | Histórico de ciclos | Vive no audit log (`USER_ROLE_GRANTED`/`REVOKED`, `USER_PERMISSION_GRANTED`/`REVOKED`, já existentes), não na tabela. Tabela guarda estado, audit log guarda história. |
+| D8 | Escolha de roles ao religar | **Default traz todas** as que morreram na cascata; o admin pode escolher um subconjunto e ignorar o resto. |
+| D9 | Contrato do override | `PUT \| DELETE /users/:userId/roles/:roleId/features/:featureId`. A role vai no **path**, nunca no body — a identidade do override é a tripla `(user, role, feature)`, e body não identifica recurso (quebraria idempotência do `PUT` e o `DELETE` não tem semântica de body). |
+| D10 | Migration | **Zera o banco.** App só tem demo de portfólio no ar, sem dado real a preservar. |
+| D11 | Self-service nunca traz funcionário | Reativação pelo signup traz (ou cria) **apenas** o perfil de cliente. Perfil de funcionário só volta por ação de admin. |
+| D12 | Signup não faz account-linking | Email/cpf de conta **ativa** → recusa e orienta a logar; nunca mexe numa conta viva (cpf não é segredo). Herdada do N12 da fase antiga. |
+| D13 | Emails | Só o **email atual** de uma conta é reservado (inclusive de conta deletada). Email já trocado fica livre para reuso; `PreviousEmail` é só auditoria e nunca bloqueia. |
+| D14 | Invariante central | **Nunca** existe usuário ativo sem ao menos um perfil ativo. Vale em todos os fluxos, sem exceção. |
+| D15 | Mensagem de erro | `"Para excluir esse perfil use o endpoint de deleção de usuário."` (hoje diz "esse usuario", invertendo o sujeito). |
+
+### Sessões de trabalho
+
+| Sessão | Sub-fases | Tema | Por que agrupa |
+|---|---|---|---|
+| **A** ⬜ | 8.0 | Escopo de override + unicidade de `UserRole` | Fundação do modelo de autorização. Nada de cascata ou reativação faz sentido antes do override ter dono. |
+| **B** ⬜ | 8.1, 8.2 | Cascata + restauração por data | Mesma mecânica de dados, uma inútil sem a outra: cascatear sem saber restaurar deixa a fase pela metade. |
+| **C** ⬜ | 8.3 | Perfil em conta ativa | Primeiro fluxo de produto, já em cima do modelo correto. |
+| **D** ⬜ | 8.4, 8.5 | Conta deletada (self-service e admin) | Os dois disparam token e convergem na mesma confirmação. |
+| **E** ⬜ | 8.6, 8.7 | Emails liberados + rate limit | Transversais, independentes dos fluxos; 8.7 cobre as superfícies que 8.4/8.5 abriram. |
+| **F** ⬜ | 8.8 | Isenção do demo no lockout | Bug de produção, sem relação com perfil/reativação. Reaplicação do patch `0002`. |
+| **G** ⬜ | 8.9 | Fechos | Docs, suíte, `typecheck`/`lint`. |
+
+### ⬜ [Sessão A] Fase 8.0 — Escopo de override e unicidade de `UserRole`
+
+- ⬜ Migration (**zera o banco**, D10): `UserFeature.userId` → `userRoleId` (FK para `UserRole`) + `@@unique([userRoleId, featureId])`; `UserRole` ganha `grantedAt` (não existia) e `@@unique([userId, roleId])`. `User.features` deixa de ser relação direta — overrides passam a ser alcançados via `User.roles[].features[]`.
+- ⬜ `UserRole` passa a reusar linha na re-concessão (D3): busca a linha do par, `deletedAt = null`. Remove a unicidade-por-código ("busca ativo → update ou create").
+- ⬜ Revogar role cascateia para os overrides dela (D2), mesma transação, mesmo timestamp.
+- ⬜ Re-conceder role restaura os overrides dela (D6) — depende da regra de correlação, que nasce completa na 8.2; aqui basta a forma mais simples (os overrides daquela `UserRole`).
+- ⬜ Contrato novo (D9): `PUT|DELETE /users/:userId/roles/:roleId/features/:featureId` substitui `/users/:userId/features/:featureId`. `GET /users/:userId/permissions` passa a expor a role de cada override no presenter.
+- ⬜ `computeEffectiveFeatures` **não muda de assinatura** — continua somando só o que está vivo. Toda a correção é de dados, não de cômputo.
+- ⬜ Guard de não-escalação (`PRIVILEGED_FEATURES`) revisado para o contrato novo.
+- ⬜ Docs: `docs/endpoints.md`, coleção Bruno, OpenAPI.
+
+### ⬜ [Sessão B] Fase 8.1 — Cascata de deleção e timestamp único
+
+- ⬜ `deleteUser` passa a cascatear (D1): `User` → perfis ativos → `UserRole` ativas daquele `appliesTo` → `UserFeature` ativas daquela `UserRole`. Hoje marca só `User.deletedAt` e invalida sessões.
+- ⬜ Todas as cascatas propagam **um único `new Date()` por transação** (D4), passado como parâmetro. Nenhuma função de repositório de cascata pode chamar `new Date()` internamente — hoje `deleteCustomerProfile` chama duas vezes. **Merece teste dedicado** provando igualdade nos quatro níveis; se essa invariante vazar, o bug da 8.2 é silencioso.
+- ⬜ A cascata **só toca linhas ativas** (`deletedAt: null`) — o que já estava morto mantém o timestamp antigo, e é isso que preserva a distinção na restauração.
+- ⬜ Mensagem do último perfil corrigida (D15).
+- ⬜ Regressão: nenhum estado de perfil/role/override ativo sob pai morto, em nenhum caminho de deleção.
+
+### ⬜ [Sessão B] Fase 8.2 — Restauração por correlação de data
+
+- ⬜ Regra única e recursiva (D5): `reativar User` → restaura perfis onde `perfil.deletedAt == user.deletedAt` · `reativar perfil` → restaura `UserRole` onde `userRole.deletedAt == perfil.deletedAt` · `reconceder role` → restaura overrides onde `userFeature.deletedAt == userRole.deletedAt`.
+- ⬜ **Ler o `deletedAt` do pai antes de zerá-lo** — senão a comparação dos filhos perde a chave. Segunda invariante silenciosa.
+- ⬜ Regressão do caso difícil (§3.1 do redesenho): perfil morre em T2 (roles A e B), admin religa só A, perfil morre de novo em T3, admin religa → só A volta; B (T2) não bate mais. Prova que a recusa do admin persiste sem regra extra.
+- ⬜ Regressão: override removido explicitamente tem `deletedAt` que não bate com nenhum pai → nunca ressuscita.
+
+### ⬜ [Sessão C] Fase 8.3 — Perfil em conta ativa
+
+Os quatro estados possíveis de um usuário ativo (D14 garante que sempre há ≥1 perfil ativo):
+
+| Estado | O outro perfil | Quem pode agir | Rota |
+|---|---|---|---|
+| Cliente ativo | Funcionário nunca existiu | Só admin/manager — **cria** | `POST /users/:userId/employee` |
+| Cliente ativo | Funcionário soft-deleted | Só admin/manager — **reativa** | `POST /users/:userId/employee` |
+| Funcionário ativo | Cliente nunca existiu | **O próprio, sempre** + admin/manager — **cria** | `POST /users/:userId/customer` |
+| Funcionário ativo | Cliente soft-deleted | **O próprio, sempre** + admin/manager — **reativa** | `POST /users/:userId/customer` |
+
+- ⬜ Mesma rota cria **ou** reativa; o service ramifica pelo estado do perfil no banco. Nunca há self-service para virar funcionário; sempre há para virar cliente.
+- ⬜ `POST /auth/signup` nesses casos **recusa e orienta a logar** (D12) — não cria, não vincula, não muda nada.
+- 🔸 **Q1 — decidir no kickoff:** `attendant` passa a poder criar/reativar o perfil de cliente de **outra** pessoa? O desenho do usuário diz que sim ("funcionário que está ajudando o cliente"), mas hoje `ATTENDANT_FEATURES` só espelha `SELF_MANAGEMENT_FEATURES` — não tem nenhuma feature de administração de usuário. Exige mexer no catálogo.
+- 🔸 **Q2 — decidir no kickoff:** continuam existindo features `reactivate:*` separadas das `create:*`? O racional antigo (permitir bloquear uma sem a outra via override) muda de peso agora que override é escopado a role.
+
+### ⬜ [Sessão D] Fase 8.4 — Conta deletada: self-service via signup
+
+Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se distinguem pelo que existia:
+
+| Caso | O que existia | Resultado do self-service |
+|---|---|---|
+| A | Só cliente | Conta ativa + cliente **restaurado** (roles e overrides da cascata voltam) |
+| B | Só funcionário | Conta ativa + cliente **criado do zero**. Funcionário **continua morto** (D11) |
+| C | Cliente + funcionário | Conta ativa + cliente **restaurado**. Funcionário **continua morto** (D11) |
+
+- ⬜ Signup detecta email de conta soft-deleted; cpf batendo → dispara reativação; cpf não batendo → 409 genérico (não revela que a conta existe).
+- ⬜ Nunca resulta em conta ativa sem perfil ativo (D14).
+- 🔸 **Q3 — decidir no kickoff:** reativação de conta continua exigindo senha nova? (era N6 da fase antiga)
+- 🔸 **Q4 — decidir no kickoff:** signup que detecta conta deletada continua respondendo 202?
+
+### ⬜ [Sessão D] Fase 8.5 — Conta deletada: caminho do admin
+
+| Caso | Admin pode |
+|---|---|
+| A — só cliente | Restaurar cliente |
+| B — só funcionário | Restaurar funcionário · criar cliente do zero · ambos |
+| C — os dois | Restaurar cliente · funcionário · ambos |
+
+- ⬜ Admin escolhe **perfis e roles** (D8: default traz todas as roles que morreram na cascata; pode escolher subconjunto).
+- ⬜ Schema recusa escolher zero perfis (D14).
+- ⬜ Confirmação converge com a da 8.4 (público, token como credencial).
+- 🔸 **Q5 — decidir no kickoff:** o endpoint continua sendo `POST /users/:id/reactivate`?
+- 🔸 **Q6 — decidir no kickoff:** guard de não-escalação para alvo que **era** privilegiado continua exigindo ator admin?
+- 🔸 **Q7 — decidir no kickoff:** como o admin nomeia as roles a restaurar — ids no body, ou default implícito com lista de exclusão?
+- 🔸 **Q8 — decidir no kickoff:** overrides restaurados de uma role privilegiada precisam de checagem de não-escalação **no momento da restauração**? (contorna o guard de concessão se não tiver)
+
+### ⬜ [Sessão E] Fase 8.6 — Emails liberados
+
+- ⬜ D13: só o **email atual** de uma conta é reservado (inclusive de conta deletada — `User.email @unique` global já garante, sem mudança de schema). Email já trocado fica livre.
+- ⬜ Os três call sites de `findPreviousEmailByEmail` que lançam 409 saem (signup de customer, admin criando employee, `POST /auth/change-email`); `assertEmailAvailable` fica vazia e é apagada; `findPreviousEmailByEmail` vira código morto e é apagada.
+- ⬜ `PreviousEmail` (tabela e criação do registro) **não muda** — continua como auditoria, só para de ser consultada para bloquear.
+- ⬜ Referência de implementação: patch `.fase-8-backup/0003-*` (commit `6dde2d8`). É um commit de remoção; depois do revert as checagens voltaram a existir, então deve aplicar bem.
+
+### ⬜ [Sessão E] Fase 8.7 — Rate limiting / anti-enumeração
+
+- ⬜ Infra aproveitável do patch `.fase-8-backup/0004-*` (commit `cad332e`): `AppError.headers` + `Retry-After` aplicado pelo error handler central, e `consumeEmailTargetLimit` chamável direto do service (os call sites são no service, que não enxerga `Request`/`Response`).
+- ⬜ ⚠️ **Descartar** as ~19 linhas do patch em `user.service.ts` — é o call site dentro do `forceAccountReactivation` antigo, que foi reescrito.
+- ⬜ Cobre as superfícies novas de 8.4/8.5, no mesmo balde Redis das rotas antigas, com `rule` própria para distinguir a origem no audit log.
+- ⬜ Regressão: login em conta deletada responde 401 genérico, indistinguível de senha errada.
+
+### ⬜ [Sessão F] Fase 8.8 — Isentar a conta demo do account lockout
+
+> Bug de produção pós-deploy da Fase 7: o lockout conta por `userId`, então segue o usuário demo entre redes/dispositivos — ao contrário do rate limit por IP. Como a senha do demo é pública (README), o lockout ali não protege credencial nenhuma e vira negação de serviço contra a porta de entrada do projeto. O demo-reset diário não resolve (estado do lockout vive no Redis, fora do alcance do truncate).
+
+- ⬜ Reaplicação integral do patch `.fase-8-backup/0002-*` (commit `e565f7a`) — é o mais limpo dos três, toca só `lockout.ts` e `auth.service.ts`, sem interseção com perfil/reativação.
+- ⬜ Predicado puro `isLockoutExempt`, identificação pela role `demo` (já vem no fetch do login, sem query extra). Rate limit por IP continua valendo para o demo.
+
+### ⬜ [Sessão G] Fase 8.9 — Fechos
+
+- ⬜ `docs/endpoints.md`, coleção Bruno, OpenAPI, `README.md` (contagem de testes).
+- ⬜ `docs/context.md`: seção nova sobre o modelo de autorização com escopo (§2.x) e o fecho da fase (§4).
+- ⬜ ADR novo ou adendo sobre escopo de override e cascata — o racional de D2/D3/D4 é o tipo de decisão que se re-questiona daqui a um ano.
+- ⬜ `CLAUDE.md`: a regra firmada de override ("`UserFeature` guarda só overrides, nunca cópias") ganha o escopo de role.
+- ⬜ Dissolver `docs/fase-8-redesign.md` e apagar `.fase-8-backup/` (ou promover a branch de backup a tag, se valer guardar).
+- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes.
+
+---
+
 ## Fases seguintes (resumo)
-- **Fase 8 — Reativação de conta deletada (soft delete):** serviço para reativar contas que tenham sido deletada. Hoje quando acontece um delete de uma conta, a conta entra no soft delete o que prende o email e os dados que são unicos na tabela. Essa fase tem como objetivo permitir que usuarios que tenham deletado a sua conta recuperem a conta e atualizem para novos dados (usuario pode ter mudado email e etc) - um ponto de atenção é não recuperar perfis errados, ex: um usuario que era employee e customer, deixou de ser employee e teve a conta deletada, mas quer "criar" uma conta de customer (signup), teria o cpf preso na conta antigo, ele deve ser capaz de recuperar a conta, mas apenas customer - sem o perfil de employee que deve permanecer soft delete. A feature de troca de email criou uma tabela de emails antigos de um usuario - hoje, um email antigo de usuario, deixa o email trabalho que nem o soft delete de um usuario faz. A partir desse momento, emails antigos não devem deixar o email preso e ele deve ser capaz de criar uma conta nova no app.
-- **Fase 9 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.
+- **Fase 9 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff. Planejamento detalhado existe no commit `1723b75` (patch `.fase-8-backup/0001-*`) e é reaplicado depois que a Fase 8 fechar.

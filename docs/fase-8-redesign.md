@@ -112,6 +112,7 @@ perfil de **funcionário** vivo — nunca o de cliente que ele pediu.
 | **D13** | Emails | Só o **email atual** de uma conta é reservado (inclusive de conta deletada). Email já trocado fica livre para reuso; `PreviousEmail` é só auditoria e nunca bloqueia. |
 | **D14** | Invariante central | **Nunca** existe usuário ativo sem ao menos um perfil ativo. Vale em todos os fluxos, sem exceção. |
 | **D15** | Mensagem de erro | `"Para excluir esse perfil use o endpoint de deleção de usuário."` (hoje diz "esse usuario", invertendo o sujeito). |
+| **D16** | Não-escalação na restauração | Ao ressuscitar overrides (re-conceder role, religar perfil, reativar conta), roda o guard de privilégio **sobre o ator**. Se o ator **não** é admin, a ação prossegue normalmente mas os overrides de `PRIVILEGED_FEATURES` (+ `*`) **não** são restaurados. Se é admin, restaura tudo. Separa *autorizar a ação* de *autorizar o conteúdo* — o manager continua podendo conceder a role, sem virar um caminho de escalação. |
 
 ### 3.1 Por que `deletedAt` e não uma coluna de motivo
 
@@ -411,7 +412,21 @@ Resolver no kickoff da sub-fase correspondente — **não decidir na implementa�
 | Q5 | O endpoint de reativação por admin continua sendo `POST /users/:id/reactivate`? | 8.5 |
 | Q6 | Guard de não-escalação para alvo que **era** privilegiado continua exigindo ator admin? (era decisão de kickoff da 8.4 antiga) | 8.5 |
 | Q7 | Como o admin nomeia as roles a restaurar — ids no body, ou default implícito com lista de exclusão? | 8.5 |
-| Q8 | Overrides restaurados de uma role privilegiada precisam de checagem de não-escalação no momento da restauração? | 8.5 |
+| ~~Q8~~ | ~~Overrides restaurados precisam de checagem de não-escalação?~~ **Resolvida em D16.** Resta uma sub-questão, abaixo | — |
+| Q9 | **Quem é o "ator" na confirmação de reativação de conta?** A rota é pública (token é a credencial), então não há `isAdmin` para checar no momento em que a restauração acontece. Encaminhamento natural: capturar a autoridade em **tempo de emissão do token** (`restorePrivileged: boolean` gravado nele, mesmo idioma do `restoreCustomer`/`restoreEmployee` da fase antiga) e honrar na confirmação. Signup self-service nunca tem admin envolvido → nunca restaura privilegiada | 8.5 |
+
+### 9.1 Consequências de D16 a registrar na implementação
+
+1. **O descarte é permanente, não adiado.** O override privilegiado pulado mantém o
+   `deletedAt` antigo — numa revogação/reconcessão futura, mesmo por um admin, o
+   timestamp não bate com o novo pai e ele **não volta sozinho**. Só por concessão
+   explícita. Coerente com fail-closed, mas precisa estar escrito.
+2. **O descarte é silencioso.** O ator recebe sucesso e a role volta, sem nada na
+   resposta indicando que um override foi dropado. Merece **registro no audit log**,
+   pelo padrão de auditoria do projeto.
+3. **Vale nos três caminhos de restauração** — re-conceder role, religar perfil,
+   reativar conta — com a mesma regra e o mesmo predicado do guard atual, incluindo
+   o wildcard: `name === "*" || PRIVILEGED_FEATURE_SET.has(name)`.
 
 ---
 

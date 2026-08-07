@@ -360,6 +360,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | D13 | Emails | Só o **email atual** de uma conta é reservado (inclusive de conta deletada). Email já trocado fica livre para reuso; `PreviousEmail` é só auditoria e nunca bloqueia. |
 | D14 | Invariante central | **Nunca** existe usuário ativo sem ao menos um perfil ativo. Vale em todos os fluxos, sem exceção. |
 | D15 | Mensagem de erro | `"Para excluir esse perfil use o endpoint de deleção de usuário."` (hoje diz "esse usuario", invertendo o sujeito). |
+| D16 | Não-escalação na restauração | Ao ressuscitar overrides, roda o guard de privilégio **sobre o ator**. Ator não-admin: a ação prossegue normalmente, mas os overrides de `PRIVILEGED_FEATURES` (+ `*`) **não** voltam. Ator admin: restaura tudo. Separa *autorizar a ação* de *autorizar o conteúdo* — o manager continua podendo conceder a role, sem que isso vire caminho de escalação. Motivo: `assertAdminForRoleAssignment` inspeciona as features **estáticas** da role, e com D2 uma `UserRole` passa a carregar features **dinâmicas** (os overrides pendurados nela) que o guard não enxerga. |
 
 ### Sessões de trabalho
 
@@ -379,6 +380,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ⬜ `UserRole` passa a reusar linha na re-concessão (D3): busca a linha do par, `deletedAt = null`. Remove a unicidade-por-código ("busca ativo → update ou create").
 - ⬜ Revogar role cascateia para os overrides dela (D2), mesma transação, mesmo timestamp.
 - ⬜ Re-conceder role restaura os overrides dela (D6) — depende da regra de correlação, que nasce completa na 8.2; aqui basta a forma mais simples (os overrides daquela `UserRole`).
+- ⬜ **D16 nasce aqui** (primeiro dos três caminhos de restauração): se o ator não é admin, a role é concedida normalmente mas os overrides de `PRIVILEGED_FEATURES` (+ `*`) **não** ressuscitam. Sem isso, um manager re-concedendo uma role não-privilegiada ressuscita um override privilegiado pendurado nela — `assertAdminForRoleAssignment` só olha as features estáticas da role e não enxerga esse caminho. Descarte é permanente e silencioso → **auditar**.
 - ⬜ Contrato novo (D9): `PUT|DELETE /users/:userId/roles/:roleId/features/:featureId` substitui `/users/:userId/features/:featureId`. `GET /users/:userId/permissions` passa a expor a role de cada override no presenter.
 - ⬜ `computeEffectiveFeatures` **não muda de assinatura** — continua somando só o que está vivo. Toda a correção é de dados, não de cômputo.
 - ⬜ Guard de não-escalação (`PRIVILEGED_FEATURES`) revisado para o contrato novo.
@@ -412,6 +414,7 @@ Os quatro estados possíveis de um usuário ativo (D14 garante que sempre há �
 
 - ⬜ Mesma rota cria **ou** reativa; o service ramifica pelo estado do perfil no banco. Nunca há self-service para virar funcionário; sempre há para virar cliente.
 - ⬜ `POST /auth/signup` nesses casos **recusa e orienta a logar** (D12) — não cria, não vincula, não muda nada.
+- ⬜ **D16 aplicada aqui** (segundo caminho de restauração): manager religando perfil de funcionário não ressuscita overrides privilegiados das roles restauradas; admin ressuscita. Mesmo predicado e mesma auditoria da 8.0.
 - 🔸 **Q1 — decidir no kickoff:** `attendant` passa a poder criar/reativar o perfil de cliente de **outra** pessoa? O desenho do usuário diz que sim ("funcionário que está ajudando o cliente"), mas hoje `ATTENDANT_FEATURES` só espelha `SELF_MANAGEMENT_FEATURES` — não tem nenhuma feature de administração de usuário. Exige mexer no catálogo.
 - 🔸 **Q2 — decidir no kickoff:** continuam existindo features `reactivate:*` separadas das `create:*`? O racional antigo (permitir bloquear uma sem a outra via override) muda de peso agora que override é escopado a role.
 
@@ -444,7 +447,8 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 - 🔸 **Q5 — decidir no kickoff:** o endpoint continua sendo `POST /users/:id/reactivate`?
 - 🔸 **Q6 — decidir no kickoff:** guard de não-escalação para alvo que **era** privilegiado continua exigindo ator admin?
 - 🔸 **Q7 — decidir no kickoff:** como o admin nomeia as roles a restaurar — ids no body, ou default implícito com lista de exclusão?
-- 🔸 **Q8 — decidir no kickoff:** overrides restaurados de uma role privilegiada precisam de checagem de não-escalação **no momento da restauração**? (contorna o guard de concessão se não tiver)
+- ⬜ **D16 aplicada aqui** (e na 8.0 e 8.3, os outros dois caminhos de restauração): ator não-admin religa a conta → overrides de `PRIVILEGED_FEATURES` (+ `*`) não voltam; ator admin → voltam. Predicado igual ao do guard atual (`name === "*" || PRIVILEGED_FEATURE_SET.has(name)`). O descarte é **permanente** (o override pulado mantém o `deletedAt` antigo e não bate com nenhum pai futuro) e **silencioso** → **registrar no audit log**.
+- 🔸 **Q9 — decidir no kickoff:** quem é o "ator" na confirmação de reativação de conta? A rota é pública (token é a credencial), então não há `isAdmin` para checar no momento em que a restauração acontece. Encaminhamento natural: capturar a autoridade em tempo de **emissão do token** (`restorePrivileged: boolean` gravado nele, mesmo idioma do `restoreCustomer`/`restoreEmployee` da fase antiga) e honrar na confirmação. Signup self-service nunca tem admin envolvido → nunca restaura privilegiada.
 
 ### ⬜ [Sessão E] Fase 8.6 — Emails liberados
 

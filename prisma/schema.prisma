@@ -87,7 +87,11 @@ model Role {
   id          String       @id @default(uuid())
   name        String       @unique
   description String?
-  appliesTo   ProfileKind?
+  // Obrigatório: toda role pertence a exatamente um perfil. É isso que faz
+  // "matar as roles do perfil" e "matar as roles do usuário" serem a mesma
+  // coisa na cascata (D1) — sem isso existiria role órfã, morta pela cascata e
+  // restaurável por perfil nenhum.
+  appliesTo   ProfileKind
   createdAt   DateTime     @default(now()) @map("created_at")
 
   features RoleFeature[]

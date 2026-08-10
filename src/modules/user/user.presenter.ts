@@ -44,16 +44,19 @@ const adminView = ownerView
           id: z.uuid(),
           name: z.string(),
         }),
-      }),
-    ),
-    features: z.array(
-      z.object({
-        granted: z.boolean(),
-        grantedAt: z.coerce.date(),
-        feature: z.object({
-          id: z.uuid(),
-          name: z.string(),
-        }),
+        // Os overrides moram dentro da atribuição de role (D2) — a view
+        // espelha a junção em vez de achatá-la, para não perder a informação
+        // de a qual atribuição cada ajuste pertence.
+        features: z.array(
+          z.object({
+            granted: z.boolean(),
+            grantedAt: z.coerce.date(),
+            feature: z.object({
+              id: z.uuid(),
+              name: z.string(),
+            }),
+          }),
+        ),
       }),
     ),
   })

@@ -34,14 +34,16 @@ permissionRouter.delete(
   permissionController.removeUserRole,
 );
 
+// A role vai no path porque a identidade do override é a tripla
+// (user, role, feature) — body não identifica recurso (D9).
 permissionRouter.put(
-  "/features/:featureId",
+  "/roles/:roleId/features/:featureId",
   canAccess("manage:permission"),
   permissionController.upsertUserFeature,
 );
 
 permissionRouter.delete(
-  "/features/:featureId",
+  "/roles/:roleId/features/:featureId",
   canAccess("manage:permission"),
   permissionController.removeUserFeature,
 );

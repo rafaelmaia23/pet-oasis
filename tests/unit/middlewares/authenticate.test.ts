@@ -87,8 +87,12 @@ describe("authenticate middleware", () => {
 
   it("valid JWT + user found -> populates req.user and calls next() without error", async () => {
     mockedGetUserForFeatureComputation.mockResolvedValue({
-      roles: [{ role: { features: [{ feature: { name: "read:user" } }] } }],
-      features: [{ granted: true, feature: { name: "read:permission" } }],
+      roles: [
+        {
+          role: { features: [{ feature: { name: "read:user" } }] },
+          features: [{ granted: true, feature: { name: "read:permission" } }],
+        },
+      ],
     } as Awaited<ReturnType<typeof getUserForFeatureComputation>>);
 
     const token = signToken({ sub: "user-id-123" });

@@ -168,7 +168,11 @@ describe("Audit log", () => {
     expect(await auditRows("USER_ROLE_REVOKED")).toEqual([
       expect.objectContaining({
         targetId: target.id,
-        metadata: { roleId: managerRole?.id, roleName: "manager" },
+        metadata: {
+          roleId: managerRole?.id,
+          roleName: "manager",
+          cascadedOverrides: 0,
+        },
       }),
     ]);
   });
@@ -179,9 +183,13 @@ describe("Audit log", () => {
     const target = await buildEmployee();
     const token = await loginAs(admin.email, admin.password);
     const feature = await getFeatureByName("read:role");
+    // O override pendura na atribuição de role (D2), então a role vai no path.
+    const attendantRole = await getRoleByName("attendant");
+
+    const url = `/api/v1/users/${target.id}/roles/${attendantRole?.id}/features/${feature?.id}`;
 
     await request(app)
-      .put(`/api/v1/users/${target.id}/features/${feature?.id}`)
+      .put(url)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -189,18 +197,21 @@ describe("Audit log", () => {
       expect.objectContaining({
         actorId: admin.id,
         targetId: target.id,
-        metadata: { featureName: "read:role", effect: "GRANT" },
+        metadata: {
+          featureName: "read:role",
+          roleId: attendantRole?.id,
+          roleName: "attendant",
+          effect: "GRANT",
+        },
       }),
     ]);
 
-    await request(app)
-      .delete(`/api/v1/users/${target.id}/features/${feature?.id}`)
-      .set("Authorization", `Bearer ${token}`);
+    await request(app).delete(url).set("Authorization", `Bearer ${token}`);
 
     expect(await auditRows("USER_PERMISSION_REVOKED")).toEqual([
       expect.objectContaining({
         targetId: target.id,
-        metadata: { featureName: "read:role" },
+        metadata: { featureName: "read:role", roleId: attendantRole?.id },
       }),
     ]);
   });

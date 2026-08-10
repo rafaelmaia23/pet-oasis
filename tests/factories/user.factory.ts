@@ -25,6 +25,54 @@ import {
 } from "@/modules/user/user.service";
 import { makePassword } from "../helpers/primitives";
 
+/**
+ * Pendura os overrides numa atribuição de role do usuário (D2 — override sem
+ * `UserRole` não existe mais). Default: a **primeira** role do usuário; quem
+ * precisar escolher passa `overrideRole`.
+ */
+async function attachOverrides(
+  userId: string,
+  overrides: {
+    grants?: FeatureName[];
+    denies?: FeatureName[];
+    overrideRole?: RoleName;
+  },
+) {
+  const grants = overrides.grants ?? [];
+  const denies = overrides.denies ?? [];
+
+  if (grants.length === 0 && denies.length === 0) return;
+
+  const userRole = await prisma.userRole.findFirst({
+    where: {
+      userId,
+      deletedAt: null,
+      ...(overrides.overrideRole && {
+        role: { name: overrides.overrideRole },
+      }),
+    },
+  });
+
+  if (!userRole)
+    throw createInternalServerError({
+      message: "No active user role to attach the feature overrides to",
+      action: "Verificar as roles pedidas na factory",
+    });
+
+  for (const { name, granted } of [
+    ...grants.map((name) => ({ name, granted: true })),
+    ...denies.map((name) => ({ name, granted: false })),
+  ]) {
+    await prisma.userFeature.create({
+      data: {
+        userRole: { connect: { id: userRole.id } },
+        feature: { connect: { name } },
+        granted,
+      },
+    });
+  }
+}
+
 const makeUserData = (overrides?: Partial<CreateCustomerInput>) => {
   const rawData = {
     name: overrides?.name ?? faker.person.fullName(),
@@ -58,6 +106,7 @@ export async function buildCustomer(overrides?: {
   roleNames?: RoleName[];
   grants?: FeatureName[];
   denies?: FeatureName[];
+  overrideRole?: RoleName;
   status?: UserStatus;
   data?: Partial<CreateCustomerInput>;
 }) {
@@ -80,23 +129,8 @@ export async function buildCustomer(overrides?: {
     data: { status: overrides?.status ?? "ACTIVE" },
   });
 
-  if (overrides?.grants || overrides?.denies) {
-    const userFeatures = [
-      ...(overrides?.grants ?? []).map((name) => ({ name, granted: true })),
-      ...(overrides?.denies ?? []).map((name) => ({ name, granted: false })),
-    ];
-
-    //in future use permission repository instead of direct prisma access
-    for (const { name, granted } of userFeatures) {
-      await prisma.userFeature.create({
-        data: {
-          user: { connect: { id: user.id } },
-          feature: { connect: { name } },
-          granted,
-        },
-      });
-    }
-  }
+  //in future use permission repository instead of direct prisma access
+  await attachOverrides(user.id, overrides ?? {});
 
   const userInDb = await findUserById(user.id);
 
@@ -113,6 +147,7 @@ export async function buildEmployee(overrides?: {
   roleNames?: RoleName[];
   grants?: FeatureName[];
   denies?: FeatureName[];
+  overrideRole?: RoleName;
   status?: UserStatus;
   data?: Partial<CreateEmployeeInput>;
 }) {
@@ -135,23 +170,8 @@ export async function buildEmployee(overrides?: {
     data: { status: overrides?.status ?? "ACTIVE" },
   });
 
-  if (overrides?.grants || overrides?.denies) {
-    const userFeatures = [
-      ...(overrides?.grants ?? []).map((name) => ({ name, granted: true })),
-      ...(overrides?.denies ?? []).map((name) => ({ name, granted: false })),
-    ];
-
-    //in future use permission repository instead of direct prisma access
-    for (const { name, granted } of userFeatures) {
-      await prisma.userFeature.create({
-        data: {
-          user: { connect: { id: user.id } },
-          feature: { connect: { name } },
-          granted,
-        },
-      });
-    }
-  }
+  //in future use permission repository instead of direct prisma access
+  await attachOverrides(user.id, overrides ?? {});
 
   const userInDb = await findUserById(user.id);
 
@@ -179,18 +199,23 @@ export async function buildAuthUser(
       : DEFAULT_CUSTOMER_ROLES);
   const roles = await getRolesByNames(roleNames);
 
+  // Mesma convenção de `attachOverrides`: os overrides pendem da primeira role.
+  const userFeatures = [
+    ...(overrides?.grants ?? []).map((name) => ({
+      granted: true,
+      feature: { name },
+    })),
+    ...(overrides?.denies ?? []).map((name) => ({
+      granted: false,
+      feature: { name },
+    })),
+  ];
+
   const userForComputation = {
-    roles: roles.map((role) => ({ role: { features: role.features } })),
-    features: [
-      ...(overrides?.grants ?? []).map((name) => ({
-        granted: true,
-        feature: { name },
-      })),
-      ...(overrides?.denies ?? []).map((name) => ({
-        granted: false,
-        feature: { name },
-      })),
-    ],
+    roles: roles.map((role, index) => ({
+      role: { features: role.features },
+      features: index === 0 ? userFeatures : [],
+    })),
   };
 
   return {

@@ -85,13 +85,21 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
-| GET `/api/v1/users/:userId/features` | `read:permission` | Lista os overrides de feature do usuário |
+| GET `/api/v1/users/:userId/features` | `read:permission` | Lista os overrides de feature do usuário, cada um com a role a que pertence |
 | GET `/api/v1/users/:userId/roles` | `read:permission` | Lista as roles ativas do usuário |
 | GET `/api/v1/users/:userId/permissions` | `read:permission` | Lista as features efetivas do usuário |
-| POST `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Concede uma role ao usuário |
-| DELETE `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Revoga uma role do usuário |
-| PUT `/api/v1/users/:userId/features/:featureId` | `manage:permission` | Cria/atualiza um override de feature (grant/deny) |
-| DELETE `/api/v1/users/:userId/features/:featureId` | `manage:permission` | Remove um override de feature |
+| POST `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Concede uma role ao usuário (reusa a linha se já houve; restaura os overrides dela) |
+| DELETE `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Revoga uma role do usuário (cascateia para os overrides dela) |
+| PUT `/api/v1/users/:userId/roles/:roleId/features/:featureId` | `manage:permission` | Cria/atualiza um override de feature (grant/deny) numa role do usuário |
+| DELETE `/api/v1/users/:userId/roles/:roleId/features/:featureId` | `manage:permission` | Remove um override de feature |
+
+**Escopo do override (Fase 8.0, D2/D9):** um override pertence a uma **atribuição de
+role**, não ao usuário solto — por isso a role vai no path. Sem a role ativa, o `PUT`
+responde **422** (`errors.roleId`); o `DELETE` responde **404** para a tripla inteira, sem
+revelar se o usuário tem aquela role. Revogar a role mata os overrides pendurados nela;
+re-conceder os traz de volta — exceto os privilegiados, se o ator não for admin (D16),
+caso em que o descarte é permanente e fica registrado como
+`USER_PERMISSION_RESTORE_SKIPPED` no audit log.
 
 ## Feature — `src/modules/feature/feature.routes.ts`
 

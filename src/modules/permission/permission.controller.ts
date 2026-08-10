@@ -92,6 +92,7 @@ export const upsertUserFeature = async (req: Request, res: Response) => {
   const userFeature = await permissionService.upsertUserFeature(
     requestingUser.id,
     params.userId,
+    params.roleId,
     params.featureId,
     body.granted,
   );
@@ -109,6 +110,7 @@ export const removeUserFeature = async (req: Request, res: Response) => {
   await permissionService.removeUserFeature(
     requesterId,
     params.userId,
+    params.roleId,
     params.featureId,
   );
 

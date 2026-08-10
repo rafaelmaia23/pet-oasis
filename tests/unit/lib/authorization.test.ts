@@ -11,12 +11,14 @@ import {
 } from "@/lib/authorization";
 import type { FeatureName } from "@/modules/feature/feature.constants";
 
+// Espelha o shape de `getUserForFeatureComputation` depois da Fase 8.0: o
+// override não pendura no user solto, mora dentro da atribuição de role (D2).
 type TestUser = {
   id: string;
   roles: {
     role: { name: string; features: { feature: { name: FeatureName } }[] };
+    features: { granted: boolean; feature: { name: FeatureName } }[];
   }[];
-  features: { granted: boolean; feature: { name: FeatureName } }[];
 };
 
 describe("Authorization", () => {
@@ -172,7 +174,6 @@ describe("Authorization", () => {
     it("should return a empty set if the user has no features or roles", () => {
       const user: TestUser = {
         id: "615e3654-f291-4959-8a29-b5bf2675d7e8",
-        features: [],
         roles: [],
       };
 
@@ -184,7 +185,6 @@ describe("Authorization", () => {
     it("should return a set of effective features for the user", () => {
       const user: TestUser = {
         id: "615e3654-f291-4959-8a29-b5bf2675d7e8",
-        features: [{ granted: true, feature: { name: "read:user:others" } }],
         roles: [
           {
             role: {
@@ -196,6 +196,9 @@ describe("Authorization", () => {
                 { feature: { name: "read:session" } },
               ],
             },
+            features: [
+              { granted: true, feature: { name: "read:user:others" } },
+            ],
           },
         ],
       };
@@ -216,10 +219,6 @@ describe("Authorization", () => {
     it("should not include features that are explicitly denied", () => {
       const user: TestUser = {
         id: "615e3654-f291-4959-8a29-b5bf2675d7e8",
-        features: [
-          { granted: true, feature: { name: "read:user:others" } },
-          { granted: false, feature: { name: "read:feature" } },
-        ],
         roles: [
           {
             role: {
@@ -231,6 +230,10 @@ describe("Authorization", () => {
                 { feature: { name: "read:session" } },
               ],
             },
+            features: [
+              { granted: true, feature: { name: "read:user:others" } },
+              { granted: false, feature: { name: "read:feature" } },
+            ],
           },
           {
             role: {
@@ -243,6 +246,7 @@ describe("Authorization", () => {
                 { feature: { name: "read:feature" } },
               ],
             },
+            features: [],
           },
         ],
       };
@@ -263,10 +267,38 @@ describe("Authorization", () => {
       );
     });
 
+    // Trava a ordem: TODAS as features estáticas primeiro, TODOS os overrides
+    // depois. Num laço só (role por role), este deny seria aplicado antes de a
+    // role `manager` somar `read:feature`, e a feature sobreviveria.
+    it("should apply every override after every role feature, whatever the role order", () => {
+      const user: TestUser = {
+        id: "615e3654-f291-4959-8a29-b5bf2675d7e8",
+        roles: [
+          {
+            role: {
+              name: "attendant",
+              features: [{ feature: { name: "read:user" } }],
+            },
+            features: [{ granted: false, feature: { name: "read:feature" } }],
+          },
+          {
+            role: {
+              name: "manager",
+              features: [{ feature: { name: "read:feature" } }],
+            },
+            features: [],
+          },
+        ],
+      };
+
+      const result = computeEffectiveFeatures(user);
+
+      expect(result).toEqual(new Set(["read:user"]));
+    });
+
     it("should deduplicate features from multiple roles", () => {
       const user: TestUser = {
         id: "615e3654-f291-4959-8a29-b5bf2675d7e8",
-        features: [],
         roles: [
           {
             role: {
@@ -278,6 +310,7 @@ describe("Authorization", () => {
                 { feature: { name: "read:session" } },
               ],
             },
+            features: [],
           },
           {
             role: {
@@ -289,6 +322,7 @@ describe("Authorization", () => {
                 { feature: { name: "read:session" } },
               ],
             },
+            features: [],
           },
         ],
       };
@@ -303,7 +337,6 @@ describe("Authorization", () => {
     it("should grant access of feature it explicitly granted even if no role grants it", () => {
       const user: TestUser = {
         id: "615e3654-f291-4959-8a29-b5bf2675d7e8",
-        features: [{ granted: true, feature: { name: "read:feature" } }],
         roles: [
           {
             role: {
@@ -315,6 +348,7 @@ describe("Authorization", () => {
                 { feature: { name: "read:session" } },
               ],
             },
+            features: [{ granted: true, feature: { name: "read:feature" } }],
           },
           {
             role: {
@@ -326,6 +360,7 @@ describe("Authorization", () => {
                 { feature: { name: "delete:user:others" } },
               ],
             },
+            features: [],
           },
         ],
       };
@@ -350,8 +385,12 @@ describe("Authorization", () => {
     it("should return a set with the wildcard feature if the user has a wildcard feature", () => {
       const user: TestUser = {
         id: "615e3654-f291-4959-8a29-b5bf2675d7e8",
-        features: [{ granted: true, feature: { name: "*" } }],
-        roles: [],
+        roles: [
+          {
+            role: { name: "customer", features: [] },
+            features: [{ granted: true, feature: { name: "*" } }],
+          },
+        ],
       };
 
       const result = computeEffectiveFeatures(user);

@@ -20,7 +20,7 @@ cpf aparece em `owner` (dado próprio) e `admin` (gerente vê — normal em pet 
 
 **Feature**: id, name, description.
 
-**Permission**: `/features` = overrides crus `[{granted, grantedAt, feature}]`; `/permissions` = efetivas `string[]`.
+**Permission**: `/features` = overrides crus `[{granted, grantedAt, updatedAt, role, feature}]`; `/permissions` = efetivas `string[]`.
 
 **Erros**: 422 VALIDATION_ERROR (`errors` por campo), 409 CONFLICT, 404 NOT_FOUND, 403 FORBIDDEN (action nomeia a feature exigida), 401 UNAUTHORIZED. DELETE de recurso = 204 (tanto user quanto perfil — no perfil o user continua existindo, só o Customer/Employee é soft-deletado).
 
@@ -272,7 +272,17 @@ cpf aparece em `owner` (dado próprio) e `admin` (gerente vê — normal em pet 
 - **Customer/Employee**: id, userId @unique, deletedAt?, campos próprios (Customer: phone obrigatório, address?, birthDate?; Employee: hiringDate @default(now())). `onDelete: Cascade` no user.
 - **UserRole/UserFeature**: `id @id @default(uuid())` (NÃO par composto — mudou para soft delete), deletedAt?. UserFeature: granted, grantedAt @default(now()), updatedAt @updatedAt.
 - **Role**: code-seeded, description obrigatória, appliesTo (ProfileKind?). **Feature**: code-seeded.
-- Unicidade de override/role ativo: garantida por código (busca ativo → update/create), não por constraint SQL.
+- ~~Unicidade de override/role ativo: garantida por código (busca ativo → update/create), não por constraint SQL.~~ **Superado na Fase 8.0** — ver abaixo.
+
+**Fase 8.0 (implementada):** `UserFeature.userId` → **`userRoleId`** (FK para `UserRole`, `onDelete: Cascade`) + `@@unique([userRoleId, featureId])`; `UserRole` ganhou `grantedAt` e `@@unique([userId, roleId])`. `User.features` deixou de existir como relação — overrides são alcançados por `User.roles[].features[]`.
+
+- **Por que o override pendura na atribuição de role, não no usuário (D2):** override é sobre a **função**, não sobre a pessoa. Escopo de usuário deixava um ajuste concedido "pro trabalho de estoquista" sobreviver à perda da role de estoquista — e, pior, à deleção do perfil inteiro de funcionário, virando vazamento de privilégio. Escopo de *perfil* foi cogitado e recusado: é grosso demais, não captura mudança de função dentro do mesmo perfil.
+- **Por que uma linha por `(userId, roleId)` para sempre (D3):** a unicidade saiu do código e foi para o banco. Isso exige **reuso de linha** na re-concessão (`deletedAt = null`) em vez de linha nova, o que dá à `UserRole` uma **identidade estável** — sem ela o FK do override ficaria órfão a cada ciclo de revogar/reconceder. O histórico de ciclos (concedido quando, revogado quando) não cabe mais na tabela e vive no audit log: tabela guarda estado, audit log guarda história.
+- **Por que a role vai no path do override (D9):** a identidade do recurso é a tripla `(user, role, feature)`. Body não identifica recurso — quebraria a idempotência do `PUT`, e o `DELETE` não tem semântica de body.
+- **Por que 422 no `PUT` sem a role ativa, mas 404 no `DELETE`:** assimetria deliberada. No `PUT` a role é pré-condição da criação, então a validação semântica nomeia o campo (`errors.roleId`) e orienta o caminho. No `DELETE` um único 404 cobre a tripla inteira e **não revela** se o usuário tem aquela role.
+- **Por que o guard de não-escalação passou a filtrar o *conteúdo* restaurado (D16):** `assertAdminForRoleAssignment` inspeciona as features **estáticas** da role. Com o override escopado, uma `UserRole` passa a carregar features **dinâmicas** que o guard não enxerga — então um manager reconcedendo uma role banal ressuscitaria um override privilegiado pendurado nela. A separação é: *autorizar a ação* (o manager continua podendo conceder a role) ≠ *autorizar o conteúdo* (os overrides de `PRIVILEGED_FEATURES` + `*` só voltam para um admin). O descarte é silencioso na resposta, então é **auditado** (`USER_PERMISSION_RESTORE_SKIPPED`, um evento por override).
+- **Consequência no cômputo:** `computeEffectiveFeatures` não mudou de assinatura, mas passou a ser **dois laços e não um aninhado** — todas as features estáticas antes de qualquer override. Num laço só, um deny pendurado na role A seria aplicado antes de a role B somar a feature, e o resultado dependeria da ordem das roles.
+- **Consequência na view:** `userViews.admin` deixou de ter `features` no topo e passou a espelhar a junção (`roles[].features[]`); `GET /users/:id/features` expõe a role de cada override; `GET /users/:id/permissions` continua `string[]` plano.
 
 **Roles** (em `role.constants.ts`): customer (CUSTOMER), attendant/manager/admin (EMPLOYEE). admin tem `["*"]`. Compostas por grupos semânticos (SELF_MANAGEMENT, USER_ADMINISTRATION, PERMISSION_FEATURES) deduplicados via `[...new Set()]`. `DEFAULT_ROLES as const satisfies readonly RoleDefinition[]`.
 

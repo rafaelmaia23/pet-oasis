@@ -2413,6 +2413,103 @@ describe("Escopo do override na atribuição de role (D2/D3/D6/D16)", () => {
     });
   });
 
+  it("should NOT restore an override that was removed on purpose before the role was revoked (D5)", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    const target = await buildEmployee({ roleNames: ["attendant", "manager"] });
+
+    const managerRoleId = await roleIdByName("manager");
+
+    const removedOnPurpose = await getFeatureByName("read:log");
+    const cascaded = await getFeatureByName("read:audit-log");
+
+    if (!removedOnPurpose || !cascaded)
+      throw createNotFoundError({ message: "Feature não encontrada" });
+
+    for (const feature of [removedOnPurpose, cascaded]) {
+      await request(app)
+        .put(
+          `/api/v1/users/${target.id}/roles/${managerRoleId}/features/${feature.id}`,
+        )
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ granted: true });
+    }
+
+    // Removido explicitamente: ganha um `deletedAt` próprio, que não vai bater
+    // com o da role depois.
+    await request(app)
+      .delete(
+        `/api/v1/users/${target.id}/roles/${managerRoleId}/features/${removedOnPurpose.id}`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    const userInDb = await findUserById(target.id);
+    const activeFeatureIds = activeOverrides(userInDb).map((o) => o.featureId);
+
+    expect(activeFeatureIds).toContain(cascaded.id);
+    expect(activeFeatureIds).not.toContain(removedOnPurpose.id);
+  });
+
+  it("should keep a privileged override skipped by a non-admin dead forever, even for an admin (D16, §9.1.1)", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const managerToken = await loginAs(manager.email, manager.password);
+
+    const target = await buildEmployee({ roleNames: ["attendant", "manager"] });
+
+    const attendantRoleId = await roleIdByName("attendant");
+
+    const privileged = await getFeatureByName("read:audit-log:full");
+
+    if (!privileged)
+      throw createNotFoundError({ message: "Feature não encontrada" });
+
+    await request(app)
+      .put(
+        `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${privileged.id}`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ granted: true });
+
+    // T1: o manager revoga e reconcede — o privilegiado é pulado e fica com o
+    // `deletedAt` de T1.
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    // T2: agora um **admin** revoga e reconcede. A role volta com um
+    // `deletedAt` novo, que não bate com o T1 do override pulado.
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    const userInDb = await findUserById(target.id);
+
+    // O descarte é permanente: só volta por concessão explícita.
+    expect(activeOverrides(userInDb).map((o) => o.featureId)).not.toContain(
+      privileged.id,
+    );
+  });
+
   it("should refuse a second active UserRole row for the same pair", async () => {
     const target = await buildEmployee({ roleNames: ["attendant"] });
 

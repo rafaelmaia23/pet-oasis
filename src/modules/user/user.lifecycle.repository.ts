@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import type { ProfileKind } from "@/generated/prisma/enums";
+import { type AuditDescriptor, record } from "@/lib/auditLog";
 
 /**
  * Ciclo de vida do grafo do usuário — `User` → perfis → `UserRole` →
@@ -138,4 +139,218 @@ export async function cascadeDeleteUserGraph(
   );
 
   return { profiles: customers + employees, roles, overrides };
+}
+
+// ─── Restauração (D5) ────────────────────────────────────────────────────────
+//
+// Uma regra só, aplicada nos três níveis: **restaura o filho cujo `deletedAt` é
+// igual ao do pai**. O que morreu noutro instante — removido de propósito, ou
+// recusado pelo admin num ciclo anterior — simplesmente não bate, e continua
+// morto sem precisar de nenhuma regra extra.
+//
+// A ordem importa: **ler o `deletedAt` do pai antes de zerá-lo**. Se o pai for
+// zerado primeiro, a chave de comparação dos filhos se perde e a restauração
+// vira um no-op silencioso.
+
+/**
+ * Política de restauração de override (D6 + D16). Ambas as pontas são regra de
+ * negócio, então moram no service e chegam aqui como função: o repositório sabe
+ * *que* precisa filtrar e auditar, não *qual* é o critério.
+ */
+export type OverrideRestorePolicy = {
+  /** `false` → o override fica morto para sempre (§9.1.1 do redesenho). */
+  canRestore: (featureName: string) => boolean;
+  /** Descritor do audit de descarte, um por override pulado (K3). */
+  describeSkip: (featureName: string) => AuditDescriptor;
+};
+
+type RestoreCounts = {
+  roles: number;
+  overrides: number;
+  skipped: string[];
+};
+
+/** Restaura os overrides que morreram no mesmo instante que a `UserRole`. */
+export async function restoreOverridesOfUserRole(
+  tx: Prisma.TransactionClient,
+  userRole: { id: string; deletedAt: Date | null },
+  policy: OverrideRestorePolicy,
+): Promise<{ restored: number; skipped: string[] }> {
+  if (userRole.deletedAt === null) return { restored: 0, skipped: [] };
+
+  const candidates = await tx.userFeature.findMany({
+    where: { userRoleId: userRole.id, deletedAt: userRole.deletedAt },
+    include: { feature: true },
+  });
+
+  const restorable: string[] = [];
+  const skipped: string[] = [];
+
+  for (const override of candidates) {
+    policy.canRestore(override.feature.name)
+      ? restorable.push(override.id)
+      : skipped.push(override.feature.name);
+  }
+
+  if (restorable.length > 0) {
+    await tx.userFeature.updateMany({
+      where: { id: { in: restorable } },
+      data: { deletedAt: null },
+    });
+  }
+
+  // O descarte é silencioso na resposta: o audit é o único rastro dele.
+  for (const featureName of skipped) {
+    await record(policy.describeSkip(featureName), tx);
+  }
+
+  return { restored: restorable.length, skipped };
+}
+
+/**
+ * Restaura as `UserRole` que morreram no instante `parentDeletedAt`, descendo
+ * para os overrides de cada uma antes de zerá-la.
+ *
+ * `roleIds` estreita para um subconjunto (D8): o que ficar de fora mantém o
+ * `deletedAt` antigo e, por construção, não volta em nenhum ciclo futuro.
+ */
+export async function restoreRolesOfProfile(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  appliesTo: ProfileKind,
+  parentDeletedAt: Date,
+  options: { roleIds?: string[]; policy: OverrideRestorePolicy },
+): Promise<RestoreCounts> {
+  const candidates = await tx.userRole.findMany({
+    where: {
+      userId,
+      deletedAt: parentDeletedAt,
+      role: { appliesTo },
+      ...(options.roleIds && { roleId: { in: options.roleIds } }),
+    },
+    select: { id: true, deletedAt: true },
+  });
+
+  const counts: RestoreCounts = { roles: 0, overrides: 0, skipped: [] };
+
+  for (const userRole of candidates) {
+    const { restored, skipped } = await restoreOverridesOfUserRole(
+      tx,
+      userRole,
+      options.policy,
+    );
+
+    await tx.userRole.update({
+      where: { id: userRole.id },
+      data: { deletedAt: null },
+    });
+
+    counts.roles += 1;
+    counts.overrides += restored;
+    counts.skipped.push(...skipped);
+  }
+
+  return counts;
+}
+
+/**
+ * Restaura o perfil e desce para as roles dele. Devolve `null` quando não há
+ * perfil morto para restaurar.
+ *
+ * `requireDeletedAt` amarra a restauração a um instante exato — é o que a
+ * reativação de **conta** usa, para trazer só o perfil que morreu na cascata
+ * dela. Sem ele, qualquer perfil morto serve, que é o caso da reativação de
+ * perfil em conta viva (8.3).
+ */
+export async function restoreProfile(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  kind: ProfileKind,
+  options: {
+    requireDeletedAt?: Date;
+    roleIds?: string[];
+    policy: OverrideRestorePolicy;
+  },
+): Promise<(RestoreCounts & { kind: ProfileKind }) | null> {
+  const where = {
+    userId,
+    deletedAt: options.requireDeletedAt ?? { not: null },
+  };
+
+  const profile =
+    kind === "CUSTOMER"
+      ? await tx.customer.findFirst({
+          where,
+          select: { id: true, deletedAt: true },
+        })
+      : await tx.employee.findFirst({
+          where,
+          select: { id: true, deletedAt: true },
+        });
+
+  if (!profile?.deletedAt) return null;
+
+  const counts = await restoreRolesOfProfile(
+    tx,
+    userId,
+    kind,
+    profile.deletedAt,
+    options,
+  );
+
+  if (kind === "CUSTOMER") {
+    await tx.customer.update({
+      where: { id: profile.id },
+      data: { deletedAt: null },
+    });
+  } else {
+    await tx.employee.update({
+      where: { id: profile.id },
+      data: { deletedAt: null },
+    });
+  }
+
+  return { ...counts, kind };
+}
+
+/**
+ * Restaura, entre os perfis pedidos, apenas os que morreram **junto com a
+ * conta**. Um perfil que já estava morto antes tem outro `deletedAt` e não vem
+ * de carona — quem o quiser de volta pede explicitamente.
+ *
+ * A linha do `User` não é tocada aqui: quem reativa a conta é o repositório de
+ * user, que precisa ler `user.deletedAt` (a chave passada aqui) antes de zerá-la.
+ */
+export async function restoreProfilesOfUser(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  userDeletedAt: Date,
+  options: {
+    kinds: ProfileKind[];
+    roleIds?: string[];
+    policy: OverrideRestorePolicy;
+  },
+): Promise<RestoreCounts & { profiles: ProfileKind[] }> {
+  const result: RestoreCounts & { profiles: ProfileKind[] } = {
+    profiles: [],
+    roles: 0,
+    overrides: 0,
+    skipped: [],
+  };
+
+  for (const kind of options.kinds) {
+    const restored = await restoreProfile(tx, userId, kind, {
+      ...options,
+      requireDeletedAt: userDeletedAt,
+    });
+
+    if (!restored) continue;
+
+    result.profiles.push(restored.kind);
+    result.roles += restored.roles;
+    result.overrides += restored.overrides;
+    result.skipped.push(...restored.skipped);
+  }
+
+  return result;
 }

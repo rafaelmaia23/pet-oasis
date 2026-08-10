@@ -1,6 +1,10 @@
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
-import { cascadeDeleteOverrides } from "@/modules/user/user.lifecycle.repository";
+import {
+  cascadeDeleteOverrides,
+  type OverrideRestorePolicy,
+  restoreOverridesOfUserRole,
+} from "@/modules/user/user.lifecycle.repository";
 
 // A role de cada override é o que o presenter expõe (K2) — sempre que um
 // override sai daqui, sai com a atribuição a que pertence.
@@ -13,17 +17,9 @@ const userRoleInclude = {
   role: { include: { features: { include: { feature: true } } } },
 } as const;
 
-/**
- * Política de restauração de override (D6 + D16). Ambas as pontas são regra de
- * negócio, então moram no service e chegam aqui como função: o repositório sabe
- * *que* precisa filtrar e auditar, não *qual* é o critério.
- */
-export type OverrideRestorePolicy = {
-  /** `false` → o override fica morto para sempre (§9.1.1 do redesenho). */
-  canRestore: (featureName: string) => boolean;
-  /** Descritor do audit de descarte, um por override pulado (K3). */
-  describeSkip: (featureName: string) => AuditDescriptor;
-};
+// A política de restauração (D6/D16) nasceu aqui na 8.0 e mudou de casa na 8.2,
+// quando religar perfil e reativar conta passaram a precisar dela também.
+export type { OverrideRestorePolicy };
 
 export async function getUserFeatures(userId: string) {
   return prisma.userFeature.findMany({
@@ -116,8 +112,9 @@ export async function getUserRoles(userId: string) {
  * a linha já existia, restaura os overrides que morreram com ela (D6) — filtrados
  * pela política de não-escalação (D16).
  *
- * Nesta sub-fase a restauração pega **todos** os overrides mortos da atribuição;
- * a 8.2 estreita para "os que morreram no mesmo instante que ela".
+ * "Morreram com ela" é literal (D5): só volta o override cujo `deletedAt` é
+ * igual ao da linha, lido **antes** de zerá-la. Override removido de propósito
+ * tem timestamp próprio e nunca ressuscita.
  */
 export async function addUserRole(
   userId: string,
@@ -140,37 +137,13 @@ export async function addUserRole(
       return created;
     }
 
+    await restoreOverridesOfUserRole(tx, existing, policy);
+
     const userRole = await tx.userRole.update({
       where: { id: existing.id },
       data: { deletedAt: null },
       include: userRoleInclude,
     });
-
-    const deadOverrides = await tx.userFeature.findMany({
-      where: { userRoleId: userRole.id, deletedAt: { not: null } },
-      include: { feature: true },
-    });
-
-    const restorable: string[] = [];
-    const skipped: string[] = [];
-
-    for (const override of deadOverrides) {
-      policy.canRestore(override.feature.name)
-        ? restorable.push(override.id)
-        : skipped.push(override.feature.name);
-    }
-
-    if (restorable.length > 0) {
-      await tx.userFeature.updateMany({
-        where: { id: { in: restorable } },
-        data: { deletedAt: null },
-      });
-    }
-
-    // O descarte é silencioso na resposta: o audit é o único rastro dele.
-    for (const featureName of skipped) {
-      await record(policy.describeSkip(featureName), tx);
-    }
 
     if (audit) await record(audit, tx);
     return userRole;

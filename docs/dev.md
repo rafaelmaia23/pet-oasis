@@ -17,6 +17,9 @@ Na subida o container aplica as migrations (`prisma migrate deploy`) e semeia fe
 `Ctrl+C` derruba tudo com shutdown gracioso.
 `npm run dev:down`, `npm run dev:reset` (recria do zero, apagando o volume)
 `npm run dev:mail` sobe só o Mailpit.
+`npm run dev:db` sobe só o Postgres-de-dev (detached, espera ficar healthy) — é o que
+`db:migrate`/`db:seed`/`db:studio` precisam de pé quando você não quer a stack inteira
+em foreground.
 
 Comandos úteis:
 
@@ -25,5 +28,6 @@ Comandos úteis:
 | `npm test` | Sobe o Postgres-de-test isolado, roda a suíte (Vitest + Supertest) no host e derruba ao final (inclusive em falha) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | Biome (`lint:fix` corrige o auto-corrigível) |
+| `npm run dev:db` | Sobe só o Postgres-de-dev, detached (pré-requisito dos `db:*`) |
 | `npm run db:migrate` | Cria/aplica uma migration nova em dev (autoria consciente) |
 | `npm run db:studio` | Prisma Studio |

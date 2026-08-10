@@ -102,7 +102,7 @@ perfil de **funcionário** vivo — nunca o de cliente que ele pediu.
 | **D3** | Unicidade de `UserRole` | `@@unique([userId, roleId])` no banco. **Uma linha por par, para sempre.** Re-conceder reusa a linha (`deletedAt = null`). |
 | **D4** | Correlação de restauração | Por `deletedAt`, com **um único timestamp por transação** propagado por toda a cascata. Sem coluna de "motivo". |
 | **D5** | Regra de restauração | Restaura o filho cujo `deletedAt` é **igual** ao do pai. Recursivo pelos três níveis. |
-| **D6** | Re-conceder role | Restaura os overrides daquela role. Tirar e devolver um cargo **não** zera os ajustes finos dele. |
+| **D6** | ~~Re-conceder role restaura os overrides~~ | **REVOGADA no kickoff da Sessão C (2026-08-10).** Substituída por **D6'**: a cascata de deleção desce quatro níveis, mas a **restauração sobe só dois** (`User` → perfil → `UserRole`). Override **nunca** ressuscita por efeito colateral — só por ação explícita (`PUT /users/:id/roles/:roleId/features/:featureId`, que já revive a linha soft-deletada). Ver §3.4. |
 | **D7** | Histórico de ciclos | Vive no audit log (`USER_ROLE_GRANTED`/`USER_ROLE_REVOKED`/`USER_PERMISSION_GRANTED`/`USER_PERMISSION_REVOKED`, já existentes), não na tabela. |
 | **D8** | Escolha de roles ao religar | **Default: traz todas** as que morreram na cascata. O admin pode escolher um subconjunto e ignorar o resto. |
 | **D9** | Contrato do override | `PUT \| DELETE /users/:userId/roles/:roleId/features/:featureId`. A role vai no path, nunca no body. |
@@ -112,7 +112,7 @@ perfil de **funcionário** vivo — nunca o de cliente que ele pediu.
 | **D13** | Emails | Só o **email atual** de uma conta é reservado (inclusive de conta deletada). Email já trocado fica livre para reuso; `PreviousEmail` é só auditoria e nunca bloqueia. |
 | **D14** | Invariante central | **Nunca** existe usuário ativo sem ao menos um perfil ativo. Vale em todos os fluxos, sem exceção. |
 | **D15** | Mensagem de erro | `"Para excluir esse perfil use o endpoint de deleção de usuário."` (hoje diz "esse usuario", invertendo o sujeito). |
-| **D16** | Não-escalação na restauração | Ao ressuscitar overrides (re-conceder role, religar perfil, reativar conta), roda o guard de privilégio **sobre o ator**. Se o ator **não** é admin, a ação prossegue normalmente mas os overrides de `PRIVILEGED_FEATURES` (+ `*`) **não** são restaurados. Se é admin, restaura tudo. Separa *autorizar a ação* de *autorizar o conteúdo* — o manager continua podendo conceder a role, sem virar um caminho de escalação. |
+| **D16** | ~~Não-escalação na restauração~~ | **MORTA junto com o D6 (Sessão C).** Existia só para tornar o D6 seguro: se nenhum override ressuscita, não há conteúdo dinâmico para filtrar, e `assertAdminForRoleAssignment` — que inspeciona as features **estáticas** da role — volta a bastar sozinha. Removida no Passo 0 da Sessão C. |
 
 ### 3.1 Por que `deletedAt` e não uma coluna de motivo
 
@@ -165,9 +165,51 @@ Resolve-se porque o histórico **já existe no audit log**. Então a tabela guar
 estado (a última revogação), o audit log guarda história. Cada um no seu lugar.
 
 E é isso que faz D2 funcionar: com reuso de linha, `UserRole` tem **identidade
-estável**, então o FK do override nunca fica órfão — a role volta, a linha é a
-mesma, os overrides voltam junto (D6). Com linhas append-only, cada re-concessão
-criaria uma linha nova e os overrides apontariam para uma atribuição morta.
+estável**, então o FK do override nunca fica órfão — a role volta e a linha é a
+mesma. Com linhas append-only, cada re-concessão criaria uma linha nova e os
+overrides apontariam para uma atribuição morta.
+
+### 3.4 Por que o D6 foi revogado (Sessão C, 2026-08-10)
+
+O D6 dizia que re-conceder uma role restaura os overrides dela. Caiu ao ser
+testado contra um caso concreto do fluxo de perfil: role R2 revogada em T1, perfil
+morto em T2, e o admin reativa o perfil nomeando R2. R2 revive — e os overrides
+dela, mortos em T1, casariam com o `deletedAt` da própria R2 e voltariam junto,
+sem que ninguém tivesse pedido.
+
+**A assimetria é principiada, não descuido.** Deletar cascateia até o override
+porque a invariante é "nunca filho ativo de pai morto" — errar para mais é
+*fail-closed*. Restaurar **concede autoridade** — errar para mais é vazamento de
+privilégio. As duas direções têm perfil de risco oposto, então param em lugares
+diferentes:
+
+```
+deletar   →  User → perfil → UserRole → UserFeature      (quatro níveis)
+restaurar →  User → perfil → UserRole                    (dois níveis)
+```
+
+Some a isso que override é ajuste fino e pontual: quem devolve um cargo a alguém
+frequentemente não sabe que existiam overrides pendurados nele, e ressuscitá-los
+em silêncio é conceder permissão sem ninguém ter decidido conceder. Override
+passa a ser sempre **ação ativa e consciente**.
+
+Contexto de mercado, coerente com §3.2: Azure RBAC, GCP IAM e Kubernetes RBAC não
+têm override por usuário; o inline policy do AWS IAM, que é o análogo mais
+próximo, é **destrutivo** na remoção — reanexar uma managed policy depois não
+ressuscita a inline apagada.
+
+**Contrapartida registrada:** o racional original do D6 era real — funcionário sai
+de licença, role revogada, volta, e os ajustes finos precisam ser refeitos à mão.
+Fica aceitável porque o histórico mora no audit log (D7): `USER_PERMISSION_GRANTED`
+/ `_REVOKED` dizem exatamente o que havia, e refazer vira consulta + ação
+consciente, que é justamente o ponto.
+
+**Consequência em cascata:** o D16 morre junto (§9.1 idem). Toda a máquina de
+não-escalação-na-restauração existia só para tornar o D6 seguro; sem overrides
+ressuscitando, uma `UserRole` restaurada carrega apenas as features **estáticas**
+da role, que é exatamente o que `assertAdminForRoleAssignment` já inspeciona. A
+linha do override continua soft-deletada — é evidência para o audit; ela apenas
+nunca volta sozinha.
 
 ---
 
@@ -240,11 +282,13 @@ restauração.
 ```
 reativar User    →  restaura perfis    onde perfil.deletedAt     == user.deletedAt
 reativar perfil  →  restaura UserRoles onde userRole.deletedAt   == perfil.deletedAt
-reconceder role  →  restaura overrides onde userFeature.deletedAt == userRole.deletedAt
+reconceder role  →  restaura a linha da UserRole e MAIS NADA          (D6', §3.4)
 ```
 
-Um override removido explicitamente tem um `deletedAt` que não bate com nenhum pai
-— então nunca ressuscita. Correto por construção.
+A correlação por data vale nos **dois** níveis que a restauração alcança. O
+terceiro nível saiu com o D6: nenhum override ressuscita, nem o que morreu junto
+com o pai — só volta por `PUT /users/:id/roles/:roleId/features/:featureId`, que
+revive a linha soft-deletada explicitamente.
 
 ### 4.4 Invariantes de implementação (não negociáveis)
 
@@ -286,10 +330,11 @@ Regras:
   perfil no banco.
 - `POST /auth/signup` nesses casos **recusa e orienta a logar** (D12). Não cria, não
   vincula, não muda nada.
-- ⚠️ Divergência a resolver: hoje `attendant` **não** tem as features de
-  administração de usuário (`ATTENDANT_FEATURES` só espelha
-  `SELF_MANAGEMENT_FEATURES`). Dar a ele o poder de reativar o perfil de cliente de
-  outra pessoa exige mudar o catálogo de features. Ver §9.
+- ✅ **Divergência resolvida no kickoff da Sessão C (Q1 → K11/K13).** O catálogo passa
+  a nomear o recurso: `create:customer-profile` / `reactivate:customer-profile` (self,
+  no baseline) + o par `:others` (attendant, manager, admin) + `create:employee-profile`
+  / `reactivate:employee-profile` (só manager/admin). É o que deixa o attendant ajudar
+  o cliente no balcão sem ganhar poder nenhum sobre perfil de funcionário.
 
 ### 5.2 Usuário DELETADO
 
@@ -388,7 +433,7 @@ dados estar correto.
 |---|---|---|
 | **8.0** | Escopo de override + unicidade de `UserRole` | Fundação. Migration, `UserFeature.userRoleId`, `@@unique`, cascata de revogação de role, contrato novo do endpoint (D9). Nada de reativação depende de mais nada antes disso |
 | **8.1** | Cascata de deleção + timestamp único | `deleteUser` cascateia (D1); todas as cascatas passam a propagar um `deletedAt` só (D4); mensagem corrigida (D15) |
-| **8.2** | Restauração por correlação de data | A regra de §4.3 nos três níveis, incluindo re-conceder role trazendo overrides (D6). É a peça que todo fluxo de reativação vai usar |
+| **8.2** | Restauração por correlação de data | A regra de §4.3. Escrita nos três níveis; o terceiro (re-conceder role trazendo overrides) foi **desfeito** no Passo 0 da Sessão C, com a revogação do D6 (§3.4) |
 | **8.3** | Perfil em conta ativa | §5.1 — as quatro linhas da tabela |
 | **8.4** | Conta deletada — self-service (signup) | §5.2, coluna self-service dos casos A/B/C |
 | **8.5** | Conta deletada — admin | §5.2, colunas de admin; escolha de perfis e roles (D8) |
@@ -405,28 +450,28 @@ Resolver no kickoff da sub-fase correspondente — **não decidir na implementa�
 
 | # | Questão | Onde |
 |---|---|---|
-| Q1 | `attendant` passa a poder criar/reativar o perfil de cliente de outra pessoa? Hoje não tem nenhuma feature de administração de usuário. Exige mexer no catálogo (§5.1) | 8.3 |
-| Q2 | Continuam existindo features `reactivate:*` separadas das `create:*`? O racional antigo (N11) era permitir bloquear uma sem a outra por override — que agora é escopado a role | 8.3 |
+| ~~Q1~~ | ~~`attendant` cria/reativa o perfil de cliente de outra pessoa?~~ **Sim** — com um par de features escopado ao cliente (K11/K13, §5.1) | ✅ 8.3 |
+| ~~Q2~~ | ~~Continuam existindo features `reactivate:*` separadas das `create:*`?~~ **Sim, separadas** (K12): reativar traz roles antigas de volta, criar nasce com o default — poderes diferentes, concedíveis em separado | ✅ 8.3 |
 | Q3 | Reativação de conta continua exigindo senha nova? (era N6 da fase antiga) | 8.4 |
 | Q4 | Signup que detecta conta deletada continua respondendo 202? (era decisão de kickoff da 8.3 antiga) | 8.4 |
 | Q5 | O endpoint de reativação por admin continua sendo `POST /users/:id/reactivate`? | 8.5 |
 | Q6 | Guard de não-escalação para alvo que **era** privilegiado continua exigindo ator admin? (era decisão de kickoff da 8.4 antiga) | 8.5 |
 | Q7 | Como o admin nomeia as roles a restaurar — ids no body, ou default implícito com lista de exclusão? | 8.5 |
-| ~~Q8~~ | ~~Overrides restaurados precisam de checagem de não-escalação?~~ **Resolvida em D16.** Resta uma sub-questão, abaixo | — |
-| Q9 | **Quem é o "ator" na confirmação de reativação de conta?** A rota é pública (token é a credencial), então não há `isAdmin` para checar no momento em que a restauração acontece. Encaminhamento natural: capturar a autoridade em **tempo de emissão do token** (`restorePrivileged: boolean` gravado nele, mesmo idioma do `restoreCustomer`/`restoreEmployee` da fase antiga) e honrar na confirmação. Signup self-service nunca tem admin envolvido → nunca restaura privilegiada | 8.5 |
+| ~~Q8~~ | ~~Overrides restaurados precisam de checagem de não-escalação?~~ **Dissolvida:** nenhum override é restaurado (D6', §3.4) | — |
+| ~~Q9~~ | ~~Quem é o "ator" na confirmação de reativação de conta, se a rota é pública?~~ **Dissolvida junto com o D16.** Não há autoridade a capturar em tempo de emissão do token, porque a confirmação não decide sobre conteúdo privilegiado — ela restaura perfis e roles, e roles são governadas por `assertAdminForRoleAssignment` no momento em que o admin as nomeia | — |
 
-### 9.1 Consequências de D16 a registrar na implementação
+### 9.1 ~~Consequências de D16~~ — o que sobrou depois do D6'
 
-1. **O descarte é permanente, não adiado.** O override privilegiado pulado mantém o
-   `deletedAt` antigo — numa revogação/reconcessão futura, mesmo por um admin, o
-   timestamp não bate com o novo pai e ele **não volta sozinho**. Só por concessão
-   explícita. Coerente com fail-closed, mas precisa estar escrito.
-2. **O descarte é silencioso.** O ator recebe sucesso e a role volta, sem nada na
-   resposta indicando que um override foi dropado. Merece **registro no audit log**,
-   pelo padrão de auditoria do projeto.
-3. **Vale nos três caminhos de restauração** — re-conceder role, religar perfil,
-   reativar conta — com a mesma regra e o mesmo predicado do guard atual, incluindo
-   o wildcard: `name === "*" || PRIVILEGED_FEATURE_SET.has(name)`.
+Com a restauração parando na role (§3.4), as três consequências que esta seção
+listava se resolvem sozinhas: o descarte deixa de ser um caso especial do override
+privilegiado e vira a regra geral para **todo** override. O que continua valendo, e
+merece estar escrito:
+
+1. **A perda é definitiva.** Um override morto pela cascata mantém o `deletedAt` e
+   não volta em nenhum ciclo futuro, para nenhum ator. Só por concessão explícita.
+2. **A perda é silenciosa na resposta**, mas não no audit: o `cascadedOverrides` na
+   metadata de `USER_ROLE_REVOKED` (K6), `USER_PROFILE_DELETED` e `USER_DELETED`
+   (K8) é o rastro de quantos ajustes finos foram embora.
 
 ---
 

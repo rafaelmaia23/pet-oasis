@@ -126,7 +126,6 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `USER_ROLE_REVOKED` | `User` | `roleId`, `roleName`, `cascadedOverrides` (nº de overrides derrubados junto) | 7.6 · 8.0 |
 | `USER_PERMISSION_GRANTED` | `User` | `featureName`, `roleId`, `roleName`, `effect` | 7.6 · 8.0 |
 | `USER_PERMISSION_REVOKED` | `User` | `featureName`, `roleId` | 7.6 · 8.0 |
-| `USER_PERMISSION_RESTORE_SKIPPED` | `User` | `featureName`, `roleId`, `roleName` | 8.0 |
 | `PASSWORD_RESET_REQUESTED` | `User` | — | 7.6 |
 | `PASSWORD_RESET_COMPLETED` | `User` | — | 7.6 |
 | `PASSWORD_CHANGED` | `User` | — | 7.6 |

@@ -471,16 +471,17 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 > histórico mora no audit log (D7): `USER_PERMISSION_GRANTED`/`_REVOKED` dizem o que havia, e
 > refazer vira consulta + ação consciente, que é justamente o ponto.
 
-### ⬜ [Passo 0 da Sessão C] Revogar D6/D16 — a restauração para na role (K16)
+### ✅ [Passo 0 da Sessão C] Revogar D6/D16 — a restauração para na role (K16)
 
-> Trabalho pontual, branch `fix/drop-override-restoration` a partir da `fase-8`, mergeada `--no-ff` **antes** da 8.3. Molde da 7.2 e do Passo 0 da Sessão B. Ao contrário daqueles, **não** é comportamento-preservado: os testes que afirmavam a restauração de override são invertidos.
+> Trabalho pontual, branch `fix/drop-override-restoration` a partir da `fase-8`, mergeada `--no-ff` **antes** da 8.3. Molde da 7.2 e do Passo 0 da Sessão B. Ao contrário daqueles, **não** é comportamento-preservado: os testes que afirmavam a restauração de override foram invertidos.
 
-- ⬜ `user.lifecycle.repository.ts`: apagar `restoreOverridesOfUserRole` e o tipo `OverrideRestorePolicy`; tirar o campo `policy` de `restoreRolesOfProfile`/`restoreProfile`/`restoreProfilesOfUser` e o `skipped` de `RestoreCounts`.
-- ⬜ `permission.repository.addUserRole`: sai a chamada a `restoreOverridesOfUserRole`, o parâmetro `policy` e o re-export do tipo. Re-conceder role revive **só** a linha da `UserRole`.
-- ⬜ `permission.service.addUserRole`: saem o `findUserById(requestingUserId)` extra, o `isAdmin(...)` e o objeto de política inline (o guard `assertAdminForRoleAssignment` continua, intocado).
-- ⬜ `auditLog.constants.ts`: sai a ação `USER_PERMISSION_RESTORE_SKIPPED` (união em tempo de compilação — sem migration).
-- ⬜ **Não muda nada na deleção:** `removeUserRole` e `cascadeDeleteOverrides` ficam idênticos, e o `cascadedOverrides` na metadata do `USER_ROLE_REVOKED` (K6) fica *mais* importante, porque a perda agora é definitiva.
-- ⬜ Testes: `permission.test.ts` inverte os casos de restauração (e perde o da "dívida da 8.0 quitada", que era prova do descarte permanente do D16); `user.lifecycle.test.ts` perde os fixtures `permissive`/`nonAdmin` e o caso "override removido explicitamente não ressuscita" vira o caso geral **"nenhum override ressuscita, em nenhum nível"**.
+- ✅ `user.lifecycle.repository.ts`: apagadas `restoreOverridesOfUserRole` e o tipo `OverrideRestorePolicy`; o campo `policy` saiu de `restoreRolesOfProfile`/`restoreProfile`/`restoreProfilesOfUser` e o `skipped` de `RestoreCounts`. `restoreRolesOfProfile` virou **um `updateMany` só** — sem o laço por role (que existia para descer aos overrides de cada uma), a correlação por data resolve o nível inteiro numa query.
+- ✅ `permission.repository.addUserRole`: saíram a chamada a `restoreOverridesOfUserRole`, o parâmetro `policy` e o re-export do tipo. Re-conceder role revive **só** a linha da `UserRole` (ternário revive-ou-cria, mesma forma do `upsertUserFeature`).
+- ✅ `permission.service.addUserRole`: saíram o `findUserById(requestingUserId)` extra, o `isAdmin(...)` e o objeto de política inline. `assertAdminForRoleAssignment` continua intocado — e volta a **bastar sozinho**, porque uma `UserRole` restaurada carrega só as features estáticas da role, que é o que ele já lê.
+- ✅ `auditLog.constants.ts`: saiu a ação `USER_PERMISSION_RESTORE_SKIPPED` (união em tempo de compilação — sem migration).
+- ✅ **Nada mudou na deleção:** `removeUserRole` e `cascadeDeleteOverrides` idênticos, e o `cascadedOverrides` na metadata do `USER_ROLE_REVOKED` (K6) ficou *mais* importante, porque a perda agora é definitiva.
+- ✅ Testes: `permission.test.ts` inverteu os casos de restauração e ganhou o par que fecha a regra — **a linha do override continua soft-deletada** (evidência para o audit) e **o `PUT` explícito é a única porta de volta**, reusando a linha (o `@@unique` não admite uma segunda). Sumiu o caso da "dívida da 8.0 quitada", que era prova do descarte permanente do D16. `user.lifecycle.test.ts` perdeu os fixtures `permissive`/`nonAdmin`, e os três casos de override viraram um só: **nenhum override ressuscita, tenha morrido na cascata ou sozinho**.
+- ✅ Suíte (650) + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão C] Fase 8.3 — Perfil em conta ativa
 

@@ -6,7 +6,6 @@ import {
 import {
   assertActorIsAdmin,
   computeEffectiveFeatures,
-  isAdmin,
 } from "@/lib/authorization";
 import { logger } from "@/lib/logger";
 import * as featureRepository from "@/modules/feature/feature.repository";
@@ -193,27 +192,13 @@ export async function addUserRole(
     });
   }
 
-  // D16: autorizar a **ação** (guard acima) é uma coisa; autorizar o
-  // **conteúdo** que volta junto é outra. A role é concedida de qualquer jeito,
-  // mas um override privilegiado pendurado nela só ressuscita para um admin —
-  // senão re-conceder uma role banal viraria caminho de escalação, invisível
-  // para `assertAdminForRoleAssignment`, que só lê as features estáticas.
-  const requestingUser = await userRepository.findUserById(requestingUserId);
-  const actorIsAdmin = isAdmin(requestingUser);
-
+  // A role volta sozinha (D6', K16): nenhum override pendurado nela ressuscita,
+  // então `assertAdminForRoleAssignment` — que lê as features **estáticas** da
+  // role — basta como guard. Era a checagem de conteúdo do D16 que precisava
+  // saber se o ator é admin; sem conteúdo dinâmico, ela deixou de existir.
   const userRole = await permissionRepository.addUserRole(
     targetUserId,
     roleId,
-    {
-      canRestore: (featureName) =>
-        actorIsAdmin || !isPrivilegedFeature(featureName),
-      describeSkip: (featureName) => ({
-        action: "USER_PERMISSION_RESTORE_SKIPPED",
-        targetType: "User",
-        targetId: targetUserId,
-        metadata: { featureName, roleId, roleName: role.name },
-      }),
-    },
     {
       action: "USER_ROLE_GRANTED",
       targetType: "User",

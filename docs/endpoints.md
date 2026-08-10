@@ -96,10 +96,12 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 **Escopo do override (Fase 8.0, D2/D9):** um override pertence a uma **atribuição de
 role**, não ao usuário solto — por isso a role vai no path. Sem a role ativa, o `PUT`
 responde **422** (`errors.roleId`); o `DELETE` responde **404** para a tripla inteira, sem
-revelar se o usuário tem aquela role. Revogar a role mata os overrides pendurados nela;
-re-conceder os traz de volta — exceto os privilegiados, se o ator não for admin (D16),
-caso em que o descarte é permanente e fica registrado como
-`USER_PERMISSION_RESTORE_SKIPPED` no audit log.
+revelar se o usuário tem aquela role.
+
+**Revogar a role mata os overrides pendurados nela — e re-concedê-la não os traz de volta**
+(D6', Fase 8 Sessão C). A cascata de deleção desce quatro níveis; a restauração para na
+`UserRole`. Quem devolve um cargo frequentemente não sabe que havia ajuste fino pendurado
+nele, então override só volta por `PUT` explícito, que revive a linha soft-deletada.
 
 ## Feature — `src/modules/feature/feature.routes.ts`
 

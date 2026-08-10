@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import type { FeatureName } from "@/modules/feature/feature.constants";
 import type { RoleName } from "@/modules/role/role.constants";
 import { getRolesByNames } from "@/modules/role/role.repository";
+import { createCustomerProfile } from "@/modules/user/profile/user.profile.repository";
 import {
   createCustomer,
   createEmployee,
@@ -30,7 +31,7 @@ import { makePassword } from "../helpers/primitives";
  * `UserRole` não existe mais). Default: a **primeira** role do usuário; quem
  * precisar escolher passa `overrideRole`.
  */
-async function attachOverrides(
+export async function attachOverrides(
   userId: string,
   overrides: {
     grants?: FeatureName[];
@@ -182,6 +183,42 @@ export async function buildEmployee(overrides?: {
     });
 
   return { ...userInDb, password: employeeData.password };
+}
+
+/**
+ * Usuário com os **dois** perfis ativos — o alvo natural dos testes de cascata,
+ * que precisam provar que a deleção alcança os dois lados do grafo. Nasce
+ * funcionário (para escolher as roles de EMPLOYEE) e ganha o perfil de cliente
+ * pelo repositório de perfil, o mesmo caminho que o service usa.
+ *
+ * Os overrides não entram aqui: pendure-os depois com `attachOverrides`,
+ * escolhendo a role de cada um por `overrideRole`.
+ */
+export async function buildHybrid(overrides?: {
+  employeeRoles?: RoleName[];
+  customerRoles?: RoleName[];
+  data?: Partial<CreateEmployeeInput>;
+}) {
+  const employee = await buildEmployee({
+    ...(overrides?.employeeRoles && { roleNames: overrides.employeeRoles }),
+    ...(overrides?.data && { data: overrides.data }),
+  });
+
+  await createCustomerProfile(
+    employee.id,
+    { phone: faker.phone.number({ style: "international" }) },
+    overrides?.customerRoles ?? DEFAULT_CUSTOMER_ROLES,
+  );
+
+  const userInDb = await findUserById(employee.id);
+
+  if (!userInDb)
+    throw createInternalServerError({
+      message: "User not found after adding the customer profile",
+      action: "Verificar processo de criação de perfil",
+    });
+
+  return { ...userInDb, password: employee.password };
 }
 
 export async function buildAuthUser(

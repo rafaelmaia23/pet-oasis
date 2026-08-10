@@ -1,5 +1,6 @@
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
+import { cascadeDeleteOverrides } from "@/modules/user/user.lifecycle.repository";
 
 // A role de cada override é o que o presenter expõe (K2) — sempre que um
 // override sai daqui, sai com a atribuição a que pertence.
@@ -178,9 +179,10 @@ export async function addUserRole(
 
 /**
  * Revoga a role e cascateia para os overrides pendurados nela (D2), na mesma
- * transação e com **um único** timestamp — ensaio do D4, que a 8.1 generaliza
- * para a cascata inteira. O audit é montado pelo service, que precisa do número
- * de overrides derrubados na metadata (K6).
+ * transação e com **um único** timestamp (D4). O elo de baixo é o mesmo que a
+ * cascata de perfil e de conta usam (`cascadeDeleteOverrides`). O audit é
+ * montado pelo service, que precisa do número de overrides derrubados na
+ * metadata (K6).
  */
 export async function removeUserRole(
   userRoleId: string,
@@ -194,10 +196,7 @@ export async function removeUserRole(
       data: { deletedAt },
     });
 
-    const { count } = await tx.userFeature.updateMany({
-      where: { userRoleId, deletedAt: null },
-      data: { deletedAt },
-    });
+    const count = await cascadeDeleteOverrides(tx, [userRoleId], deletedAt);
 
     if (describeAudit) {
       await record(describeAudit({ cascadedOverrides: count }), tx);

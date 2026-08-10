@@ -17,6 +17,10 @@ export const AUDIT_ACTIONS = [
   "AUTH_RATE_LIMIT_EXCEEDED",
   "USER_CREATED",
   "USER_DELETED",
+  // Deleção de um perfil (não da conta). Passou a ser registrada na 8.1 (K8)
+  // porque, com a cascata, ela derruba roles e overrides — inclusive
+  // privilegiados — sem nada disso aparecer na resposta 204.
+  "USER_PROFILE_DELETED",
   "USER_BANNED",
   "USER_UNBANNED",
   "USER_ROLE_GRANTED",

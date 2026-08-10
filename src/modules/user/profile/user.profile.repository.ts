@@ -1,4 +1,10 @@
+import type { ProfileKind } from "@/generated/prisma/enums";
+import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
+import {
+  type CascadeCounts,
+  cascadeDeleteProfile,
+} from "@/modules/user/user.lifecycle.repository";
 import { userInclude } from "@/modules/user/user.repository";
 
 type createCustomerProfileData = {
@@ -52,48 +58,37 @@ export async function createEmployeeProfile(
   });
 }
 
-export async function deleteCustomerProfile(userId: string) {
+/**
+ * Deleta o perfil e cascateia para as roles daquele `appliesTo` **e os
+ * overrides pendurados nelas** (D1/D2), com um único timestamp (D4). O audit
+ * chega como thunk porque as contagens só existem dentro da transação.
+ */
+function deleteProfile(
+  userId: string,
+  kind: ProfileKind,
+  describeAudit?: (counts: CascadeCounts) => AuditDescriptor,
+) {
   return prisma.$transaction(async (tx) => {
-    await tx.customer.update({
-      where: { userId, deletedAt: null },
-      data: { deletedAt: new Date() },
-    });
+    const deletedAt = new Date();
 
-    const customerRoles = await tx.role.findMany({
-      where: { appliesTo: "CUSTOMER" },
-      select: { id: true },
-    });
+    const counts = await cascadeDeleteProfile(tx, userId, kind, deletedAt);
 
-    await tx.userRole.updateMany({
-      where: {
-        userId,
-        deletedAt: null,
-        roleId: { in: customerRoles.map((r) => r.id) },
-      },
-      data: { deletedAt: new Date() },
-    });
+    if (describeAudit) await record(describeAudit(counts), tx);
+
+    return counts;
   });
 }
 
-export async function deleteEmployeeProfile(userId: string) {
-  return prisma.$transaction(async (tx) => {
-    await tx.employee.update({
-      where: { userId, deletedAt: null },
-      data: { deletedAt: new Date() },
-    });
+export function deleteCustomerProfile(
+  userId: string,
+  describeAudit?: (counts: CascadeCounts) => AuditDescriptor,
+) {
+  return deleteProfile(userId, "CUSTOMER", describeAudit);
+}
 
-    const employeeRoles = await tx.role.findMany({
-      where: { appliesTo: "EMPLOYEE" },
-      select: { id: true },
-    });
-
-    await tx.userRole.updateMany({
-      where: {
-        userId,
-        deletedAt: null,
-        roleId: { in: employeeRoles.map((r) => r.id) },
-      },
-      data: { deletedAt: new Date() },
-    });
-  });
+export function deleteEmployeeProfile(
+  userId: string,
+  describeAudit?: (counts: CascadeCounts) => AuditDescriptor,
+) {
+  return deleteProfile(userId, "EMPLOYEE", describeAudit);
 }

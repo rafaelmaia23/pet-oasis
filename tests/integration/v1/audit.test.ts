@@ -1,4 +1,9 @@
-import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
+import {
+  attachOverrides,
+  buildCustomer,
+  buildEmployee,
+  buildHybrid,
+} from "@tests/factories/user.factory";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
 import { flushRedis } from "@tests/helpers/redis";
@@ -96,6 +101,66 @@ describe("Audit log", () => {
     expect(await auditRows("USER_DELETED")).toEqual([
       expect.objectContaining({ actorId: admin.id, targetId: target.id }),
     ]);
+  });
+
+  it("records the cascade counts on USER_DELETED (K8)", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "attendant",
+    });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const rows = await auditRows("USER_DELETED");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toMatchObject({
+      cascadedProfiles: 2,
+      cascadedRoles: 2,
+      cascadedOverrides: 1,
+    });
+  });
+
+  it("records USER_PROFILE_DELETED with the profile kind and the cascade counts (K8)", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "attendant",
+    });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const rows = await auditRows("USER_PROFILE_DELETED");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorId: manager.id,
+      targetType: "User",
+      targetId: target.id,
+      metadata: {
+        profileKind: "EMPLOYEE",
+        cascadedRoles: 1,
+        cascadedOverrides: 1,
+      },
+    });
+
+    // Contrato de PII: nem o email nem o nome do alvo entram na linha.
+    const dump = JSON.stringify(rows[0]);
+    expect(dump).not.toContain(target.email);
+    expect(dump).not.toContain(target.name);
   });
 
   it("records USER_BANNED with reasonProvided and no PII", async () => {

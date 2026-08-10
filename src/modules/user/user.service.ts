@@ -216,7 +216,18 @@ export async function deleteUser(requestingUser: AuthUser, targetId: string) {
 
   const deleted = await userRepository.softDeleteUserAndInvalidateSessions(
     targetId,
-    { action: "USER_DELETED", targetType: "User", targetId },
+    ({ profiles, roles, overrides }) => ({
+      action: "USER_DELETED",
+      targetType: "User",
+      targetId,
+      // O grafo inteiro morre junto (D1); as contagens deixam o efeito visível
+      // na trilha sem gerar uma linha por filho (mesmo critério do K6).
+      metadata: {
+        cascadedProfiles: profiles,
+        cascadedRoles: roles,
+        cascadedOverrides: overrides,
+      },
+    }),
   );
 
   log.info(

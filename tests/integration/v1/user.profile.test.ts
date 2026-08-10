@@ -1,5 +1,10 @@
 import { faker } from "@faker-js/faker";
-import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
+import {
+  attachOverrides,
+  buildCustomer,
+  buildEmployee,
+  buildHybrid,
+} from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
@@ -8,6 +13,7 @@ import request from "supertest";
 import { afterEach, assert, describe, expect, it } from "vitest";
 import app from "@/app";
 import { createNotFoundError } from "@/errors/errorFactory";
+import { prisma } from "@/lib/prisma";
 import { userViews } from "@/modules/user/user.presenter";
 import { findUserById } from "@/modules/user/user.repository";
 
@@ -566,7 +572,7 @@ describe("DELETE /api/v1/users/:userId/customer", () => {
     expect(response.body).toMatchObject({
       code: "CONFLICT",
       message: "Não é possível deletar o último perfil do usuário",
-      action: "Para excluir esse usuario use o endpoint de deleção de usuário.",
+      action: "Para excluir esse perfil use o endpoint de deleção de usuário.",
     });
   });
 
@@ -783,7 +789,7 @@ describe("DELETE /api/v1/users/:userId/employee", () => {
     expect(response.body).toMatchObject({
       code: "CONFLICT",
       message: "Não é possível deletar o último perfil do usuário",
-      action: "Para excluir esse usuario use o endpoint de deleção de usuário.",
+      action: "Para excluir esse perfil use o endpoint de deleção de usuário.",
     });
   });
 
@@ -886,5 +892,162 @@ describe("DELETE /api/v1/users/:userId/employee", () => {
     const activeRoleNames = userInDb.roles.map((r) => r.role.name);
     expect(activeRoleNames).toContain("customer");
     expect(activeRoleNames).not.toContain("attendant");
+  });
+});
+
+// ─── Cascata da deleção de perfil (D1/D4) ─────────────────────────────────────
+//
+// Deletar o perfil derruba as roles daquele `appliesTo` **e os overrides
+// pendurados nelas**, com um timestamp só. O outro perfil não é tocado — é essa
+// assimetria que faz o override morrer junto com a função, e não com a pessoa.
+
+describe("Cascata da deleção de perfil", () => {
+  it("should cascade the customer profile deletion down to the overrides of its roles", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "customer",
+    });
+    await attachOverrides(target.id, {
+      grants: ["read:audit-log"],
+      overrideRole: "attendant",
+    });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const customerRole = await prisma.userRole.findFirstOrThrow({
+      where: { userId: target.id, role: { name: "customer" } },
+      include: { features: true },
+    });
+    const attendantRole = await prisma.userRole.findFirstOrThrow({
+      where: { userId: target.id, role: { name: "attendant" } },
+      include: { features: true },
+    });
+
+    // O lado do cliente morre inteiro, com o mesmo timestamp do perfil.
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { userId: target.id },
+    });
+
+    assert(customer.deletedAt !== null, "o perfil deveria estar deletado");
+    expect(customerRole.deletedAt?.getTime()).toBe(
+      customer.deletedAt.getTime(),
+    );
+    expect(customerRole.features).toHaveLength(1);
+    expect(customerRole.features[0]?.deletedAt?.getTime()).toBe(
+      customer.deletedAt.getTime(),
+    );
+
+    // O lado do funcionário fica intacto.
+    expect(attendantRole.deletedAt).toBeNull();
+    expect(attendantRole.features[0]?.deletedAt).toBeNull();
+  });
+
+  it("should cascade the employee profile deletion down to the overrides of its roles", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "attendant",
+    });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const employee = await prisma.employee.findUniqueOrThrow({
+      where: { userId: target.id },
+    });
+    const attendantRole = await prisma.userRole.findFirstOrThrow({
+      where: { userId: target.id, role: { name: "attendant" } },
+      include: { features: true },
+    });
+
+    assert(employee.deletedAt !== null, "o perfil deveria estar deletado");
+    expect(attendantRole.deletedAt?.getTime()).toBe(
+      employee.deletedAt.getTime(),
+    );
+    expect(attendantRole.features[0]?.deletedAt?.getTime()).toBe(
+      employee.deletedAt.getTime(),
+    );
+  });
+
+  it("should leave no active role or override under a deleted profile", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant", "demo"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "attendant",
+    });
+    await attachOverrides(target.id, {
+      denies: ["read:role"],
+      overrideRole: "demo",
+    });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(
+      await prisma.userRole.count({
+        where: {
+          userId: target.id,
+          deletedAt: null,
+          role: { appliesTo: "EMPLOYEE" },
+        },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.userFeature.count({
+        where: {
+          deletedAt: null,
+          userRole: { userId: target.id, role: { appliesTo: "EMPLOYEE" } },
+        },
+      }),
+    ).toBe(0);
+  });
+
+  it("should stop listing the cascaded overrides on GET /users/:userId/features", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "attendant",
+    });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const before = await request(app)
+      .get(`/api/v1/users/${target.id}/features`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(before.body.data).toHaveLength(1);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const after = await request(app)
+      .get(`/api/v1/users/${target.id}/features`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(after.body.data).toHaveLength(0);
   });
 });

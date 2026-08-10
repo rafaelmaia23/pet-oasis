@@ -2,9 +2,12 @@ import {
   createConflictError,
   createNotFoundError,
 } from "@/errors/errorFactory";
+import type { ProfileKind } from "@/generated/prisma/enums";
+import type { AuditDescriptor } from "@/lib/auditLog";
 import type { RoleName } from "@/modules/role/role.constants";
 import { getRolesByNames } from "@/modules/role/role.repository";
 import { validateRoles } from "@/utils/validateRoles";
+import type { CascadeCounts } from "../user.lifecycle.repository";
 import { findUserById } from "../user.repository";
 import * as userProfileRepository from "./user.profile.repository";
 import type {
@@ -14,6 +17,25 @@ import type {
 
 const DEFAULT_CUSTOMER_ROLES: RoleName[] = ["customer"];
 const DEFAULT_EMPLOYEE_ROLES: RoleName[] = ["attendant"];
+
+/**
+ * Descritor do audit da deleção de perfil (K8). O ator sai do request context
+ * dentro do `record()`, então o service não precisa recebê-lo.
+ */
+const describeProfileDeletion =
+  (userId: string, profileKind: ProfileKind) =>
+  ({ roles, overrides }: CascadeCounts): AuditDescriptor => ({
+    action: "USER_PROFILE_DELETED",
+    targetType: "User",
+    targetId: userId,
+    // A cascata derruba roles e overrides sem nada aparecer no 204; as
+    // contagens são o único rastro do que se perdeu (mesmo critério do K6).
+    metadata: {
+      profileKind,
+      cascadedRoles: roles,
+      cascadedOverrides: overrides,
+    },
+  });
 
 export async function createCustomerProfile(
   userId: string,
@@ -120,11 +142,14 @@ export async function deleteCustomerProfile(userId: string) {
   if (!hasActiveEmployee) {
     throw createConflictError({
       message: "Não é possível deletar o último perfil do usuário",
-      action: "Para excluir esse usuario use o endpoint de deleção de usuário.",
+      action: "Para excluir esse perfil use o endpoint de deleção de usuário.",
     });
   }
 
-  return userProfileRepository.deleteCustomerProfile(userId);
+  return userProfileRepository.deleteCustomerProfile(
+    userId,
+    describeProfileDeletion(userId, "CUSTOMER"),
+  );
 }
 
 export async function deleteEmployeeProfile(userId: string) {
@@ -157,9 +182,12 @@ export async function deleteEmployeeProfile(userId: string) {
   if (!hasActiveCustomer) {
     throw createConflictError({
       message: "Não é possível deletar o último perfil do usuário",
-      action: "Para excluir esse usuario use o endpoint de deleção de usuário.",
+      action: "Para excluir esse perfil use o endpoint de deleção de usuário.",
     });
   }
 
-  return userProfileRepository.deleteEmployeeProfile(userId);
+  return userProfileRepository.deleteEmployeeProfile(
+    userId,
+    describeProfileDeletion(userId, "EMPLOYEE"),
+  );
 }

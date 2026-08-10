@@ -2176,7 +2176,7 @@ describe("DELETE /api/v1/users/:userId/roles/:roleId/features/:featureId", () =>
   });
 });
 
-describe("Escopo do override na atribuição de role (D2/D3/D6/D16)", () => {
+describe("Escopo do override na atribuição de role (D2/D3/D6')", () => {
   it("should cascade the role revocation to the overrides hanging on it", async () => {
     const admin = await buildEmployee({ roleNames: ["admin"] });
     const adminToken = await loginAs(admin.email, admin.password);
@@ -2301,7 +2301,7 @@ describe("Escopo do override na atribuição de role (D2/D3/D6/D16)", () => {
     expect(rows[0]?.deletedAt).toBeNull();
   });
 
-  it("should restore the overrides of the role when an admin grants it again", async () => {
+  it("should NOT restore the overrides of the role when it is granted again (D6')", async () => {
     const admin = await buildEmployee({ roleNames: ["admin"] });
     const adminToken = await loginAs(admin.email, admin.password);
 
@@ -2331,15 +2331,23 @@ describe("Escopo do override na atribuição de role (D2/D3/D6/D16)", () => {
 
     const userInDb = await findUserById(target.id);
 
-    // D6: tirar e devolver o cargo não zera os ajustes finos dele.
-    expect(activeOverrides(userInDb)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ featureId: feature.id, granted: true }),
-      ]),
+    // D6' (K16): a cascata desce até o override, a restauração para na role.
+    // Quem devolve o cargo pode nem saber que havia ajuste fino pendurado nele.
+    expect(activeOverrides(userInDb).map((o) => o.featureId)).not.toContain(
+      feature.id,
     );
+
+    // A linha continua lá, soft-deletada — é evidência para o audit. Ela só
+    // não volta sozinha.
+    const row = await prisma.userFeature.findFirst({
+      where: { featureId: feature.id, userRole: { userId: target.id } },
+    });
+
+    expect(row).not.toBeNull();
+    expect(row?.deletedAt).not.toBeNull();
   });
 
-  it("should NOT restore a privileged override when the actor is not an admin (D16)", async () => {
+  it("should NOT restore overrides even for an admin re-granting a role revoked by a manager (D6')", async () => {
     const admin = await buildEmployee({ roleNames: ["admin"] });
     const adminToken = await loginAs(admin.email, admin.password);
 
@@ -2359,19 +2367,14 @@ describe("Escopo do override na atribuição de role (D2/D3/D6/D16)", () => {
       throw createNotFoundError({ message: "Feature não encontrada" });
 
     // só o admin consegue pendurar a privilegiada.
-    await request(app)
-      .put(
-        `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${privileged.id}`,
-      )
-      .set("Authorization", `Bearer ${adminToken}`)
-      .send({ granted: true });
-
-    await request(app)
-      .put(
-        `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${ordinary.id}`,
-      )
-      .set("Authorization", `Bearer ${adminToken}`)
-      .send({ granted: true });
+    for (const feature of [privileged, ordinary]) {
+      await request(app)
+        .put(
+          `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${feature.id}`,
+        )
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ granted: true });
+    }
 
     await request(app)
       .delete(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
@@ -2379,41 +2382,21 @@ describe("Escopo do override na atribuição de role (D2/D3/D6/D16)", () => {
 
     const regranted = await request(app)
       .post(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
-      .set("Authorization", `Bearer ${managerToken}`);
+      .set("Authorization", `Bearer ${adminToken}`);
 
-    // a ação prossegue normalmente: quem não volta é o conteúdo privilegiado.
+    // a ação prossegue normalmente: o que não volta é o conteúdo.
     expect(regranted.status).toBe(201);
 
     const userInDb = await findUserById(target.id);
+    const activeFeatureIds = activeOverrides(userInDb).map((o) => o.featureId);
 
-    expect(activeOverrides(userInDb)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ featureId: ordinary.id }),
-      ]),
-    );
-
-    expect(activeOverrides(userInDb)).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ featureId: privileged.id }),
-      ]),
-    );
-
-    // o descarte é silencioso na resposta: o audit é o único rastro (K3).
-    const skipped = await prisma.auditLog.findMany({
-      where: {
-        action: "USER_PERMISSION_RESTORE_SKIPPED",
-        targetId: target.id,
-      },
-    });
-
-    expect(skipped).toHaveLength(1);
-    expect(skipped[0]?.metadata).toMatchObject({
-      featureName: "read:audit-log:full",
-      roleName: "attendant",
-    });
+    // Nem o privilegiado nem o comum: a regra não olha mais quem é o ator, e
+    // por isso o D16 inteiro deixou de ter o que guardar.
+    expect(activeFeatureIds).not.toContain(privileged.id);
+    expect(activeFeatureIds).not.toContain(ordinary.id);
   });
 
-  it("should NOT restore an override that was removed on purpose before the role was revoked (D5)", async () => {
+  it("should NOT restore any override, regardless of when it died (D6')", async () => {
     const admin = await buildEmployee({ roleNames: ["admin"] });
     const adminToken = await loginAs(admin.email, admin.password);
 
@@ -2436,8 +2419,9 @@ describe("Escopo do override na atribuição de role (D2/D3/D6/D16)", () => {
         .send({ granted: true });
     }
 
-    // Removido explicitamente: ganha um `deletedAt` próprio, que não vai bater
-    // com o da role depois.
+    // Um morre explicitamente (`deletedAt` próprio), o outro na cascata da role
+    // (`deletedAt` igual ao dela). Antes do K16 essa distinção decidia quem
+    // voltava; agora os dois ficam mortos do mesmo jeito.
     await request(app)
       .delete(
         `/api/v1/users/${target.id}/roles/${managerRoleId}/features/${removedOnPurpose.id}`,
@@ -2455,59 +2439,60 @@ describe("Escopo do override na atribuição de role (D2/D3/D6/D16)", () => {
     const userInDb = await findUserById(target.id);
     const activeFeatureIds = activeOverrides(userInDb).map((o) => o.featureId);
 
-    expect(activeFeatureIds).toContain(cascaded.id);
+    expect(activeFeatureIds).not.toContain(cascaded.id);
     expect(activeFeatureIds).not.toContain(removedOnPurpose.id);
   });
 
-  it("should keep a privileged override skipped by a non-admin dead forever, even for an admin (D16, §9.1.1)", async () => {
+  it("should bring an override back only through an explicit PUT, reusing the row (D6')", async () => {
     const admin = await buildEmployee({ roleNames: ["admin"] });
     const adminToken = await loginAs(admin.email, admin.password);
 
-    const manager = await buildEmployee({ roleNames: ["manager"] });
-    const managerToken = await loginAs(manager.email, manager.password);
-
     const target = await buildEmployee({ roleNames: ["attendant", "manager"] });
 
-    const attendantRoleId = await roleIdByName("attendant");
+    const managerRoleId = await roleIdByName("manager");
 
-    const privileged = await getFeatureByName("read:audit-log:full");
+    const feature = await getFeatureByName("read:log");
 
-    if (!privileged)
+    if (!feature)
       throw createNotFoundError({ message: "Feature não encontrada" });
 
+    const overridePath = `/api/v1/users/${target.id}/roles/${managerRoleId}/features/${feature.id}`;
+
     await request(app)
-      .put(
-        `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${privileged.id}`,
-      )
+      .put(overridePath)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ granted: true });
 
-    // T1: o manager revoga e reconcede — o privilegiado é pulado e fica com o
-    // `deletedAt` de T1.
     await request(app)
-      .delete(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
-      .set("Authorization", `Bearer ${managerToken}`);
-
-    await request(app)
-      .post(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
-      .set("Authorization", `Bearer ${managerToken}`);
-
-    // T2: agora um **admin** revoga e reconcede. A role volta com um
-    // `deletedAt` novo, que não bate com o T1 do override pulado.
-    await request(app)
-      .delete(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
+      .delete(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
       .set("Authorization", `Bearer ${adminToken}`);
 
     await request(app)
-      .post(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
+      .post(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
       .set("Authorization", `Bearer ${adminToken}`);
+
+    // A única porta de volta é a ação explícita — e ela reusa a linha, porque
+    // `@@unique([userRoleId, featureId])` não admite uma segunda.
+    const revived = await request(app)
+      .put(overridePath)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ granted: true });
+
+    expect(revived.status).toBe(200);
 
     const userInDb = await findUserById(target.id);
 
-    // O descarte é permanente: só volta por concessão explícita.
-    expect(activeOverrides(userInDb).map((o) => o.featureId)).not.toContain(
-      privileged.id,
+    expect(activeOverrides(userInDb)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ featureId: feature.id, granted: true }),
+      ]),
     );
+
+    const rows = await prisma.userFeature.findMany({
+      where: { featureId: feature.id, userRole: { userId: target.id } },
+    });
+
+    expect(rows).toHaveLength(1);
   });
 
   it("should refuse a second active UserRole row for the same pair", async () => {

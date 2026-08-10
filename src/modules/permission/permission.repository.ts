@@ -1,10 +1,6 @@
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
-import {
-  cascadeDeleteOverrides,
-  type OverrideRestorePolicy,
-  restoreOverridesOfUserRole,
-} from "@/modules/user/user.lifecycle.repository";
+import { cascadeDeleteOverrides } from "@/modules/user/user.lifecycle.repository";
 
 // A role de cada override é o que o presenter expõe (K2) — sempre que um
 // override sai daqui, sai com a atribuição a que pertence.
@@ -16,10 +12,6 @@ const overrideInclude = {
 const userRoleInclude = {
   role: { include: { features: { include: { feature: true } } } },
 } as const;
-
-// A política de restauração (D6/D16) nasceu aqui na 8.0 e mudou de casa na 8.2,
-// quando religar perfil e reativar conta passaram a precisar dela também.
-export type { OverrideRestorePolicy };
 
 export async function getUserFeatures(userId: string) {
   return prisma.userFeature.findMany({
@@ -108,18 +100,15 @@ export async function getUserRoles(userId: string) {
 }
 
 /**
- * Concede a role **reusando** a linha do par `(userId, roleId)` (D3) e, quando
- * a linha já existia, restaura os overrides que morreram com ela (D6) — filtrados
- * pela política de não-escalação (D16).
- *
- * "Morreram com ela" é literal (D5): só volta o override cujo `deletedAt` é
- * igual ao da linha, lido **antes** de zerá-la. Override removido de propósito
- * tem timestamp próprio e nunca ressuscita.
+ * Concede a role **reusando** a linha do par `(userId, roleId)` (D3) — e nada
+ * além dela (D6', K16): os overrides que morreram na revogação anterior ficam
+ * mortos. Quem devolve o cargo pode nem saber que havia ajuste fino pendurado
+ * nele, então ressuscitá-lo em silêncio seria conceder permissão sem ninguém ter
+ * decidido conceder. De volta só por `upsertUserFeature`, que revive a linha.
  */
 export async function addUserRole(
   userId: string,
   roleId: string,
-  policy: OverrideRestorePolicy,
   audit?: AuditDescriptor,
 ) {
   return prisma.$transaction(async (tx) => {
@@ -127,23 +116,16 @@ export async function addUserRole(
       where: { userId_roleId: { userId, roleId } },
     });
 
-    if (!existing) {
-      const created = await tx.userRole.create({
-        data: { userId, roleId },
-        include: userRoleInclude,
-      });
-
-      if (audit) await record(audit, tx);
-      return created;
-    }
-
-    await restoreOverridesOfUserRole(tx, existing, policy);
-
-    const userRole = await tx.userRole.update({
-      where: { id: existing.id },
-      data: { deletedAt: null },
-      include: userRoleInclude,
-    });
+    const userRole = existing
+      ? await tx.userRole.update({
+          where: { id: existing.id },
+          data: { deletedAt: null },
+          include: userRoleInclude,
+        })
+      : await tx.userRole.create({
+          data: { userId, roleId },
+          include: userRoleInclude,
+        });
 
     if (audit) await record(audit, tx);
     return userRole;

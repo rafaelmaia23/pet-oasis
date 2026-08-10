@@ -3,13 +3,11 @@ import { clearDatabase } from "@tests/helpers/database";
 import { afterEach, assert, describe, expect, it } from "vitest";
 import type { ProfileKind } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
-import { PRIVILEGED_FEATURES } from "@/modules/role/role.constants";
 import {
   deleteCustomerProfile,
   deleteEmployeeProfile,
 } from "@/modules/user/profile/user.profile.repository";
 import {
-  type OverrideRestorePolicy,
   restoreProfile,
   restoreProfilesOfUser,
 } from "@/modules/user/user.lifecycle.repository";
@@ -22,27 +20,13 @@ afterEach(async () => {
   await clearDatabase();
 });
 
-/** Ator admin: restaura tudo. */
-const permissive: OverrideRestorePolicy = {
-  canRestore: () => true,
-  describeSkip: () => {
-    throw new Error("a política permissiva nunca deveria pular um override");
-  },
-};
-
-/** Ator não-admin (D16): o privilegiado fica para trás, com rastro no audit. */
-const nonAdmin = (targetId: string): OverrideRestorePolicy => ({
-  canRestore: (featureName) =>
-    !(
-      featureName === "*" || PRIVILEGED_FEATURES.includes(featureName as never)
-    ),
-  describeSkip: (featureName) => ({
-    action: "USER_PERMISSION_RESTORE_SKIPPED",
-    targetType: "User",
-    targetId,
-    metadata: { featureName },
-  }),
-});
+const activeOverrideNames = async (userId: string) =>
+  (
+    await prisma.userFeature.findMany({
+      where: { deletedAt: null, userRole: { userId } },
+      include: { feature: true },
+    })
+  ).map((override) => override.feature.name);
 
 const roleIdByName = async (name: string) =>
   (await prisma.role.findUniqueOrThrow({ where: { name } })).id;
@@ -85,7 +69,6 @@ describe("restoreProfile()", () => {
     // O admin religa o perfil escolhendo **só** attendant; manager fica em T2.
     await restore(target.id, "EMPLOYEE", {
       roleIds: [attendantRoleId],
-      policy: permissive,
     });
 
     expect(await activeRoleNames(target.id)).toEqual(
@@ -104,34 +87,13 @@ describe("restoreProfile()", () => {
 
     // Religa sem escolher nada: volta só attendant. A recusa do admin em T2
     // persiste sozinha, sem nenhuma regra extra — manager não bate com T3.
-    await restore(target.id, "EMPLOYEE", { policy: permissive });
+    await restore(target.id, "EMPLOYEE", {});
 
     expect(await activeRoleNames(target.id)).toContain("attendant");
     expect(await activeRoleNames(target.id)).not.toContain("manager");
   });
 
-  it("should bring back the overrides that died with the role", async () => {
-    const target = await buildHybrid({ employeeRoles: ["attendant"] });
-
-    await attachOverrides(target.id, {
-      grants: ["read:log"],
-      overrideRole: "attendant",
-    });
-
-    await deleteEmployeeProfile(target.id);
-    await restore(target.id, "EMPLOYEE", { policy: permissive });
-
-    const active = await prisma.userFeature.findMany({
-      where: { deletedAt: null, userRole: { userId: target.id } },
-      include: { feature: true },
-    });
-
-    expect(active.map((override) => override.feature.name)).toEqual([
-      "read:log",
-    ]);
-  });
-
-  it("should NOT bring back an override that was removed on its own before the profile died", async () => {
+  it("should never bring an override back, whatever killed it (D6')", async () => {
     const target = await buildHybrid({ employeeRoles: ["attendant"] });
 
     await attachOverrides(target.id, {
@@ -139,6 +101,9 @@ describe("restoreProfile()", () => {
       overrideRole: "attendant",
     });
 
+    // Um morre sozinho, muito antes; o outro morre na cascata do perfil. Antes
+    // do K16 essa diferença de `deletedAt` decidia quem voltava — agora a
+    // restauração para na role e os dois ficam mortos igualmente.
     const removedOnPurpose = await prisma.userFeature.findFirstOrThrow({
       where: { feature: { name: "read:log" }, userRole: { userId: target.id } },
     });
@@ -149,56 +114,25 @@ describe("restoreProfile()", () => {
     });
 
     await deleteEmployeeProfile(target.id);
-    await restore(target.id, "EMPLOYEE", { policy: permissive });
+    await restore(target.id, "EMPLOYEE", {});
 
-    const active = await prisma.userFeature.findMany({
-      where: { deletedAt: null, userRole: { userId: target.id } },
-      include: { feature: true },
-    });
-
-    expect(active.map((override) => override.feature.name)).toEqual([
-      "read:audit-log",
-    ]);
-  });
-
-  it("should skip the privileged overrides when the actor is not an admin, one audit row each (D16)", async () => {
-    const target = await buildHybrid({ employeeRoles: ["attendant"] });
-
-    await attachOverrides(target.id, {
-      grants: ["read:audit-log:full", "read:audit-log"],
-      overrideRole: "attendant",
-    });
-
-    await deleteEmployeeProfile(target.id);
-    await restore(target.id, "EMPLOYEE", { policy: nonAdmin(target.id) });
-
-    const active = await prisma.userFeature.findMany({
-      where: { deletedAt: null, userRole: { userId: target.id } },
-      include: { feature: true },
-    });
-
-    // A ação prossegue: a role volta, o conteúdo privilegiado não.
+    // A role volta — é até onde a restauração sobe.
     expect(await activeRoleNames(target.id)).toContain("attendant");
-    expect(active.map((override) => override.feature.name)).toEqual([
-      "read:audit-log",
-    ]);
+    expect(await activeOverrideNames(target.id)).toEqual([]);
 
-    const skipped = await prisma.auditLog.findMany({
-      where: { action: "USER_PERMISSION_RESTORE_SKIPPED" },
+    // As linhas continuam lá, soft-deletadas: evidência para o audit.
+    const rows = await prisma.userFeature.findMany({
+      where: { userRole: { userId: target.id } },
     });
 
-    expect(skipped).toHaveLength(1);
-    expect(skipped[0]?.metadata).toMatchObject({
-      featureName: "read:audit-log:full",
-    });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.deletedAt !== null)).toBe(true);
   });
 
   it("should be a no-op when there is no dead profile to restore", async () => {
     const target = await buildHybrid({ employeeRoles: ["attendant"] });
 
-    const result = await restore(target.id, "EMPLOYEE", {
-      policy: permissive,
-    });
+    const result = await restore(target.id, "EMPLOYEE", {});
 
     expect(result).toBeNull();
     expect(await activeRoleNames(target.id)).toEqual(
@@ -216,12 +150,9 @@ describe("restoreProfile()", () => {
     await deleteEmployeeProfile(target.id);
     await restore(target.id, "EMPLOYEE", {
       roleIds: [attendantRoleId],
-      policy: permissive,
     });
 
-    const second = await restore(target.id, "EMPLOYEE", {
-      policy: permissive,
-    });
+    const second = await restore(target.id, "EMPLOYEE", {});
 
     expect(second).toBeNull();
     expect(await activeRoleNames(target.id)).not.toContain("manager");
@@ -250,7 +181,6 @@ describe("restoreProfilesOfUser()", () => {
     const result = await prisma.$transaction((tx) =>
       restoreProfilesOfUser(tx, target.id, user.deletedAt as Date, {
         kinds: ["CUSTOMER", "EMPLOYEE"],
-        policy: permissive,
       }),
     );
 
@@ -270,10 +200,8 @@ describe("restoreProfilesOfUser()", () => {
 
     expect(await activeRoleNames(target.id)).toEqual(["attendant"]);
 
-    const active = await prisma.userFeature.findMany({
-      where: { deletedAt: null, userRole: { userId: target.id } },
-    });
-    expect(active).toHaveLength(1);
+    // A role volta; o override pendurado nela, não (D6').
+    expect(await activeOverrideNames(target.id)).toEqual([]);
   });
 
   it("should restore only the profiles the caller asked for", async () => {
@@ -289,7 +217,6 @@ describe("restoreProfilesOfUser()", () => {
     const result = await prisma.$transaction((tx) =>
       restoreProfilesOfUser(tx, target.id, user.deletedAt as Date, {
         kinds: ["CUSTOMER"],
-        policy: permissive,
       }),
     );
 

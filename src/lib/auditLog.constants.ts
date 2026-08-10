@@ -30,7 +30,6 @@ export const AUDIT_ACTIONS = [
   // Override privilegiado que **não** ressuscitou porque o ator não é admin
   // (D16). O descarte é permanente e invisível na resposta HTTP — sem esta
   // linha, ninguém fica sabendo que a permissão foi perdida.
-  "USER_PERMISSION_RESTORE_SKIPPED",
   "PASSWORD_RESET_REQUESTED",
   "PASSWORD_RESET_COMPLETED",
   "PASSWORD_CHANGED",

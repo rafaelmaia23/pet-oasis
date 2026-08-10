@@ -366,7 +366,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 
 | Sessão | Sub-fases | Tema | Por que agrupa |
 |---|---|---|---|
-| **A** ⬜ | 8.0 | Escopo de override + unicidade de `UserRole` | Fundação do modelo de autorização. Nada de cascata ou reativação faz sentido antes do override ter dono. |
+| **A** ✅ | 8.0 | Escopo de override + unicidade de `UserRole` | Fundação do modelo de autorização. Nada de cascata ou reativação faz sentido antes do override ter dono. |
 | **B** ⬜ | 8.1, 8.2 | Cascata + restauração por data | Mesma mecânica de dados, uma inútil sem a outra: cascatear sem saber restaurar deixa a fase pela metade. |
 | **C** ⬜ | 8.3 | Perfil em conta ativa | Primeiro fluxo de produto, já em cima do modelo correto. |
 | **D** ⬜ | 8.4, 8.5 | Conta deletada (self-service e admin) | Os dois disparam token e convergem na mesma confirmação. |
@@ -374,17 +374,19 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **F** ⬜ | 8.8 | Isenção do demo no lockout | Bug de produção, sem relação com perfil/reativação. Reaplicação do patch `0002`. |
 | **G** ⬜ | 8.9 | Fechos | Docs, suíte, `typecheck`/`lint`. |
 
-### ⬜ [Sessão A] Fase 8.0 — Escopo de override e unicidade de `UserRole`
+### ✅ [Sessão A] Fase 8.0 — Escopo de override e unicidade de `UserRole`
 
-- ⬜ Migration (**zera o banco**, D10): `UserFeature.userId` → `userRoleId` (FK para `UserRole`) + `@@unique([userRoleId, featureId])`; `UserRole` ganha `grantedAt` (não existia) e `@@unique([userId, roleId])`. `User.features` deixa de ser relação direta — overrides passam a ser alcançados via `User.roles[].features[]`.
-- ⬜ `UserRole` passa a reusar linha na re-concessão (D3): busca a linha do par, `deletedAt = null`. Remove a unicidade-por-código ("busca ativo → update ou create").
-- ⬜ Revogar role cascateia para os overrides dela (D2), mesma transação, mesmo timestamp.
-- ⬜ Re-conceder role restaura os overrides dela (D6) — depende da regra de correlação, que nasce completa na 8.2; aqui basta a forma mais simples (os overrides daquela `UserRole`).
-- ⬜ **D16 nasce aqui** (primeiro dos três caminhos de restauração): se o ator não é admin, a role é concedida normalmente mas os overrides de `PRIVILEGED_FEATURES` (+ `*`) **não** ressuscitam. Sem isso, um manager re-concedendo uma role não-privilegiada ressuscita um override privilegiado pendurado nela — `assertAdminForRoleAssignment` só olha as features estáticas da role e não enxerga esse caminho. Descarte é permanente e silencioso → **auditar**.
-- ⬜ Contrato novo (D9): `PUT|DELETE /users/:userId/roles/:roleId/features/:featureId` substitui `/users/:userId/features/:featureId`. `GET /users/:userId/features` passa a expor a role de cada override no presenter (K2).
-- ⬜ `computeEffectiveFeatures` **não muda de assinatura** — continua somando só o que está vivo. Toda a correção é de dados, não de cômputo.
-- ⬜ Guard de não-escalação (`PRIVILEGED_FEATURES`) revisado para o contrato novo.
-- ⬜ Docs: `docs/endpoints.md`, coleção Bruno, OpenAPI.
+- ✅ Migration `20260810154958_scope_user_feature_to_user_role` (**zerou o banco**, D10): `UserFeature.userId` → `userRoleId` (FK para `UserRole`) + `@@unique([userRoleId, featureId])`; `UserRole` ganhou `grantedAt` e `@@unique([userId, roleId])`. `User.features` deixou de ser relação direta — overrides são alcançados via `User.roles[].features[]`.
+- ✅ `UserRole` reusa linha na re-concessão (D3): `permissionRepository.addUserRole` busca a linha do par (`findUnique` no `userId_roleId`), revive com `deletedAt = null` ou cria. Unicidade-por-código removida.
+- ✅ Revogar role cascateia para os overrides dela (D2), mesma transação, **um único `new Date()`** — ensaio do D4 que a 8.1 generaliza.
+- ✅ Re-conceder role restaura os overrides dela (D6). Forma simples desta sub-fase: **todos** os overrides mortos daquela `UserRole`; a 8.2 estreita para a correlação por data.
+- ✅ **D16 nasceu aqui.** `permission.service.addUserRole` resolve `isAdmin(ator)` e passa ao repository uma `OverrideRestorePolicy` (`canRestore` + `describeSkip`) — a regra fica no service, a mecânica no repository. Ator não-admin: a role volta (201), os overrides de `PRIVILEGED_FEATURES` + `*` não. Cada descarte vira uma linha `USER_PERMISSION_RESTORE_SKIPPED` (K3).
+- ✅ Contrato novo (D9): `PUT|DELETE /users/:userId/roles/:roleId/features/:featureId`. `GET /users/:userId/features` expõe a role de cada override (K2), achatada por `toUserFeatureDTO` no service.
+- ✅ `computeEffectiveFeatures` manteve a assinatura, mas virou **dois laços em vez de um aninhado**: todas as features estáticas antes de qualquer override. Num laço só, um deny pendurado na role A seria aplicado antes de a role B somar a feature — o resultado dependeria da ordem das roles. Teste unitário dedicado trava isso.
+- ✅ Guard de não-escalação revisado: predicado extraído em `isPrivilegedFeature` (`name === "*" || PRIVILEGED_FEATURE_SET.has(name)`), agora compartilhado pelos três pontos. **Isso fechou um buraco pré-existente:** `assertAdminForPermissionFeature` só olhava `PRIVILEGED_FEATURE_SET` e deixava passar um override do wildcard `*` concedido por não-admin.
+- ✅ Efeito colateral na view: `userViews.admin` deixou de ter `features` no topo (o campo não existe mais no dado) e passou a espelhar a junção em `roles[].features[]` — mesma informação, no lugar onde ela agora mora.
+- ✅ Factories: `grants`/`denies` penduram na **primeira** role do usuário, com `overrideRole?` opcional para escolher outra (`attachOverrides`).
+- ✅ Docs: `docs/endpoints.md`, `docs/logging-policy.md`, `docs/context.md`, OpenAPI (`src/docs/paths/permission.ts`), coleção Bruno.
 
 #### Decisões do kickoff da Sessão A
 
@@ -411,6 +413,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ⬜ **Ler o `deletedAt` do pai antes de zerá-lo** — senão a comparação dos filhos perde a chave. Segunda invariante silenciosa.
 - ⬜ Regressão do caso difícil (§3.1 do redesenho): perfil morre em T2 (roles A e B), admin religa só A, perfil morre de novo em T3, admin religa → só A volta; B (T2) não bate mais. Prova que a recusa do admin persiste sem regra extra.
 - ⬜ Regressão: override removido explicitamente tem `deletedAt` que não bate com nenhum pai → nunca ressuscita.
+- 🔸 **Pendente vindo da 8.0:** o **descarte permanente** do D16 (§9.1.1 do redesenho — "o override privilegiado pulado mantém o `deletedAt` antigo e não volta sozinho nem para um admin") **ainda não vale** ao fim da 8.0. Lá a restauração pega *todos* os overrides mortos da `UserRole`, então uma segunda revogação/reconcessão por um admin ressuscita o que o manager tinha descartado. A propriedade nasce **aqui**, com a correlação por data, e o teste que a prova foi escrito e removido da 8.0 por isso — reescrever nesta sub-fase: manager reconcede (privilegiado é pulado, mantém `deletedAt` de T1) → admin revoga (nova `UserRole.deletedAt` = T2) e reconcede → o pulado **não** volta, porque T1 ≠ T2.
 
 ### ⬜ [Sessão C] Fase 8.3 — Perfil em conta ativa
 

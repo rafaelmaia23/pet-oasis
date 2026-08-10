@@ -29,9 +29,9 @@ model User {
   employee Employee?
   customer Customer?
 
-  // autorização
-  roles    UserRole[]
-  features UserFeature[]
+  // autorização — overrides não penduram no user solto: alcança-se por
+  // `roles[].features[]`, porque todo override pertence a uma UserRole (D2).
+  roles UserRole[]
 
   // autenticação
   sessions           Session[]
@@ -107,30 +107,40 @@ model RoleFeature {
   @@map("role_features")
 }
 
+// Uma linha por par (userId, roleId), para sempre (D3): re-conceder reusa a
+// linha (`deletedAt = null`) em vez de criar outra. É esse id estável que
+// permite ao override pendurar aqui sem ficar órfão a cada ciclo (D2/D6).
 model UserRole {
-  id     String   @id @default(uuid())
-  userId String @map("user_id")
-  roleId String @map("role_id")
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  roleId    String    @map("role_id")
+  grantedAt DateTime  @default(now()) @map("granted_at")
   deletedAt DateTime? @map("deleted_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role          @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  features UserFeature[]
 
+  @@unique([userId, roleId])
   @@map("user_roles")
 }
 
+// Override escopado à **atribuição de role**, não ao usuário (D2): override é
+// sobre a função ("esse precisa de um pouco mais pro trabalho que faz"), então
+// perder a função tem que levar o override junto.
 model UserFeature {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  featureId String   @map("feature_id")
-  granted   Boolean  @default(true) // true = concede · false = nega explicitamente
-  grantedAt DateTime @default(now()) @map("granted_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  id         String    @id @default(uuid())
+  userRoleId String    @map("user_role_id")
+  featureId  String    @map("feature_id")
+  granted    Boolean   @default(true) // true = concede · false = nega explicitamente
+  grantedAt  DateTime  @default(now()) @map("granted_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  userRole UserRole @relation(fields: [userRoleId], references: [id], onDelete: Cascade)
+  feature  Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
 
+  @@unique([userRoleId, featureId])
   @@map("user_features")
 }
 

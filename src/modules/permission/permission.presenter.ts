@@ -6,6 +6,12 @@ const userFeatureDefaultView = z
     granted: z.boolean(),
     grantedAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
+    // A role a que o override pertence (D2): sem ela a lista não diz sobre
+    // qual atribuição o ajuste incide, e é essa a informação nova do modelo.
+    role: z.object({
+      id: z.uuid(),
+      name: z.string().meta({ example: "manager" }),
+    }),
     feature: z.object({
       id: z.uuid(),
       name: z.string().meta({ example: "manage:permission" }),
@@ -14,7 +20,8 @@ const userFeatureDefaultView = z
   })
   .meta({
     id: "UserFeatureOverride",
-    description: "Override de feature de um usuário (grant/deny)",
+    description:
+      "Override de feature escopado a uma atribuição de role (grant/deny)",
   });
 
 export const userFeatureViews = { default: userFeatureDefaultView } as const;

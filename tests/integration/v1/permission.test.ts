@@ -12,6 +12,7 @@ import { createNotFoundError } from "@/errors/errorFactory";
 import { prisma } from "@/lib/prisma";
 import { getFeatureByName } from "@/modules/feature/feature.repository";
 import { userFeatureViews } from "@/modules/permission/permission.presenter";
+import type { RoleName } from "@/modules/role/role.constants";
 import { roleViews } from "@/modules/role/role.presenter";
 import { getRoleByName } from "@/modules/role/role.repository";
 import { findUserById } from "@/modules/user/user.repository";
@@ -20,6 +21,20 @@ afterEach(async () => {
   await clearDatabase();
   await flushRedis();
 });
+
+const roleIdByName = async (name: RoleName) => {
+  const role = await getRoleByName(name);
+
+  if (!role) {
+    throw createNotFoundError({ message: `Role "${name}" não encontrada` });
+  }
+
+  return role.id;
+};
+
+/** Overrides ativos do usuário — agora alcançados via `roles[].features[]` (D2). */
+const activeOverrides = (user: Awaited<ReturnType<typeof findUserById>>) =>
+  user?.roles.flatMap((userRole) => userRole.features) ?? [];
 
 describe("GET /api/v1/users/:userId/features", () => {
   it("should return 401 if no token is provided", async () => {
@@ -1001,10 +1016,10 @@ describe("DELETE /api/v1/users/:userId/roles/:roleId", () => {
   });
 });
 
-describe("PUT /api/v1/users/:userId/features/:featureId", () => {
+describe("PUT /api/v1/users/:userId/roles/:roleId/features/:featureId", () => {
   it("should return 401 if no token is provided", async () => {
     const response = await request(app)
-      .put("/api/v1/users/some-id/features/some-feature-id")
+      .put("/api/v1/users/some-id/roles/some-role-id/features/some-feature-id")
       .send({ granted: true });
 
     expect(response.status).toBe(401);
@@ -1023,6 +1038,8 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const feature = await getFeatureByName("read:user:others");
 
     if (!feature) {
@@ -1032,7 +1049,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1052,6 +1069,8 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const feature = await getFeatureByName("read:user:others");
 
     if (!feature) {
@@ -1061,13 +1080,40 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/non-valid-id/features/${feature.id}`)
+      .put(`/api/v1/users/non-valid-id/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
     expect(response.status).toBe(422);
 
     expectValidationError(response, ["userId"]);
+  });
+
+  it("should return 422 if role id is not a valid uuid", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const feature = await getFeatureByName("read:user:others");
+
+    if (!feature) {
+      throw createNotFoundError({
+        message: "Feature não encontrada",
+      });
+    }
+
+    const response = await request(app)
+      .put(
+        `/api/v1/users/${user.id}/roles/non-valid-role-id/features/${feature.id}`,
+      )
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["roleId"]);
   });
 
   it("should return 422 if feature id is not a valid uuid", async () => {
@@ -1077,8 +1123,12 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const response = await request(app)
-      .put(`/api/v1/users/${user.id}/features/non-valid-feature-id`)
+      .put(
+        `/api/v1/users/${user.id}/roles/${roleId}/features/non-valid-feature-id`,
+      )
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1094,6 +1144,8 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const feature = await getFeatureByName("read:user:others");
 
     if (!feature) {
@@ -1103,7 +1155,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: "not-a-boolean" });
 
@@ -1112,7 +1164,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     expectValidationError(response, ["granted"]);
 
     const response2 = await request(app)
-      .put(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({});
 
@@ -1128,6 +1180,8 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const feature = await getFeatureByName("read:user:others");
 
     if (!feature) {
@@ -1137,7 +1191,9 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${faker.string.uuid()}/features/${feature.id}`)
+      .put(
+        `/api/v1/users/${faker.string.uuid()}/roles/${roleId}/features/${feature.id}`,
+      )
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1157,8 +1213,12 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const response = await request(app)
-      .put(`/api/v1/users/${user.id}/features/${faker.string.uuid()}`)
+      .put(
+        `/api/v1/users/${user.id}/roles/${roleId}/features/${faker.string.uuid()}`,
+      )
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1169,6 +1229,102 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
       message: "Feature não encontrada",
       action: "Verifique o ID e tente novamente",
     });
+  });
+
+  it("should return 404 if role with given id does not exist", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const feature = await getFeatureByName("read:user:others");
+
+    if (!feature) {
+      throw createNotFoundError({
+        message: "Feature não encontrada",
+      });
+    }
+
+    const response = await request(app)
+      .put(
+        `/api/v1/users/${user.id}/roles/${faker.string.uuid()}/features/${feature.id}`,
+      )
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(404);
+
+    expect(response.body).toMatchObject({
+      code: "NOT_FOUND",
+      message: "Role não encontrada",
+      action: "Verifique o ID e tente novamente",
+    });
+  });
+
+  it("should return 422 if the user does not have the given role active", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+
+    // alvo é attendant: a role `manager` existe, mas ele não a tem.
+    const target = await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const managerRoleId = await roleIdByName("manager");
+
+    const feature = await getFeatureByName("read:user:others");
+
+    if (!feature) {
+      throw createNotFoundError({
+        message: "Feature não encontrada",
+      });
+    }
+
+    const response = await request(app)
+      .put(
+        `/api/v1/users/${target.id}/roles/${managerRoleId}/features/${feature.id}`,
+      )
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["roleId"]);
+  });
+
+  it("should return 422 if the user's role assignment is soft-deleted", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+
+    const target = await buildEmployee({ roleNames: ["attendant", "manager"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const managerRoleId = await roleIdByName("manager");
+
+    const feature = await getFeatureByName("read:user:others");
+
+    if (!feature) {
+      throw createNotFoundError({
+        message: "Feature não encontrada",
+      });
+    }
+
+    const revoked = await request(app)
+      .delete(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(revoked.status).toBe(204);
+
+    const response = await request(app)
+      .put(
+        `/api/v1/users/${target.id}/roles/${managerRoleId}/features/${feature.id}`,
+      )
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["roleId"]);
   });
 
   it("should return 200 and upsert the feature to another user if request is valid", async () => {
@@ -1182,6 +1338,8 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const feature = await getFeatureByName("read:user:others");
 
     if (!feature) {
@@ -1191,7 +1349,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${user2.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${user2.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1203,7 +1361,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     expect(userInDb).not.toBeNull();
 
-    expect(userInDb?.features).toEqual(
+    expect(activeOverrides(userInDb)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           featureId: feature.id,
@@ -1213,7 +1371,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     );
 
     const response2 = await request(app)
-      .put(`/api/v1/users/${user2.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${user2.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: false });
 
@@ -1225,7 +1383,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     expect(userInDb2).not.toBeNull();
 
-    expect(userInDb2?.features).toEqual(
+    expect(activeOverrides(userInDb2)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           featureId: feature.id,
@@ -1235,12 +1393,14 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     );
   });
 
-  it("should return 200 and upsert the feature self user if request is valid", async () => {
-    const user = await buildEmployee({
-      roleNames: ["manager"],
-    });
+  it("should expose the role each override belongs to", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
 
-    const token = await loginAs(user.email, user.password);
+    const target = await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const roleId = await roleIdByName("attendant");
 
     const feature = await getFeatureByName("read:user:others");
 
@@ -1251,7 +1411,47 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${target.id}/roles/${roleId}/features/${feature.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(200);
+
+    expect(response.body).toMatchObject({
+      role: { id: roleId, name: "attendant" },
+      feature: { id: feature.id, name: "read:user:others" },
+    });
+
+    const list = await request(app)
+      .get(`/api/v1/users/${target.id}/features`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(list.status).toBe(200);
+
+    expect(list.body.data).toEqual([
+      expect.objectContaining({ role: { id: roleId, name: "attendant" } }),
+    ]);
+  });
+
+  it("should return 200 and upsert the feature self user if request is valid", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const roleId = await roleIdByName("manager");
+
+    const feature = await getFeatureByName("read:user:others");
+
+    if (!feature) {
+      throw createNotFoundError({
+        message: "Feature não encontrada",
+      });
+    }
+
+    const response = await request(app)
+      .put(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1261,7 +1461,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const userInDb = await findUserById(user.id);
 
-    expect(userInDb?.features).toEqual(
+    expect(activeOverrides(userInDb)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           featureId: feature.id,
@@ -1271,7 +1471,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     );
 
     const response2 = await request(app)
-      .put(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: false });
 
@@ -1281,7 +1481,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const userInDb2 = await findUserById(user.id);
 
-    expect(userInDb2?.features).toEqual(
+    expect(activeOverrides(userInDb2)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           featureId: feature.id,
@@ -1302,6 +1502,9 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const attendantRoleId = await roleIdByName("attendant");
+    const managerRoleId = await roleIdByName("manager");
+
     const feature = await getFeatureByName("manage:permission");
 
     if (!feature) {
@@ -1311,7 +1514,9 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${user2.id}/features/${feature.id}`)
+      .put(
+        `/api/v1/users/${user2.id}/roles/${attendantRoleId}/features/${feature.id}`,
+      )
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1324,13 +1529,46 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     });
 
     const response2 = await request(app)
-      .put(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .put(
+        `/api/v1/users/${user.id}/roles/${managerRoleId}/features/${feature.id}`,
+      )
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: false });
 
     expect(response2.status).toBe(403);
 
     expect(response2.body).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Apenas administradores podem alterar features privilegiadas",
+      action: "Solicite a um administrador que faça essa alteração",
+    });
+  });
+
+  it("should return 403 if a non admin role user tries to grant the wildcard override", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+
+    const target = await buildEmployee({ roleNames: ["attendant"] });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const roleId = await roleIdByName("attendant");
+
+    const feature = await getFeatureByName("*");
+
+    if (!feature) {
+      throw createNotFoundError({
+        message: "Feature não encontrada",
+      });
+    }
+
+    const response = await request(app)
+      .put(`/api/v1/users/${target.id}/roles/${roleId}/features/${feature.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ granted: true });
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
       code: "FORBIDDEN",
       message: "Apenas administradores podem alterar features privilegiadas",
       action: "Solicite a um administrador que faça essa alteração",
@@ -1348,6 +1586,8 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(admin.email, admin.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const feature = await getFeatureByName("manage:permission");
 
     if (!feature) {
@@ -1357,7 +1597,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1367,7 +1607,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const userInDb = await findUserById(user.id);
 
-    expect(userInDb?.features).toEqual(
+    expect(activeOverrides(userInDb)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           featureId: feature.id,
@@ -1390,6 +1630,8 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const userToken = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const feature = await getFeatureByName("manage:permission");
 
     if (!feature) {
@@ -1399,14 +1641,14 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${adminToken}`)
       .send({ granted: true });
 
     expect(response.status).toBe(200);
 
     const response2 = await request(app)
-      .put(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${userToken}`)
       .send({ granted: false });
 
@@ -1419,6 +1661,8 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(manager.email, manager.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const feature = await getFeatureByName("read:audit-log:full");
 
     if (!feature) {
@@ -1426,7 +1670,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${target.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1445,6 +1689,8 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(manager.email, manager.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const feature = await getFeatureByName("read:audit-log");
 
     if (!feature) {
@@ -1452,7 +1698,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${target.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1466,6 +1712,8 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(admin.email, admin.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const feature = await getFeatureByName("read:audit-log:full");
 
     if (!feature) {
@@ -1473,7 +1721,7 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+      .put(`/api/v1/users/${target.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -1482,10 +1730,10 @@ describe("PUT /api/v1/users/:userId/features/:featureId", () => {
   });
 });
 
-describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
+describe("DELETE /api/v1/users/:userId/roles/:roleId/features/:featureId", () => {
   it("should return 401 if no token is provided", async () => {
     const response = await request(app).delete(
-      "/api/v1/users/some-id/features/some-feature-id",
+      "/api/v1/users/some-id/roles/some-role-id/features/some-feature-id",
     );
 
     expect(response.status).toBe(401);
@@ -1504,8 +1752,12 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const response = await request(app)
-      .delete(`/api/v1/users/${user.id}/features/some-feature-id`)
+      .delete(
+        `/api/v1/users/${user.id}/roles/${roleId}/features/some-feature-id`,
+      )
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(403);
@@ -1524,8 +1776,12 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const response = await request(app)
-      .delete(`/api/v1/users/${faker.string.uuid()}/features/some-feature-id`)
+      .delete(
+        `/api/v1/users/${faker.string.uuid()}/roles/${roleId}/features/some-feature-id`,
+      )
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(403);
@@ -1544,6 +1800,8 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const feature = await getFeatureByName("read:user:others");
 
     if (!feature) {
@@ -1553,12 +1811,40 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .delete(`/api/v1/users/non-valid-id/features/${feature.id}`)
+      .delete(
+        `/api/v1/users/non-valid-id/roles/${roleId}/features/${feature.id}`,
+      )
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(422);
 
     expectValidationError(response, ["userId"]);
+  });
+
+  it("should return 422 if role id is not a valid uuid", async () => {
+    const user = await buildEmployee({
+      roleNames: ["manager"],
+    });
+
+    const token = await loginAs(user.email, user.password);
+
+    const feature = await getFeatureByName("read:user:others");
+
+    if (!feature) {
+      throw createNotFoundError({
+        message: "Feature não encontrada",
+      });
+    }
+
+    const response = await request(app)
+      .delete(
+        `/api/v1/users/${user.id}/roles/non-valid-role-id/features/${feature.id}`,
+      )
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+
+    expectValidationError(response, ["roleId"]);
   });
 
   it("should return 422 if feature id is not a valid uuid", async () => {
@@ -1568,8 +1854,12 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const response = await request(app)
-      .delete(`/api/v1/users/${user.id}/features/non-valid-feature-id`)
+      .delete(
+        `/api/v1/users/${user.id}/roles/${roleId}/features/non-valid-feature-id`,
+      )
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(422);
@@ -1584,6 +1874,8 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const feature = await getFeatureByName("read:user:others");
 
     if (!feature) {
@@ -1593,7 +1885,9 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .delete(`/api/v1/users/${faker.string.uuid()}/features/${feature.id}`)
+      .delete(
+        `/api/v1/users/${faker.string.uuid()}/roles/${roleId}/features/${feature.id}`,
+      )
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(404);
@@ -1612,9 +1906,11 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const response = await request(app)
       .delete(
-        `/api/v1/users/${faker.string.uuid()}/features/${faker.string.uuid()}`,
+        `/api/v1/users/${faker.string.uuid()}/roles/${roleId}/features/${faker.string.uuid()}`,
       )
       .set("Authorization", `Bearer ${token}`);
 
@@ -1634,6 +1930,8 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const feature = await getFeatureByName("delete:user");
 
     if (!feature) {
@@ -1643,7 +1941,44 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .delete(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .delete(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+
+    expect(response.body).toMatchObject({
+      code: "NOT_FOUND",
+      message: "Usuário não possui essa feature override",
+      action: "Verifique as features do usuário",
+    });
+  });
+
+  // K5: 404 direto, sem checar a role antes — a resposta não revela se o
+  // usuário tem ou não aquela role. Assimétrico com o PUT de propósito.
+  it("should return 404 (not 422) if the user does not have the given role", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+
+    const target = await buildEmployee({
+      roleNames: ["attendant"],
+      denies: ["delete:user"],
+    });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const managerRoleId = await roleIdByName("manager");
+
+    const feature = await getFeatureByName("delete:user");
+
+    if (!feature) {
+      throw createNotFoundError({
+        message: "Feature não encontrada",
+      });
+    }
+
+    const response = await request(app)
+      .delete(
+        `/api/v1/users/${target.id}/roles/${managerRoleId}/features/${feature.id}`,
+      )
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(404);
@@ -1663,6 +1998,8 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("manager");
+
     const feature = await getFeatureByName("read:user:others");
 
     if (!feature) {
@@ -1672,7 +2009,7 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .delete(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .delete(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(204);
@@ -1685,7 +2022,7 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
       });
     }
 
-    expect(userInDb.features).not.toEqual(
+    expect(activeOverrides(userInDb)).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           featureId: feature.id,
@@ -1706,6 +2043,8 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const feature = await getFeatureByName("delete:user");
 
     if (!feature) {
@@ -1715,7 +2054,9 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .delete(`/api/v1/users/${user2.id}/features/${feature.id}`)
+      .delete(
+        `/api/v1/users/${user2.id}/roles/${roleId}/features/${feature.id}`,
+      )
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(204);
@@ -1728,7 +2069,7 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
       });
     }
 
-    expect(userInDb.features).not.toEqual(
+    expect(activeOverrides(userInDb)).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           featureId: feature.id,
@@ -1749,6 +2090,8 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(admin.email, admin.password);
 
+    const roleId = await roleIdByName("attendant");
+
     const feature = await getFeatureByName("manage:permission");
 
     if (!feature) {
@@ -1758,7 +2101,7 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .delete(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .delete(`/api/v1/users/${user.id}/roles/${roleId}/features/${feature.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(204);
@@ -1771,7 +2114,7 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
       });
     }
 
-    expect(userInDb.features).not.toEqual(
+    expect(activeOverrides(userInDb)).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           featureId: feature.id,
@@ -1792,6 +2135,9 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
 
     const token = await loginAs(user.email, user.password);
 
+    const attendantRoleId = await roleIdByName("attendant");
+    const managerRoleId = await roleIdByName("manager");
+
     const feature = await getFeatureByName("manage:permission");
 
     if (!feature) {
@@ -1801,7 +2147,9 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
     }
 
     const response = await request(app)
-      .delete(`/api/v1/users/${user2.id}/features/${feature.id}`)
+      .delete(
+        `/api/v1/users/${user2.id}/roles/${attendantRoleId}/features/${feature.id}`,
+      )
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(403);
@@ -1813,7 +2161,9 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
     });
 
     const response2 = await request(app)
-      .delete(`/api/v1/users/${user.id}/features/${feature.id}`)
+      .delete(
+        `/api/v1/users/${user.id}/roles/${managerRoleId}/features/${feature.id}`,
+      )
       .set("Authorization", `Bearer ${token}`);
 
     expect(response2.status).toBe(403);
@@ -1823,6 +2173,257 @@ describe("DELETE /api/v1/users/:userId/features/:featureId", () => {
       message: "Apenas administradores podem alterar features privilegiadas",
       action: "Solicite a um administrador que faça essa alteração",
     });
+  });
+});
+
+describe("Escopo do override na atribuição de role (D2/D3/D6/D16)", () => {
+  it("should cascade the role revocation to the overrides hanging on it", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    // duas roles de funcionário: o override vive só na `manager`.
+    const target = await buildEmployee({ roleNames: ["attendant", "manager"] });
+
+    const managerRoleId = await roleIdByName("manager");
+    const attendantRoleId = await roleIdByName("attendant");
+
+    const scopedFeature = await getFeatureByName("read:log");
+    const otherFeature = await getFeatureByName("read:audit-log");
+
+    if (!scopedFeature || !otherFeature)
+      throw createNotFoundError({ message: "Feature não encontrada" });
+
+    await request(app)
+      .put(
+        `/api/v1/users/${target.id}/roles/${managerRoleId}/features/${scopedFeature.id}`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ granted: true });
+
+    await request(app)
+      .put(
+        `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${otherFeature.id}`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ granted: true });
+
+    const revoked = await request(app)
+      .delete(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(revoked.status).toBe(204);
+
+    const userInDb = await findUserById(target.id);
+
+    // o override da role revogada morreu junto...
+    expect(activeOverrides(userInDb)).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ featureId: scopedFeature.id }),
+      ]),
+    );
+
+    // ...e o da outra role continua vivo.
+    expect(activeOverrides(userInDb)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ featureId: otherFeature.id }),
+      ]),
+    );
+
+    const effective = await request(app)
+      .get(`/api/v1/users/${target.id}/permissions`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(effective.body).not.toContain("read:log");
+    expect(effective.body).toContain("read:audit-log");
+  });
+
+  it("should record the cascaded override count on USER_ROLE_REVOKED", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    const target = await buildEmployee({ roleNames: ["attendant", "manager"] });
+
+    const managerRoleId = await roleIdByName("manager");
+
+    const feature = await getFeatureByName("read:log");
+
+    if (!feature)
+      throw createNotFoundError({ message: "Feature não encontrada" });
+
+    await request(app)
+      .put(
+        `/api/v1/users/${target.id}/roles/${managerRoleId}/features/${feature.id}`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ granted: true });
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    const revokedRow = await prisma.auditLog.findFirst({
+      where: { action: "USER_ROLE_REVOKED", targetId: target.id },
+    });
+
+    expect(revokedRow?.metadata).toMatchObject({ cascadedOverrides: 1 });
+  });
+
+  it("should reuse the same UserRole row when the role is granted again", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    const target = await buildEmployee({ roleNames: ["attendant", "manager"] });
+
+    const managerRoleId = await roleIdByName("manager");
+
+    const before = await prisma.userRole.findFirst({
+      where: { userId: target.id, roleId: managerRoleId },
+    });
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    const regranted = await request(app)
+      .post(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    // K4: re-conceder devolve 201, igual à primeira concessão.
+    expect(regranted.status).toBe(201);
+
+    const rows = await prisma.userRole.findMany({
+      where: { userId: target.id, roleId: managerRoleId },
+    });
+
+    // D3: uma linha por par, para sempre.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(before?.id);
+    expect(rows[0]?.deletedAt).toBeNull();
+  });
+
+  it("should restore the overrides of the role when an admin grants it again", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    const target = await buildEmployee({ roleNames: ["attendant", "manager"] });
+
+    const managerRoleId = await roleIdByName("manager");
+
+    const feature = await getFeatureByName("read:log");
+
+    if (!feature)
+      throw createNotFoundError({ message: "Feature não encontrada" });
+
+    await request(app)
+      .put(
+        `/api/v1/users/${target.id}/roles/${managerRoleId}/features/${feature.id}`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ granted: true });
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    const userInDb = await findUserById(target.id);
+
+    // D6: tirar e devolver o cargo não zera os ajustes finos dele.
+    expect(activeOverrides(userInDb)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ featureId: feature.id, granted: true }),
+      ]),
+    );
+  });
+
+  it("should NOT restore a privileged override when the actor is not an admin (D16)", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    // manager tem `manage:permission`, então pode conceder/revogar a role
+    // `attendant` — que não é privilegiada.
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const managerToken = await loginAs(manager.email, manager.password);
+
+    const target = await buildEmployee({ roleNames: ["attendant", "manager"] });
+
+    const attendantRoleId = await roleIdByName("attendant");
+
+    const privileged = await getFeatureByName("read:audit-log:full");
+    const ordinary = await getFeatureByName("read:audit-log");
+
+    if (!privileged || !ordinary)
+      throw createNotFoundError({ message: "Feature não encontrada" });
+
+    // só o admin consegue pendurar a privilegiada.
+    await request(app)
+      .put(
+        `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${privileged.id}`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ granted: true });
+
+    await request(app)
+      .put(
+        `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${ordinary.id}`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ granted: true });
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    const regranted = await request(app)
+      .post(`/api/v1/users/${target.id}/roles/${attendantRoleId}`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    // a ação prossegue normalmente: quem não volta é o conteúdo privilegiado.
+    expect(regranted.status).toBe(201);
+
+    const userInDb = await findUserById(target.id);
+
+    expect(activeOverrides(userInDb)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ featureId: ordinary.id }),
+      ]),
+    );
+
+    expect(activeOverrides(userInDb)).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ featureId: privileged.id }),
+      ]),
+    );
+
+    // o descarte é silencioso na resposta: o audit é o único rastro (K3).
+    const skipped = await prisma.auditLog.findMany({
+      where: {
+        action: "USER_PERMISSION_RESTORE_SKIPPED",
+        targetId: target.id,
+      },
+    });
+
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0]?.metadata).toMatchObject({
+      featureName: "read:audit-log:full",
+      roleName: "attendant",
+    });
+  });
+
+  it("should refuse a second active UserRole row for the same pair", async () => {
+    const target = await buildEmployee({ roleNames: ["attendant"] });
+
+    const attendantRoleId = await roleIdByName("attendant");
+
+    // D3 tirou a unicidade do código e pôs no banco: nem escrita crua passa.
+    await expect(
+      prisma.userRole.create({
+        data: { userId: target.id, roleId: attendantRoleId },
+      }),
+    ).rejects.toThrow();
   });
 });
 
@@ -1836,12 +2437,15 @@ describe("Soft delete de overrides — efeito no cômputo", () => {
 
       // user-alvo: attendant (tem read:user pela role attendant)
       const target = await buildEmployee({ roleNames: ["attendant"] });
+      const attendantRoleId = await roleIdByName("attendant");
       const feature = await getFeatureByName("read:user");
       if (!feature) throw new Error("Feature read:user não encontrada no seed");
 
       // 1. DENY explícito de read:user → feature deve sumir do efetivo
       await request(app)
-        .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+        .put(
+          `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${feature.id}`,
+        )
         .set("Authorization", `Bearer ${adminToken}`)
         .send({ granted: false });
 
@@ -1855,7 +2459,9 @@ describe("Soft delete de overrides — efeito no cômputo", () => {
 
       // 2. Remove o override (soft delete do deny)
       const delResp = await request(app)
-        .delete(`/api/v1/users/${target.id}/features/${feature.id}`)
+        .delete(
+          `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${feature.id}`,
+        )
         .set("Authorization", `Bearer ${adminToken}`);
       expect(delResp.status).toBe(204);
 
@@ -1868,49 +2474,51 @@ describe("Soft delete de overrides — efeito no cômputo", () => {
 
       // confirma no banco: existe UserFeature deletado (histórico preservado)
       const allOverrides = await prisma.userFeature.findMany({
-        where: { userId: target.id, featureId: feature.id },
+        where: { userRole: { userId: target.id }, featureId: feature.id },
       });
       expect(allOverrides.length).toBeGreaterThanOrEqual(1);
       expect(allOverrides.some((uf) => uf.deletedAt !== null)).toBe(true);
     });
 
-    it("should allow re-granting a feature after its override was soft-deleted (no unique clash, history kept)", async () => {
+    it("should reuse the same override row when it is granted again after a soft delete", async () => {
       const admin = await buildEmployee({ roleNames: ["admin"] });
       const adminToken = await loginAs(admin.email, admin.password);
 
       const target = await buildEmployee({ roleNames: ["attendant"] });
+      const attendantRoleId = await roleIdByName("attendant");
       const feature = await getFeatureByName("read:user:others");
       if (!feature)
         throw new Error("Feature read:user:others não encontrada no seed");
 
+      const url = `/api/v1/users/${target.id}/roles/${attendantRoleId}/features/${feature.id}`;
+
       // 1. GRANT
       const grant1 = await request(app)
-        .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+        .put(url)
         .set("Authorization", `Bearer ${adminToken}`)
         .send({ granted: true });
       expect(grant1.status).toBe(200);
 
       // 2. DELETE (soft)
       const del = await request(app)
-        .delete(`/api/v1/users/${target.id}/features/${feature.id}`)
+        .delete(url)
         .set("Authorization", `Bearer ${adminToken}`);
       expect(del.status).toBe(204);
 
-      // 3. GRANT de novo — não deve dar unique clash; cria um override ativo novo
+      // 3. GRANT de novo — o `@@unique` cobre a linha morta também, então não
+      // nasce linha nova: a mesma é revivida.
       const grant2 = await request(app)
-        .put(`/api/v1/users/${target.id}/features/${feature.id}`)
+        .put(url)
         .set("Authorization", `Bearer ${adminToken}`)
         .send({ granted: true });
       expect(grant2.status).toBe(200);
 
-      // banco: vários registros do mesmo par (histórico), mas só UM ativo
       const overrides = await prisma.userFeature.findMany({
-        where: { userId: target.id, featureId: feature.id },
+        where: { userRole: { userId: target.id }, featureId: feature.id },
       });
-      const ativos = overrides.filter((uf) => uf.deletedAt === null);
-      const deletados = overrides.filter((uf) => uf.deletedAt !== null);
-      expect(ativos.length).toBe(1); // exatamente um ativo
-      expect(deletados.length).toBeGreaterThanOrEqual(1); // histórico preservado
+
+      expect(overrides).toHaveLength(1);
+      expect(overrides[0]?.deletedAt).toBeNull();
     });
   });
 });

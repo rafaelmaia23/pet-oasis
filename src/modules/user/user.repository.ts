@@ -31,12 +31,12 @@ export const userInclude = {
     where: { deletedAt: null },
     include: {
       role: true,
-    },
-  },
-  features: {
-    where: { deletedAt: null },
-    include: {
-      feature: true,
+      // Overrides pendurados na atribuição de role (D2): não existe mais
+      // `user.features`, e um override de role morta nunca é alcançado.
+      features: {
+        where: { deletedAt: null },
+        include: { feature: true },
+      },
     },
   },
 } as const;
@@ -279,11 +279,11 @@ export async function getUserForFeatureComputation(userId: string) {
               features: { include: { feature: true } },
             },
           },
+          features: {
+            where: { deletedAt: null },
+            include: { feature: true },
+          },
         },
-      },
-      features: {
-        where: { deletedAt: null },
-        include: { feature: true },
       },
     },
   });

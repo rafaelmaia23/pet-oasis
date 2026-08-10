@@ -381,10 +381,21 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ⬜ Revogar role cascateia para os overrides dela (D2), mesma transação, mesmo timestamp.
 - ⬜ Re-conceder role restaura os overrides dela (D6) — depende da regra de correlação, que nasce completa na 8.2; aqui basta a forma mais simples (os overrides daquela `UserRole`).
 - ⬜ **D16 nasce aqui** (primeiro dos três caminhos de restauração): se o ator não é admin, a role é concedida normalmente mas os overrides de `PRIVILEGED_FEATURES` (+ `*`) **não** ressuscitam. Sem isso, um manager re-concedendo uma role não-privilegiada ressuscita um override privilegiado pendurado nela — `assertAdminForRoleAssignment` só olha as features estáticas da role e não enxerga esse caminho. Descarte é permanente e silencioso → **auditar**.
-- ⬜ Contrato novo (D9): `PUT|DELETE /users/:userId/roles/:roleId/features/:featureId` substitui `/users/:userId/features/:featureId`. `GET /users/:userId/permissions` passa a expor a role de cada override no presenter.
+- ⬜ Contrato novo (D9): `PUT|DELETE /users/:userId/roles/:roleId/features/:featureId` substitui `/users/:userId/features/:featureId`. `GET /users/:userId/features` passa a expor a role de cada override no presenter (K2).
 - ⬜ `computeEffectiveFeatures` **não muda de assinatura** — continua somando só o que está vivo. Toda a correção é de dados, não de cômputo.
 - ⬜ Guard de não-escalação (`PRIVILEGED_FEATURES`) revisado para o contrato novo.
 - ⬜ Docs: `docs/endpoints.md`, coleção Bruno, OpenAPI.
+
+#### Decisões do kickoff da Sessão A
+
+| # | Questão | Decisão |
+|---|---|---|
+| K1 | `PUT .../roles/:roleId/features/:featureId` quando o usuário não tem aquela role **ativa** | **422** (validação semântica, precisa de banco), `errors.roleId`, mesmo shape de `assertRoleAppliesToActiveProfile`. Override sem dono ativo não pode existir (D2). |
+| K2 | Quem expõe a role de cada override | **`GET /users/:userId/features`** — é o endpoint que lista overrides. O redesenho dizia `/permissions`, mas esse devolve `string[]` plano de features efetivas e **continua assim**. |
+| K3 | Audit do descarte de override privilegiado (D16) | Ação **nova** `USER_PERMISSION_RESTORE_SKIPPED`, **1 evento por override descartado**, metadata `{ featureName, roleId, roleName }`. Granular porque o descarte é permanente (§9.1 do redesenho). |
+| K4 | Status de re-conceder role antes revogada (reuso de linha, D3) | **201** nos dois casos — o cliente não precisa saber que a linha foi reusada. O 409 continua valendo só para role **já ativa**. |
+| K5 | Ordem de validação no `DELETE` do override | **404 direto** se não houver override ativo da tripla `(user, role, feature)`; não checa a role antes. Assimétrico com o `PUT` de propósito: não revela se o usuário tem aquela role. |
+| K6 | Audit da cascata de revogação de role | **Só `USER_ROLE_REVOKED`**, com `cascadedOverrides: <n>` na metadata. A cascata é consequência determinística e D6 devolve os overrides se a role voltar — não é perda de informação. |
 
 ### ⬜ [Sessão B] Fase 8.1 — Cascata de deleção e timestamp único
 

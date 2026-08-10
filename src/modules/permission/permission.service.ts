@@ -88,8 +88,6 @@ function assertRoleAppliesToActiveProfile(
   role: RoleWithFeatures,
   user: UserWithRelations,
 ) {
-  if (!role.appliesTo) return;
-
   const hasActiveCustomer =
     user.customer !== null && user.customer.deletedAt === null;
 
@@ -271,22 +269,20 @@ export async function removeUserRole(
     });
   }
 
-  if (role.appliesTo) {
-    const remainingActiveRoles = user.roles.filter(
-      (ur) => ur.role.id !== roleId && ur.role.appliesTo === role.appliesTo,
-    );
+  const remainingActiveRoles = user.roles.filter(
+    (ur) => ur.role.id !== roleId && ur.role.appliesTo === role.appliesTo,
+  );
 
-    if (remainingActiveRoles.length === 0) {
-      const profileLabel =
-        role.appliesTo === "CUSTOMER" ? "de cliente" : "de funcionário";
-      const deleteEndpoint =
-        role.appliesTo === "CUSTOMER" ? "customer" : "employee";
+  if (remainingActiveRoles.length === 0) {
+    const profileLabel =
+      role.appliesTo === "CUSTOMER" ? "de cliente" : "de funcionário";
+    const deleteEndpoint =
+      role.appliesTo === "CUSTOMER" ? "customer" : "employee";
 
-      throw createConflictError({
-        message: `Não é possível remover a última role ${profileLabel} do usuário`,
-        action: `Para remover o perfil ${profileLabel} inteiro, use o endpoint DELETE /users/:id/${deleteEndpoint}`,
-      });
-    }
+    throw createConflictError({
+      message: `Não é possível remover a última role ${profileLabel} do usuário`,
+      action: `Para remover o perfil ${profileLabel} inteiro, use o endpoint DELETE /users/:id/${deleteEndpoint}`,
+    });
   }
 
   const removed = await permissionRepository.removeUserRole(

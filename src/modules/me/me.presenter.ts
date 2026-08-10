@@ -7,7 +7,7 @@ const roleSummaryView = z
     id: z.uuid(),
     name: z.string().meta({ example: "customer" }),
     description: z.string(),
-    appliesTo: z.enum(ProfileKind).nullable(),
+    appliesTo: z.enum(ProfileKind),
   })
   .meta({ id: "RoleSummary" });
 

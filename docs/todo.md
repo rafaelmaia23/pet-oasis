@@ -367,7 +367,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | Sessão | Sub-fases | Tema | Por que agrupa |
 |---|---|---|---|
 | **A** ✅ | 8.0 | Escopo de override + unicidade de `UserRole` | Fundação do modelo de autorização. Nada de cascata ou reativação faz sentido antes do override ter dono. |
-| **B** ⬜ | 8.1, 8.2 | Cascata + restauração por data | Mesma mecânica de dados, uma inútil sem a outra: cascatear sem saber restaurar deixa a fase pela metade. |
+| **B** ✅ | 8.1, 8.2 | Cascata + restauração por data | Mesma mecânica de dados, uma inútil sem a outra: cascatear sem saber restaurar deixa a fase pela metade. |
 | **C** ⬜ | 8.3 | Perfil em conta ativa | Primeiro fluxo de produto, já em cima do modelo correto. |
 | **D** ⬜ | 8.4, 8.5 | Conta deletada (self-service e admin) | Os dois disparam token e convergem na mesma confirmação. |
 | **E** ⬜ | 8.6, 8.7 | Emails liberados + rate limit | Transversais, independentes dos fluxos; 8.7 cobre as superfícies que 8.4/8.5 abriram. |
@@ -410,33 +410,40 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 
 > **Por que a cascata é escrita à mão.** `onDelete: Cascade` é ação referencial de *hard delete* — dispara no `DELETE` físico da linha pai. Aqui o pai não é apagado (`UPDATE users SET deleted_at = ...`), e FK não propaga UPDATE de coluna comum. O nativo seria **trigger**, recusada por três motivos: o Prisma não gerencia trigger (SQL cru numa migration, fora do typecheck e dos testes), ela não devolve as contagens que o audit precisa, e a **restauração** não cabe nela — o filtro do D16 depende do ator, que o banco não conhece. Nested write cobre parte (`roles: { updateMany: ... }`), mas `updateMany` só aceita `where` + `data`: não desce até o **neto** (`UserFeature` via `UserRole`). Mínimo real: 3 statements na mesma transação com o mesmo `T`.
 
-### ⬜ [Passo 0 da Sessão B] `Role.appliesTo` obrigatório (K9)
+### ✅ [Passo 0 da Sessão B] `Role.appliesTo` obrigatório (K9)
 
-> Trabalho pontual, branch `fix/role-applies-to-not-null` a partir da `fase-8`, mergeada `--no-ff` antes da 8.1. Refactor comportamento-preservado (molde da 7.2): a suíte passa sem alteração, porque o estado removido nunca foi produzido.
+> Trabalho pontual, branch `fix/role-applies-to-not-null` a partir da `fase-8`, mergeada `--no-ff` antes da 8.1. Refactor comportamento-preservado (molde da 7.2): a suíte inteira (633) passou **sem uma linha de teste alterada**, porque o estado removido nunca foi produzido.
 
-- ⬜ `Role.appliesTo` vira `ProfileKind` (sem `?`) no schema + migration. `RoleDefinition` já tipa obrigatório e as 5 roles do catálogo têm valor.
-- ⬜ Apagar os **três branches mortos** que sustentavam o `null`: `utils/validateRoles.ts` (`r.appliesTo && ...`), `permission.service.ts` `assertRoleAppliesToActiveProfile` (`if (!role.appliesTo) return` — pulava a validação de compatibilidade inteira) e `permission.service.ts` `removeUserRole` (`if (role.appliesTo)` — pulava a guarda da última role do perfil).
-- ⬜ `role.presenter.ts` e `me.presenter.ts` param de declarar `.nullable()`; o componente OpenAPI acompanha.
-- ⬜ Ganho para a Sessão B: toda role pertence a exatamente um perfil, então "matar as roles do perfil" e "matar todas as roles do usuário" passam a ser provadamente a mesma coisa — nenhuma role órfã, morta pela cascata e restaurável por ninguém.
+- ✅ Migration `20260810173213_make_role_applies_to_required`: `Role.appliesTo` vira `ProfileKind` (sem `?`). `RoleDefinition` já tipava obrigatório e as 5 roles do catálogo têm valor.
+- ✅ Apagados os **três branches mortos** que sustentavam o `null`: `utils/validateRoles.ts` (`r.appliesTo && ...`), `permission.service.ts` `assertRoleAppliesToActiveProfile` (`if (!role.appliesTo) return` — pulava a validação de compatibilidade inteira) e `permission.service.ts` `removeUserRole` (`if (role.appliesTo)` — pulava a guarda da última role do perfil).
+- ✅ `role.presenter.ts` e `me.presenter.ts` deixaram de declarar `.nullable()`; o componente OpenAPI acompanhou (gerado dos mesmos schemas).
+- ✅ Ganho para a Sessão B: toda role pertence a exatamente um perfil, então "matar as roles do perfil" e "matar todas as roles do usuário" são provadamente a mesma coisa — nenhuma role órfã, morta pela cascata e restaurável por ninguém.
 
-### ⬜ [Sessão B] Fase 8.1 — Cascata de deleção e timestamp único
+### ✅ [Sessão B] Fase 8.1 — Cascata de deleção e timestamp único
 
-- ⬜ `deleteUser` passa a cascatear (D1): `User` → perfis ativos → `UserRole` ativas daquele `appliesTo` → `UserFeature` ativas daquela `UserRole`. Hoje marca só `User.deletedAt` e invalida sessões.
-- ⬜ Todas as cascatas propagam **um único `new Date()` por transação** (D4), passado como parâmetro. Nenhuma função de repositório de cascata pode chamar `new Date()` internamente — hoje `deleteCustomerProfile` chama duas vezes. **Merece teste dedicado** provando igualdade nos quatro níveis; se essa invariante vazar, o bug da 8.2 é silencioso.
-- ⬜ A cascata **só toca linhas ativas** (`deletedAt: null`) — o que já estava morto mantém o timestamp antigo, e é isso que preserva a distinção na restauração.
-- ⬜ Mensagem do último perfil corrigida (D15).
-- ⬜ Regressão: nenhum estado de perfil/role/override ativo sob pai morto, em nenhum caminho de deleção.
-- ⬜ Nasce o `src/modules/user/user.lifecycle.repository.ts` (K10): `cascadeDeleteRoles` (role + overrides dela), `cascadeDeleteProfile` e `cascadeDeleteUserGraph`, todas `tx`-escopadas e recebendo o `deletedAt` por parâmetro. `permission.repository.removeUserRole` passa a delegar o nível de override para lá (uma implementação só).
-- ⬜ Audit (K8): ação nova `USER_PROFILE_DELETED` (`{ profileKind, cascadedRoles, cascadedOverrides }`) e `USER_DELETED` ganha `{ cascadedProfiles, cascadedRoles, cascadedOverrides }`. Sem PII — só números e enum.
+- ✅ `deleteUser` cascateia (D1): `User` → perfis ativos → **todas** as `UserRole` ativas → `UserFeature` ativas delas. As roles vão sem filtro de `appliesTo` — o pai é a conta, e D1 não admite filho ativo de pai morto. Antes marcava só `User.deletedAt` e invalidava sessões.
+- ✅ Deletar perfil passou a alcançar o **neto** (`UserFeature`), que antes sobrevivia à morte da role — era o vazamento de privilégio do §2.2 do redesenho.
+- ✅ **Um único `new Date()` por transação** (D4), passado como parâmetro; `deleteCustomerProfile` chamava duas vezes e o `softDelete` do user, três. A igualdade nos quatro níveis tem **teste dedicado** (`user.test.ts`) — sem ele, o bug da 8.2 seria silencioso.
+- ✅ A cascata **só toca linhas ativas**; o que já estava morto mantém o timestamp antigo (teste próprio), e é isso que preserva a distinção na restauração.
+- ✅ Mensagem do último perfil corrigida (D15).
+- ✅ Regressão: varredura pós-deleção não acha perfil/role/override ativo sob pai morto, em nenhum caminho.
+- ✅ Nasceu o `src/modules/user/user.lifecycle.repository.ts` (K10): `cascadeDeleteOverrides`, `cascadeDeleteRoles`, `cascadeDeleteProfile` e `cascadeDeleteUserGraph`, todas `tx`-escopadas e recebendo o `deletedAt` por parâmetro. `permission.repository.removeUserRole` delega o nível de override para lá (uma implementação só).
+- ✅ Audit (K8): ação nova `USER_PROFILE_DELETED` (`{ profileKind, cascadedRoles, cascadedOverrides }`) e `USER_DELETED` ganhou `{ cascadedProfiles, cascadedRoles, cascadedOverrides }`. Sem PII — só números e enum, com teste de contrato. Os dois repositórios passaram a receber o audit como **thunk** (`describeAudit(counts)`), idioma do K6, porque as contagens só existem dentro da transação.
+- ✅ **Por que não é o banco que cascateia:** `onDelete: Cascade` é ação referencial de *hard delete* e aqui o pai só é atualizado; trigger foi recusada (Prisma não a gerencia, não devolve as contagens, e a restauração não caberia nela porque o filtro do D16 depende do ator). Nested write não desce até o neto (`updateMany` só aceita `where` + `data`).
+- ✅ Factory: `buildHybrid` (usuário com os dois perfis ativos) e `attachOverrides` exportada, para pendurar override numa role específica.
 
-### ⬜ [Sessão B] Fase 8.2 — Restauração por correlação de data
+### ✅ [Sessão B] Fase 8.2 — Restauração por correlação de data
 
-- ⬜ Regra única e recursiva (D5): `reativar User` → restaura perfis onde `perfil.deletedAt == user.deletedAt` · `reativar perfil` → restaura `UserRole` onde `userRole.deletedAt == perfil.deletedAt` · `reconceder role` → restaura overrides onde `userFeature.deletedAt == userRole.deletedAt`.
-- ⬜ **Ler o `deletedAt` do pai antes de zerá-lo** — senão a comparação dos filhos perde a chave. Segunda invariante silenciosa.
-- ⬜ Regressão do caso difícil (§3.1 do redesenho): perfil morre em T2 (roles A e B), admin religa só A, perfil morre de novo em T3, admin religa → só A volta; B (T2) não bate mais. Prova que a recusa do admin persiste sem regra extra.
-- ⬜ Regressão: override removido explicitamente tem `deletedAt` que não bate com nenhum pai → nunca ressuscita.
-- ⬜ As três funções entram no `user.lifecycle.repository.ts` (K7/K10): `restoreOverridesOfUserRole`, `restoreRolesOfProfile` (com `roleIds?` opcional, D8) e `restoreProfilesOfUser`. `OverrideRestorePolicy` muda de casa (sai do `permission.repository`) porque os três níveis precisam dela. `addUserRole` estreita o filtro de `{ not: null }` para `deletedAt: <o do pai>`.
-- 🔸 **Pendente vindo da 8.0:** o **descarte permanente** do D16 (§9.1.1 do redesenho — "o override privilegiado pulado mantém o `deletedAt` antigo e não volta sozinho nem para um admin") **ainda não vale** ao fim da 8.0. Lá a restauração pega *todos* os overrides mortos da `UserRole`, então uma segunda revogação/reconcessão por um admin ressuscita o que o manager tinha descartado. A propriedade nasce **aqui**, com a correlação por data, e o teste que a prova foi escrito e removido da 8.0 por isso — reescrever nesta sub-fase: manager reconcede (privilegiado é pulado, mantém `deletedAt` de T1) → admin revoga (nova `UserRole.deletedAt` = T2) e reconcede → o pulado **não** volta, porque T1 ≠ T2.
+- ✅ Regra única e recursiva (D5), nos três níveis: restaura o filho cujo `deletedAt` é **igual** ao do pai. O que morreu noutro instante não bate e continua morto, sem nenhuma regra extra.
+- ✅ **O `deletedAt` do pai é lido antes de zerá-lo** em todos os níveis — zerar primeiro perderia a chave e transformaria a restauração num no-op silencioso.
+- ✅ Regressão do caso difícil (§3.1 do redesenho): perfil morre em T2 (attendant e manager), admin religa só attendant, perfil morre de novo em T3, admin religa sem escolher nada → só attendant volta; manager (T2) não bate mais.
+- ✅ Regressão: override removido explicitamente tem `deletedAt` próprio → nunca ressuscita (nos dois níveis, role e perfil).
+- ✅ Quatro funções no `user.lifecycle.repository.ts` (K7/K10): `restoreOverridesOfUserRole`, `restoreRolesOfProfile` (com `roleIds?`, D8), `restoreProfile` e `restoreProfilesOfUser`. `OverrideRestorePolicy` mudou de casa (saiu do `permission.repository`, que agora só reexporta o tipo) porque os três níveis precisam dela.
+- ✅ `restoreProfile` tem `requireDeletedAt?` opcional: a reativação de **conta** exige que o perfil tenha morrido no mesmo instante que ela; a reativação de **perfil** em conta viva (8.3) aceita qualquer perfil morto. A linha do `User` **não** é tocada aqui — quem reativa a conta é o repositório de user, que precisa ler `user.deletedAt` (a chave) antes de zerá-la.
+- ✅ `addUserRole` estreitou o filtro de `{ not: null }` para `deletedAt: <o do pai>` e passou a delegar a `restoreOverridesOfUserRole`.
+- ✅ Testes: nível de role por HTTP (`permission.test.ts`); perfil e conta pelo repositório direto, em `tests/integration/modules/user/user.lifecycle.test.ts` (K7) — mesmo idioma de `tests/integration/scripts/`. Verificado que os dois testes novos de HTTP **falham** sem o estreitamento.
+- ✅ Suíte (652) + `typecheck` + `lint` verdes ao fechar a sessão.
+- ✅ **Dívida da 8.0 quitada:** o **descarte permanente** do D16 (§9.1.1 do redesenho — "o override privilegiado pulado mantém o `deletedAt` antigo e não volta sozinho nem para um admin") **ainda não vale** ao fim da 8.0. Lá a restauração pega *todos* os overrides mortos da `UserRole`, então uma segunda revogação/reconcessão por um admin ressuscita o que o manager tinha descartado. A propriedade nasceu **aqui**, com a correlação por data, e o teste que a prova foi reescrito (`permission.test.ts`): manager reconcede (privilegiado é pulado, mantém `deletedAt` de T1) → admin revoga (nova `UserRole.deletedAt` = T2) e reconcede → o pulado **não** volta, porque T1 ≠ T2.
 
 ### ⬜ [Sessão C] Fase 8.3 — Perfil em conta ativa
 

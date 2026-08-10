@@ -86,7 +86,7 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 ## Comandos
 
 - Ambientes via Compose base + overrides (arquivos em `infra/`, junto dos entrypoints; o `Dockerfile` fica na raiz porque é a raiz do contexto de build), isolados por `-p pet-oasis-{dev,test,prod}`; env por arquivo (`.env.development`/`.env.test`/`.env.production`, na raiz, fora do git; `.env.example` versionado). Racional em `docs/adr/environments-and-deploy.md`.
-- Dev: `npm run dev` (Compose em foreground: db + mailpit + app-em-container via tsx watch; Ctrl+C = SIGTERM gracioso) · `dev:down` · `dev:reset` · `dev:mail`.
+- Dev: `npm run dev` (Compose em foreground: db + mailpit + app-em-container via tsx watch; Ctrl+C = SIGTERM gracioso) · `dev:down` · `dev:reset` · `dev:mail` · `dev:db` (só o Postgres-de-dev, detached e healthy — é o pré-requisito dos `db:*` quando não se quer a stack em foreground).
 - Teste: `npm test` (sobe o Postgres-de-test isolado, roda o Vitest no host e **sempre** derruba ao final, inclusive em falha) · `test:coverage` · `test:watch` · helpers `test:services:up`/`down`. Testar 1 arquivo (com o test-db de pé): `npx vitest run <nome>` · watch: `npx vitest <nome>` · 1 caso: `-t "nome"`.
 - Produção: `npm run prod:up` (build + só app + Postgres-de-prod, `migrate deploy` no entrypoint) · `prod:down` · `prod:logs`.
 - Migration dev (autoria consciente): `npm run db:migrate` (roda com `.env.development`, já gera o client) · `db:generate` · `db:seed` · `db:studio`.

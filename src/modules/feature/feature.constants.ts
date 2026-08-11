@@ -9,6 +9,14 @@ export const DEFAULT_FEATURES = [
   { name: "read:user:others", description: "Ver qualquer usuário" },
   { name: "update:user:others", description: "Atualizar qualquer usuário" },
   { name: "delete:user:others", description: "Deletar qualquer usuário" },
+  // Reativar uma conta soft-deletada. Sem par `:others` pelo mesmo motivo do
+  // perfil de funcionário (D11/K13): quem está de fora não tem sessão nem
+  // token, então nunca há self-service autenticado numa conta morta — o
+  // caminho do próprio dono é o signup, que não passa por feature nenhuma.
+  {
+    name: "reactivate:user",
+    description: "Reativar uma conta soft-deletada",
+  },
 
   // Perfil de cliente — criar e reativar são features **separadas** (K12):
   // reativar traz de volta as roles que morreram na cascata, criar nasce com o

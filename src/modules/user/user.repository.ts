@@ -277,6 +277,13 @@ export async function unbanUser(userId: string, audit?: AuditDescriptor) {
   });
 }
 
+export async function findDeletedUserByEmail(email: string) {
+  return prisma.user.findFirst({
+    where: { email, deletedAt: { not: null } },
+    include: userInclude,
+  });
+}
+
 export async function findDeletedUserById(id: string) {
   return prisma.user.findFirst({
     where: { id, deletedAt: { not: null } },

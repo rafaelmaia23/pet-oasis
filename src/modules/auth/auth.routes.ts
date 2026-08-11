@@ -50,6 +50,12 @@ authRouter.post(
   authController.changeEmail,
 );
 authRouter.post("/confirm-email-change", authController.confirmEmailChange);
+// Pública: o token é a credencial — quem confirma é o dono de uma conta morta,
+// que por definição não tem sessão nem consegue autenticar.
+authRouter.post(
+  "/confirm-account-reactivation",
+  authController.confirmAccountReactivation,
+);
 authRouter.post(
   "/logout",
   authenticate,

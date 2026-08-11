@@ -38,7 +38,7 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
-| POST `/api/v1/auth/signup` | público | Auto-cadastro; cria um usuário (customer), 201 |
+| POST `/api/v1/auth/signup` | público | Auto-cadastro; cria um usuário (customer), 201. Email de conta soft-deletada com o **cpf batendo** → dispara reativação e responde **202** genérico (nada é criado); cpf não batendo, conta banida ou conta ativa → 409 genérico |
 | POST `/api/v1/auth/login` | público | Autentica; seta cookie httpOnly de refresh, retorna access token |
 | POST `/api/v1/auth/refresh` | público (usa cookie de refresh) | Rotaciona o refresh e emite novo access token |
 | POST `/api/v1/auth/logout` | `manage:session` | Revoga a sessão do cookie de refresh, limpa o cookie |
@@ -51,6 +51,7 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | POST `/api/v1/auth/change-password` | `authenticate` | Troca a senha logado (exige senha atual) e invalida TODAS as sessões, 204 |
 | POST `/api/v1/auth/change-email` | `update:user` | Pede a troca de email (exige senha atual); dispara aviso de segurança pro email antigo com o link de confirmação |
 | POST `/api/v1/auth/confirm-email-change` | público | Confirma a troca via token, grava o email antigo em `PreviousEmail` (reservado para sempre), 204 |
+| POST `/api/v1/auth/confirm-account-reactivation` | público | Reativa a conta via token e define **senha nova** (obrigatória); restaura os perfis escolhidos e as roles que morreram com eles — overrides nunca voltam (D6'). `phone` só é exigido quando o perfil de cliente precisa nascer do zero. 204 |
 
 ## Me — `src/modules/me/me.routes.ts`
 

@@ -160,7 +160,7 @@ describe("restoreProfile()", () => {
 });
 
 describe("restoreProfilesOfUser()", () => {
-  it("should restore only what died with the account", async () => {
+  it("should bring back a profile that died before the account, because naming it is an explicit act (K20)", async () => {
     const target = await buildHybrid({ employeeRoles: ["attendant"] });
 
     await attachOverrides(target.id, {
@@ -168,23 +168,31 @@ describe("restoreProfilesOfUser()", () => {
       overrideRole: "attendant",
     });
 
-    // O perfil de cliente já estava morto muito antes da conta.
+    // T1 — o perfil de cliente morre muito antes da conta, levando a role
+    // `customer` junto. T2 — a conta inteira morre, levando o perfil de
+    // funcionário e a role `attendant`.
     await deleteCustomerProfile(target.id);
+
+    const t1 = await deletedAtOfRole(target.id, "customer");
+    assert(t1 !== null, "customer deveria ter morrido com o perfil");
 
     await softDeleteUserAndInvalidateSessions(target.id);
 
-    const user = await prisma.user.findUniqueOrThrow({
-      where: { id: target.id },
-    });
-    assert(user.deletedAt !== null, "a conta deveria estar deletada");
+    const t2 = await deletedAtOfRole(target.id, "attendant");
+    assert(
+      t2 !== null && t2.getTime() !== t1.getTime(),
+      "T2 deveria ser um instante novo",
+    );
 
     const result = await prisma.$transaction((tx) =>
-      restoreProfilesOfUser(tx, target.id, user.deletedAt as Date, {
+      restoreProfilesOfUser(tx, target.id, {
         kinds: ["CUSTOMER", "EMPLOYEE"],
       }),
     );
 
-    expect(result.profiles).toEqual(["EMPLOYEE"]);
+    expect(result.profiles).toEqual(
+      expect.arrayContaining(["CUSTOMER", "EMPLOYEE"]),
+    );
 
     const customer = await prisma.customer.findUniqueOrThrow({
       where: { userId: target.id },
@@ -193,15 +201,42 @@ describe("restoreProfilesOfUser()", () => {
       where: { userId: target.id },
     });
 
-    // O perfil de cliente morreu num instante que não bate com o da conta: quem
-    // o quiser de volta terá de pedir explicitamente (8.5), não vem de carona.
-    expect(customer.deletedAt).not.toBeNull();
+    // Sem isto, a conta voltaria com **zero** perfil ativo: o de cliente não
+    // bate com o `deletedAt` da conta e, como a linha existe, criar do zero
+    // também não é possível — o furo do D14 que o K20 fecha.
+    expect(customer.deletedAt).toBeNull();
     expect(employee.deletedAt).toBeNull();
 
-    expect(await activeRoleNames(target.id)).toEqual(["attendant"]);
+    // Cada perfil traz as roles que morreram **com ele**, cada um no seu
+    // instante: `customer` em T1, `attendant` em T2.
+    expect(await activeRoleNames(target.id)).toEqual(
+      expect.arrayContaining(["customer", "attendant"]),
+    );
 
-    // A role volta; o override pendurado nela, não (D6').
+    // As roles voltam; o override pendurado nelas, não (D6').
     expect(await activeOverrideNames(target.id)).toEqual([]);
+  });
+
+  it("should leave an unnamed profile dead, whenever it died", async () => {
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    // O de cliente morre antes; o de funcionário, com a conta. Nenhum dos dois
+    // é pedido — e nenhum dos dois volta de carona.
+    await deleteCustomerProfile(target.id);
+    await softDeleteUserAndInvalidateSessions(target.id);
+
+    const result = await prisma.$transaction((tx) =>
+      restoreProfilesOfUser(tx, target.id, { kinds: ["EMPLOYEE"] }),
+    );
+
+    expect(result.profiles).toEqual(["EMPLOYEE"]);
+
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { userId: target.id },
+    });
+
+    expect(customer.deletedAt).not.toBeNull();
+    expect(await activeRoleNames(target.id)).toEqual(["attendant"]);
   });
 
   it("should restore only the profiles the caller asked for", async () => {
@@ -209,15 +244,8 @@ describe("restoreProfilesOfUser()", () => {
 
     await softDeleteUserAndInvalidateSessions(target.id);
 
-    const user = await prisma.user.findUniqueOrThrow({
-      where: { id: target.id },
-    });
-    assert(user.deletedAt !== null, "a conta deveria estar deletada");
-
     const result = await prisma.$transaction((tx) =>
-      restoreProfilesOfUser(tx, target.id, user.deletedAt as Date, {
-        kinds: ["CUSTOMER"],
-      }),
+      restoreProfilesOfUser(tx, target.id, { kinds: ["CUSTOMER"] }),
     );
 
     expect(result.profiles).toEqual(["CUSTOMER"]);

@@ -235,27 +235,26 @@ export async function restoreRolesOfProfile(
 }
 
 /**
- * Restaura o perfil e desce para as roles dele. Devolve `null` quando não há
- * perfil morto para restaurar.
+ * Restaura o perfil nomeado e desce para as roles que morreram **junto com
+ * ele**. Devolve `null` quando não há perfil morto para restaurar.
  *
- * `requireDeletedAt` amarra a restauração a um instante exato — é o que a
- * reativação de **conta** usa, para trazer só o perfil que morreu na cascata
- * dela. Sem ele, qualquer perfil morto serve, que é o caso da reativação de
- * perfil em conta viva (8.3).
+ * Qualquer perfil morto serve, tenha morrido sozinho ou na cascata da conta
+ * (K20): pedir um perfil é ação explícita, e amarrar a restauração ao instante
+ * exato da morte da conta abriria um furo no D14 — um ex-cliente que perdeu o
+ * perfil e só depois teve a conta deletada reativaria com **zero** perfil
+ * ativo, porque a linha morta não bate com o `deletedAt` da conta e, existindo,
+ * também impede criar uma nova. Nada volta de carona porque nada volta sem ser
+ * nomeado.
  */
 export async function restoreProfile(
   tx: Prisma.TransactionClient,
   userId: string,
   kind: ProfileKind,
   options: {
-    requireDeletedAt?: Date;
     roleIds?: string[];
   },
 ): Promise<(RestoreCounts & { kind: ProfileKind }) | null> {
-  const where = {
-    userId,
-    deletedAt: options.requireDeletedAt ?? { not: null },
-  };
+  const where = { userId, deletedAt: { not: null } };
 
   const profile =
     kind === "CUSTOMER"
@@ -294,17 +293,16 @@ export async function restoreProfile(
 }
 
 /**
- * Restaura, entre os perfis pedidos, apenas os que morreram **junto com a
- * conta**. Um perfil que já estava morto antes tem outro `deletedAt` e não vem
- * de carona — quem o quiser de volta pede explicitamente.
+ * Restaura os perfis pedidos — e só eles. Cada um traz as roles que morreram no
+ * instante em que ele morreu, que não é necessariamente o instante em que a
+ * conta morreu (K20).
  *
  * A linha do `User` não é tocada aqui: quem reativa a conta é o repositório de
- * user, que precisa ler `user.deletedAt` (a chave passada aqui) antes de zerá-la.
+ * user, junto da senha nova e do `status`.
  */
 export async function restoreProfilesOfUser(
   tx: Prisma.TransactionClient,
   userId: string,
-  userDeletedAt: Date,
   options: {
     kinds: ProfileKind[];
     roleIds?: string[];
@@ -317,8 +315,7 @@ export async function restoreProfilesOfUser(
 
   for (const kind of options.kinds) {
     const restored = await restoreProfile(tx, userId, kind, {
-      ...options,
-      requireDeletedAt: userDeletedAt,
+      ...(options.roleIds && { roleIds: options.roleIds }),
     });
 
     if (!restored) continue;

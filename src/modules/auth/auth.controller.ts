@@ -3,6 +3,7 @@ import { env } from "@/config/env";
 import { listEnvelope } from "@/lib/pagination";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user/user.presenter";
+import * as accountReactivationService from "./accountReactivation.service";
 import {
   REFRESH_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_PATH,
@@ -12,6 +13,7 @@ import { sessionPresenter } from "./auth.presenter";
 import {
   changeEmailSchema,
   changePasswordSchema,
+  confirmAccountReactivationSchema,
   confirmEmailChangeSchema,
   forgotPasswordSchema,
   loginSchema,
@@ -31,7 +33,34 @@ export const signup = async (req: Request, res: Response) => {
 
   const result = await authService.signup(body);
 
+  // Nada foi criado: o email pertencia a uma conta soft-deletada, o cpf bateu, e
+  // saiu um email de reativação. 202 diz exatamente isso — pedido aceito, efeito
+  // fora da request (K18). A mensagem é condicional para não confirmar que a
+  // conta existe.
+  if (!result) {
+    res.status(202).json({
+      message:
+        "Se houver uma conta correspondente, um email com instruções de reativação foi enviado",
+    });
+    return;
+  }
+
   res.status(201).json(userPresenter.present(result, "owner"));
+};
+
+export const confirmAccountReactivation = async (
+  req: Request,
+  res: Response,
+) => {
+  const { body } = confirmAccountReactivationSchema.parse({ body: req.body });
+
+  await accountReactivationService.confirmAccountReactivation(
+    body.token,
+    body.newPassword,
+    body.phone,
+  );
+
+  res.status(204).send();
 };
 
 export const verifyEmail = async (req: Request, res: Response) => {

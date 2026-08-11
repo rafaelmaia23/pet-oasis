@@ -29,9 +29,11 @@ export const AUDIT_ACTIONS = [
   "USER_ROLE_REVOKED",
   "USER_PERMISSION_GRANTED",
   "USER_PERMISSION_REVOKED",
-  // Override privilegiado que **não** ressuscitou porque o ator não é admin
-  // (D16). O descarte é permanente e invisível na resposta HTTP — sem esta
-  // linha, ninguém fica sabendo que a permissão foi perdida.
+  // Reativação de conta soft-deletada (8.4/8.5). O pedido e a confirmação são
+  // ações separadas porque acontecem em momentos e por atores diferentes: quem
+  // pede é o signup ou um admin; quem confirma é o dono da conta, com o token.
+  "ACCOUNT_REACTIVATION_REQUESTED",
+  "ACCOUNT_REACTIVATION_COMPLETED",
   "PASSWORD_RESET_REQUESTED",
   "PASSWORD_RESET_COMPLETED",
   "PASSWORD_CHANGED",

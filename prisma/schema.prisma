@@ -181,6 +181,7 @@ enum VerificationPurpose {
   EMAIL_VERIFICATION
   PASSWORD_RESET
   EMAIL_CHANGE
+  ACCOUNT_REACTIVATION
 }
 
 model VerificationToken {
@@ -192,6 +193,15 @@ model VerificationToken {
   usedAt    DateTime?           @map("used_at")
   newEmail  String?             @map("new_email")
   createdAt DateTime            @default(now()) @map("created_at")
+
+  // Escolha do ator que pediu a reativação, congelada no token (só usadas com
+  // `purpose = ACCOUNT_REACTIVATION`, mesmo idioma do `newEmail`). Quem confirma
+  // é o dono da conta, não quem escolheu — então a escolha tem de viajar junto.
+  // `restoreProfiles` = com que perfis a conta volta (o self-service grava
+  // sempre `[CUSTOMER]`, D11). `restoreRoleIds` vazio = default do D8: todas as
+  // roles que morreram na cascata.
+  restoreProfiles ProfileKind[] @map("restore_profiles")
+  restoreRoleIds  String[]      @map("restore_role_ids")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

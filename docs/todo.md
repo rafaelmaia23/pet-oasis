@@ -537,7 +537,7 @@ Os quatro estados possíveis de um usuário ativo (D14 garante que sempre há �
 - ⬜ Reescrever os comentários que hoje justificam o `requireDeletedAt` — o que os substitui é "nada volta de carona porque nada volta sem ser nomeado": o self-service nomeia só `CUSTOMER` (D11) e o admin nomeia explicitamente.
 - ⬜ `user.lifecycle.test.ts`: o caso que prova "perfil morto antes não volta" vira "perfil morto antes **volta quando nomeado**, com as roles do próprio instante dele — e o perfil **não** nomeado continua morto".
 
-### ⬜ [Sessão D] Fase 8.4 — Conta deletada: self-service via signup
+### ✅ [Sessão D] Fase 8.4 — Conta deletada: self-service via signup
 
 Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se distinguem pelo que existia:
 

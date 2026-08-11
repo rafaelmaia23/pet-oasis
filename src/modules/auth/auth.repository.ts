@@ -1,6 +1,13 @@
-import type { VerificationPurpose } from "@/generated/prisma/enums";
+import type {
+  ProfileKind,
+  VerificationPurpose,
+} from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
+import {
+  grantRolesToUser,
+  restoreProfilesOfUser,
+} from "@/modules/user/user.lifecycle.repository";
 
 type CreateSessionData = {
   userId: string;
@@ -223,6 +230,132 @@ export async function consumeEmailChange(
       data: { userId, email: oldEmail, replacedAt: new Date() },
     });
     if (audit) await record(audit, tx);
+  });
+}
+
+type RequestAccountReactivationData = {
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  restoreProfiles: ProfileKind[];
+  restoreRoleIds: string[];
+};
+
+/**
+ * Mesmo idioma do `requestEmailChange`: invalida o token de reativação pendente
+ * antes de criar o novo, então há no máximo um vivo por conta e um segundo
+ * pedido cancela o primeiro implicitamente.
+ *
+ * A escolha do ator viaja no token porque quem confirma é outra pessoa — o dono
+ * da conta, que só tem o link do email.
+ */
+export async function requestAccountReactivation(
+  data: RequestAccountReactivationData,
+  audit?: AuditDescriptor,
+) {
+  return prisma.$transaction(async (tx) => {
+    await tx.verificationToken.updateMany({
+      where: {
+        userId: data.userId,
+        purpose: "ACCOUNT_REACTIVATION",
+        usedAt: null,
+      },
+      data: { usedAt: new Date() },
+    });
+    const token = await tx.verificationToken.create({
+      data: {
+        userId: data.userId,
+        tokenHash: data.tokenHash,
+        purpose: "ACCOUNT_REACTIVATION",
+        expiresAt: data.expiresAt,
+        restoreProfiles: data.restoreProfiles,
+        restoreRoleIds: data.restoreRoleIds,
+      },
+    });
+    if (audit) await record(audit, tx);
+    return token;
+  });
+}
+
+type ConsumeAccountReactivationData = {
+  tokenId: string;
+  userId: string;
+  passwordHash: string;
+  kinds: ProfileKind[];
+  roleIds: string[];
+  newCustomer?: { phone: string };
+  customerRoleIds: string[];
+};
+
+/**
+ * Reativa a conta inteira numa transação. **Único ponto do projeto que escreve
+ * `deletedAt: null` num `User`** — a inversa exata de
+ * `softDeleteUserAndInvalidateSessions`.
+ *
+ * Não invalida sessões: a deleção da conta já derrubou todas e nenhuma pôde
+ * nascer enquanto a conta estava morta.
+ *
+ * `status: ACTIVE` porque consumir o token **é** a prova de posse do email que
+ * o `verify-email` exige; `mustChangePassword: false` porque a senha acabou de
+ * ser trocada, mesmo raciocínio do `consumePasswordReset`.
+ */
+export async function consumeAccountReactivation(
+  data: ConsumeAccountReactivationData,
+  describeAudit?: (counts: {
+    profilesRestored: ProfileKind[];
+    profilesCreated: ProfileKind[];
+    restoredRoles: number;
+    grantedRoles: number;
+  }) => AuditDescriptor,
+) {
+  return prisma.$transaction(async (tx) => {
+    await tx.verificationToken.update({
+      where: { id: data.tokenId },
+      data: { usedAt: new Date() },
+    });
+
+    await tx.user.update({
+      where: { id: data.userId },
+      data: {
+        deletedAt: null,
+        passwordHash: data.passwordHash,
+        status: "ACTIVE",
+        mustChangePassword: false,
+      },
+    });
+
+    const restored = await restoreProfilesOfUser(tx, data.userId, {
+      kinds: data.kinds,
+      ...(data.roleIds.length > 0 && { roleIds: data.roleIds }),
+    });
+
+    const profilesCreated: ProfileKind[] = [];
+
+    if (data.newCustomer) {
+      await tx.customer.create({
+        data: { userId: data.userId, phone: data.newCustomer.phone },
+      });
+      await grantRolesToUser(tx, data.userId, data.customerRoleIds);
+      profilesCreated.push("CUSTOMER");
+    }
+
+    // Role nomeada que não morreu na cascata de nenhum perfil restaurado não é
+    // alcançada pela correlação por data — então é **concedida**, reusando a
+    // linha do par (K15/K21). `grantRolesToUser` é idempotente, então passar o
+    // conjunto nomeado inteiro é seguro.
+    const grantedRoles = await grantRolesToUser(tx, data.userId, data.roleIds);
+
+    if (describeAudit) {
+      await record(
+        describeAudit({
+          profilesRestored: restored.profiles,
+          profilesCreated,
+          restoredRoles: restored.roles,
+          grantedRoles,
+        }),
+        tx,
+      );
+    }
   });
 }
 

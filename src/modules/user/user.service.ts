@@ -23,6 +23,7 @@ import type {
   UpdateUserInput,
 } from "@/modules/user/user.schema";
 import { validateRoles } from "@/utils/validateRoles";
+import { requestAccountReactivation } from "../auth/accountReactivation.service";
 import { PASSWORD_RESET_TTL_MS } from "../auth/auth.constants";
 import { buildPasswordResetEmail } from "../auth/password.service";
 import { issueEmailVerification } from "../auth/verification.service";
@@ -102,6 +103,55 @@ export async function createEmployee(
   return user;
 }
 
+const EMAIL_IN_USE_ERROR = {
+  message: "O email informado já está em uso",
+  action: "Tente outro valor para o campo email",
+};
+
+/**
+ * Decide, para o signup de cliente, entre criar conta nova, recusar e reativar.
+ *
+ * Os três ramos de recusa devolvem **a mesma** mensagem de propósito: só o email
+ * bater não prova identidade (cpf não é segredo, mas conhecer os dois já é
+ * evidência suficiente para disparar um email ao dono), e uma resposta
+ * diferente por caso revelaria que a conta existe e em que estado ela está.
+ *
+ * D12: conta **ativa** nunca é tocada — nem vinculada, nem alterada. O caminho
+ * de quem tem uma conta viva é logar.
+ */
+async function resolveCustomerSignupEmail(
+  email: string,
+  cpf: string,
+): Promise<{ reactivationTriggered: boolean }> {
+  if (await userRepository.findUserByEmail(email)) {
+    throw createConflictError(EMAIL_IN_USE_ERROR);
+  }
+
+  await assertEmailAvailable(email);
+
+  const deletedUser = await userRepository.findDeletedUserByEmail(email);
+
+  if (!deletedUser) return { reactivationTriggered: false };
+
+  if (deletedUser.cpf !== cpf || deletedUser.bannedAt !== null) {
+    throw createConflictError(EMAIL_IN_USE_ERROR);
+  }
+
+  // Self-service traz **apenas** o perfil de cliente (D11); roles vazias = o
+  // default do D8, todas as que morreram na cascata.
+  await requestAccountReactivation(deletedUser, "SELF", {
+    profiles: ["CUSTOMER"],
+    roleIds: [],
+  });
+
+  return { reactivationTriggered: true };
+}
+
+/**
+ * Devolve `null` quando o email pertencia a uma conta soft-deletada e o cpf
+ * bateu: nesse caso nada é criado, um email de reativação sai, e o controller
+ * responde 202 (K18).
+ */
 export async function createCustomer(
   data: CreateCustomerInput,
   source: UserCreationSource = "SIGNUP",
@@ -110,7 +160,12 @@ export async function createCustomer(
 
   validateRoles(rolesList, "CUSTOMER");
 
-  await assertEmailAvailable(data.email);
+  const { reactivationTriggered } = await resolveCustomerSignupEmail(
+    data.email,
+    data.cpf,
+  );
+
+  if (reactivationTriggered) return null;
 
   const { password, ...userData } = data;
 

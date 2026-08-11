@@ -36,6 +36,7 @@ const USER_ADMINISTRATION_FEATURES: FeatureName[] = [
   "read:user:others",
   "update:user:others",
   "delete:user:others",
+  "reactivate:user",
   "create:employee-profile",
   "reactivate:employee-profile",
   "delete:profile",

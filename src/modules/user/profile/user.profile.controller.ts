@@ -17,6 +17,7 @@ export const createCustomerProfile = async (req: Request, res: Response) => {
   });
 
   const response = await userProfileService.createCustomerProfile(
+    getAuthUser(req),
     params.userId,
     body,
   );
@@ -33,6 +34,7 @@ export const createEmployeeProfile = async (req: Request, res: Response) => {
   });
 
   const response = await userProfileService.createEmployeeProfile(
+    getAuthUser(req),
     params.userId,
     body,
   );

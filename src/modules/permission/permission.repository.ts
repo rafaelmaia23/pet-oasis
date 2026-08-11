@@ -1,6 +1,9 @@
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
-import { cascadeDeleteOverrides } from "@/modules/user/user.lifecycle.repository";
+import {
+  cascadeDeleteOverrides,
+  grantRolesToUser,
+} from "@/modules/user/user.lifecycle.repository";
 
 // A role de cada override é o que o presenter expõe (K2) — sempre que um
 // override sai daqui, sai com a atribuição a que pertence.
@@ -112,20 +115,12 @@ export async function addUserRole(
   audit?: AuditDescriptor,
 ) {
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.userRole.findUnique({
-      where: { userId_roleId: { userId, roleId } },
-    });
+    await grantRolesToUser(tx, userId, [roleId]);
 
-    const userRole = existing
-      ? await tx.userRole.update({
-          where: { id: existing.id },
-          data: { deletedAt: null },
-          include: userRoleInclude,
-        })
-      : await tx.userRole.create({
-          data: { userId, roleId },
-          include: userRoleInclude,
-        });
+    const userRole = await tx.userRole.findUniqueOrThrow({
+      where: { userId_roleId: { userId, roleId } },
+      include: userRoleInclude,
+    });
 
     if (audit) await record(audit, tx);
     return userRole;

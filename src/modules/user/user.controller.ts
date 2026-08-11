@@ -16,7 +16,7 @@ import { resolveUserView } from "./user.view-resolver";
 export const createEmployee = async (req: Request, res: Response) => {
   const { body } = createEmployeeSchema.parse({ body: req.body });
 
-  const user = await userService.createEmployee(body);
+  const user = await userService.createEmployee(getAuthUser(req).id, body);
 
   return res
     .status(201)

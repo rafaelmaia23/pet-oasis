@@ -124,6 +124,35 @@ describe("POST /api/v1/users", () => {
     expectValidationError(response, ["roleNames"]);
   });
 
+  it("should return 403 if a non-admin creates a user with a privileged role", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const data = makeEmployeeData({ roleNames: ["admin"] });
+
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(data);
+
+    // Criar já com a role é atribuir a role: sem este guard, `POST /users`
+    // seria um desvio de `POST /users/:id/roles/:roleId`, que o exige.
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Apenas administradores podem atribuir roles privilegiadas",
+    });
+
+    // Recusa é recusa: a conta não nasceu de qualquer jeito.
+    const created = await prisma.user.findFirst({
+      where: { email: data.email },
+    });
+
+    expect(created).toBeNull();
+  });
+
   it("should return 409 if email is already in use", async () => {
     const user = await buildEmployee({ roleNames: ["manager"] });
 

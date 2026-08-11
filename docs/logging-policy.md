@@ -119,6 +119,8 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `AUTH_RATE_LIMIT_EXCEEDED` | `Route` | `rule`, `scope` (enum: `IP`, `EMAIL`) | 7.9 |
 | `USER_CREATED` | `User` | `source` (enum: `SIGNUP`, `ADMIN`, `SEED`) | 7.6 |
 | `USER_DELETED` | `User` | `cascadedProfiles`, `cascadedRoles`, `cascadedOverrides` (nº de filhos derrubados junto) | 7.6 · 8.1 |
+| `USER_PROFILE_CREATED` | `User` | `profileKind`, `roles` (nº de roles concedidas) | 8.3 |
+| `USER_PROFILE_RESTORED` | `User` | `profileKind`, `restoredRoles` (voltaram por correlação de data), `grantedRoles` (nomeadas pelo ator) | 8.3 |
 | `USER_PROFILE_DELETED` | `User` | `profileKind` (enum: `CUSTOMER`, `EMPLOYEE`), `cascadedRoles`, `cascadedOverrides` | 8.1 |
 | `USER_BANNED` | `User` | `reasonProvided` (bool — o texto **não** entra) | 7.6 |
 | `USER_UNBANNED` | `User` | — | 7.6 |

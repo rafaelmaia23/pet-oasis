@@ -26,6 +26,7 @@ import { validateRoles } from "@/utils/validateRoles";
 import { PASSWORD_RESET_TTL_MS } from "../auth/auth.constants";
 import { buildPasswordResetEmail } from "../auth/password.service";
 import { issueEmailVerification } from "../auth/verification.service";
+import { assertAdminForRoleAssignment } from "../permission/permission.service";
 import { PERMISSION_FEATURES, type RoleName } from "../role/role.constants";
 import { getRolesByNames } from "../role/role.repository";
 
@@ -53,6 +54,7 @@ async function assertEmailAvailable(email: string) {
 }
 
 export async function createEmployee(
+  requestingUserId: string,
   data: CreateEmployeeInput,
   source: UserCreationSource = "ADMIN",
 ) {
@@ -61,6 +63,15 @@ export async function createEmployee(
     : await getRolesByNames(DEFAULT_EMPLOYEE_ROLES);
 
   validateRoles(rolesList, "EMPLOYEE");
+
+  // Nascer com a role é ser atribuído a ela: sem este guard, criar o usuário
+  // já com `roleNames: ["admin"]` seria um desvio de
+  // `POST /users/:id/roles/:roleId`, que exige ator admin para role
+  // privilegiada. Furo pré-existente, fechado junto da 8.3 porque a rota de
+  // perfil tinha o gêmeo exato dele.
+  for (const role of rolesList) {
+    await assertAdminForRoleAssignment(requestingUserId, role);
+  }
 
   await assertEmailAvailable(data.email);
 

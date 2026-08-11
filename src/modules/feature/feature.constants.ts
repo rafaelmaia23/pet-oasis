@@ -10,8 +10,39 @@ export const DEFAULT_FEATURES = [
   { name: "update:user:others", description: "Atualizar qualquer usuário" },
   { name: "delete:user:others", description: "Deletar qualquer usuário" },
 
-  // User profile administration features
-  { name: "create:profile", description: "Criar um perfil de usuário" },
+  // Perfil de cliente — criar e reativar são features **separadas** (K12):
+  // reativar traz de volta as roles que morreram na cascata, criar nasce com o
+  // default. São poderes diferentes e ficam concedíveis/revogáveis em separado.
+  // O nome diz o recurso (K13) — `create:profile` genérico não revelava que a
+  // versão `:others` não alcança o perfil de funcionário.
+  {
+    name: "create:customer-profile",
+    description: "Criar o próprio perfil de cliente",
+  },
+  {
+    name: "reactivate:customer-profile",
+    description: "Reativar o próprio perfil de cliente",
+  },
+  {
+    name: "create:customer-profile:others",
+    description: "Criar o perfil de cliente de outro usuário",
+  },
+  {
+    name: "reactivate:customer-profile:others",
+    description: "Reativar o perfil de cliente de outro usuário",
+  },
+
+  // Perfil de funcionário — nunca há self-service (D11), então não existe par
+  // `:others`: estas já são as features de agir sobre outro.
+  {
+    name: "create:employee-profile",
+    description: "Criar o perfil de funcionário de um usuário",
+  },
+  {
+    name: "reactivate:employee-profile",
+    description: "Reativar o perfil de funcionário de um usuário",
+  },
+
   { name: "delete:profile", description: "Deletar um perfil de usuário" },
 
   // Session features

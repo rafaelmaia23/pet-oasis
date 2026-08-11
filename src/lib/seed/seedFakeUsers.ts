@@ -2,6 +2,8 @@ import { cpf } from "cpf-cnpj-validator";
 import { env } from "@/config/env";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { getRolesByNames } from "@/modules/role/role.repository";
+import * as userProfileRepository from "@/modules/user/profile/user.profile.repository";
 import * as userProfileService from "@/modules/user/profile/user.profile.service";
 import * as userRepository from "@/modules/user/user.repository";
 import {
@@ -119,9 +121,16 @@ export async function seedFakeUsers(): Promise<SeedFakeUsersResult> {
     const userId = await createBaseUser(def);
 
     if (def.kind === "HYBRID") {
-      await userProfileService.createEmployeeProfile(userId, {
-        roleNames: def.employeeRoleNames,
-      });
+      // Pelo repositório, não pelo service: o service pede um ator para o guard
+      // de não-escalação (8.3), e aqui não há request nenhuma — o seed é
+      // infraestrutura. Mesmo corte que já se faz com `userRepository.create*`
+      // para não disparar email de verificação.
+      const roles = await getRolesByNames(def.employeeRoleNames);
+
+      await userProfileRepository.createEmployeeProfile(
+        userId,
+        roles.map((role) => role.id),
+      );
     }
 
     await applyTrait(userId, def.trait);

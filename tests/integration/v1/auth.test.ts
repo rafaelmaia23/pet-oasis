@@ -188,6 +188,32 @@ describe("POST /api/v1/auth/signup", () => {
     });
   });
 
+  it("should refuse and change nothing when the cpf belongs to an ACTIVE account (D12)", async () => {
+    // Um funcionário sem perfil de cliente é o alvo tentador do
+    // account-linking: o signup "poderia" reconhecer o cpf e pendurar o perfil
+    // de cliente na conta viva. Não pode — cpf não é segredo, e a rota é
+    // pública, então isso seria tomada de conta.
+    const existing = await buildEmployee({ roleNames: ["attendant"] });
+
+    const response = await request(app)
+      .post("/api/v1/auth/signup")
+      .send(makeCustomerData({ cpf: existing.cpf }));
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ code: "CONFLICT" });
+
+    const userInDb = await findUserById(existing.id);
+
+    // Não criou, não vinculou, não mudou nada.
+    expect(userInDb?.customer ?? null).toBeNull();
+    expect(userInDb?.email).toBe(existing.email);
+    expect(userInDb?.roles.map((userRole) => userRole.role.name)).toEqual([
+      "attendant",
+    ]);
+
+    expect(await prisma.user.count()).toBe(1);
+  });
+
   it("should return the same generic 409 when the email was previously used by another account", async () => {
     const other = await buildCustomer();
     const reservedEmail = other.email;

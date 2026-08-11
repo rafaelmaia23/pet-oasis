@@ -368,7 +368,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 |---|---|---|---|
 | **A** ✅ | 8.0 | Escopo de override + unicidade de `UserRole` | Fundação do modelo de autorização. Nada de cascata ou reativação faz sentido antes do override ter dono. |
 | **B** ✅ | 8.1, 8.2 | Cascata + restauração por data | Mesma mecânica de dados, uma inútil sem a outra: cascatear sem saber restaurar deixa a fase pela metade. |
-| **C** ⬜ | Passo 0 + 8.3 | Perfil em conta ativa | Primeiro fluxo de produto, já em cima do modelo correto. O kickoff revogou o D6 (K16), então a sessão abre com um Passo 0 que tira a restauração de overrides antes de construir por cima dela. |
+| **C** ✅ | Passo 0 + 8.3 | Perfil em conta ativa | Primeiro fluxo de produto, já em cima do modelo correto. O kickoff revogou o D6 (K16), então a sessão abre com um Passo 0 que tira a restauração de overrides antes de construir por cima dela. |
 | **D** ⬜ | 8.4, 8.5 | Conta deletada (self-service e admin) | Os dois disparam token e convergem na mesma confirmação. |
 | **E** ⬜ | 8.6, 8.7 | Emails liberados + rate limit | Transversais, independentes dos fluxos; 8.7 cobre as superfícies que 8.4/8.5 abriram. |
 | **F** ⬜ | 8.8 | Isenção do demo no lockout | Bug de produção, sem relação com perfil/reativação. Reaplicação do patch `0002`. |
@@ -483,7 +483,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ Testes: `permission.test.ts` inverteu os casos de restauração e ganhou o par que fecha a regra — **a linha do override continua soft-deletada** (evidência para o audit) e **o `PUT` explícito é a única porta de volta**, reusando a linha (o `@@unique` não admite uma segunda). Sumiu o caso da "dívida da 8.0 quitada", que era prova do descarte permanente do D16. `user.lifecycle.test.ts` perdeu os fixtures `permissive`/`nonAdmin`, e os três casos de override viraram um só: **nenhum override ressuscita, tenha morrido na cascata ou sozinho**.
 - ✅ Suíte (650) + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão C] Fase 8.3 — Perfil em conta ativa
+### ✅ [Sessão C] Fase 8.3 — Perfil em conta ativa
 
 Os quatro estados possíveis de um usuário ativo (D14 garante que sempre há ≥1 perfil ativo):
 
@@ -494,16 +494,20 @@ Os quatro estados possíveis de um usuário ativo (D14 garante que sempre há �
 | Funcionário ativo | Cliente nunca existiu | **O próprio, sempre** + attendant/manager/admin — **cria** | `POST /users/:userId/customer` |
 | Funcionário ativo | Cliente soft-deleted | **O próprio, sempre** + attendant/manager/admin — **reativa** | `POST /users/:userId/customer` |
 
-- ⬜ **Catálogo (K11–K13):** `create:profile` é renomeada e o conjunto vira seis features — `create:customer-profile` / `reactivate:customer-profile` (self, em `SELF_MANAGEMENT_FEATURES`), `create:customer-profile:others` / `reactivate:customer-profile:others` (grupo novo `CUSTOMER_SERVICE_FEATURES`, em attendant **e** manager), `create:employee-profile` / `reactivate:employee-profile` (em `USER_ADMINISTRATION_FEATURES`). `delete:profile` fica intocado — deleção está fora do escopo desta sub-fase.
-  - ⬜ As duas self **têm** de morar em `SELF_MANAGEMENT_FEATURES`, não em `CUSTOMER_FEATURES`: a role `customer` morre exatamente quando o perfil de cliente é deletado, então a feature sumiria no instante em que seria necessária. No baseline, ela chega pela role de funcionário — que é quem sobrou vivo.
-  - ⬜ Conferir se `runSeed` (`src/lib/seedDatabase.ts`) **poda** features/`RoleFeature` que saíram do catálogo; se só faz upsert, a `create:profile` renomeada fica órfã em dev/demo.
-- ⬜ Mesma rota cria **ou** reativa; o service ramifica pelo estado do perfil no banco. Nunca há self-service para virar funcionário; sempre há para virar cliente. `canAccess` ganha a forma OR (`string | string[]`) — referência pronta em `git show ce1e516 -- src/middlewares/canAccess.middleware.ts`.
-- ⬜ Autorização em duas etapas, o padrão que `user.service` já usa: a rota declara as features, o service reconfere a posse com `canActOnResource` no ramo que de fato correu.
-- ⬜ **Não-escalação:** o ramo de reativação passa a **conceder roles arbitrárias** (K15), então vira um segundo caminho para `addUserRole` — `assertAdminForRoleAssignment` tem de rodar **por role nomeada**, senão um manager concede `admin`/`demo` pela porta do perfil. Exige exportar o guard (hoje privado no `permission.service`).
-- ⬜ `POST /auth/signup` nesses casos **recusa e orienta a logar** (D12) — não cria, não vincula, não muda nada. Já é o comportamento de hoje (P2002 → 409 genérico); escopo aqui é **regressão, não código**. A mensagem segue genérica de propósito: distinguir "ativa" de "soft-deletada" vazaria existência de conta, e a 8.4 precisa desse mesmo 409 indistinguível.
-- ⬜ Audit (K8): ações novas `USER_PROFILE_CREATED` (`{ profileKind, roles }`) e `USER_PROFILE_RESTORED` (`{ profileKind, restoredRoles, grantedRoles }`) — criação de perfil hoje não registra nada. Só ids, enums e contagens.
-- 🔸 **Vindo da Sessão B — bug que esta sub-fase torna alcançável:** `createCustomerProfile`/`createEmployeeProfile` (`user.profile.repository.ts`) usam `roles: { create: ... }`, que estoura o `@@unique([userId, roleId])` sempre que já existe uma `UserRole` **morta** do par. Hoje é inalcançável (o service recusa com 409 "já possui um perfil inativo" antes de chegar lá), mas o ramo de **reativação** desta sub-fase remove esse 409 — o create tem de adotar o idioma de reuso de linha do `addUserRole`. Nasce a primitiva `grantRolesToUser` no `user.lifecycle.repository.ts`, para a qual o `addUserRole` também passa a delegar (uma implementação só).
-- 🔸 **Vindo da Sessão B:** o service de perfil **não recebe o ator** hoje (`deleteCustomerProfile(userId)`) — o threading pelo controller (`getAuthUser(req)`) continua necessário, agora para `canActOnResource` em vez do D16.
+- ✅ **Catálogo (K11–K13):** `create:profile` foi renomeada e o conjunto virou seis features — `create:customer-profile` / `reactivate:customer-profile` (self, em `SELF_MANAGEMENT_FEATURES`), `create:customer-profile:others` / `reactivate:customer-profile:others` (grupo novo `CUSTOMER_SERVICE_FEATURES`, em attendant **e** manager), `create:employee-profile` / `reactivate:employee-profile` (em `USER_ADMINISTRATION_FEATURES`). `delete:profile` ficou intocado — deleção está fora do escopo desta sub-fase.
+  - ✅ As duas self moram em `SELF_MANAGEMENT_FEATURES`, não em `CUSTOMER_FEATURES`: a role `customer` morre exatamente quando o perfil de cliente é deletado, então a feature sumiria no instante em que passaria a ser necessária. No baseline ela chega pela role de funcionário — que é quem sobrou vivo. **Tem teste próprio** (o funcionário reativa o próprio perfil de cliente depois de um manager derrubá-lo).
+  - ✅ `runSeed` **já podava** (`feature.deleteMany({ where: { name: { notIn: ... } } })`), então a `create:profile` sai sozinha no reseed — nenhuma migration ou passo manual.
+- ✅ Mesma rota cria **ou** reativa; o service ramifica pelo estado do perfil no banco. Nunca há self-service para virar funcionário; sempre há para virar cliente. `canAccess` ganhou a forma OR (`string | string[]`), com teste unitário próprio (`tests/unit/middlewares/canAccess.test.ts`, novo).
+- ✅ Autorização em **duas etapas**: a união das duas features **antes** da busca do usuário (403 vence 404 — a autorização não pode depender de o alvo existir), e a específica do ramo que de fato correu depois. Sem a segunda, ter só `reactivate:` deixaria criar do zero. A mensagem do 403 nomeia a variante que faltou de verdade: pedir `:others` a quem age sobre a própria conta mandaria o usuário atrás da feature errada.
+  - ✅ Perfil de cliente usa `canActOnResource` (tem par self/`:others`); perfil de funcionário usa `hasFeature` puro — sem par, de propósito: como nunca há self-service (D11), a feature já é a de agir sobre outro, e `canActOnResource` ali restringiria ao próprio, o oposto do pretendido.
+- ✅ **Não-escalação:** o ramo de reativação concede roles arbitrárias (K15), então `assertAdminForRoleAssignment` (agora exportado do `permission.service`) roda **por role nomeada** — manager nomeando `admin` recebe 403 e o perfil **não** é reativado de carona.
+- ✅ `POST /auth/signup` recusa e não mexe em nada (D12) — regressão nova cobrindo o vetor de account-linking: signup com o **cpf** de uma conta ativa responde 409 e o alvo continua sem perfil de cliente, com o mesmo email e as mesmas roles.
+- ✅ Audit (K8): ações novas `USER_PROFILE_CREATED` (`{ profileKind, roles }`) e `USER_PROFILE_RESTORED` (`{ profileKind, restoredRoles, grantedRoles }`) — criação de perfil não registrava nada. `restoredRoles` × `grantedRoles` separa o que voltou por correlação de data do que foi decisão nova do ator; só a segunda é autoridade nova. Sem PII, com teste de contrato.
+- ✅ **Bug da Sessão B corrigido:** `createCustomerProfile`/`createEmployeeProfile` usavam `roles: { create: ... }`, que estoura o `@@unique([userId, roleId])` sempre que já existe uma `UserRole` morta do par. Nasceu `grantRolesToUser` (`user.lifecycle.repository.ts`) com o idioma de reuso de linha do D3; `addUserRole` também passou a delegar para ela (uma implementação só). Os dois `create*Profile` viraram `$transaction` e passaram a receber **ids** em vez de nomes.
+- ✅ Threading do ator pelo controller (`getAuthUser(req)`) — agora para `canActOnResource`, em vez do D16 que morreu no Passo 0.
+- ✅ **Furo pré-existente achado e fechado junto:** `POST /users` aceitava `roleNames` e **nunca** rodava o guard de não-escalação — um manager criava uma conta já com a role `admin`, desviando de `POST /users/:id/roles/:roleId`, que o exige. Nascer com a role é ser atribuído a ela. `userService.createEmployee` passou a receber o ator e a rodar o mesmo guard, com teste (403 + a conta não nasce).
+- ✅ `seedFakeUsers` passou a chamar o **repositório** de perfil em vez do service: o service pede um ator para o guard, e o seed é infraestrutura, sem request nenhuma — mesmo corte que já se fazia com `userRepository.create*` para não disparar email de verificação.
+- ✅ Suíte (**667**) + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão D] Fase 8.4 — Conta deletada: self-service via signup
 
@@ -511,7 +515,7 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 
 | Caso | O que existia | Resultado do self-service |
 |---|---|---|
-| A | Só cliente | Conta ativa + cliente **restaurado** (roles e overrides da cascata voltam) |
+| A | Só cliente | Conta ativa + cliente **restaurado** (as roles da cascata voltam; os overrides delas não — D6', K16) |
 | B | Só funcionário | Conta ativa + cliente **criado do zero**. Funcionário **continua morto** (D11) |
 | C | Cliente + funcionário | Conta ativa + cliente **restaurado**. Funcionário **continua morto** (D11) |
 
@@ -528,7 +532,7 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 | B — só funcionário | Restaurar funcionário · criar cliente do zero · ambos |
 | C — os dois | Restaurar cliente · funcionário · ambos |
 
-- ⬜ Admin escolhe **perfis e roles** (D8: default traz todas as roles que morreram na cascata; pode escolher subconjunto).
+- ⬜ Admin escolhe **perfis e roles** (D8: default traz todas as roles que morreram na cascata; pode escolher subconjunto). Overrides nunca voltam (D6', K16). Ver o K15 da Sessão C: no nível de perfil a lista nomeada já significa *com que roles o perfil volta*, restaurando ou concedendo conforme o caso — vale reusar a mesma semântica aqui.
 - ⬜ Schema recusa escolher zero perfis (D14).
 - ⬜ Confirmação converge com a da 8.4 (público, token como credencial).
 - 🔸 **Vindo da Sessão B:** `restoreProfilesOfUser` (`user.lifecycle.repository.ts`) já existe e já aceita a escolha de perfis (`kinds`) e o subconjunto de roles (`roleIds`, D8) — falta só a rota, o token e o ator.

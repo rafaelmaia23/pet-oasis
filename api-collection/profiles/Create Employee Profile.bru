@@ -21,5 +21,16 @@ body:json {
 }
 
 docs {
-  Exige create:profile. O demo é read-only → 403.
+  Cria **ou** reativa o perfil de funcionário — o ramo sai do estado do perfil
+  no banco, e a resposta é 201 nos dois casos (perfil já ativo → 409).
+
+  Exige `create:employee-profile` ou `reactivate:employee-profile` (manager ou
+  admin). Nunca há self-service para virar funcionário.
+
+  `roleNames` é a lista de roles com que o perfil nasce **ou volta**: cada nome
+  é restaurado (se morreu naquela cascata) ou concedido (se não); o que não for
+  nomeado fica para trás. Omitido, volta tudo o que morreu na cascata. Nomear
+  uma role privilegiada sem ser admin → 403.
+
+  O demo é read-only → 403.
 }

@@ -165,6 +165,49 @@ type RestoreCounts = {
 };
 
 /**
+ * Concede as roles ao usuário **reusando a linha do par** `(userId, roleId)`
+ * (D3). Uma linha morta é revivida; ausente, criada. Já ativa, é no-op.
+ *
+ * Existe como primitiva porque três caminhos precisam dela e um `create` cru
+ * estoura o `@@unique([userId, roleId])` sempre que já houve aquele par:
+ * `addUserRole`, a criação de perfil, e a reativação de perfil nomeando uma role
+ * que morreu **fora** da cascata daquele perfil (K15) — que é justamente o caso
+ * em que a correlação por data não casa e a role tem de ser concedida, não
+ * restaurada.
+ */
+export async function grantRolesToUser(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  roleIds: string[],
+): Promise<number> {
+  if (roleIds.length === 0) return 0;
+
+  const existing = await tx.userRole.findMany({
+    where: { userId, roleId: { in: roleIds } },
+    select: { id: true, roleId: true },
+  });
+
+  const existingByRoleId = new Map(
+    existing.map((userRole) => [userRole.roleId, userRole.id]),
+  );
+
+  for (const roleId of roleIds) {
+    const existingId = existingByRoleId.get(roleId);
+
+    if (existingId) {
+      await tx.userRole.update({
+        where: { id: existingId },
+        data: { deletedAt: null },
+      });
+    } else {
+      await tx.userRole.create({ data: { userId, roleId } });
+    }
+  }
+
+  return roleIds.length;
+}
+
+/**
  * Restaura as `UserRole` que morreram no instante `parentDeletedAt` — e nada
  * abaixo delas (D6').
  *

@@ -163,6 +163,64 @@ describe("Audit log", () => {
     expect(dump).not.toContain(target.name);
   });
 
+  it("records USER_PROFILE_CREATED with the profile kind and the role count", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildCustomer();
+
+    const token = await loginAs(manager.email, manager.password);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ roleNames: ["attendant"] });
+
+    const rows = await auditRows("USER_PROFILE_CREATED");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorId: manager.id,
+      targetType: "User",
+      targetId: target.id,
+      metadata: { profileKind: "EMPLOYEE", roles: 1 },
+    });
+
+    const dump = JSON.stringify(rows[0]);
+    expect(dump).not.toContain(target.email);
+    expect(dump).not.toContain(target.name);
+  });
+
+  it("records USER_PROFILE_RESTORED separating restored from granted roles", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+
+    const rows = await auditRows("USER_PROFILE_RESTORED");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorId: admin.id,
+      targetType: "User",
+      targetId: target.id,
+      // Restaurada ≠ concedida: sem `roleNames`, tudo veio por correlação de
+      // data e nada foi decisão nova do ator.
+      metadata: { profileKind: "EMPLOYEE", restoredRoles: 1, grantedRoles: 0 },
+    });
+
+    const dump = JSON.stringify(rows[0]);
+    expect(dump).not.toContain(target.email);
+    expect(dump).not.toContain(target.name);
+  });
+
   it("records USER_BANNED with reasonProvided and no PII", async () => {
     const admin = await buildEmployee({ grants: ["manage:user:status"] });
     const target = await buildCustomer();

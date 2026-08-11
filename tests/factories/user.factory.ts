@@ -204,10 +204,16 @@ export async function buildHybrid(overrides?: {
     ...(overrides?.data && { data: overrides.data }),
   });
 
+  // O repositório passou a receber ids (8.3): as roles são concedidas pela
+  // primitiva de reuso de linha, que casa pelo par `(userId, roleId)`.
+  const customerRoles = await getRolesByNames(
+    overrides?.customerRoles ?? DEFAULT_CUSTOMER_ROLES,
+  );
+
   await createCustomerProfile(
     employee.id,
     { phone: faker.phone.number({ style: "international" }) },
-    overrides?.customerRoles ?? DEFAULT_CUSTOMER_ROLES,
+    customerRoles.map((role) => role.id),
   );
 
   const userInDb = await findUserById(employee.id);

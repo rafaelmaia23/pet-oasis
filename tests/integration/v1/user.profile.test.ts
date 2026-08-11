@@ -37,15 +37,15 @@ describe("POST /api/v1/users/:userId/customer", () => {
     });
   });
 
-  it("should return 403 if user does not have feature `create:profile`", async () => {
-    const user = await buildEmployee({
-      roleNames: ["attendant"],
-    });
+  it("should return 403 if user does not have feature `create:customer-profile:others`", async () => {
+    // O cliente tem a versão self (baseline), não a `:others`.
+    const actor = await buildCustomer();
+    const target = await buildEmployee();
 
-    const token = await loginAs(user.email, user.password);
+    const token = await loginAs(actor.email, actor.password);
 
     const response = await request(app)
-      .post(`/api/v1/users/${user.id}/customer`)
+      .post(`/api/v1/users/${target.id}/customer`)
       .set("Authorization", `Bearer ${token}`)
       .send({ phone: faker.phone.number({ style: "international" }) });
 
@@ -54,28 +54,29 @@ describe("POST /api/v1/users/:userId/customer", () => {
     expect(response.body).toMatchObject({
       code: "FORBIDDEN",
       message: "Você não tem permissão para acessar este recurso",
-      action: 'Verifique se você tem acesso a feature "create:profile"',
+      action:
+        'Verifique se você tem acesso a uma das features: "create:customer-profile:others", "reactivate:customer-profile:others"',
     });
   });
 
-  it("should return 403 if user does not have feature `create:profile` and tries to create a profile of non-existent user", async () => {
-    const user = await buildEmployee({
-      roleNames: ["attendant"],
-    });
+  it("should return 403 if user does not have feature `create:customer-profile:others` and tries to create a profile of non-existent user", async () => {
+    const actor = await buildCustomer();
 
-    const token = await loginAs(user.email, user.password);
+    const token = await loginAs(actor.email, actor.password);
 
     const response = await request(app)
       .post(`/api/v1/users/${faker.string.uuid()}/customer`)
       .set("Authorization", `Bearer ${token}`)
       .send({ phone: faker.phone.number({ style: "international" }) });
 
+    // 403 vence 404: a autorização não pode depender de o alvo existir.
     expect(response.status).toBe(403);
 
     expect(response.body).toMatchObject({
       code: "FORBIDDEN",
       message: "Você não tem permissão para acessar este recurso",
-      action: 'Verifique se você tem acesso a feature "create:profile"',
+      action:
+        'Verifique se você tem acesso a uma das features: "create:customer-profile:others", "reactivate:customer-profile:others"',
     });
   });
 
@@ -123,39 +124,161 @@ describe("POST /api/v1/users/:userId/customer", () => {
     });
   });
 
-  it("should return 409 if user has a deleted customer profile", async () => {
-    const user = await buildEmployee({
-      roleNames: ["manager"],
-    });
+  it("should return 201 and reactivate a soft-deleted customer profile, updating the phone", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const managerToken = await loginAs(manager.email, manager.password);
 
-    const token = await loginAs(user.email, user.password);
+    const target = await buildHybrid();
+
+    const deleted = await request(app)
+      .delete(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    expect(deleted.status).toBe(204);
+
+    const newPhone = "11987654321";
+
+    const reactivated = await request(app)
+      .post(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({ phone: newPhone });
+
+    // K14: 201 nos dois ramos — o cliente não distingue criar de reativar.
+    expect(reactivated.status).toBe(201);
+    expect(reactivated.body).toMatchView(userViews.admin);
+
+    const userInDb = await findUserById(target.id);
+    assert(userInDb?.customer != null, "o perfil de cliente deveria existir");
+
+    expect(userInDb.customer.deletedAt).toBeNull();
+
+    // O `POST` é o único caminho que grava `Customer.phone` (o `PATCH` de user
+    // só aceita `name`), então na reativação ele atualiza.
+    expect(userInDb.customer.phone).toBe(newPhone);
+
+    // A role morta na cascata volta junto (D5).
+    expect(userInDb.roles.map((userRole) => userRole.role.name)).toContain(
+      "customer",
+    );
+  });
+
+  it("should let a user create and reactivate their OWN customer profile", async () => {
+    // O employee não tem nenhuma feature `:others` — só o baseline de
+    // self-service, que é o ponto: virar cliente nunca depende de um admin.
+    const employee = await buildEmployee({ roleNames: ["attendant"] });
+    const token = await loginAs(employee.email, employee.password);
+
+    const created = await request(app)
+      .post(`/api/v1/users/${employee.id}/customer`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ phone: faker.phone.number({ style: "international" }) });
+
+    expect(created.status).toBe(201);
+
+    // Deletar perfil continua sendo `delete:profile` (manager/admin) — fora do
+    // escopo da 8.3, então quem derruba é um manager.
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const managerToken = await loginAs(manager.email, manager.password);
+
+    const deleted = await request(app)
+      .delete(`/api/v1/users/${employee.id}/customer`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    expect(deleted.status).toBe(204);
+
+    // A role `customer` morreu na cascata — se a feature de reativar morasse
+    // nela, o self-service seria estruturalmente inalcançável. Ela mora no
+    // baseline, que chega pela role de funcionário.
+    const reactivated = await request(app)
+      .post(`/api/v1/users/${employee.id}/customer`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ phone: faker.phone.number({ style: "international" }) });
+
+    expect(reactivated.status).toBe(201);
+
+    const userInDb = await findUserById(employee.id);
+    assert(userInDb?.customer != null, "o perfil de cliente deveria existir");
+    expect(userInDb.customer.deletedAt).toBeNull();
+  });
+
+  it("should let an attendant create and reactivate ANOTHER user's customer profile (K11)", async () => {
+    const attendant = await buildEmployee({ roleNames: ["attendant"] });
+    const attendantToken = await loginAs(attendant.email, attendant.password);
+
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const managerToken = await loginAs(manager.email, manager.password);
+
+    const target = await buildEmployee();
+
+    const created = await request(app)
+      .post(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${attendantToken}`)
+      .send({ phone: faker.phone.number({ style: "international" }) });
+
+    expect(created.status).toBe(201);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    const reactivated = await request(app)
+      .post(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${attendantToken}`)
+      .send({ phone: faker.phone.number({ style: "international" }) });
+
+    expect(reactivated.status).toBe(201);
+  });
+
+  it("should return 403 if an attendant tries to touch an employee profile (K11)", async () => {
+    const attendant = await buildEmployee({ roleNames: ["attendant"] });
+    const token = await loginAs(attendant.email, attendant.password);
+
+    const target = await buildCustomer();
 
     const response = await request(app)
-      .post(`/api/v1/users/${user.id}/customer`)
+      .post(`/api/v1/users/${target.id}/employee`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ phone: faker.phone.number({ style: "international" }) });
+      .send({});
 
-    expect(response.status).toBe(201);
+    // O par de features do cliente não alcança o perfil de funcionário — é
+    // exatamente por isso que o nome delas diz o recurso (K13).
+    expect(response.status).toBe(403);
+  });
 
-    const deleteResponse = await request(app)
-      .delete(`/api/v1/users/${user.id}/customer`)
-      .set("Authorization", `Bearer ${token}`);
+  it("should NOT bring the overrides back when reactivating a customer profile (D6')", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const managerToken = await loginAs(manager.email, manager.password);
 
-    expect(deleteResponse.status).toBe(204);
+    const target = await buildHybrid();
 
-    const response2 = await request(app)
-      .post(`/api/v1/users/${user.id}/customer`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ phone: faker.phone.number({ style: "international" }) });
-
-    expect(response2.status).toBe(409);
-
-    expect(response2.body).toMatchObject({
-      code: "CONFLICT",
-      message: "Usuário já possui um perfil de cliente inativo",
-      action:
-        "Verifique com o administrador do sistema para reativar o perfil de cliente",
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "customer",
     });
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    const reactivated = await request(app)
+      .post(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({ phone: faker.phone.number({ style: "international" }) });
+
+    expect(reactivated.status).toBe(201);
+
+    const userInDb = await findUserById(target.id);
+
+    // A role volta; o ajuste fino pendurado nela, não.
+    expect(userInDb?.roles.map((userRole) => userRole.role.name)).toContain(
+      "customer",
+    );
+
+    const activeOverrides = await prisma.userFeature.findMany({
+      where: { deletedAt: null, userRole: { userId: target.id } },
+    });
+
+    expect(activeOverrides).toHaveLength(0);
   });
 
   it("should return 422 if phone number is not provided or invalid", async () => {
@@ -233,7 +356,14 @@ describe("POST /api/v1/users/:userId/employee", () => {
     });
   });
 
-  it("should return 403 if user does not have feature `create:profile`", async () => {
+  const EMPLOYEE_PROFILE_FORBIDDEN = {
+    code: "FORBIDDEN",
+    message: "Você não tem permissão para acessar este recurso",
+    action:
+      'Verifique se você tem acesso a uma das features: "create:employee-profile", "reactivate:employee-profile"',
+  };
+
+  it("should return 403 if user has neither employee-profile feature", async () => {
     const user = await buildCustomer();
 
     const token = await loginAs(user.email, user.password);
@@ -243,16 +373,13 @@ describe("POST /api/v1/users/:userId/employee", () => {
       .set("Authorization", `Bearer ${token}`)
       .send({ roleNames: ["attendant"] });
 
+    // Nunca há self-service para virar funcionário (D11) — nem para o próprio.
     expect(response.status).toBe(403);
 
-    expect(response.body).toMatchObject({
-      code: "FORBIDDEN",
-      message: "Você não tem permissão para acessar este recurso",
-      action: 'Verifique se você tem acesso a feature "create:profile"',
-    });
+    expect(response.body).toMatchObject(EMPLOYEE_PROFILE_FORBIDDEN);
   });
 
-  it("should return 403 if user does not have feature `create:profile` and tries to create a profile of non-existent user", async () => {
+  it("should return 403 if user has neither employee-profile feature and tries to create a profile of non-existent user", async () => {
     const user = await buildCustomer();
 
     const token = await loginAs(user.email, user.password);
@@ -264,11 +391,7 @@ describe("POST /api/v1/users/:userId/employee", () => {
 
     expect(response.status).toBe(403);
 
-    expect(response.body).toMatchObject({
-      code: "FORBIDDEN",
-      message: "Você não tem permissão para acessar este recurso",
-      action: 'Verifique se você tem acesso a feature "create:profile"',
-    });
+    expect(response.body).toMatchObject(EMPLOYEE_PROFILE_FORBIDDEN);
   });
 
   it("should return 404 if user does not exist", async () => {
@@ -315,41 +438,119 @@ describe("POST /api/v1/users/:userId/employee", () => {
     });
   });
 
-  it("should return 409 if user has a deleted employee profile", async () => {
-    const manager = await buildEmployee({
-      roleNames: ["manager"],
-    });
-
-    const customer = await buildCustomer();
-
+  it("should return 201 and reactivate a soft-deleted employee profile, bringing its roles back", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
     const token = await loginAs(manager.email, manager.password);
 
-    const response = await request(app)
-      .post(`/api/v1/users/${customer.id}/employee`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ roleNames: ["attendant"] });
+    const target = await buildHybrid({
+      employeeRoles: ["attendant", "manager"],
+    });
 
-    expect(response.status).toBe(201);
-
-    const deleteResponse = await request(app)
-      .delete(`/api/v1/users/${customer.id}/employee`)
+    const deleted = await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
       .set("Authorization", `Bearer ${token}`);
 
-    expect(deleteResponse.status).toBe(204);
+    expect(deleted.status).toBe(204);
 
-    const response2 = await request(app)
-      .post(`/api/v1/users/${customer.id}/employee`)
+    // Sem `roleNames`: default do D8, volta tudo o que morreu na cascata.
+    const reactivated = await request(app)
+      .post(`/api/v1/users/${target.id}/employee`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ roleNames: ["attendant"] });
+      .send({});
 
-    expect(response2.status).toBe(409);
+    expect(reactivated.status).toBe(201);
+    expect(reactivated.body).toMatchView(userViews.admin);
 
-    expect(response2.body).toMatchObject({
-      code: "CONFLICT",
-      message: "Usuário já possui um perfil de funcionário inativo",
-      action:
-        "Verifique com o administrador do sistema para reativar o perfil de funcionário",
+    const userInDb = await findUserById(target.id);
+    assert(
+      userInDb?.employee != null,
+      "o perfil de funcionário deveria existir",
+    );
+
+    expect(userInDb.employee.deletedAt).toBeNull();
+    expect(userInDb.roles.map((userRole) => userRole.role.name)).toEqual(
+      expect.arrayContaining(["attendant", "manager"]),
+    );
+  });
+
+  it("should reactivate with exactly the roles named, restoring or granting each (K15)", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    const target = await buildHybrid({
+      employeeRoles: ["attendant", "manager"],
     });
+
+    const managerRoleId = (
+      await prisma.role.findUniqueOrThrow({ where: { name: "manager" } })
+    ).id;
+
+    // T1 — `manager` é revogada sozinha, num instante só dela.
+    const revoked = await request(app)
+      .delete(`/api/v1/users/${target.id}/roles/${managerRoleId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(revoked.status).toBe(204);
+
+    // T2 — o perfil morre levando só `attendant`.
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    // Reativa nomeando `manager` (morta em T1, fora desta cascata) e `demo`
+    // (nunca havida). Nenhuma das duas casa com T2 — ambas são concedidas,
+    // reusando a linha do par quando ela já existe (D3).
+    const reactivated = await request(app)
+      .post(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ roleNames: ["manager", "demo"] });
+
+    expect(reactivated.status).toBe(201);
+
+    const userInDb = await findUserById(target.id);
+    const activeRoles = userInDb?.roles.map((userRole) => userRole.role.name);
+
+    expect(activeRoles).toEqual(expect.arrayContaining(["manager", "demo"]));
+
+    // `attendant` morreu na cascata mas não foi nomeada: fica para trás.
+    expect(activeRoles).not.toContain("attendant");
+
+    // D3: uma linha por par, para sempre — a re-concessão reusou a de `manager`.
+    const managerRows = await prisma.userRole.findMany({
+      where: { userId: target.id, roleId: managerRoleId },
+    });
+
+    expect(managerRows).toHaveLength(1);
+  });
+
+  it("should return 403 if a manager names a privileged role while reactivating", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const managerToken = await loginAs(manager.email, manager.password);
+
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    // O ramo de reativação concede roles, então é um segundo caminho para
+    // `addUserRole` — e tem de responder ao mesmo guard de não-escalação.
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({ roleNames: ["admin"] });
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Apenas administradores podem atribuir roles privilegiadas",
+    });
+
+    const userInDb = await findUserById(target.id);
+
+    // Recusa é recusa: o perfil não foi reativado de carona.
+    expect(userInDb?.employee?.deletedAt).not.toBeNull();
   });
 
   it("should return 422 if roleNames is provided but invalid", async () => {

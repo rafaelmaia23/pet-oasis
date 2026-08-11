@@ -65,7 +65,12 @@ async function assertAdminForPermissionFeature(
   });
 }
 
-async function assertAdminForRoleAssignment(
+/**
+ * Guard de não-escalação da atribuição de role. Exportado porque a reativação de
+ * perfil (8.3) também concede roles — é um segundo caminho para `addUserRole`, e
+ * sem o mesmo guard um manager concederia `admin` pela porta do perfil.
+ */
+export async function assertAdminForRoleAssignment(
   requestingUserId: string,
   role: RoleWithFeatures,
 ) {

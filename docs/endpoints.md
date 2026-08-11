@@ -76,10 +76,36 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
-| POST `/api/v1/users/:userId/customer` | `create:profile` | Cria o perfil customer do usuário |
-| POST `/api/v1/users/:userId/employee` | `create:profile` | Cria o perfil employee do usuário |
-| DELETE `/api/v1/users/:userId/customer` | `delete:profile` | Soft delete do perfil customer + roles CUSTOMER |
-| DELETE `/api/v1/users/:userId/employee` | `delete:profile` | Soft delete do perfil employee + roles EMPLOYEE |
+| POST `/api/v1/users/:userId/customer` | `create:customer-profile` **ou** `reactivate:customer-profile` (self ou `:others`) | Cria **ou** reativa o perfil customer, 201 nos dois casos |
+| POST `/api/v1/users/:userId/employee` | `create:employee-profile` **ou** `reactivate:employee-profile` | Cria **ou** reativa o perfil employee, 201 nos dois casos |
+| DELETE `/api/v1/users/:userId/customer` | `delete:profile` | Soft delete do perfil customer + roles CUSTOMER + overrides delas |
+| DELETE `/api/v1/users/:userId/employee` | `delete:profile` | Soft delete do perfil employee + roles EMPLOYEE + overrides delas |
+
+**Criar ou reativar na mesma rota (Fase 8.3):** o ramo sai do estado do perfil no banco,
+não do verbo — perfil ausente cria, perfil soft-deletado reativa, perfil ativo é **409**.
+A resposta é **201** nos dois ramos: o cliente não precisa saber que a linha foi revivida.
+
+A autorização é em duas etapas. A rota declara as duas features e admite quem tiver
+qualquer uma delas; o service reconfere a específica do ramo que de fato correu — sem
+isso, ter só `reactivate:` deixaria criar do zero. A checagem de autorização acontece
+**antes** da busca do usuário (403 vence 404).
+
+| Quem | Perfil de cliente | Perfil de funcionário |
+|---|---|---|
+| O próprio usuário | ✅ criar e reativar (baseline de todo autenticado) | ❌ nunca — não há self-service para virar funcionário |
+| `attendant` | ✅ criar e reativar o de outro | ❌ |
+| `manager` / `admin` | ✅ | ✅ |
+
+O `phone` do body **atualiza** o perfil na reativação — o `POST` é o único caminho que
+grava `Customer.phone` (o `PATCH /users/:id` só aceita `name`).
+
+O `roleNames` do `POST .../employee` é a lista de roles com que o perfil **nasce ou
+volta**. Cada nome é restaurado (se morreu naquela cascata) ou concedido (se morreu
+noutro instante, ou nunca existiu); o que não for nomeado fica para trás. Omitido, volta
+tudo o que morreu na cascata. Conceder role por aqui responde ao mesmo guard de
+não-escalação de `POST /users/:id/roles/:roleId` → **403** se um não-admin nomear uma role
+privilegiada. Os overrides das roles restauradas **não** voltam (ver o bloco de escopo do
+override, acima).
 
 ## Permission — `src/modules/permission/permission.routes.ts` (montado em `/users/:userId`)
 

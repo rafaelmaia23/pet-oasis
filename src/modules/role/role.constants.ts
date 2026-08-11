@@ -15,6 +15,20 @@ const SELF_MANAGEMENT_FEATURES: FeatureName[] = [
   "delete:user",
   "read:session",
   "manage:session",
+  // Virar cliente é sempre self-service (§5.1). As duas moram aqui, e não em
+  // `CUSTOMER_FEATURES`, por um motivo estrutural: a role `customer` morre
+  // exatamente quando o perfil de cliente é deletado, então a feature sumiria no
+  // instante em que passaria a ser necessária. No baseline ela chega pela role
+  // de funcionário — que é quem sobrou vivo.
+  "create:customer-profile",
+  "reactivate:customer-profile",
+];
+
+// Atender um cliente no balcão sem ganhar poder nenhum sobre perfil de
+// funcionário (K11) — é exatamente por isso que o nome diz o recurso.
+const CUSTOMER_SERVICE_FEATURES: FeatureName[] = [
+  "create:customer-profile:others",
+  "reactivate:customer-profile:others",
 ];
 
 const USER_ADMINISTRATION_FEATURES: FeatureName[] = [
@@ -22,7 +36,8 @@ const USER_ADMINISTRATION_FEATURES: FeatureName[] = [
   "read:user:others",
   "update:user:others",
   "delete:user:others",
-  "create:profile",
+  "create:employee-profile",
+  "reactivate:employee-profile",
   "delete:profile",
   "manage:user:status",
 ];
@@ -54,12 +69,16 @@ const CUSTOMER_FEATURES: FeatureName[] = [
 ];
 
 const ATTENDANT_FEATURES: FeatureName[] = [
-  ...new Set<FeatureName>([...SELF_MANAGEMENT_FEATURES]),
+  ...new Set<FeatureName>([
+    ...SELF_MANAGEMENT_FEATURES,
+    ...CUSTOMER_SERVICE_FEATURES,
+  ]),
 ];
 
 const MANAGER_FEATURES: FeatureName[] = [
   ...new Set<FeatureName>([
     ...SELF_MANAGEMENT_FEATURES,
+    ...CUSTOMER_SERVICE_FEATURES,
     ...USER_ADMINISTRATION_FEATURES,
     ...PERMISSION_FEATURES,
     ...LOG_READ_FEATURES,

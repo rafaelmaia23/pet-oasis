@@ -1,6 +1,7 @@
 # Fase 8 — Redesenho (documento de trabalho)
 
-> **Status:** desenho fechado, implementação não começada.
+> **Status:** em execução. Sessões A e B fechadas (8.0–8.2); Sessão C fechada (Passo 0 + 8.3),
+> que **revogou o D6** — ver §3.4. Faltam as Sessões D–G (8.4–8.9).
 > **Natureza:** documento temporário de trabalho. Não é ADR nem doc permanente — o
 > conteúdo daqui se dissolve em `docs/todo.md`, `docs/context.md` e ADRs conforme
 > as sub-fases forem executadas.
@@ -101,7 +102,7 @@ perfil de **funcionário** vivo — nunca o de cliente que ele pediu.
 | **D2** | Escopo do override | `UserFeature` ganha FK para `UserRole`. Todo override pertence a uma atribuição de role — não ao usuário solto. |
 | **D3** | Unicidade de `UserRole` | `@@unique([userId, roleId])` no banco. **Uma linha por par, para sempre.** Re-conceder reusa a linha (`deletedAt = null`). |
 | **D4** | Correlação de restauração | Por `deletedAt`, com **um único timestamp por transação** propagado por toda a cascata. Sem coluna de "motivo". |
-| **D5** | Regra de restauração | Restaura o filho cujo `deletedAt` é **igual** ao do pai. Recursivo pelos três níveis. |
+| **D5** | Regra de restauração | Restaura o filho cujo `deletedAt` é **igual** ao do pai. Vale nos dois níveis que a restauração alcança (`User` → perfil → `UserRole`); o terceiro saiu com o D6' — ver §3.4. |
 | **D6** | ~~Re-conceder role restaura os overrides~~ | **REVOGADA no kickoff da Sessão C (2026-08-10).** Substituída por **D6'**: a cascata de deleção desce quatro níveis, mas a **restauração sobe só dois** (`User` → perfil → `UserRole`). Override **nunca** ressuscita por efeito colateral — só por ação explícita (`PUT /users/:id/roles/:roleId/features/:featureId`, que já revive a linha soft-deletada). Ver §3.4. |
 | **D7** | Histórico de ciclos | Vive no audit log (`USER_ROLE_GRANTED`/`USER_ROLE_REVOKED`/`USER_PERMISSION_GRANTED`/`USER_PERMISSION_REVOKED`, já existentes), não na tabela. |
 | **D8** | Escolha de roles ao religar | **Default: traz todas** as que morreram na cascata. O admin pode escolher um subconjunto e ignorar o resto. |
@@ -407,7 +408,7 @@ a nível de banco — nenhuma mudança de schema necessária aqui.
 | **8.6** — emails liberados | ✅ Conceito correto (= D13). A implementação (remover os 3 call sites de `findPreviousEmailByEmail` e apagar `assertEmailAvailable`) continua válida |
 | **8.7** — rate limit / anti-enumeração | 🟡 A infra é boa e reaproveitável: `AppError.headers` + `Retry-After` aplicado pelo error handler, e `consumeEmailTargetLimit` chamável do service. Os call sites dependem dos fluxos novos |
 | **8.0** — fundação | 🟡 Parcial: `VerificationPurpose.ACCOUNT_REACTIVATION` e as audit actions continuam necessárias. As colunas `restoreCustomer`/`restoreEmployee` mudam de forma (viram escolha de perfis **e** roles, D8) |
-| **8.1 / 8.2** — perfil em conta viva | 🟡 O comportamento externo bate com §5.1, mas a implementação assume o modelo antigo (sem cascata de overrides). Refazer guiado por teste, aproveitando o desenho de rota e o catálogo de features |
+| **8.1 / 8.2** — perfil em conta viva | ✅ **Consumido na 8.3 (Sessão C).** Aproveitados o desenho de rota (uma rota, dois ramos) e a forma OR do `canAccess`. O catálogo de features foi **refeito**, não reaproveitado: passou a nomear o recurso (`create:customer-profile`) para o attendant poder atender o cliente sem alcançar perfil de funcionário (K11/K13) |
 | **8.3 / 8.4 / 8.5** — conta inteira | ❌ **Refazer.** `resolveProfileClaimAction`, a validação 422 de "perfil estava vivo" e o guard do invariante deixam de ter propósito |
 
 ---

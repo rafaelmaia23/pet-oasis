@@ -7,8 +7,8 @@
  * `FeatureName`/`RoleName` — evita uma migration a cada ação nova.
  *
  * Declaradas mesmo antes de cada ponto ser ligado — evita reabrir este
- * arquivo a cada sub-fase nova. `DEMO_RESET_EXECUTED` (7.14) é a mais
- * recente; forçar senha/troca de email (Sessão H) ainda não têm call site.
+ * arquivo a cada sub-fase nova. As mais recentes são o par de reativação de
+ * conta (8.4/8.5); hoje todas as ações da lista têm call site.
  */
 export const AUDIT_ACTIONS = [
   "AUTH_LOGIN_FAILED",
@@ -17,9 +17,9 @@ export const AUDIT_ACTIONS = [
   "AUTH_RATE_LIMIT_EXCEEDED",
   "USER_CREATED",
   "USER_DELETED",
-  // Deleção de um perfil (não da conta). Passou a ser registrada na 8.1 (K8)
-  // porque, com a cascata, ela derruba roles e overrides — inclusive
-  // privilegiados — sem nada disso aparecer na resposta 204.
+  // Perfil (não a conta). Criação e restauração entraram na 8.3; a deleção,
+  // na 8.1 (K8), porque com a cascata ela derruba roles e overrides —
+  // inclusive privilegiados — sem nada disso aparecer na resposta 204.
   "USER_PROFILE_CREATED",
   "USER_PROFILE_RESTORED",
   "USER_PROFILE_DELETED",

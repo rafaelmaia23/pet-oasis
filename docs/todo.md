@@ -332,11 +332,11 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 
 ---
 
-## Fase 8 — Autorização com escopo, cascata de deleção e reativação ⬜
+## Fase 8 — Autorização com escopo, cascata de deleção e reativação ✅
 
 > **Esta fase já foi implementada uma vez e foi revertida.** O desenho original estava conceitualmente errado: construiu a máquina de reativação em cima de dois bugs pré-existentes (deleção de usuário que não cascateia, e override de feature sem escopo), e boa parte da complexidade que produziu existia só para contornar esses bugs. O código foi revertido para `d1b8478` em 2026-08-07 e a fase é refeita do zero com o modelo correto.
 >
-> **Desenho completo e racional em `docs/fase-8-redesign.md`** (documento de trabalho temporário — dissolve-se em `docs/context.md` e ADRs conforme as sub-fases fecham, e é apagado na 8.9). Backup da implementação antiga fica **fora do git**: branch local `backup/fase-8-original` e patches em `.fase-8-backup/` (gitignored).
+> **Desenho completo e racional:** o documento de trabalho `docs/fase-8-redesign.md` foi dissolvido e apagado na 8.9, como planejado. O modelo e o *porquê* vivem agora no ADR **`docs/adr/authorization-scope-and-lifecycle.md`** e no `docs/context.md` §2.6; a execução, nesta seção. O backup da implementação antiga também foi removido (K30) — sobrou só o patch do planejamento da Fase 9, ver a nota na seção dela.
 >
 > **O escopo cresceu:** não é mais só reativação. A fase agora conserta o modelo de autorização (escopo de override, unicidade de `UserRole`), o ciclo de vida de deleção (cascata), e só então constrói a reativação em cima de um modelo consistente. Mais o bug de produção do lockout da conta demo.
 >
@@ -373,7 +373,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **D** ✅ | 8.4, 8.5 | Conta deletada (self-service e admin) | Os dois disparam token e convergem na mesma confirmação. |
 | **E** ✅ | 8.6, 8.7 | Emails liberados + rate limit | Transversais, independentes dos fluxos; 8.7 cobre as superfícies que 8.4/8.5 abriram. |
 | **F** ✅ | 8.8 | Isenção do demo no lockout | Bug de produção, sem relação com perfil/reativação. Reaplicação do patch `0002`. |
-| **G** ⬜ | 8.9 | Fechos | Docs, suíte, `typecheck`/`lint`. |
+| **G** ✅ | 8.9 | Fechos | Docs, suíte, `typecheck`/`lint`. |
 
 ### ✅ [Sessão A] Fase 8.0 — Escopo de override e unicidade de `UserRole`
 
@@ -630,16 +630,36 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 - ✅ Docs junto: adendo novo em `docs/adr/rate-limiting-and-lockout.md` (motivo, critério, K28 e a alternativa descartada — demo-reset limpando `lockout:*`, que só adiaria o problema) · `docs/context.md` §2.2 · `README.md` (seção do usuário demo) · `.env.example` (comentário do bloco `LOCKOUT_*`) · `docs/endpoints.md` (nota na linha de `DELETE /users/:id/lock`). Sem OpenAPI/Bruno: nenhum contrato de rota mudou.
 - ✅ Suíte (**719**) + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão G] Fase 8.9 — Fechos
+### ✅ [Sessão G] Fase 8.9 — Fechos
 
-- ⬜ `docs/endpoints.md`, coleção Bruno, OpenAPI, `README.md` (contagem de testes).
-- ⬜ `docs/context.md`: seção nova sobre o modelo de autorização com escopo (§2.x) e o fecho da fase (§4).
-- ⬜ ADR novo ou adendo sobre escopo de override e cascata — o racional de D2/D3/D4 é o tipo de decisão que se re-questiona daqui a um ano.
-- ⬜ `CLAUDE.md`: a regra firmada de override ("`UserFeature` guarda só overrides, nunca cópias") ganha o escopo de role.
-- ⬜ Dissolver `docs/fase-8-redesign.md` e apagar `.fase-8-backup/` (ou promover a branch de backup a tag, se valer guardar).
-- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes.
+> Branch `feat/fase-8-9-fechos`. Sem regra de negócio nova e sem teste novo: a única edição em `src/` foi reposicionar/atualizar comentários em `auditLog.constants.ts`. Molde da 7.19 — sincronizar a documentação com o que as sub-fases de fato entregaram.
+
+#### Decisões do kickoff da Sessão G
+
+| # | Questão | Decisão |
+|---|---|---|
+| K29 | ADR novo ou adendo? | **ADR novo dedicado** (`docs/adr/authorization-scope-and-lifecycle.md`). Nenhum dos quatro ADRs existentes é casa natural para modelo de autorização — o mais próximo (`auth-token-revocation.md`) é sobre ciclo de vida de token e seria dominado pelo adendo. |
+| K30 | O que fazer com o backup da fase antiga | **Apagar a branch `backup/fase-8-original` e os patches 0002/0003/0004** (consumidos nas 8.8/8.6/8.7). O patch **0001** (planejamento da Fase 9) **fica**, porque o replan da Fase 9 foi adiado e ele é a única cópia — ver a nota na seção da Fase 9. |
+| K31 | Onde a sessão termina | **Na `dev`.** `feat/fase-8-9-fechos` → `fase-8` → `dev`, ambos `--no-ff`. O merge na `main` (que no futuro dispara deploy) fica para o usuário. |
+
+- ✅ **Auditoria de doc primeiro, correção depois** — sete afirmações que envelheceram durante a fase (o redesenho mudou de rumo três vezes: D6 revogado na Sessão C, D5 estreitado na D, D16 morto junto):
+  - ✅ **A pior delas:** `docs/endpoints.md` dizia que conceder role **"restaura os overrides dela"** — exatamente o oposto do D6'. Era a única linha de doc do projeto descrevendo comportamento inverso ao real.
+  - ✅ `CLAUDE.md` afirmava "sem reativação no ciclo 1 (email/cpf/perfil de deletado ficam presos)" e "unicidade do ativo controlada por código" — as duas caíram na própria Fase 8 (8.4/8.5 e D3). A regra de **Autorização** ganhou o escopo de role e nasceu um bloco **Cascata e restauração**; a seção "o que o projeto planeja ser" parou de listar como futuro o que já está no ar.
+  - ✅ `docs/context.md` §1: a view `admin` ainda descrevia `features` no topo (a 8.0 moveu para `roles[].features[]`) e `Role.appliesTo` como `enum.nullable()` (virou NOT NULL no Passo 0 da Sessão B). Conferidas contra os presenters, não contra a memória.
+  - ✅ `docs/context.md` §2.5: o achado do `demo-reset.ts` (7.14) justificava-se por "email fica preso para sempre" — consequência que o K25 apagou. Ganhou errata em vez de sumir: o fix continua certo por outro motivo.
+  - ✅ `docs/logging-policy.md` §4.3 não listava `ACCOUNT_REACTIVATION_REQUESTED`/`_COMPLETED`. Agora a tabela e `AUDIT_ACTIONS` batem em **24** ações, verificado por script (nenhuma ação sem linha, nenhuma linha sem ação).
+  - ✅ A regra de PII (§4.1.4) passou a registrar a folga que a 8.4 abriu: **conjunto de enums** (`string[]`) é permitido — a reativação precisa dizer *quais* perfis voltaram, não quantos.
+  - ✅ `README.md`: badge e texto diziam 618 testes (número da Fase 7).
+- ✅ **`docs/context.md` §2.6 nova** — a Fase 8 era a única fase sem seção própria: o racional dela morava em 18 bullets dentro do §3 (Schema), porque cada sub-fase escreveu por proximidade com a migration que a motivou. Migrados para §2.6, em quatro blocos (modelo de autorização · ciclo de vida · fluxos de perfil e conta · transversais), e o §3 ficou só com fato de schema — incluindo as mudanças de 8.4 (`restoreProfiles`/`restoreRoleIds`) e 8.6 (o `@unique` que saiu), que ninguém tinha registrado ali.
+- ✅ **§4 ganhou o parágrafo `Fase 8 (fechada)`**, registrando também que a fase foi implementada, revertida e refeita — o fato mais instrutivo dela, que sumiria junto com o documento de trabalho.
+- ✅ **ADR novo `docs/adr/authorization-scope-and-lifecycle.md`** (K29): os dois bugs de origem, o contra-exemplo do estoquista, D2/D3/D9, a cascata de quatro níveis com timestamp único, a restauração de dois com correlação por data, as **invariantes de implementação** (um `new Date()` por transação; ler o `deletedAt` do pai antes de zerá-lo — se vazarem, o bug é silencioso) e as alternativas recusadas. Inclui a §10 do redesenho ("do desenho revertido — não reintroduzir"), que era a única parte do documento sem outro destino.
+- ✅ **Varredura de cobertura por script**, não por leitura: as **43** rotas de `src/modules/**/*.routes.ts` estão nas 43 linhas de `docs/endpoints.md`, nos paths do OpenAPI e nas 43 requests da coleção Bruno. Nenhuma divergência — as sub-fases 8.5–8.8 de fato atualizaram junto, como diziam.
+- ✅ `docs/fase-8-redesign.md` **apagado**, dissolvido: §2/§3/§4/§10 → ADR novo · §5 → `docs/endpoints.md` (já estava lá) · decisões → `context.md` §2.6 · execução → este arquivo.
+- ✅ Limpeza (K30): branch `backup/fase-8-original` e patches 0002/0003/0004 apagados; `.fase-8-backup/` ficou só com o 0001 e o README apontando para a nota da Fase 9.
+- ✅ Suíte (**719**, 43 arquivos) + `typecheck` + `lint` verdes.
 
 ---
 
 ## Fases seguintes (resumo)
-- **Fase 9 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff. Planejamento detalhado existe no commit `1723b75` (patch `.fase-8-backup/0001-*`) e é reaplicado depois que a Fase 8 fechar.
+- **Fase 9 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.
+  - 🔸 **Nota p/ o planejamento da Fase 9 (deixada aqui de propósito — é onde vai ser executada):** existe um planejamento atômico dessa fase, escrito antes do revert da Fase 8, guardado **fora do git** em `.fase-8-backup/0001-docs-expand-Fase-9-into-atomic-tasks-*.patch` (só mexe neste arquivo, sem código). A branch `backup/fase-8-original`, de onde ele saiu, foi apagada na 8.9 — **o patch é a única cópia**. Ao abrir a Fase 9: reaplicar (`git apply`) ou reescrever a partir dele, e **só então apagar `.fase-8-backup/` inteiro**, que é o último resíduo do revert.

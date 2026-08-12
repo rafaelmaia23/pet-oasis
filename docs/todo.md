@@ -586,17 +586,18 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 | K26 | A confirmação pública de reativação ganha rate limit (pendência que a 8.4 deixou anotada)? | **Sim, e as três públicas de token juntas:** `/auth/reset-password`, `/auth/confirm-email-change` e `/auth/confirm-account-reactivation` passam a ter limite **por IP**. Proteger só a rota nova deixaria duas irmãs idênticas — públicas, consumindo token opaco — desprotegidas sem nenhuma razão de negócio que as distinga. Balde **próprio** (`tokenIpLimiter`), não o `emailIpLimiter`: enviar email e consumir token são superfícies diferentes, e compartilhar faria um reset legítimo comer o orçamento do outro. |
 | K27 | `POST /users/:id/reactivate` usa balde próprio, por ser ação de ator autenticado? | **Não — mesmo balde** `emailTargetLimiter` do `forgot-password`/`verify-email-resend`, só com `rule` própria no audit. O orçamento é do **email**, não do ator: baldes separados somariam para a mesma vítima e furariam exatamente a proteção que o limite por email-alvo existe para dar. Admin bloqueado por tráfego de terceiro é um 429 temporário numa ação rara, e a `rule` já diz no audit de onde veio. |
 
-### ⬜ [Sessão E] Fase 8.6 — Emails liberados
+### ✅ [Sessão E] Fase 8.6 — Emails liberados
 
-> Branch `feat/fase-8-6-email-reuse`. Referência: patch `.fase-8-backup/0003-*` (commit `6dde2d8`) — commit de remoção, aplica bem depois do revert. O K25 é acréscimo novo, que o patch não tinha.
+> Branch `feat/fase-8-6-email-reuse`. Referência: patch `.fase-8-backup/0003-*` (commit `6dde2d8`) — commit de remoção, aplicou bem depois do revert. O K25 é acréscimo novo, que o patch não tinha.
 
-- ⬜ D13: só o **email atual** de uma conta é reservado (inclusive de conta deletada — `User.email @unique` já garante). Email já trocado fica livre.
-- ⬜ **Testes primeiro, por inversão:** os três casos que hoje semeiam `previousEmail` e esperam 409 passam a esperar sucesso — `auth.test.ts` (signup → 201; `change-email` → 204 com `pendingEmail` setado e aviso ao email antigo) e `user.test.ts` (admin criando employee → 201).
-- ⬜ **Teste novo (K25):** conta A adota um email que já está em `PreviousEmail` de outra conta e **troca de email de novo** — a confirmação responde 204 e as duas linhas com o mesmo email coexistem. Sem a migration, falha com 409.
-- ⬜ **Migration** (`drop_previous_email_unique`): remove o `@unique` de `PreviousEmail.email`; `@@index([userId])` fica. Não zera banco.
-- ⬜ Os três call sites de `findPreviousEmailByEmail` que lançam 409 saem (signup de customer, admin criando employee, `POST /auth/change-email`); `assertEmailAvailable` fica vazia e é apagada; `findPreviousEmailByEmail` vira código morto e é apagada. O conflito com email **ativo** continua vindo do unique de `User.email` (P2002 → 409).
-- ⬜ `PreviousEmail` (tabela e criação do registro em `consumeEmailChange`) **não muda** — continua como auditoria, só para de ser consultada para bloquear.
-- ⬜ Docs junto: a errata da 7.15 aqui no `docs/todo.md` e em `docs/context.md` (§2.2 + a seção de errata da 7.15).
+- ✅ D13: só o **email atual** de uma conta é reservado (inclusive de conta deletada — `User.email @unique` já garante). Email já trocado fica livre.
+- ✅ **Testes primeiro, por inversão:** os três casos que semeavam `previousEmail` e esperavam 409 passaram a esperar sucesso — `auth.test.ts` (signup → 201; `change-email` → 204 com `pendingEmail` setado e o aviso ainda indo para o email **antigo**) e `user.test.ts` (admin criando employee → 201).
+- ✅ **Teste novo (K25):** conta que adota um email já presente em `PreviousEmail` de outra conta **troca de email de novo** — confirmação 204 e as duas linhas com o mesmo email coexistem. Sem a migration, falhava com 409.
+- ✅ **Migration** `20260812163429_drop_previous_email_unique`: uma linha (`DROP INDEX "previous_emails_email_key"`). Não zera banco; `@@index([userId])` fica.
+- ✅ Os três call sites de `findPreviousEmailByEmail` saíram (signup de customer, admin criando employee, `POST /auth/change-email`); `assertEmailAvailable` ficou vazia e foi apagada; `findPreviousEmailByEmail` virou código morto e foi apagada. O conflito com email **ativo** continua vindo do unique de `User.email` (P2002 → 409).
+- ✅ `PreviousEmail` (tabela e criação do registro em `consumeEmailChange`) **não mudou** — continua como auditoria, só parou de ser consultada para bloquear.
+- ✅ Docs junto: errata da 7.15 aqui e em `docs/context.md` (§2.2 + dois bullets novos na seção da Fase 8, um para a liberação e um para o K25); `docs/endpoints.md` deixou de dizer "reservado para sempre".
+- ✅ Suíte (**699**) + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão E] Fase 8.7 — Rate limiting / anti-enumeração
 

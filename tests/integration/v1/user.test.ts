@@ -171,7 +171,7 @@ describe("POST /api/v1/users", () => {
     });
   });
 
-  it("should return the same generic 409 when the email was previously used by another account", async () => {
+  it("should allow creating an employee with an email a previous account changed away from (8.6)", async () => {
     const user = await buildEmployee({ roleNames: ["manager"] });
     const token = await loginAs(user.email, user.password);
 
@@ -190,12 +190,8 @@ describe("POST /api/v1/users", () => {
       .set("Authorization", `Bearer ${token}`)
       .send(makeEmployeeData({ email: reservedEmail }));
 
-    expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({
-      code: "CONFLICT",
-      message: "O email informado já está em uso",
-      action: "Tente outro valor para o campo email",
-    });
+    expect(response.status).toBe(201);
+    expect(response.body.email).toBe(reservedEmail);
   });
 
   it("should return 409 if cpf is already in use", async () => {

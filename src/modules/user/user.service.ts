@@ -44,21 +44,6 @@ export const DEFAULT_CUSTOMER_ROLES: RoleName[] = ["customer"];
 /** Como a conta nasceu, para o audit distinguir signup de criação por admin. */
 export type UserCreationSource = "SIGNUP" | "ADMIN";
 
-/**
- * Um email trocado (7.15) fica reservado para sempre em `PreviousEmail` —
- * sem esta checagem, a reserva seria furável simplesmente criando uma conta
- * nova em vez de pedir a troca. O conflito com o email ATIVO de outra conta
- * continua vindo do unique constraint de `User.email` (P2002 → 409).
- */
-async function assertEmailAvailable(email: string) {
-  if (await userRepository.findPreviousEmailByEmail(email)) {
-    throw createConflictError({
-      message: "O email informado já está em uso",
-      action: "Tente outro valor para o campo email",
-    });
-  }
-}
-
 export async function createEmployee(
   requestingUserId: string,
   data: CreateEmployeeInput,
@@ -78,8 +63,6 @@ export async function createEmployee(
   for (const role of rolesList) {
     await assertAdminForRoleAssignment(requestingUserId, role);
   }
-
-  await assertEmailAvailable(data.email);
 
   const { password, ...userData } = data;
 
@@ -123,6 +106,10 @@ const EMAIL_IN_USE_ERROR = {
  *
  * D12: conta **ativa** nunca é tocada — nem vinculada, nem alterada. O caminho
  * de quem tem uma conta viva é logar.
+ *
+ * D13 (8.6): só o email **atual** de uma conta é reservado. Um endereço que a
+ * conta já largou (`PreviousEmail`) não entra em nenhum destes ramos — é
+ * histórico, não reserva.
  */
 async function resolveCustomerSignupEmail(
   email: string,
@@ -131,8 +118,6 @@ async function resolveCustomerSignupEmail(
   if (await userRepository.findUserByEmail(email)) {
     throw createConflictError(EMAIL_IN_USE_ERROR);
   }
-
-  await assertEmailAvailable(email);
 
   const deletedUser = await userRepository.findDeletedUserByEmail(email);
 

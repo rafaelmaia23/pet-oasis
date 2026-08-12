@@ -63,6 +63,8 @@ Existe um usuário público **read-only** com permissão de leitura de *administ
 
 O ambiente demo é resetado diariamente às **04:00 UTC** (dados de teste voltam ao estado inicial) — é higiene do deploy de portfólio, não o que garante o read-only (isso é o RBAC acima).
 
+A conta demo é isenta do account lockout (a role `demo` a identifica): como a senha acima é pública, travar a conta por tentativas erradas travaria o acesso de **todo mundo**, não protegeria credencial nenhuma. O rate limit por IP continua valendo normalmente.
+
 1. Abra a **[referência interativa](https://pet-oasis.maiahub.com.br/reference)**.
 2. Chame `POST /auth/login` com as credenciais acima e copie o `accessToken` da resposta.
 3. Cole o token no botão **Authorize** (canto superior) — a partir daí todas as chamadas vão autenticadas.

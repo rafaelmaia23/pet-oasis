@@ -372,7 +372,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **C** ✅ | Passo 0 + 8.3 | Perfil em conta ativa | Primeiro fluxo de produto, já em cima do modelo correto. O kickoff revogou o D6 (K16), então a sessão abre com um Passo 0 que tira a restauração de overrides antes de construir por cima dela. |
 | **D** ✅ | 8.4, 8.5 | Conta deletada (self-service e admin) | Os dois disparam token e convergem na mesma confirmação. |
 | **E** ✅ | 8.6, 8.7 | Emails liberados + rate limit | Transversais, independentes dos fluxos; 8.7 cobre as superfícies que 8.4/8.5 abriram. |
-| **F** ⬜ | 8.8 | Isenção do demo no lockout | Bug de produção, sem relação com perfil/reativação. Reaplicação do patch `0002`. |
+| **F** ✅ | 8.8 | Isenção do demo no lockout | Bug de produção, sem relação com perfil/reativação. Reaplicação do patch `0002`. |
 | **G** ⬜ | 8.9 | Fechos | Docs, suíte, `typecheck`/`lint`. |
 
 ### ✅ [Sessão A] Fase 8.0 — Escopo de override e unicidade de `UserRole`
@@ -612,12 +612,23 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 - ✅ Docs junto: adendo em `docs/adr/rate-limiting-and-lockout.md` (os dois call sites novos, o racional do `AppError.headers`, o balde de token) e `429` no OpenAPI das quatro rotas que passaram a poder devolvê-lo.
 - ✅ Suíte (**712**) + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão F] Fase 8.8 — Isentar a conta demo do account lockout
+#### Decisões do kickoff da Sessão F
 
-> Bug de produção pós-deploy da Fase 7: o lockout conta por `userId`, então segue o usuário demo entre redes/dispositivos — ao contrário do rate limit por IP. Como a senha do demo é pública (README), o lockout ali não protege credencial nenhuma e vira negação de serviço contra a porta de entrada do projeto. O demo-reset diário não resolve (estado do lockout vive no Redis, fora do alcance do truncate).
+| # | Questão | Decisão |
+|---|---|---|
+| K28 | O predicado isenta *qualquer* portador da role `demo`, ou só uma conta de demonstração "pura"? | **Basta ter a role** — `user.roles.some(r => r.role.name === "demo")`, sem qualificação. Descartadas: "só se `demo` for a única role" (regra menos óbvia, e quebra em silêncio se uma conta de demonstração futura precisar de uma segunda role) e "`demo` + conta não-privilegiada" (traria `computeEffectiveFeatures` para o caminho quente do login e misturaria lockout com não-escalação). Efeito colateral aceito e registrado no ADR: conceder `demo` a uma conta real isenta aquela conta do lockout — hoje inalcançável na prática, só o usuário demo semeado tem a role (`seedFakeUsers` não a usa). |
 
-- ⬜ Reaplicação integral do patch `.fase-8-backup/0002-*` (commit `e565f7a`) — é o mais limpo dos três, toca só `lockout.ts` e `auth.service.ts`, sem interseção com perfil/reativação.
-- ⬜ Predicado puro `isLockoutExempt`, identificação pela role `demo` (já vem no fetch do login, sem query extra). Rate limit por IP continua valendo para o demo.
+### ✅ [Sessão F] Fase 8.8 — Isentar a conta demo do account lockout
+
+> Branch `feat/fase-8-8-demo-lockout-exemption`. Bug de produção pós-deploy da Fase 7: o lockout conta por `userId`, então segue o usuário demo entre redes/dispositivos — ao contrário do rate limit por IP. Como a senha do demo é pública (README), o lockout ali não protege credencial nenhuma e vira negação de serviço contra a porta de entrada do projeto. O demo-reset diário não resolve (estado do lockout vive no Redis, fora do alcance do truncate).
+
+- ✅ Reaplicação integral do patch `.fase-8-backup/0002-*` (commit `e565f7a`) — o mais limpo dos três, sem interseção com perfil/reativação. `src/` e `tests/` não sofreram drift desde o revert e saíram idênticos ao patch; só as posições de doc mudaram (a 8.7 inseriu o bloco `RATE_LIMIT_TOKEN_*` antes do `LOCKOUT_*` no `.env.example` e um adendo novo na cauda do ADR), então as seções de doc foram reescritas no lugar certo em vez de `git apply`.
+- ✅ Predicado puro `isLockoutExempt` em `src/lib/lockout.ts`, logo abaixo de `isLocked`, com tipo estrutural local (`{ roles: { role: { name: string } }[] }`) — o módulo continua genérico (não importa nada de Prisma nem de `user`) e testável sem Redis, mesmo idioma de `applyFailure`/`isLocked`. Sem query extra: `findUserByEmail` já traz `roles` via `userInclude`, então o predicado roda sobre dado em memória.
+- ✅ Curto-circuito em `auth.service.login`, nos dois pontos de entrada: `lockoutExempt` calculado uma vez, logo após o guard de `!user`; senha errada → não chama `recordFailure`; senha certa → o bloco `getLockoutState` + 429 inteiro embrulhado no `if`. Um único ponto de decisão no service; `lockout.ts` segue genérico. `AUTH_LOGIN_FAILED` continua sendo gravado normalmente — só o lockout em si (hash `lockout:{userId}` e `AUTH_LOCKOUT_TRIGGERED`) some para a conta isenta.
+- ✅ Nada mais muda: rate limit por IP (7.9), `clearLockout` no login OK (já era no-op para a conta isenta, que nunca teve escrita para limpar), `DELETE /users/:id/lock`, fail-open (D2) e demo-reset ficam intactos. Conta comum continua sujeita ao lockout integralmente, para a mecânica seguir demonstrável.
+- ✅ Testes: unitário do predicado, 4 casos (`tests/unit/lib/lockout.test.ts`); integração em `auth.test.ts` com `buildEmployee({ roleNames: ["demo"] })` (a role `demo` é `appliesTo: EMPLOYEE`, então a factory serve sem adaptação) — demo passa de `LOCKOUT_THRESHOLD + 2` tentativas erradas e a seguinte com senha certa retorna 200 (não 429); nenhum `AUTH_LOCKOUT_TRIGGERED` no audit do demo; **a isenção não vaza para o outro mecanismo** — o rate limit por IP do demo ainda dispara 429 ao exceder `RATE_LIMIT_LOGIN_MAX`. O `describe("Account lockout (7.10)")` inteiro seguiu verde sem alteração (regressão).
+- ✅ Docs junto: adendo novo em `docs/adr/rate-limiting-and-lockout.md` (motivo, critério, K28 e a alternativa descartada — demo-reset limpando `lockout:*`, que só adiaria o problema) · `docs/context.md` §2.2 · `README.md` (seção do usuário demo) · `.env.example` (comentário do bloco `LOCKOUT_*`) · `docs/endpoints.md` (nota na linha de `DELETE /users/:id/lock`). Sem OpenAPI/Bruno: nenhum contrato de rota mudou.
+- ✅ Suíte (**719**) + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão G] Fase 8.9 — Fechos
 

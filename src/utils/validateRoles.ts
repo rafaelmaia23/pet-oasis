@@ -6,7 +6,7 @@ export function validateRoles(
   expectedAppliesTo: ProfileKind,
 ) {
   const incompatibleRoles = rolesList.filter(
-    (r) => r.appliesTo && r.appliesTo !== expectedAppliesTo,
+    (r) => r.appliesTo !== expectedAppliesTo,
   );
 
   if (incompatibleRoles.length > 0) {

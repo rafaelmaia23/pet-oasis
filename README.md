@@ -10,7 +10,7 @@
 [![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Zod](https://img.shields.io/badge/Zod-4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/)
-[![Vitest](https://img.shields.io/badge/Vitest-618%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-719%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](https://spec.openapis.org/oas/v3.1.0)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#licença)
@@ -62,6 +62,8 @@ Existe um usuário público **read-only** com permissão de leitura de *administ
 | Senha | `DemoOasis2026!` |
 
 O ambiente demo é resetado diariamente às **04:00 UTC** (dados de teste voltam ao estado inicial) — é higiene do deploy de portfólio, não o que garante o read-only (isso é o RBAC acima).
+
+A conta demo é isenta do account lockout (a role `demo` a identifica): como a senha acima é pública, travar a conta por tentativas erradas travaria o acesso de **todo mundo**, não protegeria credencial nenhuma. O rate limit por IP continua valendo normalmente.
 
 1. Abra a **[referência interativa](https://pet-oasis.maiahub.com.br/reference)**.
 2. Chame `POST /auth/login` com as credenciais acima e copie o `accessToken` da resposta.
@@ -129,7 +131,7 @@ Dali em diante dá para explorar o resto: `GET /auth/sessions` lista suas sessõ
 
 ### 🛡️ Autorização (RBAC + overrides)
 - **Roles agregam features**; são definidas em código e semeadas (`customer`, `attendant`, `manager`, `admin`, `demo`).
-- **`UserFeature` guarda só exceções** — grant ou deny por usuário, nunca cópias do conjunto da role.
+- **`UserFeature` guarda só exceções** — grant ou deny, nunca cópias do conjunto da role. O override pendura na **atribuição de role** (`(user, role, feature)`), não no usuário: perder a role mata o ajuste fino dela, e um ex-estoquista não sai carregando a permissão de estoquista.
 - Features efetivas computadas em runtime por uma função pura: `(⋃ roles ∪ grants) − denies`, com `*` = admin.
 - **Não-escalação**: mexer nas features de permissão exige ser admin de fato, não só ter a feature.
 - **Autorização antes da busca** — 403 vence 404, para não usar o código de erro como oráculo de existência.
@@ -142,6 +144,8 @@ Dali em diante dá para explorar o resto: `GET /auth/sessions` lista suas sessõ
 - Todo usuário tem ao menos um perfil (*customer* e/ou *employee*), definido pela presença da relação — não por um campo "tipo".
 - Perfis criados/removidos em transação; o último perfil ativo não pode ser removido.
 - Roles são validadas contra o perfil (`appliesTo`): não dá para dar a role `manager` a quem não é funcionário.
+- **Deletar cascateia** — usuário → perfis → roles → overrides, com um único timestamp por transação. Nunca sobra filho ativo de pai morto.
+- **E tem volta**: perfil e conta soft-deletados são reativáveis; as roles voltam por correlação de data, os overrides **nunca** voltam sozinhos (restaurar concede autoridade, e isso é sempre ação consciente).
 
 </td><td width="50%" valign="top">
 
@@ -149,6 +153,7 @@ Dali em diante dá para explorar o resto: `GET /auth/sessions` lista suas sessõ
 - **Verificação de email obrigatória**: `PENDING → ACTIVE`, com reenvio.
 - **Recuperação de senha** por token de uso único, e troca de senha logado exigindo a senha atual — ambas invalidam todas as sessões.
 - **Banimento** ortogonal ao status (`bannedAt`/`bannedBy`/`banReason`), derrubando as sessões do alvo.
+- **Conta excluída pode voltar** — pelo próprio dono (o signup detecta e dispara o fluxo) ou por um admin; nos dois casos quem conclui é o dono, provando posse do email e definindo senha nova.
 - Endpoints públicos sensíveis respondem sempre igual, existindo o email ou não (sem enumeração de contas).
 
 </td></tr>
@@ -185,7 +190,7 @@ O raciocínio longo de cada uma está em [`docs/context.md`](docs/context.md); a
 
 ### Testes antes do código
 
-Toda feature nasce de um teste que falha. A suíte tem **618 testes** (Vitest + Supertest + Faker) rodando contra um Postgres e um Redis reais e isolados, subidos e derrubados pelo próprio `npm test` — integração de verdade, não mocks de banco ou de infra. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
+Toda feature nasce de um teste que falha. A suíte tem **719 testes** (Vitest + Supertest + Faker) rodando contra um Postgres e um Redis reais e isolados, subidos e derrubados pelo próprio `npm test` — integração de verdade, não mocks de banco ou de infra. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
 
 ### Disciplina de processo
 
@@ -233,12 +238,12 @@ Ambos são idempotentes (`npm run db:seed` não duplica nada) e restaurados todo
 | ✅ | 5 | OpenAPI + Scalar, coleção Bruno, containerização |
 | ✅ | 6 | Ambientes dev/test/prod, deploy e graceful shutdown |
 | ✅ | 7 | Hardening: rate limiting, account lockout, observabilidade (access/application/audit log), paginação e filtros, teto de sessões, troca de email, timeouts |
+| ✅ | 8 | Escopo de override, cascata de deleção e reativação de conta (por signup ou por admin, sempre confirmada pelo dono) |
 
 **A seguir**
 
 | | Fase | Entrega |
 |---|---|---|
-| 🔜 | 8 — Reativação de conta deletada | Recuperar contas soft-deletadas sem prender perfis/emails que não deveriam voltar |
 | 🔜 | 9 — Domínio pet shop | Pets ligados a Customers, CRUD aninhado, escopos *own*/*others* — e, adiante, vendas e pedidos |
 
 Detalhe atômico de cada item em [`docs/todo.md`](docs/todo.md).

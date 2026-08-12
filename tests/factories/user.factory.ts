@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import type { FeatureName } from "@/modules/feature/feature.constants";
 import type { RoleName } from "@/modules/role/role.constants";
 import { getRolesByNames } from "@/modules/role/role.repository";
+import { createCustomerProfile } from "@/modules/user/profile/user.profile.repository";
 import {
   createCustomer,
   createEmployee,
@@ -24,6 +25,54 @@ import {
   DEFAULT_EMPLOYEE_ROLES,
 } from "@/modules/user/user.service";
 import { makePassword } from "../helpers/primitives";
+
+/**
+ * Pendura os overrides numa atribuição de role do usuário (D2 — override sem
+ * `UserRole` não existe mais). Default: a **primeira** role do usuário; quem
+ * precisar escolher passa `overrideRole`.
+ */
+export async function attachOverrides(
+  userId: string,
+  overrides: {
+    grants?: FeatureName[];
+    denies?: FeatureName[];
+    overrideRole?: RoleName;
+  },
+) {
+  const grants = overrides.grants ?? [];
+  const denies = overrides.denies ?? [];
+
+  if (grants.length === 0 && denies.length === 0) return;
+
+  const userRole = await prisma.userRole.findFirst({
+    where: {
+      userId,
+      deletedAt: null,
+      ...(overrides.overrideRole && {
+        role: { name: overrides.overrideRole },
+      }),
+    },
+  });
+
+  if (!userRole)
+    throw createInternalServerError({
+      message: "No active user role to attach the feature overrides to",
+      action: "Verificar as roles pedidas na factory",
+    });
+
+  for (const { name, granted } of [
+    ...grants.map((name) => ({ name, granted: true })),
+    ...denies.map((name) => ({ name, granted: false })),
+  ]) {
+    await prisma.userFeature.create({
+      data: {
+        userRole: { connect: { id: userRole.id } },
+        feature: { connect: { name } },
+        granted,
+      },
+    });
+  }
+}
 
 const makeUserData = (overrides?: Partial<CreateCustomerInput>) => {
   const rawData = {
@@ -58,6 +107,7 @@ export async function buildCustomer(overrides?: {
   roleNames?: RoleName[];
   grants?: FeatureName[];
   denies?: FeatureName[];
+  overrideRole?: RoleName;
   status?: UserStatus;
   data?: Partial<CreateCustomerInput>;
 }) {
@@ -80,23 +130,8 @@ export async function buildCustomer(overrides?: {
     data: { status: overrides?.status ?? "ACTIVE" },
   });
 
-  if (overrides?.grants || overrides?.denies) {
-    const userFeatures = [
-      ...(overrides?.grants ?? []).map((name) => ({ name, granted: true })),
-      ...(overrides?.denies ?? []).map((name) => ({ name, granted: false })),
-    ];
-
-    //in future use permission repository instead of direct prisma access
-    for (const { name, granted } of userFeatures) {
-      await prisma.userFeature.create({
-        data: {
-          user: { connect: { id: user.id } },
-          feature: { connect: { name } },
-          granted,
-        },
-      });
-    }
-  }
+  //in future use permission repository instead of direct prisma access
+  await attachOverrides(user.id, overrides ?? {});
 
   const userInDb = await findUserById(user.id);
 
@@ -113,6 +148,7 @@ export async function buildEmployee(overrides?: {
   roleNames?: RoleName[];
   grants?: FeatureName[];
   denies?: FeatureName[];
+  overrideRole?: RoleName;
   status?: UserStatus;
   data?: Partial<CreateEmployeeInput>;
 }) {
@@ -135,23 +171,8 @@ export async function buildEmployee(overrides?: {
     data: { status: overrides?.status ?? "ACTIVE" },
   });
 
-  if (overrides?.grants || overrides?.denies) {
-    const userFeatures = [
-      ...(overrides?.grants ?? []).map((name) => ({ name, granted: true })),
-      ...(overrides?.denies ?? []).map((name) => ({ name, granted: false })),
-    ];
-
-    //in future use permission repository instead of direct prisma access
-    for (const { name, granted } of userFeatures) {
-      await prisma.userFeature.create({
-        data: {
-          user: { connect: { id: user.id } },
-          feature: { connect: { name } },
-          granted,
-        },
-      });
-    }
-  }
+  //in future use permission repository instead of direct prisma access
+  await attachOverrides(user.id, overrides ?? {});
 
   const userInDb = await findUserById(user.id);
 
@@ -162,6 +183,48 @@ export async function buildEmployee(overrides?: {
     });
 
   return { ...userInDb, password: employeeData.password };
+}
+
+/**
+ * Usuário com os **dois** perfis ativos — o alvo natural dos testes de cascata,
+ * que precisam provar que a deleção alcança os dois lados do grafo. Nasce
+ * funcionário (para escolher as roles de EMPLOYEE) e ganha o perfil de cliente
+ * pelo repositório de perfil, o mesmo caminho que o service usa.
+ *
+ * Os overrides não entram aqui: pendure-os depois com `attachOverrides`,
+ * escolhendo a role de cada um por `overrideRole`.
+ */
+export async function buildHybrid(overrides?: {
+  employeeRoles?: RoleName[];
+  customerRoles?: RoleName[];
+  data?: Partial<CreateEmployeeInput>;
+}) {
+  const employee = await buildEmployee({
+    ...(overrides?.employeeRoles && { roleNames: overrides.employeeRoles }),
+    ...(overrides?.data && { data: overrides.data }),
+  });
+
+  // O repositório passou a receber ids (8.3): as roles são concedidas pela
+  // primitiva de reuso de linha, que casa pelo par `(userId, roleId)`.
+  const customerRoles = await getRolesByNames(
+    overrides?.customerRoles ?? DEFAULT_CUSTOMER_ROLES,
+  );
+
+  await createCustomerProfile(
+    employee.id,
+    { phone: faker.phone.number({ style: "international" }) },
+    customerRoles.map((role) => role.id),
+  );
+
+  const userInDb = await findUserById(employee.id);
+
+  if (!userInDb)
+    throw createInternalServerError({
+      message: "User not found after adding the customer profile",
+      action: "Verificar processo de criação de perfil",
+    });
+
+  return { ...userInDb, password: employee.password };
 }
 
 export async function buildAuthUser(
@@ -179,18 +242,23 @@ export async function buildAuthUser(
       : DEFAULT_CUSTOMER_ROLES);
   const roles = await getRolesByNames(roleNames);
 
+  // Mesma convenção de `attachOverrides`: os overrides pendem da primeira role.
+  const userFeatures = [
+    ...(overrides?.grants ?? []).map((name) => ({
+      granted: true,
+      feature: { name },
+    })),
+    ...(overrides?.denies ?? []).map((name) => ({
+      granted: false,
+      feature: { name },
+    })),
+  ];
+
   const userForComputation = {
-    roles: roles.map((role) => ({ role: { features: role.features } })),
-    features: [
-      ...(overrides?.grants ?? []).map((name) => ({
-        granted: true,
-        feature: { name },
-      })),
-      ...(overrides?.denies ?? []).map((name) => ({
-        granted: false,
-        feature: { name },
-      })),
-    ],
+    roles: roles.map((role, index) => ({
+      role: { features: role.features },
+      features: index === 0 ? userFeatures : [],
+    })),
   };
 
   return {

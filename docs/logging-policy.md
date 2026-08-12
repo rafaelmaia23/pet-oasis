@@ -94,7 +94,7 @@ Trilha durável de ações sensíveis, em `AuditLog`. Cada linha é evidência: 
 1. **Append-only.** A aplicação não faz `UPDATE` nem `DELETE` em `AuditLog`. A única exceção é o script de retenção (§7), que remove linhas por idade.
 2. **Sem endpoint de escrita.** Nenhuma rota grava audit diretamente; a gravação nasce sempre de uma ação de negócio.
 3. **Taxonomia fechada.** Toda ação vem da tabela em §4.3. Ação nova exige entrada nesta política antes do código.
-4. **`metadata` sem PII.** Apenas ids e enums. Nunca email, nome, telefone ou endereço.
+4. **`metadata` sem PII.** Apenas ids e enums. Nunca email, nome, telefone ou endereço. **Conjunto** de enums também vale (`string[]`, aberto na 8.4): a reativação de conta precisa dizer *quais* perfis voltaram, não quantos, e um `ProfileKind[]` continua sendo enum. O que a regra proíbe é dado pessoal, não cardinalidade.
 5. **Consistência transacional.** Ação que muda estado grava o audit na **mesma `$transaction`**: se o audit falha, a ação é desfeita. Uma trilha com buracos é pior que trilha nenhuma, porque induz a conclusões erradas. **Como (7.6):** a transação vive no **repository** (regra "só o repo toca o Prisma"); o **service** decide a semântica e passa um `AuditDescriptor` ao método de escrita, que roda a mutação e `record(descriptor, tx)` na mesma `$transaction` interativa. Com `tx`, `record` deixa o erro **propagar** — a transação inteira reverte.
 6. **Eventos sem transação** (login falho, e futuramente rate limit e lockout) gravam direto: `record` sem `tx` escreve fora de transação, **engole** a falha e emite `error` no application log — não derruba o request.
 7. **`record` é lib de observabilidade**, a mesma classe de exceção do `logger`/`AsyncLocalStorage` (§6): pode ser chamada de qualquer camada, mas nenhuma regra de negócio lê dela.
@@ -118,13 +118,18 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `AUTH_LOCKOUT_CLEARED` | `User` | `clearedBy` (enum: `ADMIN`, `SUCCESSFUL_LOGIN`) | 7.10 |
 | `AUTH_RATE_LIMIT_EXCEEDED` | `Route` | `rule`, `scope` (enum: `IP`, `EMAIL`) | 7.9 |
 | `USER_CREATED` | `User` | `source` (enum: `SIGNUP`, `ADMIN`, `SEED`) | 7.6 |
-| `USER_DELETED` | `User` | — | 7.6 |
+| `USER_DELETED` | `User` | `cascadedProfiles`, `cascadedRoles`, `cascadedOverrides` (nº de filhos derrubados junto) | 7.6 · 8.1 |
+| `USER_PROFILE_CREATED` | `User` | `profileKind`, `roles` (nº de roles concedidas) | 8.3 |
+| `USER_PROFILE_RESTORED` | `User` | `profileKind`, `restoredRoles` (voltaram por correlação de data), `grantedRoles` (nomeadas pelo ator) | 8.3 |
+| `USER_PROFILE_DELETED` | `User` | `profileKind` (enum: `CUSTOMER`, `EMPLOYEE`), `cascadedRoles`, `cascadedOverrides` | 8.1 |
 | `USER_BANNED` | `User` | `reasonProvided` (bool — o texto **não** entra) | 7.6 |
 | `USER_UNBANNED` | `User` | — | 7.6 |
 | `USER_ROLE_GRANTED` | `User` | `roleId`, `roleName` | 7.6 |
-| `USER_ROLE_REVOKED` | `User` | `roleId`, `roleName` | 7.6 |
-| `USER_PERMISSION_GRANTED` | `User` | `featureName`, `effect` | 7.6 |
-| `USER_PERMISSION_REVOKED` | `User` | `featureName` | 7.6 |
+| `USER_ROLE_REVOKED` | `User` | `roleId`, `roleName`, `cascadedOverrides` (nº de overrides derrubados junto) | 7.6 · 8.0 |
+| `USER_PERMISSION_GRANTED` | `User` | `featureName`, `roleId`, `roleName`, `effect` | 7.6 · 8.0 |
+| `USER_PERMISSION_REVOKED` | `User` | `featureName`, `roleId` | 7.6 · 8.0 |
+| `ACCOUNT_REACTIVATION_REQUESTED` | `User` | `source` (enum: `SELF`, `ADMIN`), `profiles` (`ProfileKind[]`), `roles` (nº de roles nomeadas) | 8.4 · 8.5 |
+| `ACCOUNT_REACTIVATION_COMPLETED` | `User` | `profilesRestored`, `profilesCreated` (`ProfileKind[]`), `restoredRoles`, `grantedRoles` (nº — restaurada por correlação de data ≠ concedida pelo ator, só a segunda é autoridade nova) | 8.4 |
 | `PASSWORD_RESET_REQUESTED` | `User` | — | 7.6 |
 | `PASSWORD_RESET_COMPLETED` | `User` | — | 7.6 |
 | `PASSWORD_CHANGED` | `User` | — | 7.6 |

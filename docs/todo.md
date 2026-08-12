@@ -273,6 +273,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ **`POST /auth/change-email`** (`authenticate` + `canAccess("update:user")`, sem feature nova): body `{ currentPassword, newEmail }`. Reabre a decisão de `user.schema.ts:56` (`email: z.never(...)` no `PATCH /users/:id`) — a troca é endpoint próprio, fora do update genérico. Exige a senha atual, recusa se `newEmail` for igual ao ativo, checa conflito contra `User.email` **e** `PreviousEmail` → 409 revelando o conflito. Gera token opaco (`purpose: EMAIL_CHANGE`, TTL = `EMAIL_VERIFICATION_TTL_MS` reaproveitada), grava `newEmail` na própria linha do token e seta `pendingEmail`. Uma nova chamada invalida o token `EMAIL_CHANGE` pendente anterior e sobrescreve `pendingEmail` (mesmo idioma de "unicidade do ativo por código" de `UserFeature`/`UserRole`) — dobra como cancelamento implícito. Dispara, na mesma operação, o aviso de segurança para o email **antigo** (com o link de confirmação — é quem ainda tem acesso à caixa real). Sem rate limit dedicado.
 - ✅ **`POST /auth/confirm-email-change`** (público): body `{ token }`. Em transação: `User.email = token.newEmail`, `pendingEmail = null`, insere `PreviousEmail`, marca o token usado, audit `EMAIL_CHANGE_COMPLETED`. Sem pré-checagem de conflito de última hora — o próprio `user.update` estoura P2002 → 409 pelo handler já existente.
 - ✅ **Email trocado fica reservado para sempre** (`PreviousEmail`, unique global) — mesmo idioma do email "preso" de conta deletada (nota da Fase 8). `createCustomer`/`createEmployee` (`user.service.ts`) ganharam `assertEmailAvailable`, checando `PreviousEmail` além do unique de `User.email` — senão a reserva seria furável simplesmente criando conta nova.
+  - 🔸 **Nota de errata (revisado na 8.6):** decisão **revertida**. A partir da 8.6 `PreviousEmail` não bloqueia mais nada (nem signup, nem admin criando employee, nem `change-email`); `assertEmailAvailable` e `findPreviousEmailByEmail` foram apagadas, e o `@unique` global da coluna saiu (K25). A tabela continua existindo como histórico. Ver a seção da Fase 8.6.
 - ✅ `GET /me` e a view `owner`/`admin` de `GET /users/:id` passam a expor `pendingEmail`.
 - ✅ `EMAIL_CHANGE_REQUESTED` (no pedido) / `EMAIL_CHANGE_COMPLETED` (na confirmação) no audit log — só ids/enum, email nunca em `metadata`.
 - ✅ **Implementação:** terceiro service do módulo auth, `src/modules/auth/emailChange.service.ts` (ao lado de `password.service.ts`/`verification.service.ts`); `authRepository.requestEmailChange`/`consumeEmailChange` (transação interativa, mesmo idioma de `consumePasswordReset`); `userRepository.findPreviousEmailByEmail`. `clearDatabase()` e o guard de regressão (`clearDatabase.guard.test.ts`) atualizados para a tabela nova. Suíte (584) + `typecheck` + `lint` verdes.
@@ -331,6 +332,334 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 
 ---
 
+## Fase 8 — Autorização com escopo, cascata de deleção e reativação ✅
+
+> **Esta fase já foi implementada uma vez e foi revertida.** O desenho original estava conceitualmente errado: construiu a máquina de reativação em cima de dois bugs pré-existentes (deleção de usuário que não cascateia, e override de feature sem escopo), e boa parte da complexidade que produziu existia só para contornar esses bugs. O código foi revertido para `d1b8478` em 2026-08-07 e a fase é refeita do zero com o modelo correto.
+>
+> **Desenho completo e racional:** o documento de trabalho `docs/fase-8-redesign.md` foi dissolvido e apagado na 8.9, como planejado. O modelo e o *porquê* vivem agora no ADR **`docs/adr/authorization-scope-and-lifecycle.md`** e no `docs/context.md` §2.6; a execução, nesta seção. O backup da implementação antiga também foi removido (K30) — sobrou só o patch do planejamento da Fase 9, ver a nota na seção dela.
+>
+> **O escopo cresceu:** não é mais só reativação. A fase agora conserta o modelo de autorização (escopo de override, unicidade de `UserRole`), o ciclo de vida de deleção (cascata), e só então constrói a reativação em cima de um modelo consistente. Mais o bug de produção do lockout da conta demo.
+>
+> Branch da fase: `fase-8`, a partir da `main`. Uma branch por sub-fase (`feat/fase-8-<n>-<slug>`).
+
+### Decisões firmadas no redesenho (2026-08-07)
+
+| # | Decisão | Escolha |
+|---|---|---|
+| D1 | Cascata de deleção | Total e sempre: `User` → perfis → `UserRole` → `UserFeature`. **Nunca existe filho ativo de pai morto** — estado inconsistente no banco é proibido, mesmo que não fosse computado. |
+| D2 | Escopo do override | `UserFeature` ganha FK para `UserRole`. Todo override pertence a uma atribuição de role, não ao usuário solto. Motivo: escopo por perfil é grosso demais — não captura mudança de função (funcionário deixa de ser estoquista mas continua funcionário; o override de estoquista tem que morrer). |
+| D3 | Unicidade de `UserRole` | `@@unique([userId, roleId])` no banco. Uma linha por par, para sempre; re-conceder **reusa** a linha (`deletedAt = null`). Tira a invariante do código e põe no banco. |
+| D4 | Correlação de restauração | Por `deletedAt`, com **um único timestamp por transação** propagado por toda a cascata. Sem coluna de "motivo da deleção" (avaliada e recusada — a data já resolve, e mantém a tabela limpa). |
+| D5 | Regra de restauração | Restaura o filho cujo `deletedAt` é **igual** ao do pai. Recursivo nos três níveis. |
+| D6 | ~~Re-conceder role restaura os overrides daquela role~~ | **REVOGADA no kickoff da Sessão C (2026-08-10).** Substituída por **D6'** — ver K16. A cascata de deleção desce quatro níveis; a restauração sobe só dois (`User` → perfil → `UserRole`). **Override nunca ressuscita por efeito colateral**, só por ação explícita. |
+| D7 | Histórico de ciclos | Vive no audit log (`USER_ROLE_GRANTED`/`REVOKED`, `USER_PERMISSION_GRANTED`/`REVOKED`, já existentes), não na tabela. Tabela guarda estado, audit log guarda história. |
+| D8 | Escolha de roles ao religar | **Default traz todas** as que morreram na cascata; o admin pode escolher um subconjunto e ignorar o resto. |
+| D9 | Contrato do override | `PUT \| DELETE /users/:userId/roles/:roleId/features/:featureId`. A role vai no **path**, nunca no body — a identidade do override é a tripla `(user, role, feature)`, e body não identifica recurso (quebraria idempotência do `PUT` e o `DELETE` não tem semântica de body). |
+| D10 | Migration | **Zera o banco.** App só tem demo de portfólio no ar, sem dado real a preservar. |
+| D11 | Self-service nunca traz funcionário | Reativação pelo signup traz (ou cria) **apenas** o perfil de cliente. Perfil de funcionário só volta por ação de admin. |
+| D12 | Signup não faz account-linking | Email/cpf de conta **ativa** → recusa e orienta a logar; nunca mexe numa conta viva (cpf não é segredo). Herdada do N12 da fase antiga. |
+| D13 | Emails | Só o **email atual** de uma conta é reservado (inclusive de conta deletada). Email já trocado fica livre para reuso; `PreviousEmail` é só auditoria e nunca bloqueia. |
+| D14 | Invariante central | **Nunca** existe usuário ativo sem ao menos um perfil ativo. Vale em todos os fluxos, sem exceção. |
+| D15 | Mensagem de erro | `"Para excluir esse perfil use o endpoint de deleção de usuário."` (hoje diz "esse usuario", invertendo o sujeito). |
+| D16 | ~~Não-escalação na restauração~~ | **MORTA junto com o D6 (Sessão C).** Toda a máquina (`OverrideRestorePolicy`, `canRestore`/`describeSkip`, `USER_PERMISSION_RESTORE_SKIPPED`) existia **só** para tornar o D6 seguro: se nenhum override ressuscita, não há conteúdo dinâmico para o guard filtrar. `assertAdminForRoleAssignment` volta a bastar sozinha, porque uma `UserRole` restaurada passa a carregar apenas as features **estáticas** da role — que é exatamente o que ele já inspeciona. Removida no Passo 0 da Sessão C. |
+
+### Sessões de trabalho
+
+| Sessão | Sub-fases | Tema | Por que agrupa |
+|---|---|---|---|
+| **A** ✅ | 8.0 | Escopo de override + unicidade de `UserRole` | Fundação do modelo de autorização. Nada de cascata ou reativação faz sentido antes do override ter dono. |
+| **B** ✅ | 8.1, 8.2 | Cascata + restauração por data | Mesma mecânica de dados, uma inútil sem a outra: cascatear sem saber restaurar deixa a fase pela metade. |
+| **C** ✅ | Passo 0 + 8.3 | Perfil em conta ativa | Primeiro fluxo de produto, já em cima do modelo correto. O kickoff revogou o D6 (K16), então a sessão abre com um Passo 0 que tira a restauração de overrides antes de construir por cima dela. |
+| **D** ✅ | 8.4, 8.5 | Conta deletada (self-service e admin) | Os dois disparam token e convergem na mesma confirmação. |
+| **E** ✅ | 8.6, 8.7 | Emails liberados + rate limit | Transversais, independentes dos fluxos; 8.7 cobre as superfícies que 8.4/8.5 abriram. |
+| **F** ✅ | 8.8 | Isenção do demo no lockout | Bug de produção, sem relação com perfil/reativação. Reaplicação do patch `0002`. |
+| **G** ✅ | 8.9 | Fechos | Docs, suíte, `typecheck`/`lint`. |
+
+### ✅ [Sessão A] Fase 8.0 — Escopo de override e unicidade de `UserRole`
+
+- ✅ Migration `20260810154958_scope_user_feature_to_user_role` (**zerou o banco**, D10): `UserFeature.userId` → `userRoleId` (FK para `UserRole`) + `@@unique([userRoleId, featureId])`; `UserRole` ganhou `grantedAt` e `@@unique([userId, roleId])`. `User.features` deixou de ser relação direta — overrides são alcançados via `User.roles[].features[]`.
+- ✅ `UserRole` reusa linha na re-concessão (D3): `permissionRepository.addUserRole` busca a linha do par (`findUnique` no `userId_roleId`), revive com `deletedAt = null` ou cria. Unicidade-por-código removida.
+- ✅ Revogar role cascateia para os overrides dela (D2), mesma transação, **um único `new Date()`** — ensaio do D4 que a 8.1 generaliza.
+- ✅ Re-conceder role restaura os overrides dela (D6). Forma simples desta sub-fase: **todos** os overrides mortos daquela `UserRole`; a 8.2 estreita para a correlação por data.
+- ✅ **D16 nasceu aqui.** `permission.service.addUserRole` resolve `isAdmin(ator)` e passa ao repository uma `OverrideRestorePolicy` (`canRestore` + `describeSkip`) — a regra fica no service, a mecânica no repository. Ator não-admin: a role volta (201), os overrides de `PRIVILEGED_FEATURES` + `*` não. Cada descarte vira uma linha `USER_PERMISSION_RESTORE_SKIPPED` (K3).
+- ✅ Contrato novo (D9): `PUT|DELETE /users/:userId/roles/:roleId/features/:featureId`. `GET /users/:userId/features` expõe a role de cada override (K2), achatada por `toUserFeatureDTO` no service.
+- ✅ `computeEffectiveFeatures` manteve a assinatura, mas virou **dois laços em vez de um aninhado**: todas as features estáticas antes de qualquer override. Num laço só, um deny pendurado na role A seria aplicado antes de a role B somar a feature — o resultado dependeria da ordem das roles. Teste unitário dedicado trava isso.
+- ✅ Guard de não-escalação revisado: predicado extraído em `isPrivilegedFeature` (`name === "*" || PRIVILEGED_FEATURE_SET.has(name)`), agora compartilhado pelos três pontos. **Isso fechou um buraco pré-existente:** `assertAdminForPermissionFeature` só olhava `PRIVILEGED_FEATURE_SET` e deixava passar um override do wildcard `*` concedido por não-admin.
+- ✅ Efeito colateral na view: `userViews.admin` deixou de ter `features` no topo (o campo não existe mais no dado) e passou a espelhar a junção em `roles[].features[]` — mesma informação, no lugar onde ela agora mora.
+- ✅ Factories: `grants`/`denies` penduram na **primeira** role do usuário, com `overrideRole?` opcional para escolher outra (`attachOverrides`).
+- ✅ Docs: `docs/endpoints.md`, `docs/logging-policy.md`, `docs/context.md`, OpenAPI (`src/docs/paths/permission.ts`), coleção Bruno.
+
+#### Decisões do kickoff da Sessão A
+
+| # | Questão | Decisão |
+|---|---|---|
+| K1 | `PUT .../roles/:roleId/features/:featureId` quando o usuário não tem aquela role **ativa** | **422** (validação semântica, precisa de banco), `errors.roleId`, mesmo shape de `assertRoleAppliesToActiveProfile`. Override sem dono ativo não pode existir (D2). |
+| K2 | Quem expõe a role de cada override | **`GET /users/:userId/features`** — é o endpoint que lista overrides. O redesenho dizia `/permissions`, mas esse devolve `string[]` plano de features efetivas e **continua assim**. |
+| K3 | Audit do descarte de override privilegiado (D16) | Ação **nova** `USER_PERMISSION_RESTORE_SKIPPED`, **1 evento por override descartado**, metadata `{ featureName, roleId, roleName }`. Granular porque o descarte é permanente (§9.1 do redesenho). |
+| K4 | Status de re-conceder role antes revogada (reuso de linha, D3) | **201** nos dois casos — o cliente não precisa saber que a linha foi reusada. O 409 continua valendo só para role **já ativa**. |
+| K5 | Ordem de validação no `DELETE` do override | **404 direto** se não houver override ativo da tripla `(user, role, feature)`; não checa a role antes. Assimétrico com o `PUT` de propósito: não revela se o usuário tem aquela role. |
+| K6 | Audit da cascata de revogação de role | **Só `USER_ROLE_REVOKED`**, com `cascadedOverrides: <n>` na metadata. A cascata é consequência determinística e D6 devolve os overrides se a role voltar — não é perda de informação. |
+
+#### Decisões do kickoff da Sessão B
+
+| # | Questão | Decisão |
+|---|---|---|
+| K7 | Até onde vai a 8.2, se só o nível de role tem rota HTTP hoje | **Os três níveis nascem como primitivas de repositório**, incluindo o filtro opcional de subconjunto de roles (D8). O nível de role é dirigido por HTTP (`permission.test.ts`); perfil e conta por teste de integração chamando o repositório direto (precedente: `tests/integration/scripts/`, `tests/integration/lib/seed/`). 8.3/8.5 só ligam rota e ator. Alternativa recusada: adiar perfil/conta para 8.3/8.5, o que desenharia a mesma mecânica em três pedaços. |
+| K8 | O que a 8.1 audita, já que a cascata derruba privilégio em silêncio | Ação **nova** `USER_PROFILE_DELETED` (deleção de perfil hoje não registra nada) **+ contagens de cascata na metadata** de `USER_DELETED` e `USER_PROFILE_DELETED`, mesmo idioma do K6. A 8.3 acrescenta os pares `USER_PROFILE_CREATED`/`USER_PROFILE_RESTORED`. |
+| K9 | `Role.appliesTo` nullable, estado que o catálogo não produz mais | **Vira NOT NULL**, em branch própria (`fix/role-applies-to-not-null`) **antes** da 8.1 — não se constrói cascata em cima de um estado que o modelo não suporta. Ver "Passo 0" abaixo. |
+| K10 | Onde moram os helpers de cascata/restauração | Arquivo **novo** `src/modules/user/user.lifecycle.repository.ts` — dá nome à cadeia que cruza `user` e `permission` e isola a regra do timestamp único num lugar só. Alternativas recusadas: espalhar por cada repositório (a cadeia perde nome) ou concentrar em `user.repository.ts` (que passaria a escrever nas tabelas do módulo permission). |
+
+> **Por que a cascata é escrita à mão.** `onDelete: Cascade` é ação referencial de *hard delete* — dispara no `DELETE` físico da linha pai. Aqui o pai não é apagado (`UPDATE users SET deleted_at = ...`), e FK não propaga UPDATE de coluna comum. O nativo seria **trigger**, recusada por três motivos: o Prisma não gerencia trigger (SQL cru numa migration, fora do typecheck e dos testes), ela não devolve as contagens que o audit precisa, e a **restauração** não cabe nela — o filtro do D16 depende do ator, que o banco não conhece. Nested write cobre parte (`roles: { updateMany: ... }`), mas `updateMany` só aceita `where` + `data`: não desce até o **neto** (`UserFeature` via `UserRole`). Mínimo real: 3 statements na mesma transação com o mesmo `T`.
+
+### ✅ [Passo 0 da Sessão B] `Role.appliesTo` obrigatório (K9)
+
+> Trabalho pontual, branch `fix/role-applies-to-not-null` a partir da `fase-8`, mergeada `--no-ff` antes da 8.1. Refactor comportamento-preservado (molde da 7.2): a suíte inteira (633) passou **sem uma linha de teste alterada**, porque o estado removido nunca foi produzido.
+
+- ✅ Migration `20260810173213_make_role_applies_to_required`: `Role.appliesTo` vira `ProfileKind` (sem `?`). `RoleDefinition` já tipava obrigatório e as 5 roles do catálogo têm valor.
+- ✅ Apagados os **três branches mortos** que sustentavam o `null`: `utils/validateRoles.ts` (`r.appliesTo && ...`), `permission.service.ts` `assertRoleAppliesToActiveProfile` (`if (!role.appliesTo) return` — pulava a validação de compatibilidade inteira) e `permission.service.ts` `removeUserRole` (`if (role.appliesTo)` — pulava a guarda da última role do perfil).
+- ✅ `role.presenter.ts` e `me.presenter.ts` deixaram de declarar `.nullable()`; o componente OpenAPI acompanhou (gerado dos mesmos schemas).
+- ✅ Ganho para a Sessão B: toda role pertence a exatamente um perfil, então "matar as roles do perfil" e "matar todas as roles do usuário" são provadamente a mesma coisa — nenhuma role órfã, morta pela cascata e restaurável por ninguém.
+
+### ✅ [Sessão B] Fase 8.1 — Cascata de deleção e timestamp único
+
+- ✅ `deleteUser` cascateia (D1): `User` → perfis ativos → **todas** as `UserRole` ativas → `UserFeature` ativas delas. As roles vão sem filtro de `appliesTo` — o pai é a conta, e D1 não admite filho ativo de pai morto. Antes marcava só `User.deletedAt` e invalidava sessões.
+- ✅ Deletar perfil passou a alcançar o **neto** (`UserFeature`), que antes sobrevivia à morte da role — era o vazamento de privilégio do §2.2 do redesenho.
+- ✅ **Um único `new Date()` por transação** (D4), passado como parâmetro; `deleteCustomerProfile` chamava duas vezes e o `softDelete` do user, três. A igualdade nos quatro níveis tem **teste dedicado** (`user.test.ts`) — sem ele, o bug da 8.2 seria silencioso.
+- ✅ A cascata **só toca linhas ativas**; o que já estava morto mantém o timestamp antigo (teste próprio), e é isso que preserva a distinção na restauração.
+- ✅ Mensagem do último perfil corrigida (D15).
+- ✅ Regressão: varredura pós-deleção não acha perfil/role/override ativo sob pai morto, em nenhum caminho.
+- ✅ Nasceu o `src/modules/user/user.lifecycle.repository.ts` (K10): `cascadeDeleteOverrides`, `cascadeDeleteRoles`, `cascadeDeleteProfile` e `cascadeDeleteUserGraph`, todas `tx`-escopadas e recebendo o `deletedAt` por parâmetro. `permission.repository.removeUserRole` delega o nível de override para lá (uma implementação só).
+- ✅ Audit (K8): ação nova `USER_PROFILE_DELETED` (`{ profileKind, cascadedRoles, cascadedOverrides }`) e `USER_DELETED` ganhou `{ cascadedProfiles, cascadedRoles, cascadedOverrides }`. Sem PII — só números e enum, com teste de contrato. Os dois repositórios passaram a receber o audit como **thunk** (`describeAudit(counts)`), idioma do K6, porque as contagens só existem dentro da transação.
+- ✅ **Por que não é o banco que cascateia:** `onDelete: Cascade` é ação referencial de *hard delete* e aqui o pai só é atualizado; trigger foi recusada (Prisma não a gerencia, não devolve as contagens, e a restauração não caberia nela porque o filtro do D16 depende do ator). Nested write não desce até o neto (`updateMany` só aceita `where` + `data`).
+- ✅ Factory: `buildHybrid` (usuário com os dois perfis ativos) e `attachOverrides` exportada, para pendurar override numa role específica.
+
+### ✅ [Sessão B] Fase 8.2 — Restauração por correlação de data
+
+- ✅ Regra única e recursiva (D5), nos três níveis: restaura o filho cujo `deletedAt` é **igual** ao do pai. O que morreu noutro instante não bate e continua morto, sem nenhuma regra extra.
+- ✅ **O `deletedAt` do pai é lido antes de zerá-lo** em todos os níveis — zerar primeiro perderia a chave e transformaria a restauração num no-op silencioso.
+- ✅ Regressão do caso difícil (§3.1 do redesenho): perfil morre em T2 (attendant e manager), admin religa só attendant, perfil morre de novo em T3, admin religa sem escolher nada → só attendant volta; manager (T2) não bate mais.
+- ✅ Regressão: override removido explicitamente tem `deletedAt` próprio → nunca ressuscita (nos dois níveis, role e perfil).
+- ✅ Quatro funções no `user.lifecycle.repository.ts` (K7/K10): `restoreOverridesOfUserRole`, `restoreRolesOfProfile` (com `roleIds?`, D8), `restoreProfile` e `restoreProfilesOfUser`. `OverrideRestorePolicy` mudou de casa (saiu do `permission.repository`, que agora só reexporta o tipo) porque os três níveis precisam dela.
+- ✅ `restoreProfile` tem `requireDeletedAt?` opcional: a reativação de **conta** exige que o perfil tenha morrido no mesmo instante que ela; a reativação de **perfil** em conta viva (8.3) aceita qualquer perfil morto. A linha do `User` **não** é tocada aqui — quem reativa a conta é o repositório de user, que precisa ler `user.deletedAt` (a chave) antes de zerá-la.
+- ✅ `addUserRole` estreitou o filtro de `{ not: null }` para `deletedAt: <o do pai>` e passou a delegar a `restoreOverridesOfUserRole`.
+- ✅ Testes: nível de role por HTTP (`permission.test.ts`); perfil e conta pelo repositório direto, em `tests/integration/modules/user/user.lifecycle.test.ts` (K7) — mesmo idioma de `tests/integration/scripts/`. Verificado que os dois testes novos de HTTP **falham** sem o estreitamento.
+- ✅ Suíte (652) + `typecheck` + `lint` verdes ao fechar a sessão.
+- ✅ **Dívida da 8.0 quitada:** o **descarte permanente** do D16 (§9.1.1 do redesenho — "o override privilegiado pulado mantém o `deletedAt` antigo e não volta sozinho nem para um admin") **ainda não vale** ao fim da 8.0. Lá a restauração pega *todos* os overrides mortos da `UserRole`, então uma segunda revogação/reconcessão por um admin ressuscita o que o manager tinha descartado. A propriedade nasceu **aqui**, com a correlação por data, e o teste que a prova foi reescrito (`permission.test.ts`): manager reconcede (privilegiado é pulado, mantém `deletedAt` de T1) → admin revoga (nova `UserRole.deletedAt` = T2) e reconcede → o pulado **não** volta, porque T1 ≠ T2.
+  - ⚠️ **Superado pelo K16 (Sessão C).** Com o D6 revogado, *nenhum* override ressuscita — o descarte deixa de ser um caso especial do privilegiado e vira a regra geral. Este bullet e o teste que ele descreve foram removidos no Passo 0 da Sessão C; ficam registrados aqui só para o histórico da 8.2 fazer sentido.
+
+#### Decisões do kickoff da Sessão C
+
+| # | Questão | Decisão |
+|---|---|---|
+| K11 | Q1 — `attendant` cria/reativa o perfil de cliente de **outra** pessoa? | **Sim, com feature nova escopada ao cliente.** Nasce o par `create:customer-profile:others` / `reactivate:customer-profile:others`, dado a attendant/manager/admin. O perfil de **funcionário** passa a exigir features próprias (`create:employee-profile` / `reactivate:employee-profile`, só manager/admin) — sem isso, dar `:others` ao attendant o deixaria criar funcionário, que é escalação contra D11. |
+| K12 | Q2 — `reactivate:*` continua separada de `create:*`? | **Sim, separadas.** Reativar traz roles antigas de volta; criar nasce com o default. São poderes diferentes e ficam concedíveis/revogáveis em separado. Total: **6 features de perfil** + `delete:profile` inalterado. |
+| K13 | Nome das features | **Recurso explícito no nome** (`create:customer-profile`, `create:employee-profile`), não `create:profile` genérico. `create:profile` é renomeada e some. Ganho: `canActOnResource(actor, "create:customer-profile", userId)` casa self e `:others` sozinho, sem OR manual no service; e quem lê o catálogo em `GET /features` não precisa adivinhar qual perfil cada uma alcança. |
+| K14 | Status HTTP do ramo de reativação | **201 nos dois ramos.** O cliente não distingue criação de reativação — mesmo idioma do K4 (re-conceder role responde 201 sem revelar o reuso da linha). |
+| K15 | `roleNames` no ramo de reativação (`POST .../employee`) | **É a lista de roles com que o perfil volta** — mesma semântica de criar. Role nomeada que morreu naquela cascata é restaurada; role nomeada que não morreu ali (revogada num ciclo anterior, ou nunca havida) é **concedida** reusando a linha do par (D3). Omitido → default do D8: todas as que morreram na cascata. O `phone` do `POST .../customer` **atualiza** o perfil restaurado — hoje é o único caminho que grava `Customer.phone` (`PATCH /users/:id` só aceita `name`). |
+| K16 | **D6 revogado — restauração para na role** | A cascata de deleção desce quatro níveis (`User` → perfil → `UserRole` → `UserFeature`); a **restauração sobe só dois** (`User` → perfil → `UserRole`). **Override nunca ressuscita por efeito colateral** — só por ação explícita (`PUT /users/:id/roles/:roleId/features/:featureId`, que já revive a linha soft-deletada). A linha do override continua soft-deletada como evidência para o audit; ela apenas nunca volta sozinha. Ver o racional abaixo. |
+
+> **Por que o D6 caiu.** A assimetria é principiada, não descuido: deletar cascateia até o
+> override porque a invariante é "nunca filho ativo de pai morto" — errar para mais é
+> *fail-closed*. Restaurar **concede autoridade** — errar para mais é vazamento de privilégio.
+> As duas direções têm perfil de risco oposto, então param em lugares diferentes. Some a isso
+> que override é ajuste fino e pontual: quem devolve um cargo a alguém frequentemente não sabe
+> que existiam overrides pendurados nele, e ressuscitá-los em silêncio é conceder permissão sem
+> ninguém ter decidido conceder. O mercado corrobora — Azure RBAC, GCP IAM e Kubernetes RBAC
+> não têm override por usuário (usa-se custom role), e o inline policy do AWS IAM é
+> **destrutivo** na remoção: reanexar uma managed policy depois não ressuscita a inline apagada.
+> **Contrapartida registrada:** o racional original do D6 era real — funcionário sai de licença,
+> role revogada, volta, e os ajustes finos precisam ser refeitos à mão. Fica aceitável porque o
+> histórico mora no audit log (D7): `USER_PERMISSION_GRANTED`/`_REVOKED` dizem o que havia, e
+> refazer vira consulta + ação consciente, que é justamente o ponto.
+
+### ✅ [Passo 0 da Sessão C] Revogar D6/D16 — a restauração para na role (K16)
+
+> Trabalho pontual, branch `fix/drop-override-restoration` a partir da `fase-8`, mergeada `--no-ff` **antes** da 8.3. Molde da 7.2 e do Passo 0 da Sessão B. Ao contrário daqueles, **não** é comportamento-preservado: os testes que afirmavam a restauração de override foram invertidos.
+
+- ✅ `user.lifecycle.repository.ts`: apagadas `restoreOverridesOfUserRole` e o tipo `OverrideRestorePolicy`; o campo `policy` saiu de `restoreRolesOfProfile`/`restoreProfile`/`restoreProfilesOfUser` e o `skipped` de `RestoreCounts`. `restoreRolesOfProfile` virou **um `updateMany` só** — sem o laço por role (que existia para descer aos overrides de cada uma), a correlação por data resolve o nível inteiro numa query.
+- ✅ `permission.repository.addUserRole`: saíram a chamada a `restoreOverridesOfUserRole`, o parâmetro `policy` e o re-export do tipo. Re-conceder role revive **só** a linha da `UserRole` (ternário revive-ou-cria, mesma forma do `upsertUserFeature`).
+- ✅ `permission.service.addUserRole`: saíram o `findUserById(requestingUserId)` extra, o `isAdmin(...)` e o objeto de política inline. `assertAdminForRoleAssignment` continua intocado — e volta a **bastar sozinho**, porque uma `UserRole` restaurada carrega só as features estáticas da role, que é o que ele já lê.
+- ✅ `auditLog.constants.ts`: saiu a ação `USER_PERMISSION_RESTORE_SKIPPED` (união em tempo de compilação — sem migration).
+- ✅ **Nada mudou na deleção:** `removeUserRole` e `cascadeDeleteOverrides` idênticos, e o `cascadedOverrides` na metadata do `USER_ROLE_REVOKED` (K6) ficou *mais* importante, porque a perda agora é definitiva.
+- ✅ Testes: `permission.test.ts` inverteu os casos de restauração e ganhou o par que fecha a regra — **a linha do override continua soft-deletada** (evidência para o audit) e **o `PUT` explícito é a única porta de volta**, reusando a linha (o `@@unique` não admite uma segunda). Sumiu o caso da "dívida da 8.0 quitada", que era prova do descarte permanente do D16. `user.lifecycle.test.ts` perdeu os fixtures `permissive`/`nonAdmin`, e os três casos de override viraram um só: **nenhum override ressuscita, tenha morrido na cascata ou sozinho**.
+- ✅ Suíte (650) + `typecheck` + `lint` verdes.
+
+### ✅ [Sessão C] Fase 8.3 — Perfil em conta ativa
+
+Os quatro estados possíveis de um usuário ativo (D14 garante que sempre há ≥1 perfil ativo):
+
+| Estado | O outro perfil | Quem pode agir | Rota |
+|---|---|---|---|
+| Cliente ativo | Funcionário nunca existiu | Só manager/admin — **cria** | `POST /users/:userId/employee` |
+| Cliente ativo | Funcionário soft-deleted | Só manager/admin — **reativa** | `POST /users/:userId/employee` |
+| Funcionário ativo | Cliente nunca existiu | **O próprio, sempre** + attendant/manager/admin — **cria** | `POST /users/:userId/customer` |
+| Funcionário ativo | Cliente soft-deleted | **O próprio, sempre** + attendant/manager/admin — **reativa** | `POST /users/:userId/customer` |
+
+- ✅ **Catálogo (K11–K13):** `create:profile` foi renomeada e o conjunto virou seis features — `create:customer-profile` / `reactivate:customer-profile` (self, em `SELF_MANAGEMENT_FEATURES`), `create:customer-profile:others` / `reactivate:customer-profile:others` (grupo novo `CUSTOMER_SERVICE_FEATURES`, em attendant **e** manager), `create:employee-profile` / `reactivate:employee-profile` (em `USER_ADMINISTRATION_FEATURES`). `delete:profile` ficou intocado — deleção está fora do escopo desta sub-fase.
+  - ✅ As duas self moram em `SELF_MANAGEMENT_FEATURES`, não em `CUSTOMER_FEATURES`: a role `customer` morre exatamente quando o perfil de cliente é deletado, então a feature sumiria no instante em que passaria a ser necessária. No baseline ela chega pela role de funcionário — que é quem sobrou vivo. **Tem teste próprio** (o funcionário reativa o próprio perfil de cliente depois de um manager derrubá-lo).
+  - ✅ `runSeed` **já podava** (`feature.deleteMany({ where: { name: { notIn: ... } } })`), então a `create:profile` sai sozinha no reseed — nenhuma migration ou passo manual.
+- ✅ Mesma rota cria **ou** reativa; o service ramifica pelo estado do perfil no banco. Nunca há self-service para virar funcionário; sempre há para virar cliente. `canAccess` ganhou a forma OR (`string | string[]`), com teste unitário próprio (`tests/unit/middlewares/canAccess.test.ts`, novo).
+- ✅ Autorização em **duas etapas**: a união das duas features **antes** da busca do usuário (403 vence 404 — a autorização não pode depender de o alvo existir), e a específica do ramo que de fato correu depois. Sem a segunda, ter só `reactivate:` deixaria criar do zero. A mensagem do 403 nomeia a variante que faltou de verdade: pedir `:others` a quem age sobre a própria conta mandaria o usuário atrás da feature errada.
+  - ✅ Perfil de cliente usa `canActOnResource` (tem par self/`:others`); perfil de funcionário usa `hasFeature` puro — sem par, de propósito: como nunca há self-service (D11), a feature já é a de agir sobre outro, e `canActOnResource` ali restringiria ao próprio, o oposto do pretendido.
+- ✅ **Não-escalação:** o ramo de reativação concede roles arbitrárias (K15), então `assertAdminForRoleAssignment` (agora exportado do `permission.service`) roda **por role nomeada** — manager nomeando `admin` recebe 403 e o perfil **não** é reativado de carona.
+- ✅ `POST /auth/signup` recusa e não mexe em nada (D12) — regressão nova cobrindo o vetor de account-linking: signup com o **cpf** de uma conta ativa responde 409 e o alvo continua sem perfil de cliente, com o mesmo email e as mesmas roles.
+- ✅ Audit (K8): ações novas `USER_PROFILE_CREATED` (`{ profileKind, roles }`) e `USER_PROFILE_RESTORED` (`{ profileKind, restoredRoles, grantedRoles }`) — criação de perfil não registrava nada. `restoredRoles` × `grantedRoles` separa o que voltou por correlação de data do que foi decisão nova do ator; só a segunda é autoridade nova. Sem PII, com teste de contrato.
+- ✅ **Bug da Sessão B corrigido:** `createCustomerProfile`/`createEmployeeProfile` usavam `roles: { create: ... }`, que estoura o `@@unique([userId, roleId])` sempre que já existe uma `UserRole` morta do par. Nasceu `grantRolesToUser` (`user.lifecycle.repository.ts`) com o idioma de reuso de linha do D3; `addUserRole` também passou a delegar para ela (uma implementação só). Os dois `create*Profile` viraram `$transaction` e passaram a receber **ids** em vez de nomes.
+- ✅ Threading do ator pelo controller (`getAuthUser(req)`) — agora para `canActOnResource`, em vez do D16 que morreu no Passo 0.
+- ✅ **Furo pré-existente achado e fechado junto:** `POST /users` aceitava `roleNames` e **nunca** rodava o guard de não-escalação — um manager criava uma conta já com a role `admin`, desviando de `POST /users/:id/roles/:roleId`, que o exige. Nascer com a role é ser atribuído a ela. `userService.createEmployee` passou a receber o ator e a rodar o mesmo guard, com teste (403 + a conta não nasce).
+- ✅ `seedFakeUsers` passou a chamar o **repositório** de perfil em vez do service: o service pede um ator para o guard, e o seed é infraestrutura, sem request nenhuma — mesmo corte que já se fazia com `userRepository.create*` para não disparar email de verificação.
+- ✅ Suíte (**667**) + `typecheck` + `lint` verdes.
+
+#### Decisões do kickoff da Sessão D
+
+| # | Questão | Decisão |
+|---|---|---|
+| K17 | Q3 — a confirmação exige senha nova? | **Sim.** Body `{ token, newPassword, phone? }`, reusando o `passwordSchema`; molde do `POST /auth/reset-password` (público, token como credencial). A conta nunca volta com credencial antiga — que pode ter sido justamente o motivo da deleção. A confirmação também seta `status = ACTIVE` (consumir o token **é** a prova de posse do email que o `verify-email` exige) e zera `mustChangePassword`, como `consumePasswordReset` já faz. |
+| K18 | Q4 — status do signup que dispara reativação | **202** + mensagem genérica. Diz exatamente o que houve: pedido aceito, nenhum recurso criado, efeito fora da request. Primeiro 202 do projeto — 201 mentiria e 200 (idioma do `/forgot-password`) é menos expressivo num POST que não devolve corpo útil. |
+| K19 | Q5 — rota e feature do admin | **`POST /users/:id/reactivate`**, mesma convenção de verbo-como-sub-recurso de `/ban`, `/lock` e `/force-password-reset`. Feature nova **`reactivate:user`** em `USER_ADMINISTRATION_FEATURES` (manager + admin via `*`), **sem par `:others`** — idioma do D11/K13: nunca há self-service autenticado numa conta morta, então a feature já é a de agir sobre outro. Responde **204**. |
+| K20 | Perfil que morreu **antes** da conta volta quando nomeado? | **Sim** — pedir um perfil é ação explícita. Fecha um furo do D14 que a Sessão B deixou aberto: ex-cliente que perdeu o perfil (T1) e depois teve a conta deletada (T2) reativaria com **zero** perfil ativo — a linha morta em T1 não bate com T2, e como ela existe, criar do zero também não é possível. As roles continuam correlacionando pelo `deletedAt` do **próprio perfil**. Nada volta de carona porque nada volta sem ser nomeado. Ver "Passo 0" abaixo. |
+| K21 | Q7 — semântica de `roleNames` | **Restaura OU concede**, idêntica ao K15: role nomeada que morreu na cascata é restaurada; role nomeada que morreu antes, ou que nunca houve, é **concedida** reusando a linha do par (D3). Omitido = default do D8 (todas as que morreram na cascata). Uma semântica só no projeto, no nível de perfil e no de conta. |
+| K22 | Q6 — não-escalação | **Guard por role que vai voltar**, não por "alvo que era privilegiado": resolve o conjunto efetivo (as nomeadas, ou — no default — as que morreram na cascata) e roda `assertAdminForRoleAssignment` **em cada uma**, exatamente como a reativação de perfil da 8.3. Reusa o guard existente sem conceito novo e cobre os dois vetores (a conta *era* admin / o ator *nomeou* admin). O molde `assertAdminForPrivilegedTarget` do ban/lock não serviria: `getUserForFeatureComputation` filtra `deletedAt: null` e as roles do alvo estão todas mortas. |
+| K23 | `phone` para criar perfil de cliente do zero (Caso B) | **Campo opcional na confirmação**; 422 em `errors.phone` se o perfil de cliente precisa nascer do zero e ele não veio. Quem confirma é o dono da conta e sabe o próprio telefone — serve aos dois caminhos sem coluna nova no token. |
+| K24 | Conta **banida** e deletada | **Recusa nos dois caminhos.** Signup → 409 genérico (indistinguível do cpf que não bate, não revela nada); `/reactivate` → 409 nomeando o motivo. O ban continua sendo o congelamento total desenhado na Fase 4 (`login`/`forgot`/`resend`/`reset` já recusam). Admin desbane e depois reativa. |
+
+> **Derivado do §5.2, não negociado:** perfil de **funcionário nunca nasce do zero** pela
+> reativação — o §5.2 só dá ao admin "restaurar funcionário" e "criar cliente do zero". Nomear
+> `EMPLOYEE` numa conta que nunca teve o perfil é **422 no momento do pedido** (não na
+> confirmação, para o admin ver o erro na hora). Criar funcionário é ato próprio, via
+> `POST /users/:id/employee`, com a conta já viva.
+
+### ✅ [Passo 0 da Sessão D] `restoreProfile` deixa de exigir instante exato (K20)
+
+> Trabalho pontual, branch `fix/restore-named-profile` a partir da `fase-8`, mergeada `--no-ff` **antes** da 8.4. Molde dos Passos 0 das Sessões B e C. Como o da Sessão C, **não** é comportamento-preservado: o teste que afirmava a regra antiga é invertido.
+
+- ✅ `restoreProfilesOfUser` para de passar `requireDeletedAt: userDeletedAt` — passa a restaurar **qualquer** perfil morto entre os `kinds` pedidos. As roles seguem correlacionando pelo `deletedAt` lido do próprio perfil, que `restoreProfile` já faz.
+- ✅ Com isso `requireDeletedAt` fica **sem nenhum caller** e some de `restoreProfile`, junto com o parâmetro `userDeletedAt` de `restoreProfilesOfUser`. Sobra uma regra só: *restaura o perfil morto nomeado, e as roles dele que morreram no mesmo instante que ele*.
+- ✅ Reescrever os comentários que hoje justificam o `requireDeletedAt` — o que os substitui é "nada volta de carona porque nada volta sem ser nomeado": o self-service nomeia só `CUSTOMER` (D11) e o admin nomeia explicitamente.
+- ✅ `user.lifecycle.test.ts`: o caso que prova "perfil morto antes não volta" vira "perfil morto antes **volta quando nomeado**, com as roles do próprio instante dele — e o perfil **não** nomeado continua morto".
+
+### ✅ [Sessão D] Fase 8.4 — Conta deletada: self-service via signup
+
+Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se distinguem pelo que existia:
+
+| Caso | O que existia | Resultado do self-service |
+|---|---|---|
+| A | Só cliente | Conta ativa + cliente **restaurado** (as roles da cascata voltam; os overrides delas não — D6', K16) |
+| B | Só funcionário | Conta ativa + cliente **criado do zero**. Funcionário **continua morto** (D11) |
+| C | Cliente + funcionário | Conta ativa + cliente **restaurado**. Funcionário **continua morto** (D11) |
+
+- ✅ Signup detecta email de conta soft-deleted; cpf batendo → dispara reativação (**202**, K18); cpf não batendo → 409 genérico (não revela que a conta existe); conta banida → o mesmo 409 genérico (K24). Email de conta **ativa** continua 409 sem tocar em nada (D12).
+- ✅ Nunca resulta em conta ativa sem perfil ativo (D14) — garantido pelo K20 (o perfil nomeado volta mesmo tendo morrido antes) + criação do zero quando não há linha nenhuma.
+- ✅ Migration `add_account_reactivation`: `VerificationPurpose += ACCOUNT_REACTIVATION`; `VerificationToken` ganha `restoreProfiles ProfileKind[]` e `restoreRoleIds String[]` — idioma do `newEmail` (colunas de um purpose só). `restoreProfiles` = com que perfis a conta volta (self-service grava sempre `[CUSTOMER]`); `restoreRoleIds` **vazio = default do D8**. ⚠️ **Não** reintroduzir as `Boolean? restoreCustomer/restoreEmployee` da fase antiga — o `null`-significa-"não-é-admin" delas morreu com o D1 (§10 do redesenho).
+- ✅ `src/modules/auth/accountReactivation.service.ts` (novo), estruturalmente no molde do `emailChange.service.ts` (pedido + confirmação pública, token com colunas próprias): `requestAccountReactivation(user, source, choice)` invalida o token pendente anterior e cria o novo na mesma transação (idioma do `requestEmailChange`, dobra como cancelamento implícito); `confirmAccountReactivation(token, newPassword, phone?)` faz a checagem de 4 vias + purpose → 400 genérico, busca por `findDeletedUserById` (não `findUserById`, que filtra `deletedAt: null`) e recusa conta banida com 403.
+- ✅ `POST /auth/confirm-account-reactivation` (público, 204), ao lado do `/confirm-email-change`. Sem rate limit aqui — é a 8.7 que cobre as superfícies novas.
+- ✅ `consumeAccountReactivation`, uma transação: token usado → `User` (`deletedAt: null`, senha nova, `status: ACTIVE`, `mustChangePassword: false`) → `restoreProfilesOfUser` → criação do cliente do zero quando não há linha → `grantRolesToUser` do que foi nomeado e não restaurado (K21) → audit. **Primeiro ponto do projeto que escreve `deletedAt: null` num `User`.** Não invalida sessões: a deleção já as invalidou e nenhuma nasceu desde então.
+- ✅ Audit: ações novas `ACCOUNT_REACTIVATION_REQUESTED` (`{ source, profiles, roles }`) e `ACCOUNT_REACTIVATION_COMPLETED` (`{ profilesRestored, profilesCreated, restoredRoles, grantedRoles }`) — mesmo corte semântico do `USER_PROFILE_RESTORED`: restaurada ≠ concedida, só a segunda é autoridade nova. Sem PII.
+- ✅ **`AuditDescriptor.metadata` passou a aceitar `string[]`.** A regra da política §4.4 é "só ids e enums, nunca PII", e um *conjunto* de enums continua sendo enum — a reativação precisa dizer **quais** perfis voltaram, não quantos. Único ponto que usa a folga até aqui.
+- ✅ Achado à parte, corrigido junto: `auditLog.constants.ts` tinha um comentário órfão descrevendo a `USER_PERMISSION_RESTORE_SKIPPED`, apagada no Passo 0 da Sessão C.
+- ✅ Testes em `tests/integration/v1/account-reactivation.test.ts` (novo — o fluxo atravessa dois routers e converge numa confirmação só, então o arquivo é nomeado pelo fluxo, precedente do `user.profile.test.ts`): os três casos A/B/C, 409 genérico do cpf/ban/conta viva, token expirado/usado/de outro purpose/replay → 400, senha nova valendo e a antiga não, `phone` obrigatório só no ramo que cria do zero, role de ciclo anterior não voltando, override nunca voltando, e o audit dos dois lados sem PII.
+
+### ✅ [Sessão D] Fase 8.5 — Conta deletada: caminho do admin
+
+| Caso | Admin pode |
+|---|---|
+| A — só cliente | Restaurar cliente |
+| B — só funcionário | Restaurar funcionário · criar cliente do zero · ambos |
+| C — os dois | Restaurar cliente · funcionário · ambos |
+
+- ✅ **`POST /users/:id/reactivate`** (K19), `canAccess("reactivate:user")`, body `{ profiles: ProfileKind[] (min 1), roleNames?: RoleName[] }`, **204**. Feature nova `reactivate:user` em `USER_ADMINISTRATION_FEATURES` (manager + admin via `*`), sem par `:others`.
+- ✅ Admin escolhe **perfis e roles** (D8: default traz todas as roles que morreram na cascata; pode escolher subconjunto). Overrides nunca voltam (D6', K16). A lista nomeada tem a semântica do K15/K21: *com que roles a conta volta*, restaurando ou concedendo conforme o caso.
+- ✅ Schema recusa escolher zero perfis (D14). Alvo vivo → 404 (não é uma conta deletada — e dizer "existe, mas está ativa" contaria sobre uma conta que o ator talvez nem possa ver); alvo banido → 409 (K24); `EMPLOYEE` pedido numa conta que nunca teve o perfil → 422 no momento do pedido, para o admin ver o erro na hora e não o dono na confirmação.
+- ✅ Validação nova que o plano não previa: **role nomeada exige o perfil dela entre os pedidos** (422). Sem isso a conta voltaria com uma `UserRole` ativa sob um perfil morto — exatamente o que o D1 proíbe.
+- ✅ **Não-escalação (K22):** resolve o conjunto de roles que vai voltar e roda `assertAdminForRoleAssignment` em cada uma, **antes de qualquer escrita** — manager tentando reativar conta que tinha `admin` recebe 403 sem token criado e sem email enviado; admin faz a mesma reativação com 204. `permissionRepository.findRolesDeletedWith` + `permissionService.getRolesRestorableWithProfiles` (o `permission` é dono de `UserRole`; `user.service` já importava `assertAdminForRoleAssignment` de lá, precedente da 8.3).
+  - ✅ A chave de correlação vem do **`deletedAt` do perfil**, não do da conta: com o K20 os dois podem divergir, e ler o da conta faria o guard inspecionar o conjunto errado.
+- ✅ Confirmação converge com a da 8.4 (público, token como credencial) — o caminho admin não reativa nada sozinho, só emite o token e envia o email.
+- ✅ `restoreProfilesOfUser` (`user.lifecycle.repository.ts`), escrita na Sessão B sem call site, ganhou o seu: nenhuma linha dela precisou mudar além do Passo 0.
+- ✅ Suíte (**698**) + `typecheck` + `lint` verdes; `docs/endpoints.md`, OpenAPI (`src/docs/paths/{auth,user}.ts`) e coleção Bruno atualizados junto, não deferidos para a 8.9.
+- ✅ ~~**D16 aplicada aqui**~~ e ~~**Q9** (quem é o ator na confirmação, se a rota é pública?)~~ — **as duas morreram no kickoff da Sessão C (K16).** Com a restauração parando na role, nenhum override ressuscita em nenhum caminho, então não há conteúdo dinâmico para o guard filtrar e não há autoridade a capturar em tempo de emissão do token. A reativação de conta restaura perfis e roles; overrides ficam mortos e só voltam por ação explícita.
+
+#### Decisões do kickoff da Sessão E
+
+| # | Questão | Decisão |
+|---|---|---|
+| K25 | O `@unique` global de `PreviousEmail.email` sobrevive à liberação? | **Não — sai** (migration). Achado neste kickoff, não visto pela Fase 8 antiga: com o bloqueio removido, B troca X→Y (grava `PreviousEmail` X); A faz signup com X (agora permitido); A troca X→Z → `previousEmail.create` estoura **P2002** e a troca de email de A falha com 409 **para sempre**, sem caminho de volta. A tabela passa a ser o que o D13 diz que ela é: histórico puro — e histórico legitimamente se repete (o mesmo endereço pertence a várias contas ao longo do tempo; a mesma conta pode voltar a um endereço antigo). Sem `findPreviousEmailByEmail`, não sobra leitura por email para o índice servir. |
+| K26 | A confirmação pública de reativação ganha rate limit (pendência que a 8.4 deixou anotada)? | **Sim, e as três públicas de token juntas:** `/auth/reset-password`, `/auth/confirm-email-change` e `/auth/confirm-account-reactivation` passam a ter limite **por IP**. Proteger só a rota nova deixaria duas irmãs idênticas — públicas, consumindo token opaco — desprotegidas sem nenhuma razão de negócio que as distinga. Balde **próprio** (`tokenIpLimiter`), não o `emailIpLimiter`: enviar email e consumir token são superfícies diferentes, e compartilhar faria um reset legítimo comer o orçamento do outro. |
+| K27 | `POST /users/:id/reactivate` usa balde próprio, por ser ação de ator autenticado? | **Não — mesmo balde** `emailTargetLimiter` do `forgot-password`/`verify-email-resend`, só com `rule` própria no audit. O orçamento é do **email**, não do ator: baldes separados somariam para a mesma vítima e furariam exatamente a proteção que o limite por email-alvo existe para dar. Admin bloqueado por tráfego de terceiro é um 429 temporário numa ação rara, e a `rule` já diz no audit de onde veio. |
+
+### ✅ [Sessão E] Fase 8.6 — Emails liberados
+
+> Branch `feat/fase-8-6-email-reuse`. Referência: patch `.fase-8-backup/0003-*` (commit `6dde2d8`) — commit de remoção, aplicou bem depois do revert. O K25 é acréscimo novo, que o patch não tinha.
+
+- ✅ D13: só o **email atual** de uma conta é reservado (inclusive de conta deletada — `User.email @unique` já garante). Email já trocado fica livre.
+- ✅ **Testes primeiro, por inversão:** os três casos que semeavam `previousEmail` e esperavam 409 passaram a esperar sucesso — `auth.test.ts` (signup → 201; `change-email` → 204 com `pendingEmail` setado e o aviso ainda indo para o email **antigo**) e `user.test.ts` (admin criando employee → 201).
+- ✅ **Teste novo (K25):** conta que adota um email já presente em `PreviousEmail` de outra conta **troca de email de novo** — confirmação 204 e as duas linhas com o mesmo email coexistem. Sem a migration, falhava com 409.
+- ✅ **Migration** `20260812163429_drop_previous_email_unique`: uma linha (`DROP INDEX "previous_emails_email_key"`). Não zera banco; `@@index([userId])` fica.
+- ✅ Os três call sites de `findPreviousEmailByEmail` saíram (signup de customer, admin criando employee, `POST /auth/change-email`); `assertEmailAvailable` ficou vazia e foi apagada; `findPreviousEmailByEmail` virou código morto e foi apagada. O conflito com email **ativo** continua vindo do unique de `User.email` (P2002 → 409).
+- ✅ `PreviousEmail` (tabela e criação do registro em `consumeEmailChange`) **não mudou** — continua como auditoria, só parou de ser consultada para bloquear.
+- ✅ Docs junto: errata da 7.15 aqui e em `docs/context.md` (§2.2 + dois bullets novos na seção da Fase 8, um para a liberação e um para o K25); `docs/endpoints.md` deixou de dizer "reservado para sempre".
+- ✅ Suíte (**699**) + `typecheck` + `lint` verdes.
+
+### ✅ [Sessão E] Fase 8.7 — Rate limiting / anti-enumeração
+
+> Branch `feat/fase-8-7-rate-limit`. Infra aproveitada do patch `.fase-8-backup/0004-*` (commit `cad332e`).
+
+- ✅ **Refactor que destravou os call sites de service:** `rateLimitByEmailTarget` é middleware e lê `req.body.email` antes do controller — nenhum dos dois pontos novos cabia nisso (o signup só consome no *ramo* de reativação, não em todo cadastro; `/users/:id/reactivate` não recebe email nenhum no request). `AppError` ganhou `headers?: Record<string, string>`; `enforce()` parou de receber `res` e joga o `Retry-After` no próprio erro; o error handler central aplica (ponto único de saída desde a 7.5). Abriu `consumeEmailTargetLimit(limiter, email, rule)`, com o mesmo padrão de DI dos middlewares (limiter por parâmetro = testável sem Redis).
+- ✅ ⚠️ As ~19 linhas do patch em `user.service.ts` foram **descartadas** — eram o call site dentro do `forceAccountReactivation` antigo, reescrito desde então. Só a **posição** se aproveitou.
+- ✅ Dois pontos de consumo novos, **mesmo balde** (K27), `rule` distinguindo a origem no audit: `resolveCustomerSignupEmail` (`signup-reactivation`, logo antes do `requestAccountReactivation(…, "SELF", …)`) e `reactivateAccount` (`account-reactivation`, **depois de todos os guards** — um 403 de não-escalação não gasta orçamento do alvo, com teste provando).
+- ✅ **K26:** `tokenIpLimiter` novo (`rl:token:ip`, `RATE_LIMIT_TOKEN_MAX`/`_WINDOW_MS`, default 20 / 15 min — o par do `login`) nas três rotas públicas de token, com uma `rule` por rota e um balde só (mesmo idioma do `emailIpLimiter`, já compartilhado por duas rules). `.env.example` atualizado.
+- ✅ Regressão: login em conta deletada responde 401 genérico byte a byte igual ao de email inexistente (só o `requestId` difere).
+- ✅ Testes: os 2 asserts antigos de `res.set` viraram asserts em `error.headers` (efeito do refactor, não regressão); `consumeEmailTargetLimit` testado isoladamente (sucesso, 429, fail-open); em `account-reactivation.test.ts`, os dois 429 novos + a prova do balde compartilhado com `forgot-password` + o 403 que não consome; em `auth.test.ts`, o 429 das três rotas de token, o balde único entre elas e a separação do balde de envio de email.
+- ✅ Docs junto: adendo em `docs/adr/rate-limiting-and-lockout.md` (os dois call sites novos, o racional do `AppError.headers`, o balde de token) e `429` no OpenAPI das quatro rotas que passaram a poder devolvê-lo.
+- ✅ Suíte (**712**) + `typecheck` + `lint` verdes.
+
+#### Decisões do kickoff da Sessão F
+
+| # | Questão | Decisão |
+|---|---|---|
+| K28 | O predicado isenta *qualquer* portador da role `demo`, ou só uma conta de demonstração "pura"? | **Basta ter a role** — `user.roles.some(r => r.role.name === "demo")`, sem qualificação. Descartadas: "só se `demo` for a única role" (regra menos óbvia, e quebra em silêncio se uma conta de demonstração futura precisar de uma segunda role) e "`demo` + conta não-privilegiada" (traria `computeEffectiveFeatures` para o caminho quente do login e misturaria lockout com não-escalação). Efeito colateral aceito e registrado no ADR: conceder `demo` a uma conta real isenta aquela conta do lockout — hoje inalcançável na prática, só o usuário demo semeado tem a role (`seedFakeUsers` não a usa). |
+
+### ✅ [Sessão F] Fase 8.8 — Isentar a conta demo do account lockout
+
+> Branch `feat/fase-8-8-demo-lockout-exemption`. Bug de produção pós-deploy da Fase 7: o lockout conta por `userId`, então segue o usuário demo entre redes/dispositivos — ao contrário do rate limit por IP. Como a senha do demo é pública (README), o lockout ali não protege credencial nenhuma e vira negação de serviço contra a porta de entrada do projeto. O demo-reset diário não resolve (estado do lockout vive no Redis, fora do alcance do truncate).
+
+- ✅ Reaplicação integral do patch `.fase-8-backup/0002-*` (commit `e565f7a`) — o mais limpo dos três, sem interseção com perfil/reativação. `src/` e `tests/` não sofreram drift desde o revert e saíram idênticos ao patch; só as posições de doc mudaram (a 8.7 inseriu o bloco `RATE_LIMIT_TOKEN_*` antes do `LOCKOUT_*` no `.env.example` e um adendo novo na cauda do ADR), então as seções de doc foram reescritas no lugar certo em vez de `git apply`.
+- ✅ Predicado puro `isLockoutExempt` em `src/lib/lockout.ts`, logo abaixo de `isLocked`, com tipo estrutural local (`{ roles: { role: { name: string } }[] }`) — o módulo continua genérico (não importa nada de Prisma nem de `user`) e testável sem Redis, mesmo idioma de `applyFailure`/`isLocked`. Sem query extra: `findUserByEmail` já traz `roles` via `userInclude`, então o predicado roda sobre dado em memória.
+- ✅ Curto-circuito em `auth.service.login`, nos dois pontos de entrada: `lockoutExempt` calculado uma vez, logo após o guard de `!user`; senha errada → não chama `recordFailure`; senha certa → o bloco `getLockoutState` + 429 inteiro embrulhado no `if`. Um único ponto de decisão no service; `lockout.ts` segue genérico. `AUTH_LOGIN_FAILED` continua sendo gravado normalmente — só o lockout em si (hash `lockout:{userId}` e `AUTH_LOCKOUT_TRIGGERED`) some para a conta isenta.
+- ✅ Nada mais muda: rate limit por IP (7.9), `clearLockout` no login OK (já era no-op para a conta isenta, que nunca teve escrita para limpar), `DELETE /users/:id/lock`, fail-open (D2) e demo-reset ficam intactos. Conta comum continua sujeita ao lockout integralmente, para a mecânica seguir demonstrável.
+- ✅ Testes: unitário do predicado, 4 casos (`tests/unit/lib/lockout.test.ts`); integração em `auth.test.ts` com `buildEmployee({ roleNames: ["demo"] })` (a role `demo` é `appliesTo: EMPLOYEE`, então a factory serve sem adaptação) — demo passa de `LOCKOUT_THRESHOLD + 2` tentativas erradas e a seguinte com senha certa retorna 200 (não 429); nenhum `AUTH_LOCKOUT_TRIGGERED` no audit do demo; **a isenção não vaza para o outro mecanismo** — o rate limit por IP do demo ainda dispara 429 ao exceder `RATE_LIMIT_LOGIN_MAX`. O `describe("Account lockout (7.10)")` inteiro seguiu verde sem alteração (regressão).
+- ✅ Docs junto: adendo novo em `docs/adr/rate-limiting-and-lockout.md` (motivo, critério, K28 e a alternativa descartada — demo-reset limpando `lockout:*`, que só adiaria o problema) · `docs/context.md` §2.2 · `README.md` (seção do usuário demo) · `.env.example` (comentário do bloco `LOCKOUT_*`) · `docs/endpoints.md` (nota na linha de `DELETE /users/:id/lock`). Sem OpenAPI/Bruno: nenhum contrato de rota mudou.
+- ✅ Suíte (**719**) + `typecheck` + `lint` verdes.
+
+### ✅ [Sessão G] Fase 8.9 — Fechos
+
+> Branch `feat/fase-8-9-fechos`. Sem regra de negócio nova e sem teste novo: a única edição em `src/` foi reposicionar/atualizar comentários em `auditLog.constants.ts`. Molde da 7.19 — sincronizar a documentação com o que as sub-fases de fato entregaram.
+
+#### Decisões do kickoff da Sessão G
+
+| # | Questão | Decisão |
+|---|---|---|
+| K29 | ADR novo ou adendo? | **ADR novo dedicado** (`docs/adr/authorization-scope-and-lifecycle.md`). Nenhum dos quatro ADRs existentes é casa natural para modelo de autorização — o mais próximo (`auth-token-revocation.md`) é sobre ciclo de vida de token e seria dominado pelo adendo. |
+| K30 | O que fazer com o backup da fase antiga | **Apagar a branch `backup/fase-8-original` e os patches 0002/0003/0004** (consumidos nas 8.8/8.6/8.7). O patch **0001** (planejamento da Fase 9) **fica**, porque o replan da Fase 9 foi adiado e ele é a única cópia — ver a nota na seção da Fase 9. |
+| K31 | Onde a sessão termina | **Na `dev`.** `feat/fase-8-9-fechos` → `fase-8` → `dev`, ambos `--no-ff`. O merge na `main` (que no futuro dispara deploy) fica para o usuário. |
+
+- ✅ **Auditoria de doc primeiro, correção depois** — sete afirmações que envelheceram durante a fase (o redesenho mudou de rumo três vezes: D6 revogado na Sessão C, D5 estreitado na D, D16 morto junto):
+  - ✅ **A pior delas:** `docs/endpoints.md` dizia que conceder role **"restaura os overrides dela"** — exatamente o oposto do D6'. Era a única linha de doc do projeto descrevendo comportamento inverso ao real.
+  - ✅ `CLAUDE.md` afirmava "sem reativação no ciclo 1 (email/cpf/perfil de deletado ficam presos)" e "unicidade do ativo controlada por código" — as duas caíram na própria Fase 8 (8.4/8.5 e D3). A regra de **Autorização** ganhou o escopo de role e nasceu um bloco **Cascata e restauração**; a seção "o que o projeto planeja ser" parou de listar como futuro o que já está no ar.
+  - ✅ `docs/context.md` §1: a view `admin` ainda descrevia `features` no topo (a 8.0 moveu para `roles[].features[]`) e `Role.appliesTo` como `enum.nullable()` (virou NOT NULL no Passo 0 da Sessão B). Conferidas contra os presenters, não contra a memória.
+  - ✅ `docs/context.md` §2.5: o achado do `demo-reset.ts` (7.14) justificava-se por "email fica preso para sempre" — consequência que o K25 apagou. Ganhou errata em vez de sumir: o fix continua certo por outro motivo.
+  - ✅ `docs/logging-policy.md` §4.3 não listava `ACCOUNT_REACTIVATION_REQUESTED`/`_COMPLETED`. Agora a tabela e `AUDIT_ACTIONS` batem em **24** ações, verificado por script (nenhuma ação sem linha, nenhuma linha sem ação).
+  - ✅ A regra de PII (§4.1.4) passou a registrar a folga que a 8.4 abriu: **conjunto de enums** (`string[]`) é permitido — a reativação precisa dizer *quais* perfis voltaram, não quantos.
+  - ✅ `README.md`: badge e texto diziam 618 testes (número da Fase 7).
+- ✅ **`docs/context.md` §2.6 nova** — a Fase 8 era a única fase sem seção própria: o racional dela morava em 18 bullets dentro do §3 (Schema), porque cada sub-fase escreveu por proximidade com a migration que a motivou. Migrados para §2.6, em quatro blocos (modelo de autorização · ciclo de vida · fluxos de perfil e conta · transversais), e o §3 ficou só com fato de schema — incluindo as mudanças de 8.4 (`restoreProfiles`/`restoreRoleIds`) e 8.6 (o `@unique` que saiu), que ninguém tinha registrado ali.
+- ✅ **§4 ganhou o parágrafo `Fase 8 (fechada)`**, registrando também que a fase foi implementada, revertida e refeita — o fato mais instrutivo dela, que sumiria junto com o documento de trabalho.
+- ✅ **ADR novo `docs/adr/authorization-scope-and-lifecycle.md`** (K29): os dois bugs de origem, o contra-exemplo do estoquista, D2/D3/D9, a cascata de quatro níveis com timestamp único, a restauração de dois com correlação por data, as **invariantes de implementação** (um `new Date()` por transação; ler o `deletedAt` do pai antes de zerá-lo — se vazarem, o bug é silencioso) e as alternativas recusadas. Inclui a §10 do redesenho ("do desenho revertido — não reintroduzir"), que era a única parte do documento sem outro destino.
+- ✅ **Varredura de cobertura por script**, não por leitura: as **43** rotas de `src/modules/**/*.routes.ts` estão nas 43 linhas de `docs/endpoints.md`, nos paths do OpenAPI e nas 43 requests da coleção Bruno. Nenhuma divergência — as sub-fases 8.5–8.8 de fato atualizaram junto, como diziam.
+- ✅ `docs/fase-8-redesign.md` **apagado**, dissolvido: §2/§3/§4/§10 → ADR novo · §5 → `docs/endpoints.md` (já estava lá) · decisões → `context.md` §2.6 · execução → este arquivo.
+- ✅ Limpeza (K30): branch `backup/fase-8-original` e patches 0002/0003/0004 apagados; `.fase-8-backup/` ficou só com o 0001 e o README apontando para a nota da Fase 9.
+- ✅ Suíte (**719**, 43 arquivos) + `typecheck` + `lint` verdes.
+
+---
+
 ## Fases seguintes (resumo)
-- **Fase 8 — Reativação de conta deletada (soft delete):** serviço para reativar contas que tenham sido deletada. Hoje quando acontece um delete de uma conta, a conta entra no soft delete o que prende o email e os dados que são unicos na tabela. Essa fase tem como objetivo permitir que usuarios que tenham deletado a sua conta recuperem a conta e atualizem para novos dados (usuario pode ter mudado email e etc) - um ponto de atenção é não recuperar perfis errados, ex: um usuario que era employee e customer, deixou de ser employee e teve a conta deletada, mas quer "criar" uma conta de customer (signup), teria o cpf preso na conta antigo, ele deve ser capaz de recuperar a conta, mas apenas customer - sem o perfil de employee que deve permanecer soft delete. A feature de troca de email criou uma tabela de emails antigos de um usuario - hoje, um email antigo de usuario, deixa o email trabalho que nem o soft delete de um usuario faz. A partir desse momento, emails antigos não devem deixar o email preso e ele deve ser capaz de criar uma conta nova no app.
 - **Fase 9 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.
+  - 🔸 **Nota p/ o planejamento da Fase 9 (deixada aqui de propósito — é onde vai ser executada):** existe um planejamento atômico dessa fase, escrito antes do revert da Fase 8, guardado **fora do git** em `.fase-8-backup/0001-docs-expand-Fase-9-into-atomic-tasks-*.patch` (só mexe neste arquivo, sem código). A branch `backup/fase-8-original`, de onde ele saiu, foi apagada na 8.9 — **o patch é a única cópia**. Ao abrir a Fase 9: reaplicar (`git apply`) ou reescrever a partir dele, e **só então apagar `.fase-8-backup/` inteiro**, que é o último resíduo do revert.

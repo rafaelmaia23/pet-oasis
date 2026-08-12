@@ -86,10 +86,13 @@ export const permissionPaths: ZodOpenApiPathsObject = {
       responses: { 204: noContentResponse, ...manageErrors },
     },
   },
-  "/users/{userId}/features/{featureId}": {
+  // A role vai no path: a identidade do override é a tripla (user, role,
+  // feature) — ver D9 em docs/todo.md.
+  "/users/{userId}/roles/{roleId}/features/{featureId}": {
     put: {
       tags: ["Permissions"],
-      summary: "Cria/atualiza um override de feature — exige manage:permission",
+      summary:
+        "Cria/atualiza um override de feature numa role do usuário — exige manage:permission",
       ...fromEnvelope(upsertPermissionParamsSchema),
       responses: {
         200: jsonResponse("Override aplicado", userFeatureViews.default),

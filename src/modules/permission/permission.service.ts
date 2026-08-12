@@ -3,6 +3,7 @@ import {
   createNotFoundError,
   createValidationError,
 } from "@/errors";
+import type { ProfileKind } from "@/generated/prisma/enums";
 import {
   assertActorIsAdmin,
   computeEffectiveFeatures,
@@ -21,6 +22,10 @@ const log = logger.child({ module: "permission" });
 // permissão + `read:audit-log:full`. Ver `PRIVILEGED_FEATURES`.
 const PRIVILEGED_FEATURE_SET: Set<string> = new Set(PRIVILEGED_FEATURES);
 
+/** O wildcard entra junto: quem tem `*` tem tudo, inclusive as privilegiadas. */
+const isPrivilegedFeature = (name: string) =>
+  name === "*" || PRIVILEGED_FEATURE_SET.has(name);
+
 type RoleWithFeatures = NonNullable<
   Awaited<ReturnType<typeof roleRepository.getRoleById>>
 >;
@@ -29,11 +34,29 @@ type UserWithRelations = NonNullable<
   Awaited<ReturnType<typeof userRepository.findUserById>>
 >;
 
+type OverrideWithRelations = Awaited<
+  ReturnType<typeof permissionRepository.getUserFeatures>
+>[number];
+
+/** Achata a junção `userRole.role` na forma que a view espera (K2). */
+function toUserFeatureDTO(override: OverrideWithRelations) {
+  return {
+    granted: override.granted,
+    grantedAt: override.grantedAt,
+    updatedAt: override.updatedAt,
+    role: {
+      id: override.userRole.role.id,
+      name: override.userRole.role.name,
+    },
+    feature: override.feature,
+  };
+}
+
 async function assertAdminForPermissionFeature(
   requestingUserId: string,
   featureName: string,
 ) {
-  if (!PRIVILEGED_FEATURE_SET.has(featureName)) return;
+  if (!isPrivilegedFeature(featureName)) return;
 
   const requestingUser = await userRepository.findUserById(requestingUserId);
 
@@ -43,13 +66,17 @@ async function assertAdminForPermissionFeature(
   });
 }
 
-async function assertAdminForRoleAssignment(
+/**
+ * Guard de não-escalação da atribuição de role. Exportado porque a reativação de
+ * perfil (8.3) também concede roles — é um segundo caminho para `addUserRole`, e
+ * sem o mesmo guard um manager concederia `admin` pela porta do perfil.
+ */
+export async function assertAdminForRoleAssignment(
   requestingUserId: string,
   role: RoleWithFeatures,
 ) {
-  const isPrivilegedRole = role.features.some(
-    (rf) =>
-      rf.feature.name === "*" || PRIVILEGED_FEATURE_SET.has(rf.feature.name),
+  const isPrivilegedRole = role.features.some((rf) =>
+    isPrivilegedFeature(rf.feature.name),
   );
 
   if (!isPrivilegedRole) return;
@@ -62,12 +89,32 @@ async function assertAdminForRoleAssignment(
   });
 }
 
+/**
+ * As roles com que os perfis voltariam se ninguém as estreitasse — o default do
+ * D8, resolvido antes de qualquer escrita para o guard de não-escalação poder
+ * inspecioná-lo (K22).
+ *
+ * Cada perfil traz as roles que morreram **junto com ele**, e o instante não é
+ * necessariamente o da morte da conta (K20) — por isso a chave vem do próprio
+ * perfil, não do `User`.
+ */
+export async function getRolesRestorableWithProfiles(
+  userId: string,
+  profiles: { kind: ProfileKind; deletedAt: Date }[],
+) {
+  const roles = await Promise.all(
+    profiles.map(({ kind, deletedAt }) =>
+      permissionRepository.findRolesDeletedWith(userId, kind, deletedAt),
+    ),
+  );
+
+  return roles.flat();
+}
+
 function assertRoleAppliesToActiveProfile(
   role: RoleWithFeatures,
   user: UserWithRelations,
 ) {
-  if (!role.appliesTo) return;
-
   const hasActiveCustomer =
     user.customer !== null && user.customer.deletedAt === null;
 
@@ -104,7 +151,9 @@ export async function getUserFeatures(userId: string) {
     });
   }
 
-  return permissionRepository.getUserFeatures(userId);
+  const overrides = await permissionRepository.getUserFeatures(userId);
+
+  return overrides.map(toUserFeatureDTO);
 }
 
 export async function getUserRoles(userId: string) {
@@ -171,6 +220,10 @@ export async function addUserRole(
     });
   }
 
+  // A role volta sozinha (D6', K16): nenhum override pendurado nela ressuscita,
+  // então `assertAdminForRoleAssignment` — que lê as features **estáticas** da
+  // role — basta como guard. Era a checagem de conteúdo do D16 que precisava
+  // saber se o ator é admin; sem conteúdo dinâmico, ela deixou de existir.
   const userRole = await permissionRepository.addUserRole(
     targetUserId,
     roleId,
@@ -229,30 +282,33 @@ export async function removeUserRole(
     });
   }
 
-  if (role.appliesTo) {
-    const remainingActiveRoles = user.roles.filter(
-      (ur) => ur.role.id !== roleId && ur.role.appliesTo === role.appliesTo,
-    );
+  const remainingActiveRoles = user.roles.filter(
+    (ur) => ur.role.id !== roleId && ur.role.appliesTo === role.appliesTo,
+  );
 
-    if (remainingActiveRoles.length === 0) {
-      const profileLabel =
-        role.appliesTo === "CUSTOMER" ? "de cliente" : "de funcionário";
-      const deleteEndpoint =
-        role.appliesTo === "CUSTOMER" ? "customer" : "employee";
+  if (remainingActiveRoles.length === 0) {
+    const profileLabel =
+      role.appliesTo === "CUSTOMER" ? "de cliente" : "de funcionário";
+    const deleteEndpoint =
+      role.appliesTo === "CUSTOMER" ? "customer" : "employee";
 
-      throw createConflictError({
-        message: `Não é possível remover a última role ${profileLabel} do usuário`,
-        action: `Para remover o perfil ${profileLabel} inteiro, use o endpoint DELETE /users/:id/${deleteEndpoint}`,
-      });
-    }
+    throw createConflictError({
+      message: `Não é possível remover a última role ${profileLabel} do usuário`,
+      action: `Para remover o perfil ${profileLabel} inteiro, use o endpoint DELETE /users/:id/${deleteEndpoint}`,
+    });
   }
 
-  const removed = await permissionRepository.removeUserRole(userRole.id, {
-    action: "USER_ROLE_REVOKED",
-    targetType: "User",
-    targetId: targetUserId,
-    metadata: { roleId, roleName: role.name },
-  });
+  const removed = await permissionRepository.removeUserRole(
+    userRole.id,
+    ({ cascadedOverrides }) => ({
+      action: "USER_ROLE_REVOKED",
+      targetType: "User",
+      targetId: targetUserId,
+      // Os overrides da role morrem junto (D2); a contagem deixa o efeito
+      // visível na trilha sem gerar uma linha por override (K6).
+      metadata: { roleId, roleName: role.name, cascadedOverrides },
+    }),
+  );
 
   log.info(
     {
@@ -270,6 +326,7 @@ export async function removeUserRole(
 export async function upsertUserFeature(
   requestingUserId: string,
   targetUserId: string,
+  roleId: string,
   featureId: string,
   granted: boolean,
 ) {
@@ -293,8 +350,36 @@ export async function upsertUserFeature(
     });
   }
 
-  const userFeature = await permissionRepository.upsertUserFeature(
+  const role = await roleRepository.getRoleById(roleId);
+
+  if (!role) {
+    throw createNotFoundError({
+      message: "Role não encontrada",
+      action: "Verifique o ID e tente novamente",
+    });
+  }
+
+  // K1: o override pertence à atribuição de role (D2), então sem atribuição
+  // ativa não há onde pendurá-lo. Semântica (precisa do banco) → 422.
+  const userRole = await permissionRepository.findActiveUserRole(
     targetUserId,
+    roleId,
+  );
+
+  if (!userRole) {
+    throw createValidationError({
+      message: `Usuário não possui a role "${role.name}" ativa`,
+      errors: {
+        roleId: [
+          `Override de feature exige que o usuário tenha a role "${role.name}" ativa`,
+        ],
+      },
+      action: `Conceda a role ao usuário (POST /users/:id/roles/${roleId}) antes de criar o override`,
+    });
+  }
+
+  const userFeature = await permissionRepository.upsertUserFeature(
+    userRole.id,
     featureId,
     granted,
     {
@@ -303,6 +388,8 @@ export async function upsertUserFeature(
       targetId: targetUserId,
       metadata: {
         featureName: feature.name,
+        roleId,
+        roleName: role.name,
         effect: granted ? "GRANT" : "DENY",
       },
     },
@@ -313,17 +400,20 @@ export async function upsertUserFeature(
       userId: targetUserId,
       actorId: requestingUserId,
       featureName: feature.name,
+      roleId,
+      roleName: role.name,
       effect: granted ? "GRANT" : "DENY",
     },
     "feature override set",
   );
 
-  return userFeature;
+  return toUserFeatureDTO(userFeature);
 }
 
 export async function removeUserFeature(
   requesterId: string,
   targetId: string,
+  roleId: string,
   featureId: string,
 ) {
   const feature = await featureRepository.getFeatureById(featureId);
@@ -346,7 +436,13 @@ export async function removeUserFeature(
     });
   }
 
-  const userFeature = user.features.find((uf) => uf.featureId === featureId);
+  // K5: um só 404 para a tripla inteira — não checa a role antes, de propósito.
+  // Assimétrico com o PUT: aqui a resposta não revela se o usuário tem a role.
+  const userFeature = await permissionRepository.findActiveUserFeature(
+    targetId,
+    roleId,
+    featureId,
+  );
 
   if (!userFeature) {
     throw createNotFoundError({
@@ -359,11 +455,16 @@ export async function removeUserFeature(
     action: "USER_PERMISSION_REVOKED",
     targetType: "User",
     targetId,
-    metadata: { featureName: feature.name },
+    metadata: { featureName: feature.name, roleId },
   });
 
   log.info(
-    { userId: targetId, actorId: requesterId, featureName: feature.name },
+    {
+      userId: targetId,
+      actorId: requesterId,
+      featureName: feature.name,
+      roleId,
+    },
     "feature override removed",
   );
 

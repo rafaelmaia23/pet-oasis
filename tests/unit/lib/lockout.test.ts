@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "@/config/env";
-import { applyFailure, isLocked, type LockoutState } from "@/lib/lockout";
+import {
+  applyFailure,
+  isLocked,
+  isLockoutExempt,
+  type LockoutState,
+} from "@/lib/lockout";
 
 const config = { threshold: 3, windowMs: 1000, maxMs: 4000 };
 
@@ -21,6 +26,30 @@ describe("isLocked", () => {
     expect(
       isLocked({ failures: 0, backoffLevel: 1, lockedUntil: 1000 }, 1000),
     ).toBe(false);
+  });
+});
+
+describe("isLockoutExempt (8.8)", () => {
+  it("is true for a user holding the demo role", () => {
+    expect(isLockoutExempt({ roles: [{ role: { name: "demo" } }] })).toBe(true);
+  });
+
+  it("is true when the demo role is among several roles", () => {
+    expect(
+      isLockoutExempt({
+        roles: [{ role: { name: "attendant" } }, { role: { name: "demo" } }],
+      }),
+    ).toBe(true);
+  });
+
+  it("is false for a user without the demo role", () => {
+    expect(isLockoutExempt({ roles: [{ role: { name: "customer" } }] })).toBe(
+      false,
+    );
+  });
+
+  it("is false for a user with no roles", () => {
+    expect(isLockoutExempt({ roles: [] })).toBe(false);
   });
 });
 

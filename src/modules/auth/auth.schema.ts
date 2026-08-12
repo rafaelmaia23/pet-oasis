@@ -87,6 +87,30 @@ export const confirmEmailChangeSchema = z.object({
   }),
 });
 
+export const confirmAccountReactivationSchema = z.object({
+  body: z.object({
+    token: z.string().min(1, "Token is required").meta({
+      description: "Token recebido por email",
+      example: "a1b2c3d4...",
+    }),
+    newPassword: passwordSchema,
+    phone: z
+      .string()
+      .transform((val) => val.replace(/\D/g, ""))
+      .pipe(
+        z
+          .string()
+          .regex(/^\d{10,11}$/, "Telefone deve ter 10 ou 11 dígitos (com DDD)"),
+      )
+      .optional()
+      .meta({
+        description:
+          "Telefone com DDD — obrigatório apenas quando a reativação precisa criar um perfil de cliente do zero",
+        example: "11987654321",
+      }),
+  }),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>["body"];
 
 export type SessionParams = z.infer<typeof sessionParamsSchema>["params"];

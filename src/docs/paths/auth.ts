@@ -4,6 +4,7 @@ import { sessionViews } from "@/modules/auth/auth.presenter";
 import {
   changeEmailSchema,
   changePasswordSchema,
+  confirmAccountReactivationSchema,
   confirmEmailChangeSchema,
   forgotPasswordSchema,
   loginSchema,
@@ -43,6 +44,10 @@ export const authPaths: ZodOpenApiPathsObject = {
       ...fromEnvelope(signupSchema),
       responses: {
         201: jsonResponse("Usuário criado", userViews.owner),
+        202: jsonResponse(
+          "O email pertence a uma conta excluída e o cpf confere: nada foi criado e um email de reativação foi enviado",
+          messageSchema,
+        ),
         409: errorResponses[409],
         422: errorResponses[422],
         429: errorResponses[429],
@@ -124,6 +129,7 @@ export const authPaths: ZodOpenApiPathsObject = {
         204: noContentResponse,
         400: errorResponses[400],
         422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },
@@ -166,6 +172,23 @@ export const authPaths: ZodOpenApiPathsObject = {
         400: errorResponses[400],
         409: errorResponses[409],
         422: errorResponses[422],
+        429: errorResponses[429],
+      },
+    },
+  },
+  "/auth/confirm-account-reactivation": {
+    post: {
+      tags: ["Auth"],
+      summary:
+        "Reativa a conta excluída via token e define uma nova senha (o phone só é exigido quando o perfil de cliente precisa nascer do zero)",
+      security: [],
+      ...fromEnvelope(confirmAccountReactivationSchema),
+      responses: {
+        204: noContentResponse,
+        400: errorResponses[400],
+        403: errorResponses[403],
+        422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },

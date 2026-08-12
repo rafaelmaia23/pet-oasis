@@ -1,4 +1,9 @@
-import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
+import {
+  attachOverrides,
+  buildCustomer,
+  buildEmployee,
+  buildHybrid,
+} from "@tests/factories/user.factory";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
 import { flushRedis } from "@tests/helpers/redis";
@@ -98,6 +103,124 @@ describe("Audit log", () => {
     ]);
   });
 
+  it("records the cascade counts on USER_DELETED (K8)", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "attendant",
+    });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const rows = await auditRows("USER_DELETED");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toMatchObject({
+      cascadedProfiles: 2,
+      cascadedRoles: 2,
+      cascadedOverrides: 1,
+    });
+  });
+
+  it("records USER_PROFILE_DELETED with the profile kind and the cascade counts (K8)", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "attendant",
+    });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const rows = await auditRows("USER_PROFILE_DELETED");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorId: manager.id,
+      targetType: "User",
+      targetId: target.id,
+      metadata: {
+        profileKind: "EMPLOYEE",
+        cascadedRoles: 1,
+        cascadedOverrides: 1,
+      },
+    });
+
+    // Contrato de PII: nem o email nem o nome do alvo entram na linha.
+    const dump = JSON.stringify(rows[0]);
+    expect(dump).not.toContain(target.email);
+    expect(dump).not.toContain(target.name);
+  });
+
+  it("records USER_PROFILE_CREATED with the profile kind and the role count", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const target = await buildCustomer();
+
+    const token = await loginAs(manager.email, manager.password);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ roleNames: ["attendant"] });
+
+    const rows = await auditRows("USER_PROFILE_CREATED");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorId: manager.id,
+      targetType: "User",
+      targetId: target.id,
+      metadata: { profileKind: "EMPLOYEE", roles: 1 },
+    });
+
+    const dump = JSON.stringify(rows[0]);
+    expect(dump).not.toContain(target.email);
+    expect(dump).not.toContain(target.name);
+  });
+
+  it("records USER_PROFILE_RESTORED separating restored from granted roles", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+
+    const rows = await auditRows("USER_PROFILE_RESTORED");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorId: admin.id,
+      targetType: "User",
+      targetId: target.id,
+      // Restaurada ≠ concedida: sem `roleNames`, tudo veio por correlação de
+      // data e nada foi decisão nova do ator.
+      metadata: { profileKind: "EMPLOYEE", restoredRoles: 1, grantedRoles: 0 },
+    });
+
+    const dump = JSON.stringify(rows[0]);
+    expect(dump).not.toContain(target.email);
+    expect(dump).not.toContain(target.name);
+  });
+
   it("records USER_BANNED with reasonProvided and no PII", async () => {
     const admin = await buildEmployee({ grants: ["manage:user:status"] });
     const target = await buildCustomer();
@@ -168,7 +291,11 @@ describe("Audit log", () => {
     expect(await auditRows("USER_ROLE_REVOKED")).toEqual([
       expect.objectContaining({
         targetId: target.id,
-        metadata: { roleId: managerRole?.id, roleName: "manager" },
+        metadata: {
+          roleId: managerRole?.id,
+          roleName: "manager",
+          cascadedOverrides: 0,
+        },
       }),
     ]);
   });
@@ -179,9 +306,13 @@ describe("Audit log", () => {
     const target = await buildEmployee();
     const token = await loginAs(admin.email, admin.password);
     const feature = await getFeatureByName("read:role");
+    // O override pendura na atribuição de role (D2), então a role vai no path.
+    const attendantRole = await getRoleByName("attendant");
+
+    const url = `/api/v1/users/${target.id}/roles/${attendantRole?.id}/features/${feature?.id}`;
 
     await request(app)
-      .put(`/api/v1/users/${target.id}/features/${feature?.id}`)
+      .put(url)
       .set("Authorization", `Bearer ${token}`)
       .send({ granted: true });
 
@@ -189,18 +320,21 @@ describe("Audit log", () => {
       expect.objectContaining({
         actorId: admin.id,
         targetId: target.id,
-        metadata: { featureName: "read:role", effect: "GRANT" },
+        metadata: {
+          featureName: "read:role",
+          roleId: attendantRole?.id,
+          roleName: "attendant",
+          effect: "GRANT",
+        },
       }),
     ]);
 
-    await request(app)
-      .delete(`/api/v1/users/${target.id}/features/${feature?.id}`)
-      .set("Authorization", `Bearer ${token}`);
+    await request(app).delete(url).set("Authorization", `Bearer ${token}`);
 
     expect(await auditRows("USER_PERMISSION_REVOKED")).toEqual([
       expect.objectContaining({
         targetId: target.id,
-        metadata: { featureName: "read:role" },
+        metadata: { featureName: "read:role", roleId: attendantRole?.id },
       }),
     ]);
   });

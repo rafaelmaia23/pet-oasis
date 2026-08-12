@@ -61,13 +61,15 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 
 **Modelo de usuário:** todo user tem ≥1 perfil (customer/employee, 1:1 por presença) e cada perfil tem ≥1 role. Perfil definido pela presença da relação, não por um campo "tipo".
 
-**Autorização:** roles agregam features; `UserFeature` guarda só overrides (grant/deny), nunca cópias. Features efetivas = `(⋃ roles ∪ grants) − denies`, computadas em runtime por `computeEffectiveFeatures` (função pura). Wildcard `*` = admin pode tudo. Autorização SEMPRE antes da busca (403 vence 404).
+**Autorização:** roles agregam features; `UserFeature` guarda só overrides (grant/deny), nunca cópias. **O override pendura na atribuição de role, não no usuário** (`UserFeature.userRoleId` → `UserRole`, Fase 8.0): override é sobre a função, então perder a role mata o ajuste fino dela. A identidade do recurso é a tripla `(user, role, feature)` e a role vai no path (`PUT|DELETE /users/:userId/roles/:roleId/features/:featureId`). `UserRole` tem `@@unique([userId, roleId])` — uma linha por par, para sempre, revivida na re-concessão. Features efetivas = `(⋃ roles ∪ grants) − denies`, computadas em runtime por `computeEffectiveFeatures` (função pura, dois laços: todas as estáticas antes de qualquer override). Wildcard `*` = admin pode tudo. Autorização SEMPRE antes da busca (403 vence 404).
 
 **Roles read-only via API** (definidas em código, seed). Só o vínculo user↔role é gerenciável. `appliesTo` (EMPLOYEE/CUSTOMER/null) valida compatibilidade role↔perfil.
 
 **Não-escalação:** conceder via override — ou atribuir uma role que contenha — uma feature de PRIVILEGED_FEATURES exige role **admin** (não só a feature). O conjunto é `PERMISSION_FEATURES` (read:feature, read:role, read:permission, manage:permission) **+ `read:audit-log:full`** (que destrava o IP inteiro no audit log; Fase 7.8). Definido em `role.constants.ts` (`PRIVILEGED_FEATURES`), checado no `permission.service` buscando a role do ator. `read:log`/`read:audit-log` são normais (concedíveis sem ser admin).
 
-**Soft delete** (preserva histórico para auditoria): User, Customer, Employee, UserRole, UserFeature têm `deletedAt`. Sem reativação no ciclo 1 (email/cpf/perfil de deletado ficam "presos"; recovery é futuro). TODAS as queries de leitura filtram `deletedAt: null` — incluindo `getUserForFeatureComputation` (é o que mata o token de deletado e ignora overrides removidos). Hard delete só em teardown de teste. UserFeature/UserRole usam `id` próprio como PK (não par composto) + unicidade do ativo controlada por código (busca ativo → update ou create).
+**Soft delete** (preserva histórico para auditoria): User, Customer, Employee, UserRole, UserFeature têm `deletedAt`. TODAS as queries de leitura filtram `deletedAt: null` — incluindo `getUserForFeatureComputation` (é o que mata o token de deletado e ignora overrides removidos). Hard delete só em teardown de teste e nos scripts de faxina (`src/scripts/cleanup-*`). UserFeature/UserRole usam `id` próprio como PK (não par composto); a unicidade é do **banco** (`@@unique`), não do código.
+
+**Cascata e restauração (Fase 8):** deletar desce quatro níveis — `User` → perfis → `UserRole` → `UserFeature` —, com **um único `new Date()` por transação** propagado por toda a cadeia (`user.lifecycle.repository.ts`). Nunca existe filho ativo de pai morto. Restaurar sobe só **dois** (`User` → perfil → `UserRole`): o perfil volta porque foi **nomeado**, as roles dele voltam por **correlação de `deletedAt`** com o do perfil, e **nenhum override ressuscita por efeito colateral** — só por `PUT` explícito na tripla. A assimetria é principiada: deletar demais é fail-closed, restaurar demais é vazamento de privilégio. Racional em `docs/adr/authorization-scope-and-lifecycle.md`. Conta deletada tem caminho de volta (reativação por signup ou por admin, sempre confirmada pelo dono via token); **nunca** existe usuário ativo sem ao menos um perfil ativo.
 
 **Validação:** sintática (Zod, sem banco) no controller; semântica (precisa de banco — appliesTo, etc.) no service. Ambas produzem 422 no mesmo shape (`errors` por campo). Unicidade pelo banco (P2002 → 409 no handler, lê `meta.driverAdapterError.cause.constraint.fields`).
 
@@ -112,7 +114,7 @@ Quando terminar um trabalho e sobrar algo pendente para uma etapa/sessão **futu
 
 ## O que o projeto planeja ser
 
-Ciclo 1 foca na fundação: autenticação, autorização (RBAC com overrides), usuários e perfis. Fases seguintes: auth robusto (refresh token rotativo), verificação de email + status de conta, rate limiting/lockout, e o domínio do pet shop em si (Pets ligados a Customers, e adiante vendas/pedidos — que é o que dá sentido ao soft delete atual).
+O Ciclo 1 (fundação) está **fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de conta, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação. O que vem a seguir é o domínio do pet shop em si — Pets ligados a Customers, e adiante vendas/pedidos, que é o que dá sentido ao soft delete atual.
 
 ---
 

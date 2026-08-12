@@ -3,6 +3,7 @@ import { z } from "zod";
 export const upsertPermissionParamsSchema = z.object({
   params: z.object({
     userId: z.uuid("Invalid user ID"),
+    roleId: z.uuid("Invalid role ID"),
     featureId: z.uuid("Invalid feature ID"),
   }),
   body: z.object({
@@ -34,6 +35,7 @@ export const getUserPermissionsParamsSchema = z.object({
 export const removePermissionParamsSchema = z.object({
   params: z.object({
     userId: z.uuid("Invalid user ID"),
+    roleId: z.uuid("Invalid role ID"),
     featureId: z.uuid("Invalid feature ID"),
   }),
 });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { UserStatus } from "@/generated/prisma/enums";
+import { ProfileKind, UserStatus } from "@/generated/prisma/enums";
 import { offsetQuerySchema } from "@/lib/pagination";
 import { ROLE_NAMES } from "@/modules/role/role.constants";
 
@@ -92,6 +92,33 @@ export const userParamsSchema = z.object({
 });
 
 export const forcePasswordResetSchema = userParamsSchema;
+
+export const reactivateAccountSchema = z.object({
+  params: z.object({
+    id: z.uuid("Invalid user ID"),
+  }),
+  body: z.object({
+    // `.min(1)` é o D14 no schema: uma conta ativa sem nenhum perfil ativo é
+    // estado proibido, então escolher zero perfis nem chega ao service.
+    profiles: z
+      .array(z.enum(ProfileKind))
+      .min(1, "Escolha ao menos um perfil para restaurar")
+      .meta({
+        description: "Perfis com que a conta volta",
+        example: ["CUSTOMER"],
+      }),
+    // Omitido = default do D8 (todas as roles que morreram com cada perfil).
+    // Nomeada, tem a semântica do K15/K21: é *com que roles a conta volta* —
+    // restaura a que morreu naquela cascata, concede a que não morreu ali.
+    roleNames: z
+      .array(z.enum(ROLE_NAMES))
+      .optional()
+      .meta({
+        description: "Roles com que a conta volta (default: as da cascata)",
+        example: ["attendant"],
+      }),
+  }),
+});
 
 export const listUsersSchema = z.object({
   query: offsetQuerySchema.extend({

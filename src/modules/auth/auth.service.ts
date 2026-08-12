@@ -56,6 +56,8 @@ export async function login(
     });
   }
 
+  const lockoutExempt = lockout.isLockoutExempt(user);
+
   const passwordMatch = await verifyPassword(data.password, user.passwordHash);
 
   if (!passwordMatch) {
@@ -71,24 +73,29 @@ export async function login(
     // conta (mesmo espírito anti-enumeração do bannedAt/status abaixo). O
     // papel do lockout é impedir que uma senha eventualmente certa complete o
     // login dentro da janela de bloqueio — só precisa ser checado no ramo de
-    // senha correta.
-    await lockout.recordFailure(user.id);
+    // senha correta. Conta demo (8.8) é isenta: a senha é pública, então o
+    // lockout ali não protege credencial nenhuma — só abriria DoS.
+    if (!lockoutExempt) {
+      await lockout.recordFailure(user.id);
+    }
     throw createUnauthorizedError({
       message: "Credenciais inválidas",
       action: "Verifique seu email e senha e tente novamente",
     });
   }
 
-  const lockoutState = await lockout.getLockoutState(user.id);
-  if (lockoutState.isLocked) {
-    log.warn({ userId: user.id, reason: "LOCKED" }, "login refused");
-    await record({
-      action: "AUTH_LOGIN_FAILED",
-      targetType: "User",
-      targetId: user.id,
-      metadata: { reason: "LOCKED" },
-    });
-    throw createTooManyRequestsError();
+  if (!lockoutExempt) {
+    const lockoutState = await lockout.getLockoutState(user.id);
+    if (lockoutState.isLocked) {
+      log.warn({ userId: user.id, reason: "LOCKED" }, "login refused");
+      await record({
+        action: "AUTH_LOGIN_FAILED",
+        targetType: "User",
+        targetId: user.id,
+        metadata: { reason: "LOCKED" },
+      });
+      throw createTooManyRequestsError();
+    }
   }
 
   if (user.bannedAt !== null) {

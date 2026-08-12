@@ -36,7 +36,10 @@ import {
 } from "@/modules/auth/auth.constants";
 import { sessionViews } from "@/modules/auth/auth.presenter";
 import { userViews } from "@/modules/user/user.presenter";
-import { findUserById } from "@/modules/user/user.repository";
+import {
+  findUserById,
+  softDeleteUserAndInvalidateSessions,
+} from "@/modules/user/user.repository";
 
 const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }));
 
@@ -188,7 +191,33 @@ describe("POST /api/v1/auth/signup", () => {
     });
   });
 
-  it("should return the same generic 409 when the email was previously used by another account", async () => {
+  it("should refuse and change nothing when the cpf belongs to an ACTIVE account (D12)", async () => {
+    // Um funcionário sem perfil de cliente é o alvo tentador do
+    // account-linking: o signup "poderia" reconhecer o cpf e pendurar o perfil
+    // de cliente na conta viva. Não pode — cpf não é segredo, e a rota é
+    // pública, então isso seria tomada de conta.
+    const existing = await buildEmployee({ roleNames: ["attendant"] });
+
+    const response = await request(app)
+      .post("/api/v1/auth/signup")
+      .send(makeCustomerData({ cpf: existing.cpf }));
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ code: "CONFLICT" });
+
+    const userInDb = await findUserById(existing.id);
+
+    // Não criou, não vinculou, não mudou nada.
+    expect(userInDb?.customer ?? null).toBeNull();
+    expect(userInDb?.email).toBe(existing.email);
+    expect(userInDb?.roles.map((userRole) => userRole.role.name)).toEqual([
+      "attendant",
+    ]);
+
+    expect(await prisma.user.count()).toBe(1);
+  });
+
+  it("should allow signup with an email a previous account changed away from (8.6)", async () => {
     const other = await buildCustomer();
     const reservedEmail = other.email;
     await prisma.user.update({
@@ -203,11 +232,8 @@ describe("POST /api/v1/auth/signup", () => {
       .post("/api/v1/auth/signup")
       .send(makeCustomerData({ email: reservedEmail }));
 
-    expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({
-      message: "O email informado já está em uso",
-      code: "CONFLICT",
-    });
+    expect(response.status).toBe(201);
+    expect(response.body.email).toBe(reservedEmail);
   });
 
   it("should return 422 if name is missing", async () => {
@@ -1698,7 +1724,7 @@ describe("POST /api/v1/auth/change-email", () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it("should return 409 when newEmail was previously used by another account", async () => {
+  it("should allow changing to an email a previous account changed away from (8.6)", async () => {
     const user = await buildCustomer();
     const other = await buildCustomer();
     const token = await loginAs(user.email, user.password);
@@ -1712,8 +1738,57 @@ describe("POST /api/v1/auth/change-email", () => {
       .set("Authorization", `Bearer ${token}`)
       .send({ currentPassword: user.password, newEmail: reservedEmail });
 
-    expect(response.status).toBe(409);
-    expect(sendMock).not.toHaveBeenCalled();
+    expect(response.status).toBe(204);
+
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.pendingEmail).toBe(reservedEmail);
+
+    // O aviso continua indo para o email ANTIGO (7.15), não para o reclamado.
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: user.email }),
+    );
+  });
+
+  /**
+   * K25: liberar o reuso sem derrubar o `@unique` global de `PreviousEmail.email`
+   * deixaria uma bomba-relógio — a conta que adota um email já usado por outra
+   * nunca mais conseguiria trocar de email, porque o `previousEmail.create` da
+   * confirmação estouraria P2002.
+   */
+  it("should let two accounts leave the same email behind in PreviousEmail (8.6, K25)", async () => {
+    const other = await buildCustomer();
+    const adopted = other.email;
+    await prisma.user.update({
+      where: { id: other.id },
+      data: { email: `changed-${other.id}@example.com` },
+    });
+    await prisma.previousEmail.create({
+      data: { userId: other.id, email: adopted, replacedAt: new Date() },
+    });
+
+    const adopter = await buildCustomer({ data: { email: adopted } });
+    const token = await loginAs(adopter.email, adopter.password);
+    sendMock.mockClear();
+
+    await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        currentPassword: adopter.password,
+        newEmail: "third@example.com",
+      });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token: tokenFromLastEmail() });
+
+    expect(response.status).toBe(204);
+
+    const rows = await prisma.previousEmail.findMany({
+      where: { email: adopted },
+    });
+    expect(rows).toHaveLength(2);
   });
 
   it("should return 403 for a banned account", async () => {
@@ -2082,6 +2157,88 @@ describe("Rate limiting (7.9)", () => {
   });
 });
 
+/**
+ * K26: as três rotas públicas que consomem token opaco dividem um balde por IP
+ * (`tokenIpLimiter`), separado do balde de quem **envia** email — senão um
+ * reset legítimo comeria o orçamento do outro.
+ */
+describe("Rate limiting das rotas de token (8.7)", () => {
+  const tokenRoutes = [
+    "/api/v1/auth/reset-password",
+    "/api/v1/auth/confirm-email-change",
+    "/api/v1/auth/confirm-account-reactivation",
+  ];
+
+  it.each(tokenRoutes)(
+    "returns 429 on %s once the per-IP limit is exceeded",
+    async (route) => {
+      const body = { token: generateOpaqueToken(), newPassword: "Senha@123" };
+
+      for (let i = 0; i < env.RATE_LIMIT_TOKEN_MAX; i++) {
+        const response = await request(app).post(route).send(body);
+        // Token inexistente: 400 genérico, mas o limite já contou a tentativa.
+        expect(response.status).toBe(400);
+      }
+
+      const response = await request(app).post(route).send(body);
+
+      expect(response.status).toBe(429);
+      expect(response.headers["retry-after"]).toBeDefined();
+    },
+  );
+
+  it("shares one bucket across the three routes", async () => {
+    const body = { token: generateOpaqueToken(), newPassword: "Senha@123" };
+
+    for (let i = 0; i < env.RATE_LIMIT_TOKEN_MAX; i++) {
+      await request(app).post("/api/v1/auth/reset-password").send(body);
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send(body);
+
+    expect(response.status).toBe(429);
+  });
+
+  it("keeps the token bucket separate from the one that sends emails", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_MAX; i++) {
+      await request(app)
+        .post("/api/v1/auth/forgot-password")
+        .send({ email: user.email });
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: generateOpaqueToken(), newPassword: "Senha@123" });
+
+    expect(response.status).toBe(400);
+  });
+});
+
+describe("Anti-enumeração (8.7)", () => {
+  it("returns the same generic 401 for a soft-deleted account as for a wrong password", async () => {
+    const user = await buildCustomer();
+    await softDeleteUserAndInvalidateSessions(user.id);
+
+    const deleted = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: user.email, password: user.password });
+
+    const wrongPassword = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: "nobody@example.com", password: "Senha@123" });
+
+    expect(deleted.status).toBe(401);
+    // `requestId` é o único campo que difere entre duas requests quaisquer.
+    const { requestId: _deletedId, ...deletedBody } = deleted.body;
+    const { requestId: _wrongId, ...wrongPasswordBody } = wrongPassword.body;
+    expect(deletedBody).toEqual(wrongPasswordBody);
+  });
+});
+
 describe("Account lockout (7.10)", () => {
   it("does not lock the account before LOCKOUT_THRESHOLD wrong attempts", async () => {
     const user = await buildCustomer();
@@ -2203,6 +2360,62 @@ describe("Account lockout (7.10)", () => {
       where: { action: "AUTH_LOCKOUT_CLEARED", targetId: user.id },
     });
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe("Account lockout exemption for the demo role (8.8)", () => {
+  it("never locks the demo account, regardless of wrong attempts", async () => {
+    const demoUser = await buildEmployee({ roleNames: ["demo"] });
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD + 2; i++) {
+      const response = await request(app).post("/api/v1/auth/login").send({
+        email: demoUser.email,
+        password: "wrongpassword",
+      });
+      expect(response.status).toBe(401);
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: demoUser.email,
+      password: demoUser.password,
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("never records AUTH_LOCKOUT_TRIGGERED for the demo account", async () => {
+    const demoUser = await buildEmployee({ roleNames: ["demo"] });
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD + 2; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: demoUser.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_LOCKOUT_TRIGGERED", targetId: demoUser.id },
+    });
+
+    expect(rows).toHaveLength(0);
+  });
+
+  it("still applies the per-IP rate limit to the demo account", async () => {
+    const demoUser = await buildEmployee({ roleNames: ["demo"] });
+
+    for (let i = 0; i < env.RATE_LIMIT_LOGIN_MAX; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: demoUser.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: demoUser.email,
+      password: "wrongpassword",
+    });
+
+    expect(response.status).toBe(429);
   });
 });
 

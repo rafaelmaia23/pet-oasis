@@ -371,7 +371,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **B** ✅ | 8.1, 8.2 | Cascata + restauração por data | Mesma mecânica de dados, uma inútil sem a outra: cascatear sem saber restaurar deixa a fase pela metade. |
 | **C** ✅ | Passo 0 + 8.3 | Perfil em conta ativa | Primeiro fluxo de produto, já em cima do modelo correto. O kickoff revogou o D6 (K16), então a sessão abre com um Passo 0 que tira a restauração de overrides antes de construir por cima dela. |
 | **D** ✅ | 8.4, 8.5 | Conta deletada (self-service e admin) | Os dois disparam token e convergem na mesma confirmação. |
-| **E** ⬜ | 8.6, 8.7 | Emails liberados + rate limit | Transversais, independentes dos fluxos; 8.7 cobre as superfícies que 8.4/8.5 abriram. |
+| **E** ✅ | 8.6, 8.7 | Emails liberados + rate limit | Transversais, independentes dos fluxos; 8.7 cobre as superfícies que 8.4/8.5 abriram. |
 | **F** ⬜ | 8.8 | Isenção do demo no lockout | Bug de produção, sem relação com perfil/reativação. Reaplicação do patch `0002`. |
 | **G** ⬜ | 8.9 | Fechos | Docs, suíte, `typecheck`/`lint`. |
 
@@ -599,16 +599,18 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 - ✅ Docs junto: errata da 7.15 aqui e em `docs/context.md` (§2.2 + dois bullets novos na seção da Fase 8, um para a liberação e um para o K25); `docs/endpoints.md` deixou de dizer "reservado para sempre".
 - ✅ Suíte (**699**) + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão E] Fase 8.7 — Rate limiting / anti-enumeração
+### ✅ [Sessão E] Fase 8.7 — Rate limiting / anti-enumeração
 
-> Branch `feat/fase-8-7-rate-limit`. Infra aproveitável do patch `.fase-8-backup/0004-*` (commit `cad332e`).
+> Branch `feat/fase-8-7-rate-limit`. Infra aproveitada do patch `.fase-8-backup/0004-*` (commit `cad332e`).
 
-- ⬜ **Refactor que destrava os call sites de service:** `rateLimitByEmailTarget` é middleware e lê `req.body.email` antes do controller — nenhum dos dois pontos novos cabe nisso (o signup só consome no *branch* de reativação, não em todo cadastro; `/users/:id/reactivate` não recebe email nenhum no request). `AppError` ganha `headers?: Record<string, string>`; `enforce()` para de receber `res` e joga o `Retry-After` no próprio erro; o error handler central aplica (ponto único de saída desde a 7.5). Abre `consumeEmailTargetLimit(limiter, email, rule)`, com o mesmo padrão de DI dos middlewares (limiter por parâmetro = testável sem Redis).
-- ⬜ ⚠️ **Descartar** as ~19 linhas do patch em `user.service.ts` — é o call site dentro do `forceAccountReactivation` antigo, que foi reescrito. Só a **posição** do call site se aproveita.
-- ⬜ Dois pontos de consumo novos, **mesmo balde** (K27), `rule` distinguindo a origem no audit: `resolveCustomerSignupEmail` (`signup-reactivation`, logo antes do `requestAccountReactivation(…, "SELF", …)`) e `reactivateAccount` (`account-reactivation`, **depois de todos os guards** — um 403 de não-escalação nunca gasta orçamento do alvo).
-- ⬜ **K26:** `tokenIpLimiter` novo (`rl:token:ip`, `RATE_LIMIT_TOKEN_MAX`/`_WINDOW_MS` — default 20 / 15 min, o par do `login`) nas três rotas públicas de token, com uma `rule` por rota e um balde só (mesmo idioma do `emailIpLimiter`, já compartilhado por duas rules).
-- ⬜ Regressão: login em conta deletada responde 401 genérico, indistinguível de senha errada.
-- ⬜ Docs junto: adendo em `docs/adr/rate-limiting-and-lockout.md` (os dois call sites novos, o racional do `AppError.headers`, o balde de token) e `429` no OpenAPI das rotas que passaram a poder devolvê-lo.
+- ✅ **Refactor que destravou os call sites de service:** `rateLimitByEmailTarget` é middleware e lê `req.body.email` antes do controller — nenhum dos dois pontos novos cabia nisso (o signup só consome no *ramo* de reativação, não em todo cadastro; `/users/:id/reactivate` não recebe email nenhum no request). `AppError` ganhou `headers?: Record<string, string>`; `enforce()` parou de receber `res` e joga o `Retry-After` no próprio erro; o error handler central aplica (ponto único de saída desde a 7.5). Abriu `consumeEmailTargetLimit(limiter, email, rule)`, com o mesmo padrão de DI dos middlewares (limiter por parâmetro = testável sem Redis).
+- ✅ ⚠️ As ~19 linhas do patch em `user.service.ts` foram **descartadas** — eram o call site dentro do `forceAccountReactivation` antigo, reescrito desde então. Só a **posição** se aproveitou.
+- ✅ Dois pontos de consumo novos, **mesmo balde** (K27), `rule` distinguindo a origem no audit: `resolveCustomerSignupEmail` (`signup-reactivation`, logo antes do `requestAccountReactivation(…, "SELF", …)`) e `reactivateAccount` (`account-reactivation`, **depois de todos os guards** — um 403 de não-escalação não gasta orçamento do alvo, com teste provando).
+- ✅ **K26:** `tokenIpLimiter` novo (`rl:token:ip`, `RATE_LIMIT_TOKEN_MAX`/`_WINDOW_MS`, default 20 / 15 min — o par do `login`) nas três rotas públicas de token, com uma `rule` por rota e um balde só (mesmo idioma do `emailIpLimiter`, já compartilhado por duas rules). `.env.example` atualizado.
+- ✅ Regressão: login em conta deletada responde 401 genérico byte a byte igual ao de email inexistente (só o `requestId` difere).
+- ✅ Testes: os 2 asserts antigos de `res.set` viraram asserts em `error.headers` (efeito do refactor, não regressão); `consumeEmailTargetLimit` testado isoladamente (sucesso, 429, fail-open); em `account-reactivation.test.ts`, os dois 429 novos + a prova do balde compartilhado com `forgot-password` + o 403 que não consome; em `auth.test.ts`, o 429 das três rotas de token, o balde único entre elas e a separação do balde de envio de email.
+- ✅ Docs junto: adendo em `docs/adr/rate-limiting-and-lockout.md` (os dois call sites novos, o racional do `AppError.headers`, o balde de token) e `429` no OpenAPI das quatro rotas que passaram a poder devolvê-lo.
+- ✅ Suíte (**712**) + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão F] Fase 8.8 — Isentar a conta demo do account lockout
 

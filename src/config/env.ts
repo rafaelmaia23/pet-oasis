@@ -88,6 +88,16 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(60 * 60 * 1000),
+  // 8.7/K26: as três rotas públicas que consomem token opaco (reset-password,
+  // confirm-email-change, confirm-account-reactivation), num contador por IP.
+  // Consumir token é clique de link: o par do login (20 / 15 min) absorve NAT
+  // de escritório sem abrir espaço para adivinhação.
+  RATE_LIMIT_TOKEN_MAX: z.coerce.number().int().positive().default(20),
+  RATE_LIMIT_TOKEN_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
 
   // Account lockout (7.10) — janela fixa inicial, dobrando a cada ciclo até o
   // teto. Contador vive no Redis (`src/lib/lockout.ts`), sem coluna nova no User.

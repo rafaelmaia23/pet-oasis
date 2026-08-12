@@ -1,0 +1,42 @@
+meta {
+  name: Reactivate Account
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/users/{{userId}}/reactivate
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "profiles": ["CUSTOMER"],
+    "roleNames": ["customer"]
+  }
+}
+
+docs {
+  Exige reactivate:user (manager e admin). O demo não tem essa feature, retorna 403.
+
+  Não reativa nada sozinho: emite um token e envia o email de reativação. A conta
+  só volta quando o dono confirma em /auth/confirm-account-reactivation definindo
+  uma senha nova.
+
+  `profiles` é obrigatório e não aceita lista vazia (uma conta ativa sempre tem ao
+  menos um perfil ativo). `roleNames` é opcional — omitido, a conta volta com todas
+  as roles que morreram junto com cada perfil; nomeado, é *com que roles a conta
+  volta*: restaura a que morreu naquela cascata e concede a que não morreu ali.
+
+  Overrides de feature nunca voltam, nem por aqui nem pela confirmação — só por
+  PUT /users/:userId/roles/:roleId/features/:featureId.
+
+  404 se a conta não estiver excluída · 409 se estiver banida · 422 se pedir o
+  perfil de funcionário numa conta que nunca teve um · 403 se um manager tentar
+  trazer de volta (ou nomear) uma role privilegiada.
+}

@@ -369,7 +369,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 | **A** ✅ | 8.0 | Escopo de override + unicidade de `UserRole` | Fundação do modelo de autorização. Nada de cascata ou reativação faz sentido antes do override ter dono. |
 | **B** ✅ | 8.1, 8.2 | Cascata + restauração por data | Mesma mecânica de dados, uma inútil sem a outra: cascatear sem saber restaurar deixa a fase pela metade. |
 | **C** ✅ | Passo 0 + 8.3 | Perfil em conta ativa | Primeiro fluxo de produto, já em cima do modelo correto. O kickoff revogou o D6 (K16), então a sessão abre com um Passo 0 que tira a restauração de overrides antes de construir por cima dela. |
-| **D** ⬜ | 8.4, 8.5 | Conta deletada (self-service e admin) | Os dois disparam token e convergem na mesma confirmação. |
+| **D** ✅ | 8.4, 8.5 | Conta deletada (self-service e admin) | Os dois disparam token e convergem na mesma confirmação. |
 | **E** ⬜ | 8.6, 8.7 | Emails liberados + rate limit | Transversais, independentes dos fluxos; 8.7 cobre as superfícies que 8.4/8.5 abriram. |
 | **F** ⬜ | 8.8 | Isenção do demo no lockout | Bug de produção, sem relação com perfil/reativação. Reaplicação do patch `0002`. |
 | **G** ⬜ | 8.9 | Fechos | Docs, suíte, `typecheck`/`lint`. |
@@ -528,14 +528,14 @@ Os quatro estados possíveis de um usuário ativo (D14 garante que sempre há �
 > confirmação, para o admin ver o erro na hora). Criar funcionário é ato próprio, via
 > `POST /users/:id/employee`, com a conta já viva.
 
-### ⬜ [Passo 0 da Sessão D] `restoreProfile` deixa de exigir instante exato (K20)
+### ✅ [Passo 0 da Sessão D] `restoreProfile` deixa de exigir instante exato (K20)
 
 > Trabalho pontual, branch `fix/restore-named-profile` a partir da `fase-8`, mergeada `--no-ff` **antes** da 8.4. Molde dos Passos 0 das Sessões B e C. Como o da Sessão C, **não** é comportamento-preservado: o teste que afirmava a regra antiga é invertido.
 
-- ⬜ `restoreProfilesOfUser` para de passar `requireDeletedAt: userDeletedAt` — passa a restaurar **qualquer** perfil morto entre os `kinds` pedidos. As roles seguem correlacionando pelo `deletedAt` lido do próprio perfil, que `restoreProfile` já faz.
-- ⬜ Com isso `requireDeletedAt` fica **sem nenhum caller** e some de `restoreProfile`, junto com o parâmetro `userDeletedAt` de `restoreProfilesOfUser`. Sobra uma regra só: *restaura o perfil morto nomeado, e as roles dele que morreram no mesmo instante que ele*.
-- ⬜ Reescrever os comentários que hoje justificam o `requireDeletedAt` — o que os substitui é "nada volta de carona porque nada volta sem ser nomeado": o self-service nomeia só `CUSTOMER` (D11) e o admin nomeia explicitamente.
-- ⬜ `user.lifecycle.test.ts`: o caso que prova "perfil morto antes não volta" vira "perfil morto antes **volta quando nomeado**, com as roles do próprio instante dele — e o perfil **não** nomeado continua morto".
+- ✅ `restoreProfilesOfUser` para de passar `requireDeletedAt: userDeletedAt` — passa a restaurar **qualquer** perfil morto entre os `kinds` pedidos. As roles seguem correlacionando pelo `deletedAt` lido do próprio perfil, que `restoreProfile` já faz.
+- ✅ Com isso `requireDeletedAt` fica **sem nenhum caller** e some de `restoreProfile`, junto com o parâmetro `userDeletedAt` de `restoreProfilesOfUser`. Sobra uma regra só: *restaura o perfil morto nomeado, e as roles dele que morreram no mesmo instante que ele*.
+- ✅ Reescrever os comentários que hoje justificam o `requireDeletedAt` — o que os substitui é "nada volta de carona porque nada volta sem ser nomeado": o self-service nomeia só `CUSTOMER` (D11) e o admin nomeia explicitamente.
+- ✅ `user.lifecycle.test.ts`: o caso que prova "perfil morto antes não volta" vira "perfil morto antes **volta quando nomeado**, com as roles do próprio instante dele — e o perfil **não** nomeado continua morto".
 
 ### ✅ [Sessão D] Fase 8.4 — Conta deletada: self-service via signup
 
@@ -547,15 +547,18 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 | B | Só funcionário | Conta ativa + cliente **criado do zero**. Funcionário **continua morto** (D11) |
 | C | Cliente + funcionário | Conta ativa + cliente **restaurado**. Funcionário **continua morto** (D11) |
 
-- ⬜ Signup detecta email de conta soft-deleted; cpf batendo → dispara reativação (**202**, K18); cpf não batendo → 409 genérico (não revela que a conta existe); conta banida → o mesmo 409 genérico (K24). Email de conta **ativa** continua 409 sem tocar em nada (D12).
-- ⬜ Nunca resulta em conta ativa sem perfil ativo (D14) — garantido pelo K20 (o perfil nomeado volta mesmo tendo morrido antes) + criação do zero quando não há linha nenhuma.
-- ⬜ Migration `add_account_reactivation`: `VerificationPurpose += ACCOUNT_REACTIVATION`; `VerificationToken` ganha `restoreProfiles ProfileKind[]` e `restoreRoleIds String[]` — idioma do `newEmail` (colunas de um purpose só). `restoreProfiles` = com que perfis a conta volta (self-service grava sempre `[CUSTOMER]`); `restoreRoleIds` **vazio = default do D8**. ⚠️ **Não** reintroduzir as `Boolean? restoreCustomer/restoreEmployee` da fase antiga — o `null`-significa-"não-é-admin" delas morreu com o D1 (§10 do redesenho).
-- ⬜ `src/modules/auth/accountReactivation.service.ts` (novo), estruturalmente no molde do `emailChange.service.ts` (pedido + confirmação pública, token com colunas próprias): `requestAccountReactivation(user, source, choice)` invalida o token pendente anterior e cria o novo na mesma transação (idioma do `requestEmailChange`, dobra como cancelamento implícito); `confirmAccountReactivation(token, newPassword, phone?)` faz a checagem de 4 vias + purpose → 400 genérico, busca por `findDeletedUserById` (não `findUserById`, que filtra `deletedAt: null`) e recusa conta banida com 403.
-- ⬜ `POST /auth/confirm-account-reactivation` (público, 204), ao lado do `/confirm-email-change`. Sem rate limit aqui — é a 8.7 que cobre as superfícies novas.
-- ⬜ `consumeAccountReactivation`, uma transação: token usado → `User` (`deletedAt: null`, senha nova, `status: ACTIVE`, `mustChangePassword: false`) → `restoreProfilesOfUser` → criação do cliente do zero quando não há linha → `grantRolesToUser` do que foi nomeado e não restaurado (K21) → audit. **Primeiro ponto do projeto que escreve `deletedAt: null` num `User`.** Não invalida sessões: a deleção já as invalidou e nenhuma nasceu desde então.
-- ⬜ Audit: ações novas `ACCOUNT_REACTIVATION_REQUESTED` (`{ source, profiles, roles }`) e `ACCOUNT_REACTIVATION_COMPLETED` (`{ profilesRestored, profilesCreated, restoredRoles, grantedRoles }`) — mesmo corte semântico do `USER_PROFILE_RESTORED`: restaurada ≠ concedida, só a segunda é autoridade nova. Sem PII.
+- ✅ Signup detecta email de conta soft-deleted; cpf batendo → dispara reativação (**202**, K18); cpf não batendo → 409 genérico (não revela que a conta existe); conta banida → o mesmo 409 genérico (K24). Email de conta **ativa** continua 409 sem tocar em nada (D12).
+- ✅ Nunca resulta em conta ativa sem perfil ativo (D14) — garantido pelo K20 (o perfil nomeado volta mesmo tendo morrido antes) + criação do zero quando não há linha nenhuma.
+- ✅ Migration `add_account_reactivation`: `VerificationPurpose += ACCOUNT_REACTIVATION`; `VerificationToken` ganha `restoreProfiles ProfileKind[]` e `restoreRoleIds String[]` — idioma do `newEmail` (colunas de um purpose só). `restoreProfiles` = com que perfis a conta volta (self-service grava sempre `[CUSTOMER]`); `restoreRoleIds` **vazio = default do D8**. ⚠️ **Não** reintroduzir as `Boolean? restoreCustomer/restoreEmployee` da fase antiga — o `null`-significa-"não-é-admin" delas morreu com o D1 (§10 do redesenho).
+- ✅ `src/modules/auth/accountReactivation.service.ts` (novo), estruturalmente no molde do `emailChange.service.ts` (pedido + confirmação pública, token com colunas próprias): `requestAccountReactivation(user, source, choice)` invalida o token pendente anterior e cria o novo na mesma transação (idioma do `requestEmailChange`, dobra como cancelamento implícito); `confirmAccountReactivation(token, newPassword, phone?)` faz a checagem de 4 vias + purpose → 400 genérico, busca por `findDeletedUserById` (não `findUserById`, que filtra `deletedAt: null`) e recusa conta banida com 403.
+- ✅ `POST /auth/confirm-account-reactivation` (público, 204), ao lado do `/confirm-email-change`. Sem rate limit aqui — é a 8.7 que cobre as superfícies novas.
+- ✅ `consumeAccountReactivation`, uma transação: token usado → `User` (`deletedAt: null`, senha nova, `status: ACTIVE`, `mustChangePassword: false`) → `restoreProfilesOfUser` → criação do cliente do zero quando não há linha → `grantRolesToUser` do que foi nomeado e não restaurado (K21) → audit. **Primeiro ponto do projeto que escreve `deletedAt: null` num `User`.** Não invalida sessões: a deleção já as invalidou e nenhuma nasceu desde então.
+- ✅ Audit: ações novas `ACCOUNT_REACTIVATION_REQUESTED` (`{ source, profiles, roles }`) e `ACCOUNT_REACTIVATION_COMPLETED` (`{ profilesRestored, profilesCreated, restoredRoles, grantedRoles }`) — mesmo corte semântico do `USER_PROFILE_RESTORED`: restaurada ≠ concedida, só a segunda é autoridade nova. Sem PII.
+- ✅ **`AuditDescriptor.metadata` passou a aceitar `string[]`.** A regra da política §4.4 é "só ids e enums, nunca PII", e um *conjunto* de enums continua sendo enum — a reativação precisa dizer **quais** perfis voltaram, não quantos. Único ponto que usa a folga até aqui.
+- ✅ Achado à parte, corrigido junto: `auditLog.constants.ts` tinha um comentário órfão descrevendo a `USER_PERMISSION_RESTORE_SKIPPED`, apagada no Passo 0 da Sessão C.
+- ✅ Testes em `tests/integration/v1/account-reactivation.test.ts` (novo — o fluxo atravessa dois routers e converge numa confirmação só, então o arquivo é nomeado pelo fluxo, precedente do `user.profile.test.ts`): os três casos A/B/C, 409 genérico do cpf/ban/conta viva, token expirado/usado/de outro purpose/replay → 400, senha nova valendo e a antiga não, `phone` obrigatório só no ramo que cria do zero, role de ciclo anterior não voltando, override nunca voltando, e o audit dos dois lados sem PII.
 
-### ⬜ [Sessão D] Fase 8.5 — Conta deletada: caminho do admin
+### ✅ [Sessão D] Fase 8.5 — Conta deletada: caminho do admin
 
 | Caso | Admin pode |
 |---|---|
@@ -563,12 +566,15 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 | B — só funcionário | Restaurar funcionário · criar cliente do zero · ambos |
 | C — os dois | Restaurar cliente · funcionário · ambos |
 
-- ⬜ **`POST /users/:id/reactivate`** (K19), `canAccess("reactivate:user")`, body `{ profiles: ProfileKind[] (min 1), roleNames?: RoleName[] }`, **204**.
-- ⬜ Admin escolhe **perfis e roles** (D8: default traz todas as roles que morreram na cascata; pode escolher subconjunto). Overrides nunca voltam (D6', K16). A lista nomeada tem a semântica do K15/K21: *com que roles a conta volta*, restaurando ou concedendo conforme o caso.
-- ⬜ Schema recusa escolher zero perfis (D14). Alvo vivo → 404 (não é uma conta deletada); alvo banido → 409 (K24); `EMPLOYEE` pedido numa conta que nunca teve o perfil → 422 no momento do pedido.
-- ⬜ **Não-escalação (K22):** resolve o conjunto de roles que vai voltar e roda `assertAdminForRoleAssignment` em cada uma, **antes de qualquer escrita** — manager tentando reativar conta que tinha `admin` recebe 403 sem token criado e sem email enviado. A leitura das roles mortas na cascata entra como função exportada do `permission.service` (dono de `UserRole`), apoiada num método novo do `permission.repository`; `user.service` já importa `assertAdminForRoleAssignment` de lá (precedente da 8.3).
-- ⬜ Confirmação converge com a da 8.4 (público, token como credencial).
-- 🔸 **Vindo da Sessão B:** `restoreProfilesOfUser` (`user.lifecycle.repository.ts`) já existe e já aceita a escolha de perfis (`kinds`) e o subconjunto de roles (`roleIds`, D8) — falta só a rota, o token e o ator.
+- ✅ **`POST /users/:id/reactivate`** (K19), `canAccess("reactivate:user")`, body `{ profiles: ProfileKind[] (min 1), roleNames?: RoleName[] }`, **204**. Feature nova `reactivate:user` em `USER_ADMINISTRATION_FEATURES` (manager + admin via `*`), sem par `:others`.
+- ✅ Admin escolhe **perfis e roles** (D8: default traz todas as roles que morreram na cascata; pode escolher subconjunto). Overrides nunca voltam (D6', K16). A lista nomeada tem a semântica do K15/K21: *com que roles a conta volta*, restaurando ou concedendo conforme o caso.
+- ✅ Schema recusa escolher zero perfis (D14). Alvo vivo → 404 (não é uma conta deletada — e dizer "existe, mas está ativa" contaria sobre uma conta que o ator talvez nem possa ver); alvo banido → 409 (K24); `EMPLOYEE` pedido numa conta que nunca teve o perfil → 422 no momento do pedido, para o admin ver o erro na hora e não o dono na confirmação.
+- ✅ Validação nova que o plano não previa: **role nomeada exige o perfil dela entre os pedidos** (422). Sem isso a conta voltaria com uma `UserRole` ativa sob um perfil morto — exatamente o que o D1 proíbe.
+- ✅ **Não-escalação (K22):** resolve o conjunto de roles que vai voltar e roda `assertAdminForRoleAssignment` em cada uma, **antes de qualquer escrita** — manager tentando reativar conta que tinha `admin` recebe 403 sem token criado e sem email enviado; admin faz a mesma reativação com 204. `permissionRepository.findRolesDeletedWith` + `permissionService.getRolesRestorableWithProfiles` (o `permission` é dono de `UserRole`; `user.service` já importava `assertAdminForRoleAssignment` de lá, precedente da 8.3).
+  - ✅ A chave de correlação vem do **`deletedAt` do perfil**, não do da conta: com o K20 os dois podem divergir, e ler o da conta faria o guard inspecionar o conjunto errado.
+- ✅ Confirmação converge com a da 8.4 (público, token como credencial) — o caminho admin não reativa nada sozinho, só emite o token e envia o email.
+- ✅ `restoreProfilesOfUser` (`user.lifecycle.repository.ts`), escrita na Sessão B sem call site, ganhou o seu: nenhuma linha dela precisou mudar além do Passo 0.
+- ✅ Suíte (**698**) + `typecheck` + `lint` verdes; `docs/endpoints.md`, OpenAPI (`src/docs/paths/{auth,user}.ts`) e coleção Bruno atualizados junto, não deferidos para a 8.9.
 - ✅ ~~**D16 aplicada aqui**~~ e ~~**Q9** (quem é o ator na confirmação, se a rota é pública?)~~ — **as duas morreram no kickoff da Sessão C (K16).** Com a restauração parando na role, nenhum override ressuscita em nenhum caminho, então não há conteúdo dinâmico para o guard filtrar e não há autoridade a capturar em tempo de emissão do token. A reativação de conta restaura perfis e roles; overrides ficam mortos e só voltam por ação explícita.
 
 ### ⬜ [Sessão E] Fase 8.6 — Emails liberados

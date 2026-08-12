@@ -1,7 +1,8 @@
 # Fase 8 — Redesenho (documento de trabalho)
 
 > **Status:** em execução. Sessões A e B fechadas (8.0–8.2); Sessão C fechada (Passo 0 + 8.3),
-> que **revogou o D6** — ver §3.4. Faltam as Sessões D–G (8.4–8.9).
+> que **revogou o D6** — ver §3.4; Sessão D fechada (Passo 0 + 8.4 + 8.5), que **estreitou o
+> D5** — ver §3.5 — e resolveu Q3–Q7. Faltam as Sessões E–G (8.6–8.9).
 > **Natureza:** documento temporário de trabalho. Não é ADR nem doc permanente — o
 > conteúdo daqui se dissolve em `docs/todo.md`, `docs/context.md` e ADRs conforme
 > as sub-fases forem executadas.
@@ -102,7 +103,7 @@ perfil de **funcionário** vivo — nunca o de cliente que ele pediu.
 | **D2** | Escopo do override | `UserFeature` ganha FK para `UserRole`. Todo override pertence a uma atribuição de role — não ao usuário solto. |
 | **D3** | Unicidade de `UserRole` | `@@unique([userId, roleId])` no banco. **Uma linha por par, para sempre.** Re-conceder reusa a linha (`deletedAt = null`). |
 | **D4** | Correlação de restauração | Por `deletedAt`, com **um único timestamp por transação** propagado por toda a cascata. Sem coluna de "motivo". |
-| **D5** | Regra de restauração | Restaura o filho cujo `deletedAt` é **igual** ao do pai. Vale nos dois níveis que a restauração alcança (`User` → perfil → `UserRole`); o terceiro saiu com o D6' — ver §3.4. |
+| **D5** | Regra de restauração | Restaura o filho cujo `deletedAt` é **igual** ao do pai. Vale nos dois níveis que a restauração alcança (`User` → perfil → `UserRole`); o terceiro saiu com o D6' — ver §3.4. **Estreitada no Passo 0 da Sessão D (K20):** o nível `User` → perfil deixou de correlacionar, porque perfil só volta quando é **nomeado** — a correlação por data continua governando perfil → `UserRole`. Ver §3.5. |
 | **D6** | ~~Re-conceder role restaura os overrides~~ | **REVOGADA no kickoff da Sessão C (2026-08-10).** Substituída por **D6'**: a cascata de deleção desce quatro níveis, mas a **restauração sobe só dois** (`User` → perfil → `UserRole`). Override **nunca** ressuscita por efeito colateral — só por ação explícita (`PUT /users/:id/roles/:roleId/features/:featureId`, que já revive a linha soft-deletada). Ver §3.4. |
 | **D7** | Histórico de ciclos | Vive no audit log (`USER_ROLE_GRANTED`/`USER_ROLE_REVOKED`/`USER_PERMISSION_GRANTED`/`USER_PERMISSION_REVOKED`, já existentes), não na tabela. |
 | **D8** | Escolha de roles ao religar | **Default: traz todas** as que morreram na cascata. O admin pode escolher um subconjunto e ignorar o resto. |
@@ -212,6 +213,31 @@ da role, que é exatamente o que `assertAdminForRoleAssignment` já inspeciona. 
 linha do override continua soft-deletada — é evidência para o audit; ela apenas
 nunca volta sozinha.
 
+### 3.5 Por que o nível `User` → perfil deixou de correlacionar (Sessão D, 2026-08-11)
+
+O D5 mandava restaurar o perfil cujo `deletedAt` batesse com o da conta. Caiu contra um
+caso concreto que ele mesmo produz:
+
+```
+T1  perfil de cliente deletado            → customer.deletedAt = T1
+T2  conta inteira deletada                → user.deletedAt = T2, employee.deletedAt = T2
+    self-service (signup) reclama cliente → T1 ≠ T2, não restaura
+                                          → e a linha existe, então criar do zero
+                                            também não é possível
+                                          → conta ativa com ZERO perfil ativo ✗ (D14)
+```
+
+A correlação existia para impedir que um perfil morto noutro instante voltasse **de
+carona**. Só que, na reativação de conta, perfil nenhum volta sem ser nomeado: o
+self-service nomeia `CUSTOMER` e só (D11), e o admin nomeia a escolha dele. O risco que a
+regra cobria não existe nesse nível — e o preço era um usuário sem caminho de volta.
+
+Então o corte mudou de lugar: **perfil volta porque foi pedido; role volta porque
+correlaciona.** A data continua sendo a chave onde ninguém nomeia nada (perfil →
+`UserRole`), que é exatamente onde o §3.1 mostrou que ela resolve sozinha o caso difícil.
+
+Consequência de código: `requireDeletedAt` ficou sem caller e saiu de `restoreProfile`.
+
 ---
 
 ## 4. Modelo corrigido
@@ -281,15 +307,16 @@ restauração.
 ### 4.3 Restauração (D5)
 
 ```
-reativar User    →  restaura perfis    onde perfil.deletedAt     == user.deletedAt
-reativar perfil  →  restaura UserRoles onde userRole.deletedAt   == perfil.deletedAt
-reconceder role  →  restaura a linha da UserRole e MAIS NADA          (D6', §3.4)
+reativar User    →  restaura os perfis NOMEADOS, tenham morrido quando tiverem (K20, §3.5)
+reativar perfil  →  restaura UserRoles onde userRole.deletedAt == perfil.deletedAt
+reconceder role  →  restaura a linha da UserRole e MAIS NADA             (D6', §3.4)
 ```
 
-A correlação por data vale nos **dois** níveis que a restauração alcança. O
-terceiro nível saiu com o D6: nenhum override ressuscita, nem o que morreu junto
-com o pai — só volta por `PUT /users/:id/roles/:roleId/features/:featureId`, que
-revive a linha soft-deletada explicitamente.
+Sobra **um** nível correlacionando por data — perfil → `UserRole` —, que é onde
+ninguém nomeia nada. Acima dele, perfil volta por ser pedido (§3.5); abaixo dele,
+nenhum override ressuscita, nem o que morreu junto com o pai — só volta por
+`PUT /users/:id/roles/:roleId/features/:featureId`, que revive a linha
+soft-deletada explicitamente (§3.4).
 
 ### 4.4 Invariantes de implementação (não negociáveis)
 
@@ -453,11 +480,11 @@ Resolver no kickoff da sub-fase correspondente — **não decidir na implementa�
 |---|---|---|
 | ~~Q1~~ | ~~`attendant` cria/reativa o perfil de cliente de outra pessoa?~~ **Sim** — com um par de features escopado ao cliente (K11/K13, §5.1) | ✅ 8.3 |
 | ~~Q2~~ | ~~Continuam existindo features `reactivate:*` separadas das `create:*`?~~ **Sim, separadas** (K12): reativar traz roles antigas de volta, criar nasce com o default — poderes diferentes, concedíveis em separado | ✅ 8.3 |
-| Q3 | Reativação de conta continua exigindo senha nova? (era N6 da fase antiga) | 8.4 |
-| Q4 | Signup que detecta conta deletada continua respondendo 202? (era decisão de kickoff da 8.3 antiga) | 8.4 |
-| Q5 | O endpoint de reativação por admin continua sendo `POST /users/:id/reactivate`? | 8.5 |
-| Q6 | Guard de não-escalação para alvo que **era** privilegiado continua exigindo ator admin? (era decisão de kickoff da 8.4 antiga) | 8.5 |
-| Q7 | Como o admin nomeia as roles a restaurar — ids no body, ou default implícito com lista de exclusão? | 8.5 |
+| ~~Q3~~ | ~~Reativação de conta continua exigindo senha nova?~~ **Sim** (K17) — o token é a credencial da rota pública, e a conta nunca volta com a senha de antes da deleção | ✅ 8.4 |
+| ~~Q4~~ | ~~Signup que detecta conta deletada continua respondendo 202?~~ **Sim** (K18) — nada foi criado e o efeito sai fora da request; primeiro 202 do projeto | ✅ 8.4 |
+| ~~Q5~~ | ~~O endpoint de reativação por admin continua sendo `POST /users/:id/reactivate`?~~ **Sim** (K19), com a feature nova `reactivate:user` sem par `:others` | ✅ 8.5 |
+| ~~Q6~~ | ~~Guard de não-escalação para alvo que **era** privilegiado continua exigindo ator admin?~~ **Reformulada** (K22): o guard corre sobre as **roles que vão voltar**, não sobre o alvo. O molde do ban/lock não serviria — ele lê features efetivas, e num alvo morto todas as roles estão soft-deletadas, então o conjunto sairia vazio e o guard passaria sempre | ✅ 8.5 |
+| ~~Q7~~ | ~~Como o admin nomeia as roles a restaurar — ids no body, ou default implícito com lista de exclusão?~~ **Nomes no body, com a semântica do K15** (K21): a lista é *com que roles a conta volta*, restaurando ou concedendo conforme o caso; omitida = default do D8 | ✅ 8.5 |
 | ~~Q8~~ | ~~Overrides restaurados precisam de checagem de não-escalação?~~ **Dissolvida:** nenhum override é restaurado (D6', §3.4) | — |
 | ~~Q9~~ | ~~Quem é o "ator" na confirmação de reativação de conta, se a rota é pública?~~ **Dissolvida junto com o D16.** Não há autoridade a capturar em tempo de emissão do token, porque a confirmação não decide sobre conteúdo privilegiado — ela restaura perfis e roles, e roles são governadas por `assertAdminForRoleAssignment` no momento em que o admin as nomeia | — |
 

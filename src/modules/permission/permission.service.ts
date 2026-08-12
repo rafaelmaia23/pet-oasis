@@ -3,6 +3,7 @@ import {
   createNotFoundError,
   createValidationError,
 } from "@/errors";
+import type { ProfileKind } from "@/generated/prisma/enums";
 import {
   assertActorIsAdmin,
   computeEffectiveFeatures,
@@ -86,6 +87,28 @@ export async function assertAdminForRoleAssignment(
     message: "Apenas administradores podem atribuir roles privilegiadas",
     action: "Solicite a um administrador que faça essa alteração",
   });
+}
+
+/**
+ * As roles com que os perfis voltariam se ninguém as estreitasse — o default do
+ * D8, resolvido antes de qualquer escrita para o guard de não-escalação poder
+ * inspecioná-lo (K22).
+ *
+ * Cada perfil traz as roles que morreram **junto com ele**, e o instante não é
+ * necessariamente o da morte da conta (K20) — por isso a chave vem do próprio
+ * perfil, não do `User`.
+ */
+export async function getRolesRestorableWithProfiles(
+  userId: string,
+  profiles: { kind: ProfileKind; deletedAt: Date }[],
+) {
+  const roles = await Promise.all(
+    profiles.map(({ kind, deletedAt }) =>
+      permissionRepository.findRolesDeletedWith(userId, kind, deletedAt),
+    ),
+  );
+
+  return roles.flat();
 }
 
 function assertRoleAppliesToActiveProfile(

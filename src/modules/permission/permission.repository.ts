@@ -1,3 +1,4 @@
+import type { ProfileKind } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import {
@@ -20,6 +21,25 @@ export async function getUserFeatures(userId: string) {
   return prisma.userFeature.findMany({
     where: { deletedAt: null, userRole: { userId, deletedAt: null } },
     include: overrideInclude,
+  });
+}
+
+/**
+ * As roles que morreram no instante `deletedAt` daquele perfil — ou seja,
+ * exatamente as que a restauração traria de volta por correlação de data (D5).
+ *
+ * Devolve `Role` com as features (shape que `assertAdminForRoleAssignment` lê),
+ * porque o único consumidor é o guard de não-escalação da reativação de conta:
+ * antes de emitir o token é preciso saber que autoridade vai voltar (K22).
+ */
+export async function findRolesDeletedWith(
+  userId: string,
+  appliesTo: ProfileKind,
+  deletedAt: Date,
+) {
+  return prisma.role.findMany({
+    where: { appliesTo, users: { some: { userId, deletedAt } } },
+    include: { features: { include: { feature: true } } },
   });
 }
 

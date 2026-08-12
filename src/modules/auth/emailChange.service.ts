@@ -119,8 +119,7 @@ export async function confirmEmailChange(token: string) {
   );
 
   if (
-    !changeToken ||
-    changeToken.purpose !== "EMAIL_CHANGE" ||
+    changeToken?.purpose !== "EMAIL_CHANGE" ||
     changeToken.usedAt !== null ||
     changeToken.expiresAt < new Date() ||
     !changeToken.newEmail

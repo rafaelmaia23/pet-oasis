@@ -1,6 +1,6 @@
 # infra/cron — agendamento dos scripts de manutenção
 
-Corte de responsabilidade (docs/context.md §2.2): `src/scripts/` é código
+Corte de responsabilidade (docs/context/architecture.md): `src/scripts/` é código
 (bundlado pelo tsup, roda com `node dist/<script>.js`); esta pasta é só
 agendamento. Nenhum destes timers é instalado automaticamente pelo Compose —
 é um passo manual do deploy, no host que roda `pet-oasis-app` (produção).

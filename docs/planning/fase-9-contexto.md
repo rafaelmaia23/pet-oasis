@@ -7,7 +7,7 @@
 > escritos.
 >
 > Depois de consumido, este arquivo **não sobrevive**: seu conteúdo vira `docs/todo.md`
-> (§ tarefas), `docs/context.md` §2.7 (racional), ADRs (decisões estruturais) e
+> (§ tarefas), `docs/context/pet-domain.md` (racional), ADRs (decisões estruturais) e
 > `CLAUDE.md` (convenções). Apague-o ao final da fase, ou mantenha-o em
 > `docs/planning/` como registro histórico — decisão do usuário.
 
@@ -69,7 +69,7 @@ uma trave a outra. Carrinho, pedido e fluxo de pagamento são a **Fase 10**.
 - Views distintas por capability do leitor (cliente não vê custo nem estoque interno).
 
 **Transversal**
-- Ordenação configurável nas listagens paginadas (dívida do `docs/backlog.md`).
+- Ordenação configurável nas listagens paginadas (dívida do `docs/reference/backlog.md`).
 - Seed de dados fake do domínio, integrado ao reset do ambiente demo.
 - Ações novas na taxonomia do audit log.
 - RBAC do domínio: features e, possivelmente, roles novas de funcionário.
@@ -82,7 +82,7 @@ avaliações e comentários · lista de desejos · movimentação de estoque com
 (`StockMovement`) · reserva de estoque · notificação transacional · transferência de pet
 entre clientes · frontend.
 
-Tudo isso que tem valor reconhecido mas ficou fora deve entrar no `docs/backlog.md` com o
+Tudo isso que tem valor reconhecido mas ficou fora deve entrar no `docs/reference/backlog.md` com o
 racional (ver §7).
 
 ### 1.4 O que a fase consome do que já existe
@@ -273,7 +273,7 @@ precisa para chamar a rota aninhada. Fica no backlog.
 ### 2.6 Audit log
 
 Ações novas, seguindo a taxonomia fechada em TypeScript e a política de metadata sem PII
-(`docs/logging-policy.md` §4): apenas ids e enums.
+(`docs/reference/logging-policy.md` §4): apenas ids e enums.
 
 ```
 PET_CREATED    · metadata: { customerId, species, source: "SELF" | "STAFF" }
@@ -516,7 +516,7 @@ decisão de contrato — ver §9.5.
 Faixa de preço filtra pelas **variantes**: o produto entra no resultado se **alguma**
 variante estiver na faixa. Vale documentar, porque é contraintuitivo na primeira leitura.
 
-**Ordenação — resolve a dívida do `docs/backlog.md`:**
+**Ordenação — resolve a dívida do `docs/reference/backlog.md`:**
 
 - Sintaxe: **`?sort=price&order=asc`** (decidido).
 - **Allowlist por recurso** — o campo nunca vai cru para o `orderBy`. Para produtos:
@@ -673,7 +673,7 @@ leitor do repositório vai querer ver justificada, e que parece arbitrária sem 
 
 ## 7. Backlog — o que sai da fase com valor reconhecido
 
-Entradas a acrescentar em `docs/backlog.md`, com o racional de por que ficaram fora:
+Entradas a acrescentar em `docs/reference/backlog.md`, com o racional de por que ficaram fora:
 
 - **Transferência de pet entre clientes** — caso real (venda, doação, mudança de tutor).
   Fora por escopo; precisa de trilha de auditoria própria e de decisão sobre o que
@@ -713,7 +713,7 @@ checklist atômico, e cada uma tem sua branch `feat/fase-9-<n>-<slug>`.
 | **9.9** | **Busca textual** | Depende de 9.8 existir para ter o que buscar. A sessão de maior risco técnico — isolada de propósito. |
 | **9.10** | **Adaptador de storage + upload de imagem** | Independente do resto; podia vir antes, mas é a sessão com mais infra e menos domínio. Inclui foto de pet, se couber. |
 | **9.11** | **Seed fake do domínio + `demo-reset`** | Depende de todo o schema estar firme. É o que faz o demo público parar de mostrar listas vazias — item já registrado no backlog. |
-| **9.12** | **Fechos** | `docs/endpoints.md`, coleção Bruno, README (roadmap + contagem de testes), `context.md` §2.7 e §4, revisão do backlog. |
+| **9.12** | **Fechos** | `docs/reference/endpoints.md`, coleção Bruno, README (roadmap + contagem de testes), `context/pet-domain.md` e `context/history.md`, revisão do backlog. |
 
 **Ponto de atenção sobre a 9.1:** ela é uma sessão de conversa, não de código. Não comece
 a 9.4 sem ela fechada — cada endpoint escrito com nome de feature provisório é um endpoint
@@ -759,7 +759,7 @@ público com campos reduzidos e detalhes só autenticado.
 
 ### 9.3 Unicidade de `microchipId` e `sku`
 
-Mesmo problema já documentado no `docs/backlog.md` para email/cpf: `@unique` no Postgres
+Mesmo problema já documentado no `docs/reference/backlog.md` para email/cpf: `@unique` no Postgres
 vale também para a linha soft-deletada, então um produto excluído prende o SKU para sempre.
 Caminhos: unique global e aceitar o efeito · unique parcial (`WHERE deleted_at IS NULL`,
 exige editar a migration à mão) · sem unique, com validação no service.
@@ -823,15 +823,15 @@ automaticamente, ou a reativação escolhe? O padrão do projeto sugere que volt
 - **`docs/todo.md`** — a fase inteira, na estrutura de sessões da §8, com checklist
   atômico por sessão e as pendências da §9 ancoradas na sessão em que devem ser
   perguntadas.
-- **`docs/context.md`** — §2.7 nova ("Fase 9 — planejada"), promovida a "implementada" no
+- **`docs/context/pet-domain.md`** — ponteiros da Fase 9, promovidos a "implementada" no
   fecho; parágrafo "Fase 9 (fechada)" em §4 ao final, no mesmo padrão das fases 7 e 8.
 - **`CLAUDE.md`** — seção de domínio: o corte produto/variante, a regra da espécie como
   faceta, a convenção de valores monetários e de peso em inteiro, e o corte "SQL cru vive
   no repository".
-- **`docs/endpoints.md`** — todas as rotas novas.
-- **`docs/logging-policy.md`** — as ações novas do audit log e a nota sobre nome de pet
+- **`docs/reference/endpoints.md`** — todas as rotas novas.
+- **`docs/reference/logging-policy.md`** — as ações novas do audit log e a nota sobre nome de pet
   fora da metadata.
-- **`docs/backlog.md`** — as entradas da §7.
+- **`docs/reference/backlog.md`** — as entradas da §7.
 - **`README.md`** — roadmap (Fase 9 sai de "A seguir"), contagem de testes, e provavelmente
   uma linha sobre o catálogo no que o projeto faz.
 - **`.env.example`** — variáveis de upload (diretório, teto de tamanho, base URL pública).

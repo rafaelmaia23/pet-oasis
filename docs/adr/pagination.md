@@ -104,7 +104,7 @@ existe, só não tem elementos.
   Scalar, e o cursor não cabe bem em header. Preterido.
 - **Envelope só onde pagina:** ver acima — troca um breaking change grande por
   vários pequenos. Preterido.
-- **Ordenação configurável (`?sort=`):** fora de escopo, no `docs/backlog.md`. É
+- **Ordenação configurável (`?sort=`):** fora de escopo, no `docs/reference/backlog.md`. É
   trivial em offset e complexo em cursor (a chave teria que codificar o campo de
   ordenação).
 
@@ -125,7 +125,7 @@ testada de fato quando a Fase 9 chegar; até lá, nada a revisar aqui.
 
 ## Adendo (Fase 9.2) — ordenação configurável
 
-`?sort=` saiu do `docs/backlog.md` na Fase 9: as listagens novas de domínio
+`?sort=` saiu do `docs/reference/backlog.md` na Fase 9: as listagens novas de domínio
 (pets, produtos) tornam ordenação por campo (preço, nome, data de criação)
 relevante o suficiente para não ficar mais pendente.
 

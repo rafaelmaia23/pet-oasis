@@ -17,10 +17,10 @@
 
 > Autenticação, autorização, usuários e perfis, e segurança (rate limit, lockout,
 > observabilidade, ciclo de vida de deleção/reativação). **Fechado.** Todas as fases abaixo
-> estão na forma resumida; o racional completo vive no `docs/context.md` (§2.x) e nos ADRs.
+> estão na forma resumida; o racional completo vive nos arquivos temáticos de `docs/context/` (indexados em `docs/context.md`) e nos ADRs.
 
 ## Fase 2 — Autorização e perfis ✅
-> RBAC + CRUD de user com modelo de perfis. Regras e racional no `docs/context.md` (§1, §2).
+> RBAC + CRUD de user com modelo de perfis. Regras e racional em `docs/context/authorization.md` e `docs/context/api-contracts.md`.
 - Autorização: `computeEffectiveFeatures` (pura) + `can`/`hasFeature`/`canActOnResource`; middleware `authenticate`; autorização-antes-da-busca (403 vence 404).
 - CRUD de user: POST / GET lista / GET :id / PATCH / DELETE; `createCustomer`/`createEmployee` (nested write); soft delete (`softDeleteUserAndInvalidateSessions`).
 - Módulos read-only: role (`GET /roles`, `/roles/:id`) e feature (`GET /features`, `/features/:id`).
@@ -33,7 +33,7 @@
 ---
 
 ## Fase 3 — Auth alvo (access JWT + refresh opaco rotativo) ✅
-> Migrou de "JWT-como-Session validado no banco a cada request" para "access JWT 15min validado local + refresh opaco rotativo". Design e racional no `docs/context.md` (§2, §3).
+> Migrou de "JWT-como-Session validado no banco a cada request" para "access JWT 15min validado local + refresh opaco rotativo". Design e racional em `docs/context/identity-and-sessions.md` e `docs/context/schema.md`.
 - `Session` reshaped: `refreshTokenHash`/`usedAt`/`userAgent`/`ipAddress` (sem `token`). `src/lib/token.ts` (gera/hash opaco).
 - `authenticate` reescrito (valida JWT só localmente, sem hit no banco), movido de global → por-grupo-de-rota; erros via `create*Error` (idem `canAccess`).
 - Endpoints: `POST /auth/login` (sempre cria Session nova), `POST /auth/refresh` (rotação + detecção de roubo por reuso → invalida todas as sessões), `POST /auth/logout` (por refresh cookie + ownership), `GET /auth/sessions` (só vivas), `DELETE /auth/sessions/:id` (404 unificado "não existe/morta").
@@ -43,30 +43,30 @@
 ---
 
 ## Fase 4 — Email, status de conta e banimento ✅
-> Status de conta com verificação de email obrigatória, serviço de email genérico (nodemailer; mailpit em dev / Resend em prod), recuperação/troca de senha e banimento. Regras e racional no `docs/context.md` (§2.1, §4).
+> Status de conta com verificação de email obrigatória, serviço de email genérico (nodemailer; mailpit em dev / Resend em prod), recuperação/troca de senha e banimento. Regras e racional em `docs/context/identity-and-sessions.md`.
 - Modelo de status: `enum UserStatus { PENDING, ACTIVE }` + `bannedAt`/`bannedBy`/`banReason` ortogonais (idioma `deletedAt`); loga só com `status == ACTIVE && bannedAt == null`; desbanir limpa as três colunas e preserva o `status`.
 - `VerificationToken` genérico (`purpose: EMAIL_VERIFICATION | PASSWORD_RESET`, hash salvo, TTL por purpose) + `src/lib/email.ts` (`send`, erro → 503).
 - Verificação: todo user novo nasce `PENDING` (signup e `POST /users`); `POST /auth/verify-email` (204) + `/verify-email/resend` (sempre 200 genérico); orquestração em `verification.service.ts` (evita ciclo `auth`↔`user`); token ruim → 400 genérico.
 - Recuperação/troca de senha: `POST /auth/forgot-password` (200 genérico) + `/reset-password` (204, token single-use, invalida TODAS as sessões) + `/change-password` logado (403 se senha atual errada, também invalida todas as sessões).
 - Banimento: `POST`/`DELETE /users/:id/ban` `{ reason }` (`manage:user:status`); `assertAdminForBan` (features efetivas do alvo, não da role); auto-ban/-unban → 409; conta banida = "congelada" (login/forgot/resend/reset/change bloqueados, sessões derrubadas), **204** em ambos.
-- Fechos: 2 bugs pré-existentes corrigidos — `getUserById` passou a autorizar antes de buscar (403 vence 404) e JSON malformado do body-parser virou **400** (era 500). Adotado o fluxo de branches por fase (`main` → `fase-<n>` → `feat/...`). Nasceu o `docs/endpoints.md`.
+- Fechos: 2 bugs pré-existentes corrigidos — `getUserById` passou a autorizar antes de buscar (403 vence 404) e JSON malformado do body-parser virou **400** (era 500). Adotado o fluxo de branches por fase (`main` → `fase-<n>` → `feat/...`). Nasceu o `docs/reference/endpoints.md`.
 - Suíte (329) + `typecheck` + `lint` verdes ao fechar.
 
 ---
 
 ## Fase 5 — Documentação da API + Containerização (deploy) ✅
-> Fecha o Ciclo 1 como peça de portfólio: OpenAPI gerado dos schemas Zod → UI Scalar → coleção Bruno, usuário demo read-only, e deploy via Docker do zero. Racional no `docs/context.md` (§2.3, §4).
+> Fecha o Ciclo 1 como peça de portfólio: OpenAPI gerado dos schemas Zod → UI Scalar → coleção Bruno, usuário demo read-only, e deploy via Docker do zero. Racional em `docs/context/infrastructure.md`.
 - OpenAPI 3.1 via `zod-openapi` + `.meta()` nativo do Zod 4 (sem monkey-patch) — schemas/presenters viram componentes nomeados; **`GET /openapi.json`** (público, router de topo, `servers: [{url:"/api/v1"}]`); doc verificada sem `passwordHash`/`tokenHash`/`refreshTokenHash`.
 - UI Scalar interativa em **`GET /reference`** (público), consumindo `/openapi.json`, Bearer preenchível no "try it".
 - Usuário demo read-only: role `demo` (`appliesTo EMPLOYEE`, só features de leitura) sempre semeada; usuário demo só nasce com `SEED_DEMO_USER=true` (ligado em Docker/prod, desligado em test/dev).
 - `README.md` (novo) e coleção **Bruno** versionada em `api-collection/` (por módulo, environments `local`/`prod`); login encadeia o token via `bru.setVar` (não `setEnvVar` — não grava segredo no `.bru` versionado).
 - Containerização: `Dockerfile` multi-stage não-root (client Prisma embutido no bundle via tsup, `src/generated` não copiado ao runtime); serviço `app` no compose sob profile `full`, derivando a própria `DATABASE_URL` (`@db`); entrypoint `migrate deploy → seed → start` (seed bundlado, `dist/seed.js`). Deploy documentado no `README.md`.
-- Suíte (335) + `typecheck` + `lint` verdes ao fechar; nasceu o `docs/endpoints.md` § "Docs".
+- Suíte (335) + `typecheck` + `lint` verdes ao fechar; nasceu o `docs/reference/endpoints.md` § "Docs".
 
 ---
 
 ## Fase 6 — Ambientes, Docker por ambiente e deploy ✅
-> Reformula dev/test/prod para Compose base + overrides por ambiente, corrige dois bugs de deploy (SMTP hardcodado pro mailpit em vez da Resend; prod subindo db/mailpit de dev) e adiciona graceful shutdown. Nenhuma regra de negócio nova. Racional no `docs/context.md` (§2.4, §4) e ADR `docs/adr/environments-and-deploy.md`.
+> Reformula dev/test/prod para Compose base + overrides por ambiente, corrige dois bugs de deploy (SMTP hardcodado pro mailpit em vez da Resend; prod subindo db/mailpit de dev) e adiciona graceful shutdown. Nenhuma regra de negócio nova. Racional em `docs/context/infrastructure.md` e ADR `docs/adr/environments-and-deploy.md`.
 - Envs por arquivo: `.env.{development,test,production}` (fora do git) + `.env.example`; `dotenv-cli` na autoria de migration; `vitest.config.ts` carrega `.env.test` (`npx vitest run <arquivo>` funciona sozinho).
 - `src/lib/shutdown.ts` (`createShutdownHandler`, injeção de dependência): `server.close()` → `prisma.$disconnect()` → exit, timeout de força-saída; `server.ts` registra SIGTERM/SIGINT.
 - Compose **base + overrides** (`.dev`/`.prod`/`.test`), isolados por `-p pet-oasis-{dev,test,prod}`: prod só `app` + Postgres-de-prod (mata os dois bugs); dev com bind-mount + client Prisma em volume anônimo; stage `dev` do Dockerfile roda como root (evita EACCES no bind-mount).
@@ -77,7 +77,7 @@
 ---
 
 ## Fase 7 — Hardening e observabilidade ✅
-> Ampliou o escopo original do roadmap ("rate limiting, account lockout") para observabilidade completa e polimento das features de conta já construídas. 9 sessões de trabalho (A–I), sub-fases 7.0–7.19, cada uma em feat-branch própria. Racional no `docs/context.md` (§2.2, §4), em `docs/logging-policy.md` e nos ADRs `rate-limiting-and-lockout.md` / `pagination.md`.
+> Ampliou o escopo original do roadmap ("rate limiting, account lockout") para observabilidade completa e polimento das features de conta já construídas. 9 sessões de trabalho (A–I), sub-fases 7.0–7.19, cada uma em feat-branch própria. Racional em `docs/context/security.md` e `docs/context/observability.md`, em `docs/reference/logging-policy.md` e nos ADRs `rate-limiting-and-lockout.md` / `pagination.md`.
 - Infra e bordas (7.0–7.2): serviço `redis` nos três overrides do Compose (dev 6379 · test 6380 · prod sem porta publicada) e client `ioredis` que **falha rápido** — é isso que torna o fail-open real, não a decisão sozinha; `app.set("trust proxy", 1)`; `express.json({ limit })` com corpo grande virando **413** (era 500); helmet com CSP mais estrita que o default, bundle do Scalar **auto-hospedado** (`GET /scalar/standalone.js`) + nonce por request; CORS por allowlist; os 3 guards de escalação consolidados em `assertActorIsAdmin` (`lib/authorization.ts`).
 - Observabilidade (7.3–7.6): `pino` com streams por ambiente (test escreve **só** no ring buffer — suíte silenciosa e ainda assim assertável), `redact` da política, `AsyncLocalStorage` com `requestId` ecoado no header e no corpo de erro; access log (`pino-http`, rotas de ruído em `debug`), application log por `logger.child({ module })`, error handler com ponto único de saída; `AuditLog` com taxonomia fechada como union em tempo de compilação, `record(descriptor, tx?)`, gravação transacional feita pelo **repository** (o service passa o descritor) e `metadata` só com ids/enums.
 - Contrato de leitura (7.7–7.8): helper `src/lib/pagination.ts` com as duas estratégias (offset e cursor, com tiebreaker obrigatório por `id`), envelope `{ data, meta }` em **todas** as listagens (exceto `GET /users/:userId/permissions`), filtros estritos em `GET /users` (fora da allowlist → 422); `GET /audit-logs` (cursor + filtros, `ip` mascarado para quem não tem `read:audit-log:full`, só `GET`) e `GET /logs/recent` (ring buffer, limitação declarada no `meta`).
@@ -89,7 +89,7 @@
 ---
 
 ## Seed de dados fake (usuários) ✅
-> Trabalho pontual entre as Fases 7 e 8 — não é fase numerada; branch `feat/seed-fake-data-users` direto da `main`. Racional no `docs/context.md` (§2.5).
+> Trabalho pontual entre as Fases 7 e 8 — não é fase numerada; branch `feat/seed-fake-data-users` direto da `main`. Racional em `docs/context/infrastructure.md`.
 - Duas flags independentes: **`SEED_FAKE_DATA`** (20 usuários — customers, employees, híbridos, e os cenários banido / pendente de verificação / soft-deletado, com senha compartilhada) e **`SEED_ADMIN_USER`** (acesso total, **nunca ligada em produção/demo** — decisão firmada com o usuário).
 - Roster declarativo em `src/lib/seed/fakeUsers.constants.ts`, com email fixo como chave de idempotência **ignorando `deletedAt`** (o entrypoint roda o seed a cada boot, sem truncate antes); criação via `userRepository` e serviços reais de perfil/ban — nunca via `user.service`, que dispararia email de verificação a cada restart.
 - `@faker-js/faker` e `cpf-cnpj-validator` migraram para `dependencies` (viraram código de produção, bundlado). Achado corrigido junto: `demo-reset.ts` não truncava `previousEmail`.
@@ -98,7 +98,7 @@
 ---
 
 ## Fase 8 — Autorização com escopo, cascata de deleção e reativação ✅
-> **Única fase implementada, revertida e refeita.** O desenho original construiu a reativação de conta em cima de dois bugs pré-existentes (deleção que não cascateava; override de feature sem escopo) e boa parte da complexidade existia só para contorná-los; o código foi revertido para `d1b8478` em 2026-08-07 e a fase refeita com o escopo ampliado — consertar o modelo antes de construir sobre ele. 7 sessões (A–G), sub-fases 8.0–8.9, mais três "Passo 0" pontuais em branch própria. Racional no `docs/context.md` (§2.6, §3, §4) e no ADR `docs/adr/authorization-scope-and-lifecycle.md`; o documento de trabalho `docs/fase-8-redesign.md` foi dissolvido na 8.9.
+> **Única fase implementada, revertida e refeita.** O desenho original construiu a reativação de conta em cima de dois bugs pré-existentes (deleção que não cascateava; override de feature sem escopo) e boa parte da complexidade existia só para contorná-los; o código foi revertido para `d1b8478` em 2026-08-07 e a fase refeita com o escopo ampliado — consertar o modelo antes de construir sobre ele. 7 sessões (A–G), sub-fases 8.0–8.9, mais três "Passo 0" pontuais em branch própria. Racional em `docs/context/authorization.md`, `docs/context/lifecycle.md` e `docs/context/schema.md`, e no ADR `docs/adr/authorization-scope-and-lifecycle.md`; o documento de trabalho `docs/fase-8-redesign.md` foi dissolvido na 8.9.
 - Modelo de autorização (8.0): `UserFeature.userId` → **`userRoleId`** (o override pendura na atribuição de role) + `@@unique([userRoleId, featureId])`; `UserRole` ganhou `grantedAt` e `@@unique([userId, roleId])`, com **reuso de linha** na re-concessão (201 em qualquer caso; 409 só para role já ativa); contrato `PUT|DELETE /users/:userId/roles/:roleId/features/:featureId` (422 nomeando `roleId` quando falta a role ativa; 404 seco no `DELETE`, que não revela se o usuário tem a role); `computeEffectiveFeatures` virou dois laços (todas as estáticas antes de qualquer override); a migration **zerou o banco** (só havia o demo de portfólio no ar). Fechou junto um buraco pré-existente: o guard de escalação não via override do wildcard `*`.
 - Passos 0 (trabalho pontual, cada um em branch própria antes da sub-fase que dependia dele): `Role.appliesTo` virou **NOT NULL** (três branches mortos apagados, suíte inteira passou sem alteração); revogação do D6/D16 — a restauração deixou de ressuscitar override, e toda a máquina de política de restauração foi apagada; `restoreProfile` deixou de exigir instante exato — perfil **nomeado** volta mesmo tendo morrido antes da conta.
 - Cascata de deleção (8.1): desce quatro níveis (`User` → perfis → `UserRole` → `UserFeature`) com **um único `new Date()` por transação**, concentrada em `src/modules/user/user.lifecycle.repository.ts`; só toca linha ativa (o que já estava morto mantém o timestamp antigo, e é isso que preserva a distinção na restauração); audit ganhou `USER_PROFILE_DELETED` e contagens de cascata na metadata, passadas como thunk porque só existem dentro da transação.
@@ -106,7 +106,7 @@
 - Perfil em conta ativa (8.3): a **mesma rota cria ou reativa** (201 nos dois ramos, quem ramifica é o service); o catálogo passou a nomear o recurso — `create:customer-profile`/`reactivate:customer-profile` (self, em `SELF_MANAGEMENT_FEATURES`, porque a role `customer` morre junto com o perfil), variantes `:others` no grupo novo `CUSTOMER_SERVICE_FEATURES`, e o par de funcionário em `USER_ADMINISTRATION_FEATURES`; `create:*` e `reactivate:*` ficam separadas de propósito (poderes diferentes, concedíveis em separado). `canAccess` ganhou a forma OR e a autorização virou duas etapas (união das features antes da busca — 403 vence 404 —, específica do ramo depois). Furo pré-existente fechado: `POST /users` aceitava `roleNames` sem rodar a não-escalação.
 - Conta deletada (8.4/8.5): volta pelo **signup** (email de conta morta + cpf batendo → **202**; cpf que não bate, conta banida ou conta ativa → o mesmo 409 genérico) ou por **`POST /users/:id/reactivate`** (feature nova `reactivate:user`, admin escolhe perfis e roles, 204). Nenhum dos dois reativa sozinho: ambos só emitem token, e quem conclui é o dono em `POST /auth/confirm-account-reactivation` (público, senha nova obrigatória, `phone` exigido só quando o perfil de cliente nasce do zero). Self-service nunca traz funcionário; `roleNames` significa "com que roles a conta volta" (restaura ou concede); a não-escalação roda por role que vai voltar, **antes de qualquer escrita**.
 - Transversais (8.6–8.8): `PreviousEmail` parou de bloquear qualquer cadastro e perdeu o `@unique` global (continua como histórico); o rate limit cobriu as superfícies novas (mesmo balde por email-alvo do `forgot-password`) e as três rotas públicas de token (`tokenIpLimiter`), com o `Retry-After` migrando para `AppError.headers` — o que permitiu consumir limite de dentro de um service; conta com a role `demo` ficou isenta do account lockout (bug de produção pós-deploy da Fase 7 — senha pública transforma lockout por conta em DoS).
-- Fechos (8.9): auditoria de doc antes da correção — sete afirmações envelhecidas durante a fase, a pior delas o `docs/endpoints.md` descrevendo o **inverso** do D6'; `docs/context.md` ganhou a §2.6 (o racional morava espalhado no §3) e nasceu o ADR `authorization-scope-and-lifecycle.md`; varredura **por script** provando que as 43 rotas batem em `endpoints.md`, OpenAPI e coleção Bruno. Suíte (**719**) + `typecheck` + `lint` verdes.
+- Fechos (8.9): auditoria de doc antes da correção — sete afirmações envelhecidas durante a fase, a pior delas o `docs/reference/endpoints.md` descrevendo o **inverso** do D6'; o racional da fase foi consolidado (morava espalhado na seção de schema) e nasceu o ADR `authorization-scope-and-lifecycle.md`; varredura **por script** provando que as 43 rotas batem em `endpoints.md`, OpenAPI e coleção Bruno. Suíte (**719**) + `typecheck` + `lint` verdes.
 
 ---
 
@@ -125,10 +125,10 @@
 > usuário). Duas agregações praticamente independentes — **Bloco A** (pets, ligados a
 > `Customer`) e **Bloco B** (catálogo: marca/categoria/tag/produto/variante) — que só se
 > tocam na faceta "para qual espécie este produto serve". Carrinho, pedido e pagamento
-> ficam para a **Fase 10**. Racional completo no `docs/context.md` §2.7, ADRs novos em
+> ficam para a **Fase 10**. Racional completo em `docs/context/pet-domain.md`, ADRs novos em
 > `docs/adr/` (`pet-domain-modeling.md`, `product-catalog-modeling.md`,
 > `product-vs-service.md`, `text-search.md`, `file-storage-and-uploads.md`, e um adendo em
-> `pagination.md`), itens deixados de fora no `docs/backlog.md`.
+> `pagination.md`), itens deixados de fora no `docs/reference/backlog.md`.
 >
 > **Muitas decisões de negócio ainda não foram tomadas** — ver os bullets `🔸 Pendência`
 > em cada sessão abaixo. Cada uma é regra de negócio: apresentar 2–4 caminhos, a
@@ -161,7 +161,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 | Sessão | Tema | Por que nesta posição |
 |---|---|---|
 | **9.1** | RBAC do domínio — decisão + seed | Toda rota nova precisa de feature. Sessão de **decisão com o usuário**, praticamente sem código. Nenhuma outra sessão começa antes desta fechar. |
-| **9.2** | Ordenação configurável no helper de paginação | Dívida do `docs/backlog.md`. Habilita todas as listagens da fase — fazer antes evita retrabalho em cada uma. |
+| **9.2** | Ordenação configurável no helper de paginação | Dívida do `docs/reference/backlog.md`. Habilita todas as listagens da fase — fazer antes evita retrabalho em cada uma. |
 | **9.3** | Espécies, raças e seed de `Breed` | Pré-requisito do CRUD de pets. |
 | **9.4** | Pets — CRUD, escopo próprio | Núcleo do Bloco A. |
 | **9.5** | Pets — escopo staff, listagem geral, filtros | Depende de 9.2 e 9.4. |
@@ -170,7 +170,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 | **9.8** | Catálogo — leitura, views por capability, filtros | Depende de 9.2, 9.6, 9.7. |
 | **9.9** | Busca textual | Depende de 9.8 existir para ter o que buscar. Maior risco técnico da fase — isolada de propósito. |
 | **9.10** | Adaptador de storage + upload de imagem | Independente do resto — mais infra, menos domínio. |
-| **9.11** | Seed fake do domínio + `demo-reset` | Depende do schema inteiro estar firme. Resolve a entrada "Dummy data para a demo" do `docs/backlog.md`. |
+| **9.11** | Seed fake do domínio + `demo-reset` | Depende do schema inteiro estar firme. Resolve a entrada "Dummy data para a demo" do `docs/reference/backlog.md`. |
 | **9.12** | Fechos | Docs, coleção Bruno, README, `context.md`, revisão do backlog. |
 
 ### ⬜ [Sessão 9.1] Fase 9.1 — RBAC do domínio: decisão + seed
@@ -187,7 +187,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ⬜ `?sort=<campo>&order=asc|desc` no helper de paginação **offset** (`src/lib/pagination.ts`).
 - ⬜ Allowlist de campos ordenáveis por recurso — campo fora da allowlist → **422** (nunca vai cru para o `orderBy`).
 - ⬜ Tiebreaker por `id` obrigatório mesmo com `?sort=` — mesma lição da 7.7 (cursor).
-- ⬜ Ordenação entra **só no offset**; a limitação do cursor permanece documentada no `docs/backlog.md`.
+- ⬜ Ordenação entra **só no offset**; a limitação do cursor permanece documentada no `docs/reference/backlog.md`.
 - ⬜ Conferir que a implementação bate com o desenho já registrado no adendo de `docs/adr/pagination.md` (escrito no planejamento da fase, antes do código).
 - ⬜ Testes: campo fora da allowlist → 422; ordenação asc/desc corretas; tiebreaker por id evita duplicata/omissão com valores repetidos no campo de ordenação.
 
@@ -230,7 +230,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ⬜ `enum ProductStatus { DRAFT ACTIVE DISCONTINUED }`; model `Product` (`targetSpecies: PetSpecies[]`, `brandId`, `status`, soft delete) + `ProductVariant` (`sku` @unique, `priceCents`, `compareAtPriceCents?`, `costCents?`, `stockQuantity`, `weightGrams?`, `volumeMl?`, `sizeLabel?`, `barcode?`, `isDefault`, soft delete).
 - ⬜ `POST/PATCH/DELETE /products`, `POST /products/:id/variants`, `PATCH/DELETE /variants/:id` (recurso plano, mesmo racional dos pets).
 - ⬜ Todo produto nasce com ≥1 variante — produto "sem variação" ganha variante única `isDefault: true`.
-- 🔸 **Pendência** (ver §9.3 do `fase-9-contexto.md`): unicidade de `sku` — unique global vs. unique parcial vs. validação no service (mesmo dilema do `microchipId` da 9.4, já documentado para email/cpf no `docs/backlog.md`).
+- 🔸 **Pendência** (ver §9.3 do `fase-9-contexto.md`): unicidade de `sku` — unique global vs. unique parcial vs. validação no service (mesmo dilema do `microchipId` da 9.4, já documentado para email/cpf no `docs/reference/backlog.md`).
 - 🔸 **Pendência** (ver §9.4 do `fase-9-contexto.md`): estoque pode ficar negativo? Sem carrinho ainda, o único caminho de mudança é edição manual pelo staff — aceitar negativo (registra erro de contagem real) ou barrar em 422?
 - 🔸 **Pendência** (ver §9.8 do `fase-9-contexto.md`): slug do produto gerado ou informado — mesma decisão da 9.6, reaplicada aqui.
 - ⬜ Testes: produto sem variante é rejeitado; variante default automática quando só uma é criada; validação de `targetSpecies` (array vazio = qualquer espécie).
@@ -272,15 +272,15 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ⬜ Dataset fake de catálogo (marca, categoria, tag, produto, variante) coerente, para o demo não mostrar listas vazias.
 - ⬜ `demo-reset.ts` passa a truncar/restaurar as tabelas transacionais novas (pets, produtos, variantes — `Breed` segue como catálogo de referência tipo `Role`/`Feature`, preservado, não truncado — confirmar na implementação).
 - ⬜ `demo-reset.ts` passa a limpar o diretório de upload (dependência da 9.10).
-- ⬜ Marcar como resolvida a entrada "Dummy data para a demo" do `docs/backlog.md` ao fechar esta sessão.
+- ⬜ Marcar como resolvida a entrada "Dummy data para a demo" do `docs/reference/backlog.md` ao fechar esta sessão.
 - ⬜ Testes: seed idempotente; demo-reset restaura pets/produtos fake e limpa uploads.
 
 ### ⬜ [Sessão 9.12] Fase 9.12 — Fechos
-- ⬜ `docs/endpoints.md` — todas as rotas novas de pet/breed/catálogo.
+- ⬜ `docs/reference/endpoints.md` — todas as rotas novas de pet/breed/catálogo.
 - ⬜ Coleção Bruno — pastas novas por módulo (`pets`, `breeds`, `products`, `variants`, `categories`, `brands`, `tags`), environments `local`/`prod`.
-- ⬜ `docs/context.md` §2.7 promovida de "planejada" a "implementada"; parágrafo "Fase 9 (fechada)" em §4.
-- ⬜ `docs/logging-policy.md` — conferir taxonomia final (ações de catálogo que a 9.1/9.7 tiverem definido, além das quatro de pet já registradas no planejamento).
-- ⬜ `docs/backlog.md` revisado — nenhum item resolvido pela fase sem marcação, nenhuma entrada nova esquecida.
+- ⬜ `docs/context/pet-domain.md` promovido de "planejada" a "implementada"; parágrafo "Fase 9 (fechada)" em `docs/context/history.md`; decisões novas indexadas em `docs/context.md`.
+- ⬜ `docs/reference/logging-policy.md` — conferir taxonomia final (ações de catálogo que a 9.1/9.7 tiverem definido, além das quatro de pet já registradas no planejamento).
+- ⬜ `docs/reference/backlog.md` revisado — nenhum item resolvido pela fase sem marcação, nenhuma entrada nova esquecida.
 - ⬜ `README.md` — roadmap promove a Fase 9 a ✅, contagem de testes atualizada.
 - ⬜ Decisão do usuário: apagar `docs/planning/fase-9-contexto.md` ou mantê-lo em `docs/planning/` como registro histórico.
 - ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 9 marcada ✅.

@@ -170,7 +170,7 @@ quem compra. Um teste de contrato afirma que a view pública não contém
 Imagem pertence ao **produto**, não à variante — imagem por variante é caso
 real ("cores diferentes" precisa; "mesmo saco, tamanhos diferentes" quase
 nunca precisa) mas adiciona complexidade que o domínio raramente cobra
-(`docs/backlog.md`).
+(`docs/reference/backlog.md`).
 
 ## Alternativas consideradas
 

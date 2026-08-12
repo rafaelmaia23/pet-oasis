@@ -7,7 +7,7 @@ import type { ListRecentLogsQuery } from "./log.schema";
  * já chegam ao buffer redigidas pelo `redact` do pino, então saem como estão —
  * um presenter de whitelist derrubaria os campos heterogêneos de cada linha.
  *
- * O `meta` declara as limitações do buffer (docs/logging-policy.md §9): é **por
+ * O `meta` declara as limitações do buffer (docs/reference/logging-policy.md §9): é **por
  * processo** (com réplicas, cada request vê só a fatia da instância que atendeu)
  * e **volátil** (some no restart).
  */

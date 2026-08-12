@@ -5,7 +5,7 @@ import { getRequestContext } from "@/lib/requestContext";
 
 /**
  * Campos que nunca saem da aplicação, em nenhuma categoria de log
- * (`docs/logging-policy.md` §5.1). A lista é única e compartilhada: qualquer
+ * (`docs/reference/logging-policy.md` §5.1). A lista é única e compartilhada: qualquer
  * destino novo (Axiom, Sentry, ring buffer) consome esta mesma configuração —
  * um destino que escapasse do `redact` anularia a política inteira.
  *

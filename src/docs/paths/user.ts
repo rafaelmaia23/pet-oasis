@@ -135,6 +135,7 @@ export const userPaths: ZodOpenApiPathsObject = {
         404: errorResponses[404],
         409: errorResponses[409],
         422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },

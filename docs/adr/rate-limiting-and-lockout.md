@@ -161,3 +161,43 @@ por uma falha real em produção; segue sem dado de produção para reavaliar o
 ponto acima. Single-instance segue valendo (nenhuma réplica nova), e nenhum
 volume de envio chegou perto de pressionar o limite por email destinatário.
 Os quatro gatilhos acima continuam de pé, sem novidade a registrar ainda.
+
+## Adendo (Fase 8.7) — dois pontos de consumo novos e um balde novo
+
+A Fase 8 abriu duas superfícies que também disparam email para um endereço **sem
+que o ator prove posse da conta**: o ramo de reativação self-service dentro de
+`POST /auth/signup` (8.4, quando email+cpf batem com uma conta soft-deletada) e
+`POST /users/:id/reactivate` (8.5, o admin forçando o envio). É a mesma superfície
+do item 3 do problema original ("bombardeio de caixa alheia"), então os dois
+passaram a consumir o **mesmo** `RATE_LIMIT_EMAIL_TARGET_*` já usado por
+`forgot-password`/`verify-email/resend` — não um limitador novo.
+
+**Por que o mesmo balde, inclusive para a rota autenticada de admin (K27):** o
+orçamento é do **email**, não do ator. Dois baldes somariam na caixa da mesma
+vítima e furariam exatamente a proteção que o limite por email-alvo existe para
+dar. A contrapartida — um admin legítimo pode levar 429 porque um terceiro gastou
+o orçamento daquele endereço — é um bloqueio temporário numa ação rara, e a `rule`
+(`signup-reactivation`/`account-reactivation`) distingue a origem no audit log.
+No caminho do admin o consumo acontece **depois** de todos os guards: um pedido
+recusado por 403/404/422 não gasta o orçamento do alvo.
+
+**Diferença técnica dos dois casos originais:** `rateLimitByEmailTarget` é um
+middleware Express que lê `req.body.email` antes do controller. Nenhum dos dois
+pontos novos se encaixa nesse formato — o signup só deve consumir no *ramo* de
+reativação (não em todo cadastro), e o endpoint de admin não recebe email nenhum
+no request (só `:id`; o email só existe depois da busca do alvo, dentro do
+service). Solução: `enforce()` (`src/lib/rateLimit.ts`) parou de precisar de
+`res` — o 429 passou a carregar o `Retry-After` no próprio `AppError`
+(campo `headers`), aplicado pelo error handler central, que já era o ponto único
+de saída desde a 7.5. Isso abriu um `consumeEmailTargetLimit(limiter, email, rule)`
+chamável direto do service, sem middleware.
+
+**Balde novo por IP para as rotas de token (K26):** `/auth/reset-password`,
+`/auth/confirm-email-change` e `/auth/confirm-account-reactivation` são públicas,
+consomem credencial opaca e não tinham freio nenhum. Ganharam o `tokenIpLimiter`
+(`RATE_LIMIT_TOKEN_*`, default 20 / 15 min — o par do login, porque consumir
+token é clique de link e precisa absorver NAT). Balde **próprio**, não o
+`emailIpLimiter`: enviar email e consumir token são superfícies diferentes, e
+dividir faria um reset legítimo comer o orçamento do outro. A decisão cobriu as
+três de uma vez porque proteger só a rota nova deixaria duas irmãs idênticas
+desprotegidas, sem razão de negócio que as distinga.

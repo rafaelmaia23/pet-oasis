@@ -36,7 +36,10 @@ import {
 } from "@/modules/auth/auth.constants";
 import { sessionViews } from "@/modules/auth/auth.presenter";
 import { userViews } from "@/modules/user/user.presenter";
-import { findUserById } from "@/modules/user/user.repository";
+import {
+  findUserById,
+  softDeleteUserAndInvalidateSessions,
+} from "@/modules/user/user.repository";
 
 const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }));
 
@@ -2151,6 +2154,88 @@ describe("Rate limiting (7.9)", () => {
       .send({ email: user.email });
 
     expect(response.status).toBe(429);
+  });
+});
+
+/**
+ * K26: as três rotas públicas que consomem token opaco dividem um balde por IP
+ * (`tokenIpLimiter`), separado do balde de quem **envia** email — senão um
+ * reset legítimo comeria o orçamento do outro.
+ */
+describe("Rate limiting das rotas de token (8.7)", () => {
+  const tokenRoutes = [
+    "/api/v1/auth/reset-password",
+    "/api/v1/auth/confirm-email-change",
+    "/api/v1/auth/confirm-account-reactivation",
+  ];
+
+  it.each(tokenRoutes)(
+    "returns 429 on %s once the per-IP limit is exceeded",
+    async (route) => {
+      const body = { token: generateOpaqueToken(), newPassword: "Senha@123" };
+
+      for (let i = 0; i < env.RATE_LIMIT_TOKEN_MAX; i++) {
+        const response = await request(app).post(route).send(body);
+        // Token inexistente: 400 genérico, mas o limite já contou a tentativa.
+        expect(response.status).toBe(400);
+      }
+
+      const response = await request(app).post(route).send(body);
+
+      expect(response.status).toBe(429);
+      expect(response.headers["retry-after"]).toBeDefined();
+    },
+  );
+
+  it("shares one bucket across the three routes", async () => {
+    const body = { token: generateOpaqueToken(), newPassword: "Senha@123" };
+
+    for (let i = 0; i < env.RATE_LIMIT_TOKEN_MAX; i++) {
+      await request(app).post("/api/v1/auth/reset-password").send(body);
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send(body);
+
+    expect(response.status).toBe(429);
+  });
+
+  it("keeps the token bucket separate from the one that sends emails", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_MAX; i++) {
+      await request(app)
+        .post("/api/v1/auth/forgot-password")
+        .send({ email: user.email });
+    }
+
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: generateOpaqueToken(), newPassword: "Senha@123" });
+
+    expect(response.status).toBe(400);
+  });
+});
+
+describe("Anti-enumeração (8.7)", () => {
+  it("returns the same generic 401 for a soft-deleted account as for a wrong password", async () => {
+    const user = await buildCustomer();
+    await softDeleteUserAndInvalidateSessions(user.id);
+
+    const deleted = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: user.email, password: user.password });
+
+    const wrongPassword = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: "nobody@example.com", password: "Senha@123" });
+
+    expect(deleted.status).toBe(401);
+    // `requestId` é o único campo que difere entre duas requests quaisquer.
+    const { requestId: _deletedId, ...deletedBody } = deleted.body;
+    const { requestId: _wrongId, ...wrongPasswordBody } = wrongPassword.body;
+    expect(deletedBody).toEqual(wrongPasswordBody);
   });
 });
 

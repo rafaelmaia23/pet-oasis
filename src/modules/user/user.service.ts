@@ -16,6 +16,7 @@ import * as lockout from "@/lib/lockout";
 import { logger } from "@/lib/logger";
 import { buildOffsetArgs } from "@/lib/pagination";
 import { hashPassword } from "@/lib/password";
+import { consumeEmailTargetLimit, emailTargetLimiter } from "@/lib/rateLimit";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import * as userRepository from "@/modules/user/user.repository";
 import type {
@@ -126,6 +127,15 @@ async function resolveCustomerSignupEmail(
   if (deletedUser.cpf !== cpf || deletedUser.bannedAt !== null) {
     throw createConflictError(EMAIL_IN_USE_ERROR);
   }
+
+  // 8.7: só a partir daqui o request de fato dispara email para o endereço, e
+  // sem que o ator tenha provado posse da conta — mesma superfície de abuso do
+  // `forgot-password`, então mesmo balde (K27), com `rule` própria no audit.
+  await consumeEmailTargetLimit(
+    emailTargetLimiter,
+    deletedUser.email,
+    "signup-reactivation",
+  );
 
   // Self-service traz **apenas** o perfil de cliente (D11); roles vazias = o
   // default do D8, todas as que morreram na cascata.
@@ -549,6 +559,15 @@ export async function reactivateAccount(
   for (const role of rolesList) {
     await assertAdminForRoleAssignment(requestingUserId, role);
   }
+
+  // 8.7: consumido **depois** de todos os guards — um pedido recusado não gasta
+  // o orçamento do alvo. Mesmo balde do `forgot-password` (K27): o orçamento é
+  // do email, e um segundo balde só somaria na caixa da mesma vítima.
+  await consumeEmailTargetLimit(
+    emailTargetLimiter,
+    target.email,
+    "account-reactivation",
+  );
 
   await requestAccountReactivation(target, "ADMIN", {
     profiles: choice.profiles,

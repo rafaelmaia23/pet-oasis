@@ -21,6 +21,7 @@ import {
   vi,
 } from "vitest";
 import app from "@/app";
+import { env } from "@/config/env";
 import { prisma } from "@/lib/prisma";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import type { RoleName } from "@/modules/role/role.constants";
@@ -779,5 +780,116 @@ describe("POST /api/v1/users/:id/reactivate", () => {
       profiles: ["EMPLOYEE"],
     });
     expect(JSON.stringify(requested)).not.toContain(target.email);
+  });
+});
+
+/**
+ * Os dois caminhos disparam email para um endereço sem que o ator prove posse
+ * da conta — a mesma superfície de abuso do `forgot-password`, e por isso o
+ * mesmo balde de email-alvo (K27). O IP é rotacionado porque o limite por IP do
+ * signup dispararia antes e mascararia o que está sendo medido.
+ */
+describe("Rate limiting por email-alvo (8.7)", () => {
+  const rateLimitAuditRows = () =>
+    prisma.auditLog.findMany({ where: { action: "AUTH_RATE_LIMIT_EXCEEDED" } });
+
+  const signupReclaimingFrom = (
+    target: { email: string; cpf: string },
+    ip: string,
+  ) => signupReclaiming(target).set("X-Forwarded-For", ip);
+
+  it("should return 429 on the signup reactivation branch once the per-email-target limit is exceeded", async () => {
+    const target = await buildCustomer();
+    await softDeleteUserAndInvalidateSessions(target.id);
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_TARGET_MAX; i++) {
+      const response = await signupReclaimingFrom(target, `198.51.100.${i}`);
+      expect(response.status).toBe(202);
+    }
+
+    const response = await signupReclaimingFrom(target, "198.51.100.250");
+
+    expect(response.status).toBe(429);
+    expect(response.headers["retry-after"]).toBeDefined();
+
+    const rows = await rateLimitAuditRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toEqual({
+      rule: "signup-reactivation",
+      scope: "EMAIL",
+    });
+  });
+
+  it("should share the budget with forgot-password, not open a bucket of its own (K27)", async () => {
+    const target = await buildCustomer();
+    await softDeleteUserAndInvalidateSessions(target.id);
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_TARGET_MAX; i++) {
+      const response = await request(app)
+        .post("/api/v1/auth/forgot-password")
+        .set("X-Forwarded-For", `198.51.101.${i}`)
+        .send({ email: target.email });
+      expect(response.status).toBe(200);
+    }
+
+    const response = await signupReclaimingFrom(target, "198.51.101.250");
+
+    expect(response.status).toBe(429);
+  });
+
+  it("should return 429 on the admin route once the per-email-target limit is exceeded", async () => {
+    const target = await buildHybrid();
+    await softDeleteUserAndInvalidateSessions(target.id);
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(admin.email, admin.password);
+
+    const reactivate = () =>
+      request(app)
+        .post(`/api/v1/users/${target.id}/reactivate`)
+        .set("Authorization", `Bearer ${token}`)
+        .send({ profiles: ["CUSTOMER"] });
+
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_TARGET_MAX; i++) {
+      expect((await reactivate()).status).toBe(204);
+    }
+
+    const response = await reactivate();
+
+    expect(response.status).toBe(429);
+    expect(response.headers["retry-after"]).toBeDefined();
+
+    const rows = await rateLimitAuditRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.metadata).toEqual({
+      rule: "account-reactivation",
+      scope: "EMAIL",
+    });
+  });
+
+  it("should not spend the target's budget on a request the guards refused", async () => {
+    const target = await buildHybrid({ employeeRoles: ["admin"] });
+    await softDeleteUserAndInvalidateSessions(target.id);
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const managerToken = await loginAs(manager.email, manager.password);
+
+    // K22: o manager não alcança uma conta que carregava role privilegiada.
+    for (let i = 0; i < env.RATE_LIMIT_EMAIL_TARGET_MAX + 1; i++) {
+      const refused = await request(app)
+        .post(`/api/v1/users/${target.id}/reactivate`)
+        .set("Authorization", `Bearer ${managerToken}`)
+        .send({ profiles: ["EMPLOYEE"] });
+      expect(refused.status).toBe(403);
+    }
+
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const adminToken = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/reactivate`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ profiles: ["EMPLOYEE"] });
+
+    expect(response.status).toBe(204);
+    expect(await rateLimitAuditRows()).toHaveLength(0);
   });
 });

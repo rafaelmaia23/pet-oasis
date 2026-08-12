@@ -6,6 +6,7 @@ import {
   rateLimitByEmailTarget,
   rateLimitByIp,
   signupIpLimiter,
+  tokenIpLimiter,
 } from "@/lib/rateLimit";
 import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
@@ -37,7 +38,13 @@ authRouter.post(
   rateLimitByEmailTarget(emailTargetLimiter, "forgot-password"),
   authController.forgotPassword,
 );
-authRouter.post("/reset-password", authController.resetPassword);
+// As três rotas públicas de token dividem um balde por IP (K26): são anônimas,
+// consomem credencial opaca e não têm outro freio na frente.
+authRouter.post(
+  "/reset-password",
+  rateLimitByIp(tokenIpLimiter, "reset-password"),
+  authController.resetPassword,
+);
 authRouter.post(
   "/change-password",
   authenticate,
@@ -49,11 +56,16 @@ authRouter.post(
   canAccess("update:user"),
   authController.changeEmail,
 );
-authRouter.post("/confirm-email-change", authController.confirmEmailChange);
+authRouter.post(
+  "/confirm-email-change",
+  rateLimitByIp(tokenIpLimiter, "confirm-email-change"),
+  authController.confirmEmailChange,
+);
 // Pública: o token é a credencial — quem confirma é o dono de uma conta morta,
 // que por definição não tem sessão nem consegue autenticar.
 authRouter.post(
   "/confirm-account-reactivation",
+  rateLimitByIp(tokenIpLimiter, "confirm-account-reactivation"),
   authController.confirmAccountReactivation,
 );
 authRouter.post(

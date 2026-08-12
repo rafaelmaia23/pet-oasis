@@ -4,6 +4,12 @@ export type AppErrorParams = {
   cause?: unknown;
   action?: string;
   code?: string;
+  /**
+   * Headers de resposta que este erro exige (ex.: `Retry-After` no 429). Vivem
+   * no erro, e não em `res.set`, porque quem lança pode não ter `res` à mão —
+   * o error handler central é o ponto único que aplica.
+   */
+  headers?: Record<string, string>;
 };
 
 export class AppError extends Error {
@@ -11,6 +17,7 @@ export class AppError extends Error {
   public readonly cause?: unknown | undefined;
   public readonly action?: string | undefined;
   public readonly code?: string | undefined;
+  public readonly headers?: Record<string, string> | undefined;
   public readonly isOperational = true;
 
   constructor({
@@ -19,6 +26,7 @@ export class AppError extends Error {
     cause,
     action,
     code,
+    headers,
   }: AppErrorParams) {
     super(message, { cause });
     this.name = this.constructor.name;
@@ -26,6 +34,7 @@ export class AppError extends Error {
     this.cause = cause;
     this.action = action;
     this.code = code;
+    this.headers = headers;
     Error.captureStackTrace(this, this.constructor);
   }
 

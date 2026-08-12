@@ -273,6 +273,7 @@ As sub-fases mantêm a numeração `7.0–7.19`; as sessões agrupam-nas em bloc
 - ✅ **`POST /auth/change-email`** (`authenticate` + `canAccess("update:user")`, sem feature nova): body `{ currentPassword, newEmail }`. Reabre a decisão de `user.schema.ts:56` (`email: z.never(...)` no `PATCH /users/:id`) — a troca é endpoint próprio, fora do update genérico. Exige a senha atual, recusa se `newEmail` for igual ao ativo, checa conflito contra `User.email` **e** `PreviousEmail` → 409 revelando o conflito. Gera token opaco (`purpose: EMAIL_CHANGE`, TTL = `EMAIL_VERIFICATION_TTL_MS` reaproveitada), grava `newEmail` na própria linha do token e seta `pendingEmail`. Uma nova chamada invalida o token `EMAIL_CHANGE` pendente anterior e sobrescreve `pendingEmail` (mesmo idioma de "unicidade do ativo por código" de `UserFeature`/`UserRole`) — dobra como cancelamento implícito. Dispara, na mesma operação, o aviso de segurança para o email **antigo** (com o link de confirmação — é quem ainda tem acesso à caixa real). Sem rate limit dedicado.
 - ✅ **`POST /auth/confirm-email-change`** (público): body `{ token }`. Em transação: `User.email = token.newEmail`, `pendingEmail = null`, insere `PreviousEmail`, marca o token usado, audit `EMAIL_CHANGE_COMPLETED`. Sem pré-checagem de conflito de última hora — o próprio `user.update` estoura P2002 → 409 pelo handler já existente.
 - ✅ **Email trocado fica reservado para sempre** (`PreviousEmail`, unique global) — mesmo idioma do email "preso" de conta deletada (nota da Fase 8). `createCustomer`/`createEmployee` (`user.service.ts`) ganharam `assertEmailAvailable`, checando `PreviousEmail` além do unique de `User.email` — senão a reserva seria furável simplesmente criando conta nova.
+  - 🔸 **Nota de errata (revisado na 8.6):** decisão **revertida**. A partir da 8.6 `PreviousEmail` não bloqueia mais nada (nem signup, nem admin criando employee, nem `change-email`); `assertEmailAvailable` e `findPreviousEmailByEmail` foram apagadas, e o `@unique` global da coluna saiu (K25). A tabela continua existindo como histórico. Ver a seção da Fase 8.6.
 - ✅ `GET /me` e a view `owner`/`admin` de `GET /users/:id` passam a expor `pendingEmail`.
 - ✅ `EMAIL_CHANGE_REQUESTED` (no pedido) / `EMAIL_CHANGE_COMPLETED` (na confirmação) no audit log — só ids/enum, email nunca em `metadata`.
 - ✅ **Implementação:** terceiro service do módulo auth, `src/modules/auth/emailChange.service.ts` (ao lado de `password.service.ts`/`verification.service.ts`); `authRepository.requestEmailChange`/`consumeEmailChange` (transação interativa, mesmo idioma de `consumePasswordReset`); `userRepository.findPreviousEmailByEmail`. `clearDatabase()` e o guard de regressão (`clearDatabase.guard.test.ts`) atualizados para a tabela nova. Suíte (584) + `typecheck` + `lint` verdes.
@@ -577,19 +578,36 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 - ✅ Suíte (**698**) + `typecheck` + `lint` verdes; `docs/endpoints.md`, OpenAPI (`src/docs/paths/{auth,user}.ts`) e coleção Bruno atualizados junto, não deferidos para a 8.9.
 - ✅ ~~**D16 aplicada aqui**~~ e ~~**Q9** (quem é o ator na confirmação, se a rota é pública?)~~ — **as duas morreram no kickoff da Sessão C (K16).** Com a restauração parando na role, nenhum override ressuscita em nenhum caminho, então não há conteúdo dinâmico para o guard filtrar e não há autoridade a capturar em tempo de emissão do token. A reativação de conta restaura perfis e roles; overrides ficam mortos e só voltam por ação explícita.
 
+#### Decisões do kickoff da Sessão E
+
+| # | Questão | Decisão |
+|---|---|---|
+| K25 | O `@unique` global de `PreviousEmail.email` sobrevive à liberação? | **Não — sai** (migration). Achado neste kickoff, não visto pela Fase 8 antiga: com o bloqueio removido, B troca X→Y (grava `PreviousEmail` X); A faz signup com X (agora permitido); A troca X→Z → `previousEmail.create` estoura **P2002** e a troca de email de A falha com 409 **para sempre**, sem caminho de volta. A tabela passa a ser o que o D13 diz que ela é: histórico puro — e histórico legitimamente se repete (o mesmo endereço pertence a várias contas ao longo do tempo; a mesma conta pode voltar a um endereço antigo). Sem `findPreviousEmailByEmail`, não sobra leitura por email para o índice servir. |
+| K26 | A confirmação pública de reativação ganha rate limit (pendência que a 8.4 deixou anotada)? | **Sim, e as três públicas de token juntas:** `/auth/reset-password`, `/auth/confirm-email-change` e `/auth/confirm-account-reactivation` passam a ter limite **por IP**. Proteger só a rota nova deixaria duas irmãs idênticas — públicas, consumindo token opaco — desprotegidas sem nenhuma razão de negócio que as distinga. Balde **próprio** (`tokenIpLimiter`), não o `emailIpLimiter`: enviar email e consumir token são superfícies diferentes, e compartilhar faria um reset legítimo comer o orçamento do outro. |
+| K27 | `POST /users/:id/reactivate` usa balde próprio, por ser ação de ator autenticado? | **Não — mesmo balde** `emailTargetLimiter` do `forgot-password`/`verify-email-resend`, só com `rule` própria no audit. O orçamento é do **email**, não do ator: baldes separados somariam para a mesma vítima e furariam exatamente a proteção que o limite por email-alvo existe para dar. Admin bloqueado por tráfego de terceiro é um 429 temporário numa ação rara, e a `rule` já diz no audit de onde veio. |
+
 ### ⬜ [Sessão E] Fase 8.6 — Emails liberados
 
-- ⬜ D13: só o **email atual** de uma conta é reservado (inclusive de conta deletada — `User.email @unique` global já garante, sem mudança de schema). Email já trocado fica livre.
-- ⬜ Os três call sites de `findPreviousEmailByEmail` que lançam 409 saem (signup de customer, admin criando employee, `POST /auth/change-email`); `assertEmailAvailable` fica vazia e é apagada; `findPreviousEmailByEmail` vira código morto e é apagada.
-- ⬜ `PreviousEmail` (tabela e criação do registro) **não muda** — continua como auditoria, só para de ser consultada para bloquear.
-- ⬜ Referência de implementação: patch `.fase-8-backup/0003-*` (commit `6dde2d8`). É um commit de remoção; depois do revert as checagens voltaram a existir, então deve aplicar bem.
+> Branch `feat/fase-8-6-email-reuse`. Referência: patch `.fase-8-backup/0003-*` (commit `6dde2d8`) — commit de remoção, aplica bem depois do revert. O K25 é acréscimo novo, que o patch não tinha.
+
+- ⬜ D13: só o **email atual** de uma conta é reservado (inclusive de conta deletada — `User.email @unique` já garante). Email já trocado fica livre.
+- ⬜ **Testes primeiro, por inversão:** os três casos que hoje semeiam `previousEmail` e esperam 409 passam a esperar sucesso — `auth.test.ts` (signup → 201; `change-email` → 204 com `pendingEmail` setado e aviso ao email antigo) e `user.test.ts` (admin criando employee → 201).
+- ⬜ **Teste novo (K25):** conta A adota um email que já está em `PreviousEmail` de outra conta e **troca de email de novo** — a confirmação responde 204 e as duas linhas com o mesmo email coexistem. Sem a migration, falha com 409.
+- ⬜ **Migration** (`drop_previous_email_unique`): remove o `@unique` de `PreviousEmail.email`; `@@index([userId])` fica. Não zera banco.
+- ⬜ Os três call sites de `findPreviousEmailByEmail` que lançam 409 saem (signup de customer, admin criando employee, `POST /auth/change-email`); `assertEmailAvailable` fica vazia e é apagada; `findPreviousEmailByEmail` vira código morto e é apagada. O conflito com email **ativo** continua vindo do unique de `User.email` (P2002 → 409).
+- ⬜ `PreviousEmail` (tabela e criação do registro em `consumeEmailChange`) **não muda** — continua como auditoria, só para de ser consultada para bloquear.
+- ⬜ Docs junto: a errata da 7.15 aqui no `docs/todo.md` e em `docs/context.md` (§2.2 + a seção de errata da 7.15).
 
 ### ⬜ [Sessão E] Fase 8.7 — Rate limiting / anti-enumeração
 
-- ⬜ Infra aproveitável do patch `.fase-8-backup/0004-*` (commit `cad332e`): `AppError.headers` + `Retry-After` aplicado pelo error handler central, e `consumeEmailTargetLimit` chamável direto do service (os call sites são no service, que não enxerga `Request`/`Response`).
-- ⬜ ⚠️ **Descartar** as ~19 linhas do patch em `user.service.ts` — é o call site dentro do `forceAccountReactivation` antigo, que foi reescrito.
-- ⬜ Cobre as superfícies novas de 8.4/8.5, no mesmo balde Redis das rotas antigas, com `rule` própria para distinguir a origem no audit log.
+> Branch `feat/fase-8-7-rate-limit`. Infra aproveitável do patch `.fase-8-backup/0004-*` (commit `cad332e`).
+
+- ⬜ **Refactor que destrava os call sites de service:** `rateLimitByEmailTarget` é middleware e lê `req.body.email` antes do controller — nenhum dos dois pontos novos cabe nisso (o signup só consome no *branch* de reativação, não em todo cadastro; `/users/:id/reactivate` não recebe email nenhum no request). `AppError` ganha `headers?: Record<string, string>`; `enforce()` para de receber `res` e joga o `Retry-After` no próprio erro; o error handler central aplica (ponto único de saída desde a 7.5). Abre `consumeEmailTargetLimit(limiter, email, rule)`, com o mesmo padrão de DI dos middlewares (limiter por parâmetro = testável sem Redis).
+- ⬜ ⚠️ **Descartar** as ~19 linhas do patch em `user.service.ts` — é o call site dentro do `forceAccountReactivation` antigo, que foi reescrito. Só a **posição** do call site se aproveita.
+- ⬜ Dois pontos de consumo novos, **mesmo balde** (K27), `rule` distinguindo a origem no audit: `resolveCustomerSignupEmail` (`signup-reactivation`, logo antes do `requestAccountReactivation(…, "SELF", …)`) e `reactivateAccount` (`account-reactivation`, **depois de todos os guards** — um 403 de não-escalação nunca gasta orçamento do alvo).
+- ⬜ **K26:** `tokenIpLimiter` novo (`rl:token:ip`, `RATE_LIMIT_TOKEN_MAX`/`_WINDOW_MS` — default 20 / 15 min, o par do `login`) nas três rotas públicas de token, com uma `rule` por rota e um balde só (mesmo idioma do `emailIpLimiter`, já compartilhado por duas rules).
 - ⬜ Regressão: login em conta deletada responde 401 genérico, indistinguível de senha errada.
+- ⬜ Docs junto: adendo em `docs/adr/rate-limiting-and-lockout.md` (os dois call sites novos, o racional do `AppError.headers`, o balde de token) e `429` no OpenAPI das rotas que passaram a poder devolvê-lo.
 
 ### ⬜ [Sessão F] Fase 8.8 — Isentar a conta demo do account lockout
 

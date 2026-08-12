@@ -2,7 +2,9 @@ import {
   createConflictError,
   createForbiddenError,
   createNotFoundError,
+  createValidationError,
 } from "@/errors";
+import type { ProfileKind } from "@/generated/prisma/enums";
 import type { AuthUser } from "@/lib/authorization";
 import {
   assertActorIsAdmin,
@@ -27,7 +29,10 @@ import { requestAccountReactivation } from "../auth/accountReactivation.service"
 import { PASSWORD_RESET_TTL_MS } from "../auth/auth.constants";
 import { buildPasswordResetEmail } from "../auth/password.service";
 import { issueEmailVerification } from "../auth/verification.service";
-import { assertAdminForRoleAssignment } from "../permission/permission.service";
+import {
+  assertAdminForRoleAssignment,
+  getRolesRestorableWithProfiles,
+} from "../permission/permission.service";
 import { PERMISSION_FEATURES, type RoleName } from "../role/role.constants";
 import { getRolesByNames } from "../role/role.repository";
 
@@ -463,6 +468,116 @@ export async function unlockAccount(
   }
 
   log.info({ userId: targetId, actorId: requestingUserId }, "account unlocked");
+}
+
+/**
+ * Admin dispara a reativação de uma conta soft-deletada, escolhendo perfis e —
+ * opcionalmente — roles (D8/K19). Não reativa nada: emite o token e manda o
+ * email, e quem conclui é o dono da conta, definindo a senha nova (K17).
+ *
+ * **Não-escalação (K22):** o guard corre sobre as roles que de fato vão voltar —
+ * as nomeadas, ou, no default, as que morreram com cada perfil. Roda antes de
+ * qualquer escrita, então um manager barrado não deixa nem token nem email para
+ * trás. É o mesmo `assertAdminForRoleAssignment` da atribuição de role e da
+ * reativação de perfil (8.3): uma conta que volta com `admin` é alguém sendo
+ * atribuído a `admin`.
+ *
+ * O molde `assertAdminForPrivilegedTarget` (ban/lock) não serve aqui: ele lê as
+ * features **efetivas** do alvo, e num alvo morto todas as roles estão
+ * soft-deletadas — o conjunto sairia vazio e o guard passaria sempre.
+ */
+export async function reactivateAccount(
+  requestingUserId: string,
+  targetId: string,
+  choice: { profiles: ProfileKind[]; roleNames?: RoleName[] },
+) {
+  const target = await userRepository.findDeletedUserById(targetId);
+
+  // Conta viva também cai aqui: não é uma conta deletada, e dizer "existe mas
+  // está ativa" seria contar sobre uma conta que o ator talvez nem possa ver.
+  if (!target) {
+    throw createNotFoundError({
+      message: "Usuário excluído não encontrado",
+      action: "Verifique o ID e tente novamente",
+    });
+  }
+
+  if (target.bannedAt !== null) {
+    throw createConflictError({
+      message: "Não é possível reativar uma conta banida",
+      action: "Remova o banimento antes de reativar a conta",
+    });
+  }
+
+  const claimedProfiles = choice.profiles.map((kind) => ({
+    kind,
+    deletedAt:
+      kind === "CUSTOMER"
+        ? (target.customer?.deletedAt ?? null)
+        : (target.employee?.deletedAt ?? null),
+  }));
+
+  // Restaurar um perfil que nunca existiu é impossível, e criar do zero só vale
+  // para o de cliente (§5.2): virar funcionário é ato próprio, com a conta viva.
+  const impossible = claimedProfiles.filter(
+    ({ kind, deletedAt }) => kind === "EMPLOYEE" && deletedAt === null,
+  );
+
+  if (impossible.length > 0) {
+    throw createValidationError({
+      errors: {
+        profiles: [
+          "A conta nunca teve perfil de funcionário; crie-o com a conta já ativa",
+        ],
+      },
+    });
+  }
+
+  const rolesList = choice.roleNames
+    ? await getRolesByNames(choice.roleNames)
+    : await getRolesRestorableWithProfiles(
+        targetId,
+        claimedProfiles.filter(
+          (profile): profile is { kind: ProfileKind; deletedAt: Date } =>
+            profile.deletedAt !== null,
+        ),
+      );
+
+  // Uma role só volta se o perfil dela voltar junto — senão a conta ficaria com
+  // uma atribuição ativa sob um perfil morto, o oposto do D1.
+  if (choice.roleNames) {
+    for (const kind of ["CUSTOMER", "EMPLOYEE"] as const) {
+      const roles = rolesList.filter((role) => role.appliesTo === kind);
+
+      if (roles.length > 0 && !choice.profiles.includes(kind)) {
+        throw createValidationError({
+          errors: {
+            roleNames: [
+              `As roles ${roles.map((r) => r.name).join(", ")} exigem que o perfil correspondente seja restaurado`,
+            ],
+          },
+        });
+      }
+    }
+  }
+
+  for (const role of rolesList) {
+    await assertAdminForRoleAssignment(requestingUserId, role);
+  }
+
+  await requestAccountReactivation(target, "ADMIN", {
+    profiles: choice.profiles,
+    roleIds: choice.roleNames ? rolesList.map((role) => role.id) : [],
+  });
+
+  log.info(
+    {
+      userId: targetId,
+      actorId: requestingUserId,
+      profiles: choice.profiles,
+    },
+    "account reactivation forced",
+  );
 }
 
 export async function forcePasswordReset(

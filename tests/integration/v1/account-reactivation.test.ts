@@ -6,6 +6,7 @@ import {
   makeCustomerData,
 } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
+import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
 import { makePassword } from "@tests/helpers/primitives";
 import { flushRedis } from "@tests/helpers/redis";
@@ -22,6 +23,7 @@ import {
 import app from "@/app";
 import { prisma } from "@/lib/prisma";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
+import type { RoleName } from "@/modules/role/role.constants";
 import { softDeleteUserAndInvalidateSessions } from "@/modules/user/user.repository";
 
 // A reativação atravessa dois routers (o signup em `/auth`, a ação do admin em
@@ -478,5 +480,304 @@ describe("POST /api/v1/auth/confirm-account-reactivation", () => {
     });
     assert(rows.length === 2, "os dois overrides deveriam continuar existindo");
     expect(rows.every((row) => row.deletedAt !== null)).toBe(true);
+  });
+});
+
+describe("POST /api/v1/users/:id/reactivate", () => {
+  const reactivate = (
+    token: string,
+    userId: string,
+    body: Record<string, unknown>,
+  ) =>
+    request(app)
+      .post(`/api/v1/users/${userId}/reactivate`)
+      .set("Authorization", `Bearer ${token}`)
+      .send(body);
+
+  const deletedHybrid = async (employeeRoles: RoleName[] = ["attendant"]) => {
+    const target = await buildHybrid({ employeeRoles });
+    await softDeleteUserAndInvalidateSessions(target.id);
+    return target;
+  };
+
+  it("should require authentication and the reactivate:user feature", async () => {
+    const target = await deletedHybrid();
+
+    const anonymous = await request(app)
+      .post(`/api/v1/users/${target.id}/reactivate`)
+      .send({ profiles: ["CUSTOMER"] });
+    expect(anonymous.status).toBe(401);
+
+    const attendant = await buildEmployee({ roleNames: ["attendant"] });
+    const attendantToken = await loginAs(attendant.email, attendant.password);
+
+    const forbidden = await reactivate(attendantToken, target.id, {
+      profiles: ["CUSTOMER"],
+    });
+    expect(forbidden.status).toBe(403);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(await reactivationTokens(target.id)).toHaveLength(0);
+  });
+
+  it("should issue the token for the profiles the manager chose", async () => {
+    const target = await deletedHybrid();
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await reactivate(token, target.id, {
+      profiles: ["EMPLOYEE"],
+    });
+
+    expect(response.status).toBe(204);
+
+    const tokens = await reactivationTokens(target.id);
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]?.restoreProfiles).toEqual(["EMPLOYEE"]);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: target.email }),
+    );
+
+    // O pedido não reativa nada: quem reativa é o dono, com o token.
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    expect(user.deletedAt).not.toBeNull();
+  });
+
+  it("should bring back both profiles when both are claimed", async () => {
+    const target = await deletedHybrid();
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    await reactivate(token, target.id, {
+      profiles: ["CUSTOMER", "EMPLOYEE"],
+    });
+
+    await confirm({
+      token: tokenFromLastEmail(),
+      newPassword: makePassword(),
+    });
+
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { userId: target.id },
+    });
+    const employee = await prisma.employee.findUniqueOrThrow({
+      where: { userId: target.id },
+    });
+
+    expect(customer.deletedAt).toBeNull();
+    expect(employee.deletedAt).toBeNull();
+    expect(await activeRoleNames(target.id)).toEqual(
+      expect.arrayContaining(["customer", "attendant"]),
+    );
+  });
+
+  it("should narrow the roles the profile comes back with (D8)", async () => {
+    const target = await buildHybrid({
+      employeeRoles: ["attendant", "manager"],
+    });
+    await softDeleteUserAndInvalidateSessions(target.id);
+
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(admin.email, admin.password);
+
+    await reactivate(token, target.id, {
+      profiles: ["EMPLOYEE"],
+      roleNames: ["attendant"],
+    });
+
+    await confirm({
+      token: tokenFromLastEmail(),
+      newPassword: makePassword(),
+    });
+
+    expect(await activeRoleNames(target.id)).toEqual(["attendant"]);
+  });
+
+  it("should grant a named role that did not die in the cascade (K15/K21)", async () => {
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    // `manager` nunca foi atribuída: nomeá-la é conceder, não restaurar.
+    await softDeleteUserAndInvalidateSessions(target.id);
+
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(admin.email, admin.password);
+
+    await reactivate(token, target.id, {
+      profiles: ["EMPLOYEE"],
+      roleNames: ["attendant", "manager"],
+    });
+
+    await confirm({
+      token: tokenFromLastEmail(),
+      newPassword: makePassword(),
+    });
+
+    expect(await activeRoleNames(target.id)).toEqual(
+      expect.arrayContaining(["attendant", "manager"]),
+    );
+  });
+
+  it("should create the customer profile from scratch for an employee-only account (Caso B)", async () => {
+    const target = await buildEmployee();
+    await softDeleteUserAndInvalidateSessions(target.id);
+
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await reactivate(token, target.id, {
+      profiles: ["CUSTOMER"],
+    });
+    expect(response.status).toBe(204);
+
+    await confirm({
+      token: tokenFromLastEmail(),
+      newPassword: makePassword(),
+      phone: "11987650002",
+    });
+
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { userId: target.id },
+    });
+    expect(customer.deletedAt).toBeNull();
+    expect(await activeRoleNames(target.id)).toEqual(["customer"]);
+  });
+
+  it("should refuse to invent an employee profile that never existed (§5.2)", async () => {
+    const target = await buildCustomer();
+    await softDeleteUserAndInvalidateSessions(target.id);
+
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await reactivate(token, target.id, {
+      profiles: ["EMPLOYEE"],
+    });
+
+    expectValidationError(response, ["profiles"]);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(await reactivationTokens(target.id)).toHaveLength(0);
+  });
+
+  it("should refuse an empty profile list (D14)", async () => {
+    const target = await deletedHybrid();
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await reactivate(token, target.id, { profiles: [] });
+
+    expectValidationError(response, ["profiles"]);
+  });
+
+  it("should refuse a role incompatible with the claimed profiles", async () => {
+    const target = await deletedHybrid();
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await reactivate(token, target.id, {
+      profiles: ["CUSTOMER"],
+      roleNames: ["attendant"],
+    });
+
+    expectValidationError(response);
+    expect(await reactivationTokens(target.id)).toHaveLength(0);
+  });
+
+  it("should 404 an account that is not deleted", async () => {
+    const target = await buildCustomer();
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await reactivate(token, target.id, {
+      profiles: ["CUSTOMER"],
+    });
+
+    expect(response.status).toBe(404);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("should 409 a banned account (K24)", async () => {
+    const target = await buildCustomer();
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { bannedAt: new Date(), banReason: "fraude" },
+    });
+    await softDeleteUserAndInvalidateSessions(target.id);
+
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await reactivate(token, target.id, {
+      profiles: ["CUSTOMER"],
+    });
+
+    expect(response.status).toBe(409);
+    expect(await reactivationTokens(target.id)).toHaveLength(0);
+  });
+
+  it("should refuse a manager reactivating an account that carried a privileged role (K22)", async () => {
+    const target = await deletedHybrid(["admin"]);
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await reactivate(token, target.id, {
+      profiles: ["EMPLOYEE"],
+    });
+
+    expect(response.status).toBe(403);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(await reactivationTokens(target.id)).toHaveLength(0);
+  });
+
+  it("should refuse a manager naming a privileged role (K22)", async () => {
+    const target = await deletedHybrid();
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await reactivate(token, target.id, {
+      profiles: ["EMPLOYEE"],
+      roleNames: ["admin"],
+    });
+
+    expect(response.status).toBe(403);
+    expect(await reactivationTokens(target.id)).toHaveLength(0);
+  });
+
+  it("should let an admin reactivate an account that carried a privileged role", async () => {
+    const target = await deletedHybrid(["admin"]);
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await reactivate(token, target.id, {
+      profiles: ["EMPLOYEE"],
+    });
+
+    expect(response.status).toBe(204);
+
+    await confirm({
+      token: tokenFromLastEmail(),
+      newPassword: makePassword(),
+    });
+
+    expect(await activeRoleNames(target.id)).toEqual(["admin"]);
+  });
+
+  it("should record the request in the audit trail as an admin-sourced one", async () => {
+    const target = await deletedHybrid();
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    await reactivate(token, target.id, { profiles: ["EMPLOYEE"] });
+
+    const requested = await prisma.auditLog.findFirstOrThrow({
+      where: { action: "ACCOUNT_REACTIVATION_REQUESTED", targetId: target.id },
+    });
+
+    expect(requested.actorId).toBe(manager.id);
+    expect(requested.metadata).toMatchObject({
+      source: "ADMIN",
+      profiles: ["EMPLOYEE"],
+    });
+    expect(JSON.stringify(requested)).not.toContain(target.email);
   });
 });

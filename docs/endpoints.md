@@ -50,7 +50,7 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | POST `/api/v1/auth/reset-password` | público | Troca a senha via token e invalida TODAS as sessões, 204 |
 | POST `/api/v1/auth/change-password` | `authenticate` | Troca a senha logado (exige senha atual) e invalida TODAS as sessões, 204 |
 | POST `/api/v1/auth/change-email` | `update:user` | Pede a troca de email (exige senha atual); dispara aviso de segurança pro email antigo com o link de confirmação |
-| POST `/api/v1/auth/confirm-email-change` | público | Confirma a troca via token, grava o email antigo em `PreviousEmail` (reservado para sempre), 204 |
+| POST `/api/v1/auth/confirm-email-change` | público | Confirma a troca via token, grava o email antigo em `PreviousEmail` (só histórico — não reserva o endereço, 8.6), 204 |
 | POST `/api/v1/auth/confirm-account-reactivation` | público | Reativa a conta via token e define **senha nova** (obrigatória); restaura os perfis escolhidos e as roles que morreram com eles — overrides nunca voltam (D6'). `phone` só é exigido quando o perfil de cliente precisa nascer do zero. 204 |
 
 ## Me — `src/modules/me/me.routes.ts`

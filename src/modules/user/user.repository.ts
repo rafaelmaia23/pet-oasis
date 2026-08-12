@@ -59,10 +59,6 @@ export async function findUserByEmail(email: string) {
   });
 }
 
-export async function findPreviousEmailByEmail(email: string) {
-  return prisma.previousEmail.findFirst({ where: { email } });
-}
-
 export type UserListFilters = {
   status?: UserStatus | undefined;
   banned?: boolean | undefined;

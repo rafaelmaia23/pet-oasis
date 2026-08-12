@@ -212,10 +212,15 @@ model VerificationToken {
 // Histórico de emails que já foram ativos numa conta. Unique global: um email
 // só pode ter sido ativo de uma conta na história do sistema (reserva
 // permanente, mesmo idioma do email "preso" de conta soft-deletada).
+// Histórico puro (D13): registra que um endereço pertenceu a uma conta até tal
+// data, e NUNCA bloqueia reuso. Por isso `email` não é único (8.6/K25) — o mesmo
+// endereço pode ser deixado para trás por várias contas ao longo do tempo, e uma
+// conta pode voltar a um endereço que já largou; com unique, a segunda troca
+// estouraria P2002 e travaria a conta sem caminho de volta.
 model PreviousEmail {
   id         String   @id @default(uuid())
   userId     String   @map("user_id")
-  email      String   @unique
+  email      String
   replacedAt DateTime @map("replaced_at")
   createdAt  DateTime @default(now()) @map("created_at")
 

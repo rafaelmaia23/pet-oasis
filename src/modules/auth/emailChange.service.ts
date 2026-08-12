@@ -9,11 +9,7 @@ import { send } from "@/lib/email";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
-import {
-  findPreviousEmailByEmail,
-  findUserByEmail,
-  findUserById,
-} from "@/modules/user/user.repository";
+import { findUserByEmail, findUserById } from "@/modules/user/user.repository";
 import { EMAIL_VERIFICATION_TTL_MS } from "./auth.constants";
 import * as authRepository from "./auth.repository";
 
@@ -83,11 +79,9 @@ export async function changeEmail(
     });
   }
 
+  // Só o email ATIVO de alguém bloqueia (D13, 8.6): um endereço que outra conta
+  // já largou está em `PreviousEmail` como histórico e é reutilizável.
   if (await findUserByEmail(newEmail)) {
-    throw createConflictError(EMAIL_IN_USE_ERROR);
-  }
-
-  if (await findPreviousEmailByEmail(newEmail)) {
     throw createConflictError(EMAIL_IN_USE_ERROR);
   }
 

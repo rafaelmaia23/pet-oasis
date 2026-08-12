@@ -214,7 +214,7 @@ describe("POST /api/v1/auth/signup", () => {
     expect(await prisma.user.count()).toBe(1);
   });
 
-  it("should return the same generic 409 when the email was previously used by another account", async () => {
+  it("should allow signup with an email a previous account changed away from (8.6)", async () => {
     const other = await buildCustomer();
     const reservedEmail = other.email;
     await prisma.user.update({
@@ -229,11 +229,8 @@ describe("POST /api/v1/auth/signup", () => {
       .post("/api/v1/auth/signup")
       .send(makeCustomerData({ email: reservedEmail }));
 
-    expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({
-      message: "O email informado já está em uso",
-      code: "CONFLICT",
-    });
+    expect(response.status).toBe(201);
+    expect(response.body.email).toBe(reservedEmail);
   });
 
   it("should return 422 if name is missing", async () => {
@@ -1724,7 +1721,7 @@ describe("POST /api/v1/auth/change-email", () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it("should return 409 when newEmail was previously used by another account", async () => {
+  it("should allow changing to an email a previous account changed away from (8.6)", async () => {
     const user = await buildCustomer();
     const other = await buildCustomer();
     const token = await loginAs(user.email, user.password);
@@ -1738,8 +1735,57 @@ describe("POST /api/v1/auth/change-email", () => {
       .set("Authorization", `Bearer ${token}`)
       .send({ currentPassword: user.password, newEmail: reservedEmail });
 
-    expect(response.status).toBe(409);
-    expect(sendMock).not.toHaveBeenCalled();
+    expect(response.status).toBe(204);
+
+    const userInDb = await findUserById(user.id);
+    expect(userInDb?.pendingEmail).toBe(reservedEmail);
+
+    // O aviso continua indo para o email ANTIGO (7.15), não para o reclamado.
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: user.email }),
+    );
+  });
+
+  /**
+   * K25: liberar o reuso sem derrubar o `@unique` global de `PreviousEmail.email`
+   * deixaria uma bomba-relógio — a conta que adota um email já usado por outra
+   * nunca mais conseguiria trocar de email, porque o `previousEmail.create` da
+   * confirmação estouraria P2002.
+   */
+  it("should let two accounts leave the same email behind in PreviousEmail (8.6, K25)", async () => {
+    const other = await buildCustomer();
+    const adopted = other.email;
+    await prisma.user.update({
+      where: { id: other.id },
+      data: { email: `changed-${other.id}@example.com` },
+    });
+    await prisma.previousEmail.create({
+      data: { userId: other.id, email: adopted, replacedAt: new Date() },
+    });
+
+    const adopter = await buildCustomer({ data: { email: adopted } });
+    const token = await loginAs(adopter.email, adopter.password);
+    sendMock.mockClear();
+
+    await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        currentPassword: adopter.password,
+        newEmail: "third@example.com",
+      });
+
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token: tokenFromLastEmail() });
+
+    expect(response.status).toBe(204);
+
+    const rows = await prisma.previousEmail.findMany({
+      where: { email: adopted },
+    });
+    expect(rows).toHaveLength(2);
   });
 
   it("should return 403 for a banned account", async () => {

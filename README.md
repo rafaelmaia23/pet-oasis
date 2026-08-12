@@ -244,7 +244,7 @@ Ambos são idempotentes (`npm run db:seed` não duplica nada) e restaurados todo
 
 | | Fase | Entrega |
 |---|---|---|
-| 🔜 | 9 — Domínio pet shop | Pets ligados a Customers, CRUD aninhado, escopos *own*/*others* — e, adiante, vendas e pedidos |
+| 🔜 | 9 — Domínio pet shop | Pets ligados a Customers (CRUD, escopos *own*/*others*) e catálogo (produto/variante, marca, categoria, tag, busca textual, upload de imagem) — sem checkout ainda; carrinho e pedido ficam para a Fase 10 |
 
 Detalhe atômico de cada item em [`docs/todo.md`](docs/todo.md).
 

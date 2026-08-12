@@ -660,6 +660,169 @@ Com a cascata (D1), conta deletada tem **todos** os perfis mortos. Os casos se d
 
 ---
 
-## Fases seguintes (resumo)
-- **Fase 9 — Domínio pet shop:** model Pet (Customer 1:N), CRUD aninhado em customers, scopes own/others, views owner/staff.
-  - 🔸 **Nota p/ o planejamento da Fase 9 (deixada aqui de propósito — é onde vai ser executada):** existe um planejamento atômico dessa fase, escrito antes do revert da Fase 8, guardado **fora do git** em `.fase-8-backup/0001-docs-expand-Fase-9-into-atomic-tasks-*.patch` (só mexe neste arquivo, sem código). A branch `backup/fase-8-original`, de onde ele saiu, foi apagada na 8.9 — **o patch é a única cópia**. Ao abrir a Fase 9: reaplicar (`git apply`) ou reescrever a partir dele, e **só então apagar `.fase-8-backup/` inteiro**, que é o último resíduo do revert.
+## Fase 9 — Domínio pet shop: pets e catálogo
+
+> Planejada em 2026-08-06, sessão de brainstorming/decisão consumida de
+> `docs/planning/fase-9-contexto.md` (mantido ou apagado ao final da fase — decisão do
+> usuário). Duas agregações praticamente independentes — **Bloco A** (pets, ligados a
+> `Customer`) e **Bloco B** (catálogo: marca/categoria/tag/produto/variante) — que só se
+> tocam na faceta "para qual espécie este produto serve". Carrinho, pedido e pagamento
+> ficam para a **Fase 10**. Racional completo no `docs/context.md` §2.7, ADRs novos em
+> `docs/adr/` (`pet-domain-modeling.md`, `product-catalog-modeling.md`,
+> `product-vs-service.md`, `text-search.md`, `file-storage-and-uploads.md`, e um adendo em
+> `pagination.md`), itens deixados de fora no `docs/backlog.md`.
+>
+> **Muitas decisões de negócio ainda não foram tomadas** — ver os bullets `🔸 Pendência`
+> em cada sessão abaixo. Cada uma é regra de negócio: apresentar 2–4 caminhos, a
+> consequência de cada um, uma recomendação, e esperar a decisão do usuário antes de
+> codificar (regra do `CLAUDE.md`). Nenhuma delas se resolve sozinha.
+
+### Decisões firmadas no planejamento da fase
+
+| # | Decisão | Escolha |
+|---|---|---|
+| N1 | Recorte da fase | Bloco A (pets) + Bloco B (catálogo), **sem checkout** — opção B entre três avaliadas (só pets era magro demais; loja completa com carrinho/pedido tinha cadeia de dependência longa demais). Carrinho/pedido/pagamento ficam para a Fase 10. |
+| N2 | Espécie do pet | Enum fechado no banco, **sem `OUTRO`**: `DOG, CAT, RABBIT, BIRD, RODENT, REPTILE, FISH`. `OUTRO` seria um buraco permanente de qualidade de dado; espécie nova = migration barata (`ALTER TYPE ... ADD VALUE`). |
+| N3 | Raça | Tabela `Breed` semeada por constante curada **uma vez** a partir de API pública (TheDogAPI/TheCatAPI), **nunca consultada em runtime**; `@@unique([species, name])`. `SPECIES_WITH_BREED` é constante **explícita** ao lado do enum, não derivada de "existe `Breed` para esta espécie" (evita efeito retroativo). |
+| N4 | Rotas de pet | Coleção aninhada em `/customers/:customerId/pets`, recurso plano em `/pets/:petId` — `petId` é UUID global, `customerId` no item seria redundante e poderia discordar do dono real. Sem `/me/pets` nesta fase (backlog). |
+| N5 | Falecimento vs. exclusão | `deceasedAt` separado de `deletedAt` — pet falecido continua na lista do dono, histórico clínico futuro permanece válido; excluir destruiria informação clinicamente relevante. |
+| N6 | Produto e variante | `Product` (identidade comercial) + `ProductVariant` (unidade vendável: SKU/preço/estoque) — **nunca produto plano**. Todo produto tem ≥1 variante (produto "sem variação" ganha variante única `isDefault: true`) — evita o caminho duplo "produto com preço próprio × produto com variantes". |
+| N7 | Categoria vs. espécie | Categoria em árvore = **função** do produto (`Alimentação > Ração seca`); espécie = **faceta** própria (`Product.targetSpecies: PetSpecies[]`), fora da árvore. Evita duplicar toda categoria folha por espécie ("problema da cama": uma cama serve cães e gatos, não são duas categorias). |
+| N8 | Características da variante | Colunas fixas (`weightGrams`, `volumeMl`, `sizeLabel`) — EAV e JSON descartados (tipagem estrita é valor central do projeto; atributo novo é migration, barata e explícita). |
+| N9 | Preço | **Inteiro em centavos** (`priceCents`, `compareAtPriceCents`, `costCents`) — nunca `Decimal`/float. Moeda implícita BRL. Congelamento de preço no pedido é decisão da Fase 10, mas já fica registrado: o item do pedido grava o preço, nunca lê do produto. |
+| N10 | Status do produto | Enum `DRAFT/ACTIVE/DISCONTINUED` **coexiste** com soft delete (`deletedAt`) — significados distintos ("isto está à venda?" vs. "isto existe?"); descontinuado preserva histórico de venda. |
+| N11 | Produto × Serviço (decisão **herdada pela Fase 10**) | Tabelas separadas (`Product`/`Service`), `OrderItem` **polimórfico** com CHECK constraint escrito à mão (nem `kind` único — armadilha confortável de colunas nulas —, nem supertipo/class table inheritance — junção a mais no caminho mais quente). Nada muda no schema da Fase 9; só o formato futuro de `OrderItem` já é conhecido. |
+| N12 | Busca textual | **Postgres nativo** (`tsvector` + `unaccent` + `pg_trgm`) — não `ILIKE`, não Meilisearch/Typesense agora. Escolha do usuário, explicitamente contra a recomendação inicial (`ILIKE`), com motivação **didática**: o objetivo é aprender busca com tolerância a erro de digitação. |
+| N13 | Upload de imagem | Disco local atrás de um **adaptador de storage** (`put`/`delete`/`url`, implementação `LocalDiskStorage`); path no banco (nunca URL completa); servido como estático pelo reverse proxy, sem passar por Node. |
+
+### Sessões de trabalho
+
+Diferente da Fase 8, aqui cada sessão é 1:1 com sua sub-fase (9.1 a 9.12) — sem
+agrupamento de várias sub-fases numa mesma feat-branch.
+
+| Sessão | Tema | Por que nesta posição |
+|---|---|---|
+| **9.1** | RBAC do domínio — decisão + seed | Toda rota nova precisa de feature. Sessão de **decisão com o usuário**, praticamente sem código. Nenhuma outra sessão começa antes desta fechar. |
+| **9.2** | Ordenação configurável no helper de paginação | Dívida do `docs/backlog.md`. Habilita todas as listagens da fase — fazer antes evita retrabalho em cada uma. |
+| **9.3** | Espécies, raças e seed de `Breed` | Pré-requisito do CRUD de pets. |
+| **9.4** | Pets — CRUD, escopo próprio | Núcleo do Bloco A. |
+| **9.5** | Pets — escopo staff, listagem geral, filtros | Depende de 9.2 e 9.4. |
+| **9.6** | Taxonomia do catálogo — `Brand`, `Category` (árvore), `Tag` | Pré-requisito de `Product`. |
+| **9.7** | `Product` + `ProductVariant` — escrita | Núcleo do Bloco B. |
+| **9.8** | Catálogo — leitura, views por capability, filtros | Depende de 9.2, 9.6, 9.7. |
+| **9.9** | Busca textual | Depende de 9.8 existir para ter o que buscar. Maior risco técnico da fase — isolada de propósito. |
+| **9.10** | Adaptador de storage + upload de imagem | Independente do resto — mais infra, menos domínio. |
+| **9.11** | Seed fake do domínio + `demo-reset` | Depende do schema inteiro estar firme. Resolve a entrada "Dummy data para a demo" do `docs/backlog.md`. |
+| **9.12** | Fechos | Docs, coleção Bruno, README, `context.md`, revisão do backlog. |
+
+### ⬜ [Sessão 9.1] Fase 9.1 — RBAC do domínio: decisão + seed
+> Sessão de conversa, não de código. Ver §9.1 do `docs/planning/fase-9-contexto.md`.
+- 🔸 **Pendência:** nomes das features de pet (`create:pet`, `read:pet` + variantes `:others`) e de catálogo (`create:product`, `manage:catalog`, `read:product:internal`, …).
+- 🔸 **Pendência:** granularidade — uma feature por operação por recurso (mais precisa, catálogo maior) vs. features agrupadas por domínio (`manage:catalog` cobrindo marca/categoria/tag — mais enxuto, menos flexível para override).
+- 🔸 **Pendência:** quais roles recebem o quê. Já decidido: atendente cadastra pet no nome de um cliente (`:others`). Em aberto: quem cadastra produto, quem mexe em estoque, quem vê custo/margem.
+- 🔸 **Pendência:** nascem roles novas de funcionário (`stockist`, `catalog-manager`)? Hoje `attendant` só tem self-management; o catálogo pode cair em `manager` ou justificar role própria.
+- 🔸 **Pendência:** a role `demo` precisa das features de leitura novas, senão o demo público mostra 403 onde deveria mostrar catálogo.
+- 🔸 **Pendência:** alguma feature nova é privilegiada (entra em `PRIVILEGED_FEATURES`)? Custo e margem são candidatos.
+- ⬜ Nomes definidos entram em `feature.constants.ts`/`role.constants.ts`; reseed necessário.
+
+### ⬜ [Sessão 9.2] Fase 9.2 — Ordenação configurável no helper de paginação
+- ⬜ `?sort=<campo>&order=asc|desc` no helper de paginação **offset** (`src/lib/pagination.ts`).
+- ⬜ Allowlist de campos ordenáveis por recurso — campo fora da allowlist → **422** (nunca vai cru para o `orderBy`).
+- ⬜ Tiebreaker por `id` obrigatório mesmo com `?sort=` — mesma lição da 7.7 (cursor).
+- ⬜ Ordenação entra **só no offset**; a limitação do cursor permanece documentada no `docs/backlog.md`.
+- ⬜ Conferir que a implementação bate com o desenho já registrado no adendo de `docs/adr/pagination.md` (escrito no planejamento da fase, antes do código).
+- ⬜ Testes: campo fora da allowlist → 422; ordenação asc/desc corretas; tiebreaker por id evita duplicata/omissão com valores repetidos no campo de ordenação.
+
+### ⬜ [Sessão 9.3] Fase 9.3 — Espécies, raças e seed de `Breed`
+- ⬜ `enum PetSpecies { DOG CAT RABBIT BIRD RODENT REPTILE FISH }` no schema.
+- ⬜ Model `Breed` (`id`, `name`, `species`, `@@unique([species, name])`).
+- ⬜ Curadoria da constante de raças em `src/lib/seed/` — puxada uma vez de API pública, nomes em pt-BR, sem duplicata/ruído; nunca mais consultada em runtime.
+- ⬜ `SPECIES_WITH_BREED` — constante explícita ao lado do enum.
+- ⬜ Linha **"SRD" (sem raça definida)** semeada para toda espécie com raça.
+- ⬜ Seed idempotente por `@@unique([species, name])`, mesmo padrão de `DEFAULT_ROLES`/`DEFAULT_FEATURES`.
+- ⬜ `GET /breeds?species=DOG` — leitura pública (popula select do frontend).
+- ⬜ Testes: seed idempotente (rerun não duplica); filtro por espécie; SRD presente em toda espécie com raça.
+
+### ⬜ [Sessão 9.4] Fase 9.4 — Pets: CRUD, escopo próprio
+- ⬜ `enum PetSex { MALE FEMALE UNKNOWN }`; model `Pet` completo (`customerId`, `name`, `species`, `breedId?`, `sex`, `birthDate?`, `birthDateIsEstimated`, `weightGrams?`, `neutered`, `microchipId?`, `color?`, `notes?`, `photoPath?`, `deceasedAt?`, soft delete — ver §2.3 do `fase-9-contexto.md`).
+- ⬜ `POST /customers/:customerId/pets`, `GET /customers/:customerId/pets`, `GET /pets/:petId`, `PATCH /pets/:petId`, `DELETE /pets/:petId` (soft delete).
+- ⬜ Autorização escopo `own`/`:others`, com os nomes de feature decididos na 9.1.
+- ⬜ Validação semântica no service (422): espécie em `SPECIES_WITH_BREED` exige `breedId`; espécie fora dela exige `breedId` ausente; raça informada precisa pertencer à espécie informada.
+- 🔸 **Pendência** (ver §9.3 do `fase-9-contexto.md`): unicidade de `microchipId` — unique global (aceita prender o valor de pet excluído) vs. unique parcial (`WHERE deleted_at IS NULL`, migration manual) vs. sem unique + validação no service. Agravante: duplicata pode ser erro de digitação ou pet transferido entre clientes (backlog).
+- 🔸 **Pendência** (ver §9.9 do `fase-9-contexto.md`): pets de um cliente soft-deletado voltam automaticamente na reativação de perfil da Fase 8, ou a reativação escolhe?
+- ⬜ Falecimento como estado distinto de exclusão (`deceasedAt`).
+- ⬜ Testes: CRUD completo; 422 dos três casos de raça/espécie; escopo `own` recusa acesso a pet de outro customer; escopo `:others` (atendente) cadastra/edita pet no nome de um cliente; falecimento não remove o pet da listagem do dono.
+
+### ⬜ [Sessão 9.5] Fase 9.5 — Pets: escopo staff, listagem geral, filtros
+- ⬜ `GET /pets` — listagem geral para staff, paginada (offset, helper da 9.2) e filtrável.
+- ⬜ Ordenação via `?sort=&order=` (helper da 9.2).
+- ⬜ Testes: staff vê todos os pets; customer sem `:others` não acessa `GET /pets`; filtros combinados; ordenação com tiebreaker.
+
+### ⬜ [Sessão 9.6] Fase 9.6 — Taxonomia do catálogo: `Brand`, `Category` (árvore), `Tag`
+- ⬜ Model `Brand` (`id`, `name` @unique, `slug` @unique, `description?`, `logoPath?`, soft delete).
+- ⬜ Model `Category` em árvore (`parentId?` auto-relação, `position`, soft delete) — `ProductCategory` N:N com **mínimo de uma** por produto.
+- ⬜ Model `Tag` (`id`, `name` @unique, `slug` @unique) — `ProductTag` N:N **sem** mínimo.
+- ⬜ `GET/POST/PATCH/DELETE /categories`, `/brands`, `/tags`.
+- 🔸 **Pendência** (ver §9.2 do `fase-9-contexto.md`): catálogo público (sem token) ou autenticado? Primeira sessão do Bloco B a expor leitura — decide se `GET /categories|/brands|/tags` (e depois `/products`) responde sem Bearer. Consequências reais: rate limit próprio, cache (Redis já disponível), view à prova de vazamento por definição, não por permissão.
+- 🔸 **Pendência** (ver §9.7 do `fase-9-contexto.md`): regras da árvore de categoria — profundidade máxima? categoria com filhos pode ser excluída? produto vincula só a folha ou também categoria intermediária? excluir categoria com produtos vinculados bloqueia (409) ou desvincula?
+- 🔸 **Pendência** (ver §9.8 do `fase-9-contexto.md`): slug gerado a partir do nome (o que acontece quando o nome muda?) ou informado pelo staff (controle total, risco de colisão/slug feio)? Decisão vale para `Category`/`Brand`/`Tag` aqui e é reaplicada em `Product` na 9.7.
+- ⬜ Testes: árvore de categoria (criação, ciclo em `parentId` recusado); N:N de categoria com mínimo de uma; tag sem mínimo.
+
+### ⬜ [Sessão 9.7] Fase 9.7 — `Product` + `ProductVariant`: escrita
+- ⬜ `enum ProductStatus { DRAFT ACTIVE DISCONTINUED }`; model `Product` (`targetSpecies: PetSpecies[]`, `brandId`, `status`, soft delete) + `ProductVariant` (`sku` @unique, `priceCents`, `compareAtPriceCents?`, `costCents?`, `stockQuantity`, `weightGrams?`, `volumeMl?`, `sizeLabel?`, `barcode?`, `isDefault`, soft delete).
+- ⬜ `POST/PATCH/DELETE /products`, `POST /products/:id/variants`, `PATCH/DELETE /variants/:id` (recurso plano, mesmo racional dos pets).
+- ⬜ Todo produto nasce com ≥1 variante — produto "sem variação" ganha variante única `isDefault: true`.
+- 🔸 **Pendência** (ver §9.3 do `fase-9-contexto.md`): unicidade de `sku` — unique global vs. unique parcial vs. validação no service (mesmo dilema do `microchipId` da 9.4, já documentado para email/cpf no `docs/backlog.md`).
+- 🔸 **Pendência** (ver §9.4 do `fase-9-contexto.md`): estoque pode ficar negativo? Sem carrinho ainda, o único caminho de mudança é edição manual pelo staff — aceitar negativo (registra erro de contagem real) ou barrar em 422?
+- 🔸 **Pendência** (ver §9.8 do `fase-9-contexto.md`): slug do produto gerado ou informado — mesma decisão da 9.6, reaplicada aqui.
+- ⬜ Testes: produto sem variante é rejeitado; variante default automática quando só uma é criada; validação de `targetSpecies` (array vazio = qualquer espécie).
+
+### ⬜ [Sessão 9.8] Fase 9.8 — Catálogo: leitura, views por capability, filtros
+- ⬜ `GET /products` — paginada (offset, 9.2), ordenável (`?sort=&order=`), filtrável (`species`, `category`, `tag` repetível, `brand`, `minPrice`, `maxPrice`, `status` só staff, `inStock`, `q` — busca da 9.9).
+- ⬜ `GET /products/:idOrSlug` — detalhe com variantes.
+- ⬜ Views por capability (presenter Zod): cliente não vê `costCents`/margem nem `stockQuantity` exato nem produtos `DRAFT`/`DISCONTINUED`; disponibilidade (booleano derivado) substitui quantidade exata na view pública.
+- ⬜ Teste de contrato: view pública não contém `costCents` nem `stockQuantity`.
+- ⬜ Faixa de preço filtra pelas **variantes** (produto entra se alguma variante estiver na faixa) — documentar, é contraintuitivo.
+- 🔸 **Pendência** (ver §9.5 do `fase-9-contexto.md`): `GET /products/:idOrSlug` aceitando id **e** slug é ambíguo de contrato (o que acontece se um slug for um UUID válido?) — alternativa: rotas separadas, ou só id com slug em query (`?slug=`).
+- 🔸 **Pendência** (ver §9.6 do `fase-9-contexto.md`): ordenação por preço com N variantes — menor preço entre variantes ativas? preço da variante default? produto aparece uma vez por variante?
+- ⬜ Testes: filtros combinados; view por capability (cliente vs. staff); paginação+ordenação com tiebreaker; faixa de preço via variante.
+
+### ⬜ [Sessão 9.9] Fase 9.9 — Busca textual
+> Ver ADR `docs/adr/text-search.md` para as armadilhas conhecidas antes de começar.
+- ⬜ Migration manual com `CREATE EXTENSION` (`unaccent`, `pg_trgm`) — dev, test e prod precisam das extensões.
+- ⬜ Coluna `tsvector` gerada (wrapper `IMMUTABLE` sobre `unaccent`, ou trigger — decidir na implementação e registrar a escolha no ADR) com `setweight` (nome pesa mais que descrição/marca/tag).
+- ⬜ Índices GIN (`tsvector`) e GIN `gin_trgm_ops` (trigram) — sem eles a busca funciona e é lenta.
+- ⬜ Estratégia de consulta: full-text com `websearch_to_tsquery` + `ts_rank` primeiro; fallback para similaridade `pg_trgm` se vazio/pobre (ou pontuação combinada — calibrar na implementação).
+- ⬜ SQL cru só no **repository**, via `$queryRaw` parametrizado (nunca concatenação).
+- ⬜ `pg_trgm.similarity_threshold`/`set_limit` por query (não por sessão — pool de conexões).
+- ⬜ Testes de comportamento observável, não de forma de query: "buscar `racao golden` encontra 'Ração Golden Adulto'"; "buscar `golen` (typo) encontra"; "buscar `xyzabc` não encontra"; "resultado mais relevante vem primeiro".
+
+### ⬜ [Sessão 9.10] Fase 9.10 — Adaptador de storage + upload de imagem
+- ⬜ Adaptador de storage (`put`/`delete`/`url`) com implementação `LocalDiskStorage`; volume Docker montado no container; path salvo no banco (nunca URL completa — base derivada de env var).
+- ⬜ `POST /products/:id/images` (multipart), `DELETE /images/:id`, `PATCH /products/:id/images/ordem` (formato de reordenação a definir na implementação).
+- ⬜ Reverse proxy serve `/uploads/*` como estático, sem passar por Node.
+- ⬜ Validação por magic bytes (não `Content-Type`/extensão); nome de arquivo gerado por nós (uuid — nunca nome do usuário, vetor de path traversal); teto de tamanho e de quantidade por produto; normalização/redimensionamento via `sharp`.
+- ⬜ Órfãos: exclusão de produto remove arquivo no mesmo fluxo; script de varredura (`src/scripts/` + systemd timer em `infra/cron/`, se necessário) para os que escaparem.
+- ⬜ Ordem de escrita: disco antes da linha; linha falha → apaga o arquivo (disco não participa da transação do Postgres).
+- ⬜ Role `demo` sem acesso de upload (teste explícito); `demo-reset` passa a limpar o diretório de upload sob `DEMO_MODE=true`; rate limit próprio para o endpoint + teto de tamanho agressivo.
+- ⬜ Foto de pet (`Pet.photoPath`, já no schema da 9.4) reaproveita o mesmo adaptador, se couber nesta sessão.
+- ⬜ Env vars novas em `.env.example` (diretório de upload, teto de tamanho, base URL pública) — nomes definidos aqui, na implementação.
+- ⬜ Testes: magic bytes recusa arquivo disfarçado; nome do usuário nunca chega ao disco; teto de tamanho/quantidade; órfão removido pela varredura; demo não sobe arquivo.
+
+### ⬜ [Sessão 9.11] Fase 9.11 — Seed fake do domínio + `demo-reset`
+- ⬜ `src/lib/seed/fakePets.constants.ts` (já anunciado em comentário de `fakeUsers.constants.ts`), amarrado aos customers fake existentes por email fixo.
+- ⬜ Dataset fake de catálogo (marca, categoria, tag, produto, variante) coerente, para o demo não mostrar listas vazias.
+- ⬜ `demo-reset.ts` passa a truncar/restaurar as tabelas transacionais novas (pets, produtos, variantes — `Breed` segue como catálogo de referência tipo `Role`/`Feature`, preservado, não truncado — confirmar na implementação).
+- ⬜ `demo-reset.ts` passa a limpar o diretório de upload (dependência da 9.10).
+- ⬜ Marcar como resolvida a entrada "Dummy data para a demo" do `docs/backlog.md` ao fechar esta sessão.
+- ⬜ Testes: seed idempotente; demo-reset restaura pets/produtos fake e limpa uploads.
+
+### ⬜ [Sessão 9.12] Fase 9.12 — Fechos
+- ⬜ `docs/endpoints.md` — todas as rotas novas de pet/breed/catálogo.
+- ⬜ Coleção Bruno — pastas novas por módulo (`pets`, `breeds`, `products`, `variants`, `categories`, `brands`, `tags`), environments `local`/`prod`.
+- ⬜ `docs/context.md` §2.7 promovida de "planejada" a "implementada"; parágrafo "Fase 9 (fechada)" em §4.
+- ⬜ `docs/logging-policy.md` — conferir taxonomia final (ações de catálogo que a 9.1/9.7 tiverem definido, além das quatro de pet já registradas no planejamento).
+- ⬜ `docs/backlog.md` revisado — nenhum item resolvido pela fase sem marcação, nenhuma entrada nova esquecida.
+- ⬜ `README.md` — roadmap promove a Fase 9 a ✅, contagem de testes atualizada.
+- ⬜ Decisão do usuário: apagar `docs/planning/fase-9-contexto.md` ou mantê-lo em `docs/planning/` como registro histórico.
+- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 9 marcada ✅.

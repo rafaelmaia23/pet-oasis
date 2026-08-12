@@ -77,6 +77,8 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 
 **Tipos:** `FeatureName`/`RoleName` (union literal) onde se DIGITA o literal no código; `string` onde o dado vem do banco. A fronteira é banco/request — forçar o union além dela gera `as` (evite).
 
+**Domínio pet shop (a partir da Fase 9):** `Product` é identidade comercial, `ProductVariant` é a unidade vendável (SKU/preço/estoque) — todo produto tem ≥1 variante, nunca produto plano. Espécie de pet (`PetSpecies`) é **faceta** do produto (`targetSpecies[]`), nunca nível da árvore de `Category` — categoria modela função, não espécie. Racional completo em `docs/adr/pet-domain-modeling.md` e `docs/adr/product-catalog-modeling.md`.
+
 ---
 
 ## Convenções de código
@@ -84,6 +86,8 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 - Presenter (view Zod) por whitelist: `.parse()` derruba campos não listados → nada sensível vaza. View resolvida pela capability do viewer.
 - Junção do Prisma sempre aninha (`user.roles` = `UserRole[]` com `.role` dentro); achate no service ou espelhe na view.
 - `snake_case` no banco via `@map`; camelCase no código.
+- Valores monetários em inteiro-**centavos** (`priceCents`, nunca `Decimal`/float); peso em inteiro-**gramas** (`weightGrams`). Mesmo racional dos dois: aritmética inteira, sem bug de ponto flutuante, sem `Decimal` do Prisma contaminando serialização/Zod.
+- SQL cru (necessário só para busca textual com `tsvector`/`pg_trgm`, Fase 9) vive **exclusivamente no repository**, via `$queryRaw` com template parametrizado — nunca concatenação, nunca fora dessa camada. Ver `docs/adr/text-search.md`.
 
 ## Comandos
 
@@ -114,7 +118,9 @@ Quando terminar um trabalho e sobrar algo pendente para uma etapa/sessão **futu
 
 ## O que o projeto planeja ser
 
-O Ciclo 1 (fundação) está **fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de conta, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação. O que vem a seguir é o domínio do pet shop em si — Pets ligados a Customers, e adiante vendas/pedidos, que é o que dá sentido ao soft delete atual.
+O **Ciclo 1 (fundação) está fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de conta, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação.
+
+O **Ciclo 2 abre o domínio do pet shop**: a Fase 9 traz pets (ligados a `Customer`) e catálogo (produto/variante, marca, categoria, tag, busca textual, upload de imagem), ainda **sem checkout**; a Fase 10 traz carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro).
 
 ---
 

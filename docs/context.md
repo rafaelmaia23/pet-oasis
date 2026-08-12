@@ -341,6 +341,141 @@ cpf aparece em `owner` (dado próprio) e `admin` (gerente vê — normal em pet 
 
 ---
 
+## 2.7 Fase 9 (planejada) — domínio pet shop: pets e catálogo
+
+> Planejada em 2026-08-06, a partir de uma sessão de brainstorming/decisão do usuário
+> (`docs/planning/fase-9-contexto.md`). Passo-a-passo atômico e as pendências ainda em
+> aberto no `docs/todo.md`; decisões estruturais nos ADRs `pet-domain-modeling.md`,
+> `product-catalog-modeling.md`, `product-vs-service.md`, `text-search.md`,
+> `file-storage-and-uploads.md` e num adendo em `pagination.md`. Esta seção registra só o
+> "porquê" das decisões já fechadas — o "o quê" está no `todo.md`, o que ficou de fora com
+> o racional de exclusão está no `docs/backlog.md`.
+
+**Por que Bloco A (pets) + Bloco B (catálogo), sem checkout:** dos três recortes avaliados,
+"só pets" ficava magro demais para o marco que o README já anuncia ("o Ciclo 2 abre o
+domínio do pet shop"), e "loja virtual completa" (pets + catálogo + carrinho + pedido) foi
+recusado porque o pedido depende de estoque, que depende de variante, que depende de
+preço — uma cadeia longa demais para descobrir um erro de modelagem só no fim. As duas
+agregações entregues só se tocam na faceta "para qual espécie este produto serve", o que
+permite trabalhá-las em sequência sem que uma trave a outra.
+
+**Por que espécie é enum sem `OUTRO`, e raça é tabela semeada por constante (nunca API em
+runtime):** um enum fechado dá filtro confiável, relatório possível e dado que nasce
+limpo — mesma escolha já feita em `UserStatus`/`ProfileKind`. `OUTRO` pareceria
+flexibilidade, mas é um buraco permanente: o pet fica sem raça válida, fora de todo filtro
+útil, e a pressão seguinte é criar um campo de texto livre, trazendo de volta pela porta
+dos fundos o que o enum evitava — por isso a lista nasce deliberadamente mais larga que o
+mínimo (`DOG, CAT, RABBIT, BIRD, RODENT, REPTILE, FISH`), e espécie nova é uma migration
+barata (`ALTER TYPE ... ADD VALUE`). Para raça, consultar uma API pública em runtime
+(TheDogAPI/TheCatAPI) colocaria a disponibilidade da própria API refém de um terceiro, não
+daria um id estável para FK (empurrando `Pet.breed` de volta a string) e tem cobertura
+ruim fora de cão e gato. A saída é puxar uma vez, curar à mão (pt-BR, sem duplicata) e
+nunca mais consultar — manutenção dali em diante é edição da constante. `SPECIES_WITH_BREED`
+é uma constante **explícita**, não derivada de "existe `Breed` para esta espécie": derivar
+pareceria mais elegante, mas no dia em que alguém semeasse a primeira raça de peixe, todo
+pet-peixe já cadastrado passaria retroativamente a violar a regra, sem que ninguém tivesse
+mudado a regra de fato.
+
+**Por que `deceasedAt` é separado de `deletedAt`:** falecido não é excluído. O pet morto
+continua na lista do dono e todo o histórico futuro de prontuário permanece válido e
+legível — excluir destruiria informação clinicamente relevante e emocionalmente
+significativa. Pelo mesmo racional, dono único (`Pet.customerId` obrigatório, sem N:N) foi
+mantido apesar de família compartilhando pet ser um caso real: o gatilho de revisão é
+migrar para tabela de junção, registrado no backlog.
+
+**Por que `Product` + `ProductVariant`, e não produto plano:** o caso motivador é concreto
+— "Ração Golden Adulto" existe em 1 kg, 10,1 kg e 15 kg, com preço/estoque/código de barras
+diferentes mas mesma descrição/marca/categoria. Produto plano (cada peso como produto
+independente) faria a vitrine mostrar três cards do mesmo produto, "escolher o tamanho"
+deixaria de existir como conceito, e o item do pedido da Fase 10 apontaria para algo que
+não é a unidade real de venda — migrar depois seria caro. Todo produto nasce com ≥1
+variante (mesmo "sem variação" ganha uma variante única `isDefault`) para não abrir dois
+caminhos de preço (produto com preço próprio × produto com variantes), fonte clássica de
+bug em catálogo.
+
+**Por que espécie é faceta do produto e categoria é função ("o problema da cama"):** uma
+cama de pet serve cães e gatos — modelar "Cães > Camas" e "Gatos > Camas" como categorias
+diferentes faria **toda** categoria folha se duplicar por espécie, e a árvore viraria um
+produto cartesiano que cresce a cada espécie nova. Separando as dimensões
+(`Product.targetSpecies: PetSpecies[]` fora da árvore de `Category`), a cama que serve aos
+dois vira uma linha só com `[DOG, CAT]`, e a navegação por espécie (`?species=DOG`) e por
+categoria (`?category=camas`) se combina no filtro, onde a combinatória é barata. Array
+vazio significa "serve a qualquer espécie" — evita listar todas as espécies num produto
+genérico e não quebra quando uma espécie nova entra no enum. Categoria e tag são N:N
+(categoria com mínimo de uma — tapete higiênico é higiene e é adestramento; tag sem
+mínimo, para o transversal e volátil: "promoção", "filhote").
+
+**Por que características da variante são colunas fixas, não EAV nem JSON:** EAV
+(`Attribute`+`ProductAttribute`) dá flexibilidade cadastrável pelo funcionário ao custo de
+filtro sofrível, tipagem impossível e junções em tudo — contra o valor central do projeto,
+que é tipagem estrita. JSON é meio-termo que funciona no Postgres mas sai do conforto do
+Prisma e do Zod, e deixa o dado se sujar sem que nada reclame. Colunas fixas
+(`weightGrams`/`volumeMl`/`sizeLabel`) cobrem a esmagadora maioria dos casos de pet shop
+com uma fração da complexidade; atributo novo é migration, barata e explícita; tags
+absorvem o resto.
+
+**Por que preço em centavos:** elimina de uma vez a classe de bug de ponto flutuante, é o
+formato que gateways de pagamento usam, e evita o `Decimal` do Prisma, que chega como
+objeto e contamina serialização/Zod/comparação — mesmo racional já vale para
+`weightGrams` do pet. Moeda fica implícita (BRL) até existir motivo para uma coluna.
+`costCents` é dado interno e nunca aparece na view do cliente — é o que motiva a view por
+capability do catálogo.
+
+**Por que status do produto (`DRAFT/ACTIVE/DISCONTINUED`) coexiste com soft delete:**
+respondem perguntas diferentes. Um produto descontinuado não está excluído — tem histórico
+de venda e pode voltar; `deletedAt` continua sendo o soft delete de sempre (erro de
+cadastro, duplicata). Views por capability (presenter Zod, já existente) resolvem "cliente
+não vê custo/estoque interno/produto fora de venda" sem risco de vazamento — mesma
+ferramenta que já protege `passwordHash` no módulo de usuário. Expor **disponibilidade**
+(booleano derivado) em vez de quantidade exata ao público é decisão consciente: quantidade
+é informação competitiva e não muda nada para quem compra.
+
+**Por que produto e serviço ficam em tabelas separadas (decisão herdada pela Fase 10, mas
+tomada agora):** o app, no longo prazo, vende produtos e serviços (banho, tosa, consulta),
+e o custo de errar essa modelagem só aparece na Fase 10, no item do pedido — quando alguém
+compra 1 saco de ração e 1 banho, o pedido tem dois itens e o banco não tem FK que aponte
+para duas tabelas. `kind` único (`Product.kind = PRODUCT | SERVICE`) daria FK única e
+carrinho sem ramificação, mas a tabela viraria metade colunas nulas (serviço não tem peso
+nem estoque; produto não tem duração nem profissional executante) e a validação
+"obrigatório se `kind = SERVICE`" migraria do banco para o código — uma armadilha
+confortável. Supertipo com PK compartilhada (*class table inheritance*) seria mais correto
+academicamente, mas custaria uma junção a mais em **toda** leitura de catálogo — a parte
+mais usada do sistema — e duas escritas coordenadas em todo cadastro. A escolha (tabelas
+separadas + `OrderItem` polimórfico com CHECK constraint escrito à mão, garantindo que
+exatamente um de `productVariantId`/`serviceId` está preenchido) paga junção e cerimônia
+só na Fase 10, no ponto de menor tráfego, não no de maior.
+
+**Por que busca textual no Postgres nativo (`tsvector`+`unaccent`+`pg_trgm`), e não
+`ILIKE` nem Meilisearch/Typesense:** decisão do usuário, explicitamente contra a
+recomendação inicial (que era começar com `ILIKE`), com motivação didática — o objetivo
+declarado é aprender a construir busca com tolerância a erro de digitação, não entregar o
+mínimo que funciona. Não existe biblioteca Node que resolva tolerância a typo; a resposta
+de mercado quando o volume justifica é Meilisearch/Typesense, descartados aqui porque
+custam um container a mais, um pipeline de sincronização produto→índice e uma segunda
+fonte de verdade que pode divergir do Postgres (gatilho de revisão registrado no ADR).
+Armadilhas técnicas conhecidas, documentadas para não custarem uma tarde cada: `unaccent`
+não é `IMMUTABLE` (coluna gerada exige função imutável — resolve com wrapper ou trigger);
+extensões (`unaccent`, `pg_trgm`) exigem `CREATE EXTENSION` em migration escrita à mão, o
+Prisma não as declara, e isso afeta dev/test/prod igualmente; sem índice GIN a busca
+funciona e é lenta, e a lentidão só aparece com volume, depois do deploy;
+`websearch_to_tsquery` é preferível a `to_tsquery` (não explode com sintaxe inválida); o
+limiar de similaridade do `pg_trgm` é sessão-scoped, e com pool de conexões precisa ser
+definido por query. SQL cru para isso vive só no repository, via `$queryRaw`
+parametrizado — o corte de camadas se mantém mesmo quando a ferramenta é SQL puro.
+
+**Por que upload em disco local atrás de um adaptador, e não S3/R2 direto:** restrições do
+usuário — hospedagem própria, VPS ARM64, custo zero — mais a intenção declarada de
+aprender como upload funciona de verdade. O adaptador (`put`/`delete`/`url`, implementação
+`LocalDiskStorage`) mantém o service alheio à existência de disco; trocar por storage
+externo no futuro é uma classe nova e uma env var, o mesmo corte que o repository já faz
+com o Prisma. O reverse proxy serve os arquivos como estático, sem passar por Node,
+poupando o processo da app do custo de servir binário. O ambiente demo público é o ponto
+de atenção maior — upload aberto na internet é abuso de disco garantido — daí a role
+`demo` sem acesso de escrita a upload, `demo-reset` passando a limpar o diretório, e rate
+limit próprio agressivo para o endpoint.
+
+---
+
 ## 3. Schema — pontos de atenção
 
 - **User**: id, name, cpf @unique, email @unique, passwordHash, createdAt, updatedAt, deletedAt?. Relações: employee?, customer?, roles[], features[], sessions[].

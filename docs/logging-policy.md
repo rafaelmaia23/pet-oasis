@@ -137,6 +137,19 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `EMAIL_CHANGE_REQUESTED` | `User` | — | 7.15 |
 | `EMAIL_CHANGE_COMPLETED` | `User` | — | 7.15 |
 | `DEMO_RESET_EXECUTED` | `System` | `tablesTruncated`, `rowsDeleted`, `durationMs` | 7.14 |
+| `PET_CREATED` | `Pet` | `customerId`, `species`, `source` (enum: `SELF`, `STAFF`) | 9.4 |
+| `PET_UPDATED` | `Pet` | `customerId`, `fieldsChanged` (`string[]`) | 9.4 |
+| `PET_DELETED` | `Pet` | `customerId` | 9.4 |
+| `PET_DECEASED` | `Pet` | `customerId` | 9.4 |
+
+Nome do pet **não** entra em `metadata` de nenhuma das quatro ações acima — não
+por ser PII do pet, mas porque nome de pet é frequentemente usado como resposta
+de pergunta de segurança e como componente de senha; e porque a política
+vigente é "ids e enums", que só vale se não for flexibilizada caso a caso
+(planejamento da Fase 9, `docs/context.md` §2.7). Ações de catálogo (produto,
+variante, categoria etc.) entram na tabela quando a sub-fase 9.1/9.7 fechar a
+granularidade de features do domínio — ainda não estão aqui de propósito, não
+por esquecimento.
 
 `actorId` é nulo quando não há ator identificado (login falho de email inexistente, script automatizado). `AUTH_LOGIN_FAILED` de conta existente registra o `targetId` do dono, mesmo sem ator.
 

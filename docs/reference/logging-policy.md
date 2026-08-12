@@ -146,7 +146,7 @@ Nome do pet **não** entra em `metadata` de nenhuma das quatro ações acima —
 por ser PII do pet, mas porque nome de pet é frequentemente usado como resposta
 de pergunta de segurança e como componente de senha; e porque a política
 vigente é "ids e enums", que só vale se não for flexibilizada caso a caso
-(planejamento da Fase 9, `docs/context.md` §2.7). Ações de catálogo (produto,
+(planejamento da Fase 9, `docs/context/pet-domain.md`). Ações de catálogo (produto,
 variante, categoria etc.) entram na tabela quando a sub-fase 9.1/9.7 fechar a
 granularidade de features do domínio — ainda não estão aqui de propósito, não
 por esquecimento.
@@ -235,7 +235,7 @@ Documentadas em vez de escondidas:
 - **Ring buffer é por processo.** Com mais de uma réplica, `GET /logs/recent` mostra apenas a fatia da instância que atendeu o request. A resposta declara isso em `meta`.
 - **Ring buffer é volátil.** Reinício do processo zera o conteúdo.
 - **Falha do destino externo degrada, não derruba.** Axiom indisponível → a aplicação continua escrevendo em stdout e no buffer. Sentry indisponível → o erro continua sendo logado normalmente. Nenhum request falha por causa do subsistema de log.
-- **Sem LGPD nesta fase.** O projeto é portfólio e não trata dado real de titular. O delete de usuário é soft delete e **preserva** `actorId`/`targetId` no audit. Anonimização, base legal e resposta a requisição de titular estão no `docs/backlog.md`.
+- **Sem LGPD nesta fase.** O projeto é portfólio e não trata dado real de titular. O delete de usuário é soft delete e **preserva** `actorId`/`targetId` no audit. Anonimização, base legal e resposta a requisição de titular estão no `docs/reference/backlog.md`.
 
 ---
 

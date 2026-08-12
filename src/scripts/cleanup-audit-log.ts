@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 /**
  * Hard delete de AuditLog acima de AUDIT_LOG_RETENTION_DAYS (7.13) — único
- * ponto do código autorizado a apagar audit log (docs/logging-policy.md §7).
+ * ponto do código autorizado a apagar audit log (docs/reference/logging-policy.md §7).
  * Nunca roda no ciclo request/response.
  */
 

@@ -99,6 +99,7 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 - Produção: `npm run prod:up` (build + só app + Postgres-de-prod, `migrate deploy` no entrypoint) · `prod:down` · `prod:logs`.
 - Migration dev (autoria consciente): `npm run db:migrate` (roda com `.env.development`, já gera o client) · `db:generate` · `db:seed` · `db:studio`.
 - Typecheck: `npm run typecheck` · Lint: `npm run lint` · Lint com fix: `npm run lint:fix` · Format: `npm run format`
+- Doc: `npm run docs:check` (todo caminho `docs/**.md` e toda âncora citados no repo existem — inclusive nos comentários de `src/`).
 
 ## ⚠️ REGRA — Prefira os scripts do `package.json` a comandos diretos
 
@@ -112,9 +113,29 @@ Se perceber a necessidade de um script que não existe — algo que você (ou o 
 
 ## TODO e roadmap
 
-O estado atual, a ordem das tarefas e o que vem a seguir vivem em **`docs/todo.md`** e no documento de contexto `docs/context.md`. Consulte-o antes de começar qualquer tarefa para saber o próximo item e o que já está feito. Mantenha-o atualizado conforme concluir tarefas.
+O estado atual, a ordem das tarefas e o que vem a seguir vivem em **`docs/todo.md`**. Consulte-o antes de começar qualquer tarefa para saber o próximo item e o que já está feito. Mantenha-o atualizado conforme concluir tarefas.
 
-**Forma de registro no `docs/todo.md`:** a fase **em execução** fica expandida (passo-a-passo, decisões de kickoff, pendências `🔸`); a fase **fechada** é destilada num resumo de poucos bullets. Ao fechar uma fase, essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas migram para `docs/context.md` (ou o ADR correspondente) **antes** de o expandido ser removido — nunca apague detalhe que só existe ali. O detalhe de execução permanece recuperável no histórico do git.
+**Forma de registro no `docs/todo.md`:** a fase **em execução** fica expandida (passo-a-passo, decisões de kickoff, pendências `🔸`); a fase **fechada** é destilada num resumo de poucos bullets. Ao fechar uma fase, essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas migram para o arquivo temático de `docs/context/` (ou o ADR correspondente) **antes** de o expandido ser removido — nunca apague detalhe que só existe ali. O detalhe de execução permanece recuperável no histórico do git.
+
+## ⚠️ REGRA — Como ler o contexto: pelo índice, nunca inteiro
+
+O *porquê* de cada decisão do projeto vive em **`docs/context/`**, quebrado por tema
+(`authorization`, `lifecycle`, `identity-and-sessions`, `api-contracts`, `architecture`,
+`security`, `observability`, `infrastructure`, `pet-domain`, `schema`, `history`). O
+**`docs/context.md` é só o índice**: uma linha por decisão, apontando o arquivo que a contém.
+
+O protocolo é: **leia o índice → identifique a decisão → abra apenas aquele arquivo.** Nunca leia
+os arquivos temáticos em bloco nem "para ter contexto" — juntos eles passam de 25 mil tokens, e
+uma tarefa concreta precisa de um ou dois. Se o índice não tiver a decisão, ela não foi registrada:
+pergunte, não invente.
+
+Ao **acrescentar** uma decisão: escreva no arquivo temático (um `###` com o título da decisão) e
+acrescente a linha correspondente no índice — os dois juntos, senão a decisão fica inalcançável.
+Decisão estrutural vira **ADR** em `docs/adr/`, e o contexto guarda só o ponteiro. Decisão
+revertida é **reescrita** narrando a reversão, não duplicada como decisão + errata.
+
+Depois de mexer em doc, rode **`npm run docs:check`**: ele prova que todo caminho e toda âncora
+citados na documentação (inclusive nos comentários de `src/`) existem de fato.
 
 ## ⚠️ REGRA — Anotação de pendência vai no LOCAL DA EXECUÇÃO, nunca para trás
 

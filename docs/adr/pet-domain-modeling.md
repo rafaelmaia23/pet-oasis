@@ -83,7 +83,7 @@ não do Zod do controller.
 
 `Pet.customerId` é obrigatório e não há tabela de junção. Família compartilhando
 o mesmo pet é um caso real, mas foi deixado fora do escopo da Fase 9
-(`docs/backlog.md`) — modelar isso exigiria decidir também como funciona
+(`docs/reference/backlog.md`) — modelar isso exigiria decidir também como funciona
 transferência de pet entre clientes, o que é decisão de negócio própria, não um
 efeito colateral da estrutura de dados.
 
@@ -123,7 +123,7 @@ um único campo.
   retroativo indesejado, ver acima. Preterido.
 - **Múltiplos donos por pet desde já (N:N):** resolveria um caso real, mas
   reabre transferência de pet e trilha de auditoria própria — fora do escopo
-  fechável da Fase 9. `docs/backlog.md`.
+  fechável da Fase 9. `docs/reference/backlog.md`.
 - **Falecimento como soft delete comum:** perderia a distinção "vivo vs.
   registro visível" e destruiria a legibilidade do histórico futuro. Preterido.
 
@@ -131,7 +131,7 @@ um único campo.
 
 - Se surgir demanda real de família compartilhando pet: migrar `customerId`
   para uma tabela de junção `PetOwner`, e decidir transferência de pet junto
-  (mesmo gatilho, `docs/backlog.md`).
+  (mesmo gatilho, `docs/reference/backlog.md`).
 - Quando a veterinária entrar no domínio: `weightGrams` deixa de ser campo
   único e vira medição datada no prontuário.
 - Se uma espécie sem raça cadastrada hoje (peixe, réptil) ganhar uma lista

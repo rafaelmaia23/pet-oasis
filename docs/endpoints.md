@@ -116,7 +116,7 @@ override, acima).
 | GET `/api/v1/users/:userId/features` | `read:permission` | Lista os overrides de feature do usuário, cada um com a role a que pertence |
 | GET `/api/v1/users/:userId/roles` | `read:permission` | Lista as roles ativas do usuário |
 | GET `/api/v1/users/:userId/permissions` | `read:permission` | Lista as features efetivas do usuário |
-| POST `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Concede uma role ao usuário (reusa a linha se já houve; restaura os overrides dela) |
+| POST `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Concede uma role ao usuário (reusa a linha se já houve — 201 nos dois casos; os overrides dela **não** voltam, D6') |
 | DELETE `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Revoga uma role do usuário (cascateia para os overrides dela) |
 | PUT `/api/v1/users/:userId/roles/:roleId/features/:featureId` | `manage:permission` | Cria/atualiza um override de feature (grant/deny) numa role do usuário |
 | DELETE `/api/v1/users/:userId/roles/:roleId/features/:featureId` | `manage:permission` | Remove um override de feature |

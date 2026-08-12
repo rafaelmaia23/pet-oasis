@@ -240,7 +240,7 @@ Ambos são idempotentes (`npm run db:seed` não duplica nada) e restaurados todo
 | ✅ | 7 | Hardening: rate limiting, account lockout, observabilidade (access/application/audit log), paginação e filtros, teto de sessões, troca de email, timeouts |
 | ✅ | 8 | Escopo de override, cascata de deleção e reativação de conta (por signup ou por admin, sempre confirmada pelo dono) |
 
-**A seguir**
+**Ciclo 2 — Domínio pet shop** 🔜 *a seguir* (a numeração das fases continua global)
 
 | | Fase | Entrega |
 |---|---|---|

@@ -35,6 +35,8 @@ Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos test
 
 Resumo do fluxo: `dev` → `fase-<n>` → `feat/fase-<n>-<m>-<slug>` → merge na `fase-<n>` → (fim da fase) merge na `dev` → (suíte verde) merge na `main` + nova `dev`.
 
+**A numeração de fase é global e nunca reinicia.** O roadmap é agrupado em **ciclos** (Ciclo 1 = fundação, Fases 1–8; Ciclo 2 = domínio pet shop, Fase 9 em diante), mas o ciclo é só agrupamento de leitura no `docs/todo.md`: a fase seguinte à 9 é a 10, não "Ciclo 2 fase 2". O `<n>` do nome da branch depende disso — dois "fase-1" em ciclos diferentes tornariam o histórico ambíguo.
+
 ## Commits em ingles
 
 Mensagens de commit devem ser escritas em ingles. **Nunca assinar o commit**, apenas escrever as mensagens. 
@@ -111,6 +113,8 @@ Se perceber a necessidade de um script que não existe — algo que você (ou o 
 ## TODO e roadmap
 
 O estado atual, a ordem das tarefas e o que vem a seguir vivem em **`docs/todo.md`** e no documento de contexto `docs/context.md`. Consulte-o antes de começar qualquer tarefa para saber o próximo item e o que já está feito. Mantenha-o atualizado conforme concluir tarefas.
+
+**Forma de registro no `docs/todo.md`:** a fase **em execução** fica expandida (passo-a-passo, decisões de kickoff, pendências `🔸`); a fase **fechada** é destilada num resumo de poucos bullets. Ao fechar uma fase, essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas migram para `docs/context.md` (ou o ADR correspondente) **antes** de o expandido ser removido — nunca apague detalhe que só existe ali. O detalhe de execução permanece recuperável no histórico do git.
 
 ## ⚠️ REGRA — Anotação de pendência vai no LOCAL DA EXECUÇÃO, nunca para trás
 

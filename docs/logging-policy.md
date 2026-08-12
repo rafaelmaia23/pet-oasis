@@ -169,6 +169,8 @@ Aplicado via `redact` do pino (§ `src/lib/logger.ts`) e replicado no `beforeSen
 
 A lista é única e compartilhada: qualquer destino novo (Axiom, Sentry, ring buffer) consome a mesma configuração. Um destino que escapasse do `redact` anularia a política inteira.
 
+**Gotcha ao acrescentar campo à lista:** no pino os caminhos de `redact` são **literais**, não padrões — declarar `password` censura só a chave de topo. Cada campo entra também na forma `*.password`, senão o mesmo dado aninhado num objeto (`{ body: { password } }`) passa direto. Ao incluir um campo novo, incluir as duas formas.
+
 ### 5.2 Permitidos
 
 - **IP** — registrado por inteiro no access log, no application log e no `AuditLog`. É evidência necessária para investigar abuso e para o rate limit fazer sentido.
@@ -201,6 +203,8 @@ Efeito prático: com um `requestId` você recupera a linha de access log, todas 
 | Ring buffer | `LOG_BUFFER_SIZE` (default 500 entradas) | volátil | volátil |
 | Audit log | `AUDIT_LOG_RETENTION_DAYS` | 21 dias | 365 dias |
 | Sessões e tokens mortos | `SESSION_RETENTION_DAYS` | 30 dias | 30 dias |
+
+O ring buffer (`src/lib/logBuffer.ts`) se defende sozinho, porque é memória do processo: entrada acima de `MAX_ENTRY_SIZE` é **truncada** (uma linha gigante não pode comer a memória das outras) e linha malformada é **descartada em silêncio**. É a mesma regra que já governa o `record` sem transação (§4.1, item 6): o subsistema de log nunca derruba quem loga.
 
 O descarte do `AuditLog` acontece **exclusivamente** em `src/scripts/cleanup-audit-log.ts`, rodado por agendador externo, nunca dentro do ciclo request/response. É o único ponto do código autorizado a deletar audit log.
 

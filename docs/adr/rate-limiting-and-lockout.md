@@ -201,3 +201,38 @@ token é clique de link e precisa absorver NAT). Balde **próprio**, não o
 dividir faria um reset legítimo comer o orçamento do outro. A decisão cobriu as
 três de uma vez porque proteger só a rota nova deixaria duas irmãs idênticas
 desprotegidas, sem razão de negócio que as distinga.
+
+## Adendo (Fase 8.8) — conta demo isenta do lockout
+
+Bug descoberto em produção pós-deploy da Fase 7 (2026-08-04): o account
+lockout conta falhas por `userId`, sem distinção de origem — ao contrário do
+rate limit por IP, que mantém baldes separados por origem. A senha do
+usuário demo é pública (`README.md`), então o lockout, ali, deixa de proteger
+qualquer credencial e vira só um vetor de negação de serviço: qualquer
+visitante que erre a senha do demo trava a conta para **todo mundo** por até
+24h (o backoff dobra a cada ciclo), derrubando a porta de entrada do projeto
+para recrutadores. O demo-reset diário (7.14) não resolve — o estado do
+lockout vive no Redis, fora do alcance do truncate/reseed do Postgres.
+
+**Decisão:** a conta demo fica isenta do lockout, mas continua sujeita ao
+rate limit por IP (que já é por-origem e não sofre do mesmo problema).
+Isenção identificada pela **role `demo`**, não por comparação de email
+contra uma env var — generaliza para futuras contas de demonstração e não
+custa query extra: `userRepository.findUserByEmail` (usado por `login()`) já
+inclui `roles` no mesmo fetch, então o predicado (`isLockoutExempt`,
+`src/lib/lockout.ts`) roda sobre dado já em memória.
+
+**Critério simples, sem qualificação (K28):** basta *ter* a role `demo` —
+nada de "só se for a única role" nem de cruzar com features privilegiadas. A
+primeira alternativa quebra em silêncio se uma conta de demonstração futura
+precisar de uma segunda role; a segunda traria `computeEffectiveFeatures`
+para o caminho quente do login e misturaria lockout com não-escalação.
+Efeito colateral aceito e registrado: conceder a role `demo` a uma conta real
+isenta aquela conta do lockout — hoje inalcançável na prática, já que só o
+usuário demo semeado tem a role (o seed de dados fake não a usa).
+
+**Alternativa descartada:** fazer o demo-reset diário também limpar as
+chaves `lockout:*` do Redis. Descartada porque a janela de indisponibilidade
+entre um reset e o próximo continuaria em até 24h — o ataque ainda derrubaria
+o demo por quase um dia inteiro antes do próximo reset, só adiando o
+problema em vez de eliminá-lo.

@@ -2363,6 +2363,62 @@ describe("Account lockout (7.10)", () => {
   });
 });
 
+describe("Account lockout exemption for the demo role (8.8)", () => {
+  it("never locks the demo account, regardless of wrong attempts", async () => {
+    const demoUser = await buildEmployee({ roleNames: ["demo"] });
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD + 2; i++) {
+      const response = await request(app).post("/api/v1/auth/login").send({
+        email: demoUser.email,
+        password: "wrongpassword",
+      });
+      expect(response.status).toBe(401);
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: demoUser.email,
+      password: demoUser.password,
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("never records AUTH_LOCKOUT_TRIGGERED for the demo account", async () => {
+    const demoUser = await buildEmployee({ roleNames: ["demo"] });
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD + 2; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: demoUser.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "AUTH_LOCKOUT_TRIGGERED", targetId: demoUser.id },
+    });
+
+    expect(rows).toHaveLength(0);
+  });
+
+  it("still applies the per-IP rate limit to the demo account", async () => {
+    const demoUser = await buildEmployee({ roleNames: ["demo"] });
+
+    for (let i = 0; i < env.RATE_LIMIT_LOGIN_MAX; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: demoUser.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: demoUser.email,
+      password: "wrongpassword",
+    });
+
+    expect(response.status).toBe(429);
+  });
+});
+
 describe("End-to-end: signup -> login -> me -> refresh -> sessions -> logout", () => {
   it("should support the full auth lifecycle for a freshly signed-up customer", async () => {
     const data = makeCustomerData();

@@ -70,7 +70,7 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | DELETE `/api/v1/users/:id` | `delete:user` | Soft delete do usuário + invalida sessões |
 | POST `/api/v1/users/:id/ban` | `manage:user:status` | Bane o usuário (`bannedAt`/`bannedBy`/`banReason`) + invalida sessões, 204 |
 | DELETE `/api/v1/users/:id/ban` | `manage:user:status` | Desbane o usuário (limpa colunas de ban, preserva `status`), 204 |
-| DELETE `/api/v1/users/:id/lock` | `manage:user:status` | Desbloqueia a conta travada por lockout, reset completo do contador, 204 |
+| DELETE `/api/v1/users/:id/lock` | `manage:user:status` | Desbloqueia a conta travada por lockout, reset completo do contador, 204 · conta com a role `demo` é isenta do lockout (8.8), então nunca chega a travar |
 | POST `/api/v1/users/:id/force-password-reset` | `manage:user:status` | Força troca de senha (bloqueia login até o reset), invalida sessões + envia email de reset, 204 |
 | POST `/api/v1/users/:id/reactivate` | `reactivate:user` | Dispara a reativação de uma conta excluída escolhendo perfis (obrigatório, ≥1) e roles (opcional, default = as da cascata); **não reativa**, só emite o token e envia o email — quem conclui é o dono. 204 · 404 conta não excluída · 409 banida · 422 perfil de funcionário inexistente · 403 role privilegiada sem ator admin |
 

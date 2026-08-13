@@ -31,6 +31,31 @@ const CUSTOMER_SERVICE_FEATURES: FeatureName[] = [
   "reactivate:customer-profile:others",
 ];
 
+// Pets do próprio cliente. Mora fora de `SELF_MANAGEMENT_FEATURES` porque só
+// faz sentido para quem tem perfil de cliente — funcionário sem perfil de
+// cliente não tem pet nenhum.
+const PET_FEATURES: FeatureName[] = ["read:pet", "manage:pet"];
+
+// Atender o cliente na ficha do pet dele, no mesmo espírito de
+// `CUSTOMER_SERVICE_FEATURES`.
+const PET_SERVICE_FEATURES: FeatureName[] = [
+  "read:pet:others",
+  "manage:pet:others",
+];
+
+// O que o repositor precisa: contar prateleira exige ver o estoque exato e os
+// produtos que ainda não estão à venda.
+const STOCK_FEATURES: FeatureName[] = ["read:product:internal", "manage:stock"];
+
+// Autoria de catálogo. `manage:product` cobre produto, variante e imagem —
+// variante não existe sem produto; `manage:catalog-structure` é separada
+// porque reorganizar a árvore de categorias reclassifica a loja inteira.
+const CATALOG_MANAGEMENT_FEATURES: FeatureName[] = [
+  "manage:product",
+  "manage:catalog-structure",
+  "read:product:cost",
+];
+
 const USER_ADMINISTRATION_FEATURES: FeatureName[] = [
   "create:user",
   "read:user:others",
@@ -65,7 +90,9 @@ export const PRIVILEGED_FEATURES: FeatureName[] = [
 const CUSTOMER_FEATURES: FeatureName[] = [
   ...new Set<FeatureName>([
     ...SELF_MANAGEMENT_FEATURES,
-    // Outras features específicas para clientes podem ser adicionadas aqui
+    ...PET_FEATURES,
+    // Nenhuma feature de catálogo: a vitrine é pública, então não há o que
+    // conceder ao cliente para ele ver produto.
   ]),
 ];
 
@@ -73,6 +100,24 @@ const ATTENDANT_FEATURES: FeatureName[] = [
   ...new Set<FeatureName>([
     ...SELF_MANAGEMENT_FEATURES,
     ...CUSTOMER_SERVICE_FEATURES,
+    ...PET_SERVICE_FEATURES,
+    // Vê o estoque exato para responder "tem em estoque?" no balcão, sem ver
+    // custo e sem mexer no catálogo.
+    "read:product:internal",
+  ]),
+];
+
+const STOCKIST_FEATURES: FeatureName[] = [
+  ...new Set<FeatureName>([...SELF_MANAGEMENT_FEATURES, ...STOCK_FEATURES]),
+];
+
+const CATALOG_MANAGER_FEATURES: FeatureName[] = [
+  ...new Set<FeatureName>([
+    ...SELF_MANAGEMENT_FEATURES,
+    // Quem cadastra o produto também corrige contagem — a sobreposição com o
+    // repositor é intencional.
+    ...STOCK_FEATURES,
+    ...CATALOG_MANAGEMENT_FEATURES,
   ]),
 ];
 
@@ -80,10 +125,15 @@ const MANAGER_FEATURES: FeatureName[] = [
   ...new Set<FeatureName>([
     ...SELF_MANAGEMENT_FEATURES,
     ...CUSTOMER_SERVICE_FEATURES,
+    ...PET_SERVICE_FEATURES,
     ...USER_ADMINISTRATION_FEATURES,
     ...PERMISSION_FEATURES,
     ...LOG_READ_FEATURES,
     "read:audit-log:full",
+    // Superconjunto do gerente de catálogo — o cargo existe para delegar, não
+    // para tirar poder do gerente da loja.
+    ...STOCK_FEATURES,
+    ...CATALOG_MANAGEMENT_FEATURES,
   ]),
 ];
 
@@ -99,6 +149,11 @@ const DEMO_READ_FEATURES: FeatureName[] = [
     // Lê a trilha e o buffer — mas **não** `read:audit-log:full`: o demo vê o IP
     // mascarado (RBAC demonstrado dentro da própria resposta).
     ...LOG_READ_FEATURES,
+    // Mesmo desenho aplicado ao domínio novo (9.1): o demo enxerga pets e a
+    // visão interna do catálogo — sem `read:product:cost`, então a resposta
+    // mostra ao vivo o campo sensível ausente pela whitelist do presenter.
+    "read:pet:others",
+    "read:product:internal",
   ]),
 ];
 
@@ -114,6 +169,18 @@ export const DEFAULT_ROLES = [
     name: "attendant",
     description: "Atendente da loja",
     features: ATTENDANT_FEATURES,
+    appliesTo: ProfileKind.EMPLOYEE,
+  },
+  {
+    name: "stockist",
+    description: "Repositor de estoque",
+    features: STOCKIST_FEATURES,
+    appliesTo: ProfileKind.EMPLOYEE,
+  },
+  {
+    name: "catalog-manager",
+    description: "Gerente de catálogo",
+    features: CATALOG_MANAGER_FEATURES,
     appliesTo: ProfileKind.EMPLOYEE,
   },
   {

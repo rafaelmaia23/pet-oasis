@@ -75,6 +75,15 @@ completo, os contra-argumentos e os gotchas.
 - `reactivate:*` é feature separada de `create:*` (K12)
 - `create:`/`reactivate:customer-profile` moram em `SELF_MANAGEMENT_FEATURES`
 - `read:audit-log:full` entrou em `PRIVILEGED_FEATURES`
+- O critério de granularidade, escrito na 9.1
+- Pet — leitura × escrita, e não um verbo por operação
+- Catálogo — quatro cortes, nenhum deles por recurso
+- Custo/margem **não** entrou em `PRIVILEGED_FEATURES`
+
+*Roles de funcionário*
+
+- `stockist` e `catalog-manager` nasceram na 9.1
+- O `demo` enxerga o domínio novo, menos o custo
 
 ### [Ciclo de vida](context/lifecycle.md)
 
@@ -161,6 +170,10 @@ completo, os contra-argumentos e os gotchas.
 - User — progressão por capability
 - Demais recursos
 - `GET /me`
+
+*Superfície pública*
+
+- A vitrine do catálogo responde sem token (9.1)
 
 *Erros*
 

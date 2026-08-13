@@ -84,6 +84,48 @@ export const DEFAULT_FEATURES = [
     description: "Ler a trilha de auditoria com o IP completo",
   },
 
+  // Pet features (9.1) — o recorte é leitura × escrita, e não um verbo por
+  // operação: sobre o próprio pet os quatro verbos andam sempre juntos, e a
+  // fronteira que existe de verdade no balcão é "consultar a ficha" ×
+  // "alterar a ficha". Marcar um pet como falecido é `manage:pet` comum.
+  { name: "read:pet", description: "Ver os próprios pets" },
+  {
+    name: "manage:pet",
+    description: "Criar, atualizar e excluir os próprios pets",
+  },
+  { name: "read:pet:others", description: "Ver os pets de qualquer cliente" },
+  {
+    name: "manage:pet:others",
+    description: "Criar, atualizar e excluir pets de qualquer cliente",
+  },
+
+  // Catalog features (9.1) — não há feature de leitura pública: a vitrine
+  // (`GET /products`, `/categories`, `/brands`, `/tags`, `/breeds`) responde
+  // sem token. As features abaixo cobrem só o que está acima desse baseline.
+  {
+    name: "manage:product",
+    description: "Gerenciar produtos, variantes e imagens do catálogo",
+  },
+  {
+    name: "manage:catalog-structure",
+    description: "Gerenciar marcas, categorias e tags do catálogo",
+  },
+  {
+    name: "manage:stock",
+    description: "Ajustar o estoque das variantes",
+  },
+  {
+    name: "read:product:internal",
+    description: "Ver rascunhos, descontinuados e o estoque exato do catálogo",
+  },
+  // Segredo comercial, mas **não** privilegiada: o guard de não-escalação
+  // existe contra escalar o próprio sistema de permissão, e quem decide quem
+  // vê margem é o gerente, não o admin.
+  {
+    name: "read:product:cost",
+    description: "Ver o custo e a margem dos produtos",
+  },
+
   // Wildcard feature
   { name: "*", description: "Acesso total a todas as funcionalidades" },
 ] as const;

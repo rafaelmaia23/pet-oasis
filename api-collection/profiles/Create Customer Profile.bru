@@ -21,5 +21,15 @@ body:json {
 }
 
 docs {
-  Exige create:profile. O demo é read-only → 403.
+  Cria **ou** reativa o perfil de cliente — o ramo sai do estado do perfil no
+  banco, e a resposta é 201 nos dois casos (perfil já ativo → 409).
+
+  Exige `create:customer-profile` ou `reactivate:customer-profile` para a
+  própria conta (baseline de qualquer autenticado), ou a variante `:others`
+  para a de outro usuário (attendant, manager, admin).
+
+  Na reativação o `phone` enviado atualiza o perfil, e as roles que morreram
+  na cascata voltam — os overrides delas, não.
+
+  O demo é read-only → 403.
 }

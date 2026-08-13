@@ -38,7 +38,7 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
-| POST `/api/v1/auth/signup` | público | Auto-cadastro; cria um usuário (customer), 201 |
+| POST `/api/v1/auth/signup` | público | Auto-cadastro; cria um usuário (customer), 201. Email de conta soft-deletada com o **cpf batendo** → dispara reativação e responde **202** genérico (nada é criado); cpf não batendo, conta banida ou conta ativa → 409 genérico |
 | POST `/api/v1/auth/login` | público | Autentica; seta cookie httpOnly de refresh, retorna access token |
 | POST `/api/v1/auth/refresh` | público (usa cookie de refresh) | Rotaciona o refresh e emite novo access token |
 | POST `/api/v1/auth/logout` | `manage:session` | Revoga a sessão do cookie de refresh, limpa o cookie |
@@ -50,7 +50,8 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | POST `/api/v1/auth/reset-password` | público | Troca a senha via token e invalida TODAS as sessões, 204 |
 | POST `/api/v1/auth/change-password` | `authenticate` | Troca a senha logado (exige senha atual) e invalida TODAS as sessões, 204 |
 | POST `/api/v1/auth/change-email` | `update:user` | Pede a troca de email (exige senha atual); dispara aviso de segurança pro email antigo com o link de confirmação |
-| POST `/api/v1/auth/confirm-email-change` | público | Confirma a troca via token, grava o email antigo em `PreviousEmail` (reservado para sempre), 204 |
+| POST `/api/v1/auth/confirm-email-change` | público | Confirma a troca via token, grava o email antigo em `PreviousEmail` (só histórico — não reserva o endereço, 8.6), 204 |
+| POST `/api/v1/auth/confirm-account-reactivation` | público | Reativa a conta via token e define **senha nova** (obrigatória); restaura os perfis escolhidos e as roles que morreram com eles — overrides nunca voltam (D6'). `phone` só é exigido quando o perfil de cliente precisa nascer do zero. 204 |
 
 ## Me — `src/modules/me/me.routes.ts`
 
@@ -69,29 +70,66 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | DELETE `/api/v1/users/:id` | `delete:user` | Soft delete do usuário + invalida sessões |
 | POST `/api/v1/users/:id/ban` | `manage:user:status` | Bane o usuário (`bannedAt`/`bannedBy`/`banReason`) + invalida sessões, 204 |
 | DELETE `/api/v1/users/:id/ban` | `manage:user:status` | Desbane o usuário (limpa colunas de ban, preserva `status`), 204 |
-| DELETE `/api/v1/users/:id/lock` | `manage:user:status` | Desbloqueia a conta travada por lockout, reset completo do contador, 204 |
+| DELETE `/api/v1/users/:id/lock` | `manage:user:status` | Desbloqueia a conta travada por lockout, reset completo do contador, 204 · conta com a role `demo` é isenta do lockout (8.8), então nunca chega a travar |
 | POST `/api/v1/users/:id/force-password-reset` | `manage:user:status` | Força troca de senha (bloqueia login até o reset), invalida sessões + envia email de reset, 204 |
+| POST `/api/v1/users/:id/reactivate` | `reactivate:user` | Dispara a reativação de uma conta excluída escolhendo perfis (obrigatório, ≥1) e roles (opcional, default = as da cascata); **não reativa**, só emite o token e envia o email — quem conclui é o dono. 204 · 404 conta não excluída · 409 banida · 422 perfil de funcionário inexistente · 403 role privilegiada sem ator admin |
 
 ## User profile — `src/modules/user/profile/user.profile.routes.ts`
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
-| POST `/api/v1/users/:userId/customer` | `create:profile` | Cria o perfil customer do usuário |
-| POST `/api/v1/users/:userId/employee` | `create:profile` | Cria o perfil employee do usuário |
-| DELETE `/api/v1/users/:userId/customer` | `delete:profile` | Soft delete do perfil customer + roles CUSTOMER |
-| DELETE `/api/v1/users/:userId/employee` | `delete:profile` | Soft delete do perfil employee + roles EMPLOYEE |
+| POST `/api/v1/users/:userId/customer` | `create:customer-profile` **ou** `reactivate:customer-profile` (self ou `:others`) | Cria **ou** reativa o perfil customer, 201 nos dois casos |
+| POST `/api/v1/users/:userId/employee` | `create:employee-profile` **ou** `reactivate:employee-profile` | Cria **ou** reativa o perfil employee, 201 nos dois casos |
+| DELETE `/api/v1/users/:userId/customer` | `delete:profile` | Soft delete do perfil customer + roles CUSTOMER + overrides delas |
+| DELETE `/api/v1/users/:userId/employee` | `delete:profile` | Soft delete do perfil employee + roles EMPLOYEE + overrides delas |
+
+**Criar ou reativar na mesma rota (Fase 8.3):** o ramo sai do estado do perfil no banco,
+não do verbo — perfil ausente cria, perfil soft-deletado reativa, perfil ativo é **409**.
+A resposta é **201** nos dois ramos: o cliente não precisa saber que a linha foi revivida.
+
+A autorização é em duas etapas. A rota declara as duas features e admite quem tiver
+qualquer uma delas; o service reconfere a específica do ramo que de fato correu — sem
+isso, ter só `reactivate:` deixaria criar do zero. A checagem de autorização acontece
+**antes** da busca do usuário (403 vence 404).
+
+| Quem | Perfil de cliente | Perfil de funcionário |
+|---|---|---|
+| O próprio usuário | ✅ criar e reativar (baseline de todo autenticado) | ❌ nunca — não há self-service para virar funcionário |
+| `attendant` | ✅ criar e reativar o de outro | ❌ |
+| `manager` / `admin` | ✅ | ✅ |
+
+O `phone` do body **atualiza** o perfil na reativação — o `POST` é o único caminho que
+grava `Customer.phone` (o `PATCH /users/:id` só aceita `name`).
+
+O `roleNames` do `POST .../employee` é a lista de roles com que o perfil **nasce ou
+volta**. Cada nome é restaurado (se morreu naquela cascata) ou concedido (se morreu
+noutro instante, ou nunca existiu); o que não for nomeado fica para trás. Omitido, volta
+tudo o que morreu na cascata. Conceder role por aqui responde ao mesmo guard de
+não-escalação de `POST /users/:id/roles/:roleId` → **403** se um não-admin nomear uma role
+privilegiada. Os overrides das roles restauradas **não** voltam (ver o bloco de escopo do
+override, acima).
 
 ## Permission — `src/modules/permission/permission.routes.ts` (montado em `/users/:userId`)
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
-| GET `/api/v1/users/:userId/features` | `read:permission` | Lista os overrides de feature do usuário |
+| GET `/api/v1/users/:userId/features` | `read:permission` | Lista os overrides de feature do usuário, cada um com a role a que pertence |
 | GET `/api/v1/users/:userId/roles` | `read:permission` | Lista as roles ativas do usuário |
 | GET `/api/v1/users/:userId/permissions` | `read:permission` | Lista as features efetivas do usuário |
-| POST `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Concede uma role ao usuário |
-| DELETE `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Revoga uma role do usuário |
-| PUT `/api/v1/users/:userId/features/:featureId` | `manage:permission` | Cria/atualiza um override de feature (grant/deny) |
-| DELETE `/api/v1/users/:userId/features/:featureId` | `manage:permission` | Remove um override de feature |
+| POST `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Concede uma role ao usuário (reusa a linha se já houve — 201 nos dois casos; os overrides dela **não** voltam, D6') |
+| DELETE `/api/v1/users/:userId/roles/:roleId` | `manage:permission` | Revoga uma role do usuário (cascateia para os overrides dela) |
+| PUT `/api/v1/users/:userId/roles/:roleId/features/:featureId` | `manage:permission` | Cria/atualiza um override de feature (grant/deny) numa role do usuário |
+| DELETE `/api/v1/users/:userId/roles/:roleId/features/:featureId` | `manage:permission` | Remove um override de feature |
+
+**Escopo do override (Fase 8.0, D2/D9):** um override pertence a uma **atribuição de
+role**, não ao usuário solto — por isso a role vai no path. Sem a role ativa, o `PUT`
+responde **422** (`errors.roleId`); o `DELETE` responde **404** para a tripla inteira, sem
+revelar se o usuário tem aquela role.
+
+**Revogar a role mata os overrides pendurados nela — e re-concedê-la não os traz de volta**
+(D6', Fase 8 Sessão C). A cascata de deleção desce quatro níveis; a restauração para na
+`UserRole`. Quem devolve um cargo frequentemente não sabe que havia ajuste fino pendurado
+nele, então override só volta por `PUT` explícito, que revive a linha soft-deletada.
 
 ## Feature — `src/modules/feature/feature.routes.ts`
 

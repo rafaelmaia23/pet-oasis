@@ -154,6 +154,12 @@ export function errorHandler(
 
   // Erro operacional — lançado intencionalmente pelo dev
   if (err instanceof AppError) {
+    // Ex.: o `Retry-After` do 429 de rate limit (8.7). O header viaja no erro
+    // porque quem o lança pode estar dentro de um service, sem `res` — o ponto
+    // único de saída é quem aplica.
+    if (err.headers) {
+      res.set(err.headers);
+    }
     return respond(res, err.statusCode, err.toJson(), err);
   }
 

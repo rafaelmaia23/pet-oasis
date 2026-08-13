@@ -25,6 +25,11 @@ userRouter.delete(
   userController.unlockAccount,
 );
 userRouter.post(
+  "/:id/reactivate",
+  canAccess("reactivate:user"),
+  userController.reactivateAccount,
+);
+userRouter.post(
   "/:id/force-password-reset",
   canAccess("manage:user:status"),
   userController.forcePasswordReset,

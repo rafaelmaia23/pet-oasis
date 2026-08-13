@@ -16,9 +16,11 @@ export type AuditDescriptor = {
   action: AuditAction;
   targetType: AuditTargetType;
   targetId?: string;
-  // Só ids e enums — nunca PII (docs/logging-policy.md §4.4). Garantido pelos
-  // call sites + teste de contrato, não por validação em runtime.
-  metadata?: Record<string, string | number | boolean>;
+  // Só ids e enums — nunca PII (docs/reference/logging-policy.md §4.4). Garantido pelos
+  // call sites + teste de contrato, não por validação em runtime. Listas de
+  // escalar entram porque um conjunto de enums continua sendo enum: a
+  // reativação de conta precisa dizer **quais** perfis voltaram, não quantos.
+  metadata?: Record<string, string | number | boolean | string[]>;
   actorId?: string;
 };
 

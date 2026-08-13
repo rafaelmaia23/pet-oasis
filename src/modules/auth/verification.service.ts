@@ -57,8 +57,7 @@ export async function verifyEmail(token: string) {
   );
 
   if (
-    !verificationToken ||
-    verificationToken.purpose !== "EMAIL_VERIFICATION" ||
+    verificationToken?.purpose !== "EMAIL_VERIFICATION" ||
     verificationToken.usedAt !== null ||
     verificationToken.expiresAt < new Date()
   ) {
@@ -86,7 +85,7 @@ export async function verifyEmail(token: string) {
 export async function resendVerification(email: string) {
   const user = await findUserByEmail(email);
 
-  if (!user || user.status !== "PENDING" || user.bannedAt !== null) {
+  if (user?.status !== "PENDING" || user.bannedAt !== null) {
     return;
   }
 

@@ -18,7 +18,7 @@ const FORBIDDEN_KEYS = new Set(
 
 /**
  * Percorre um evento do Sentry e censura os mesmos campos/headers proibidos
- * de `docs/logging-policy.md` §5.1 — reaproveitando as listas do pino
+ * de `docs/reference/logging-policy.md` §5.1 — reaproveitando as listas do pino
  * (`logger.ts`) em vez de manter uma cópia à mão que pudesse divergir.
  *
  * Função pura, sem depender do SDK: testável com um objeto-fixture, sem

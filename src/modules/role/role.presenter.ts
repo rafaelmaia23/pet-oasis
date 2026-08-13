@@ -7,7 +7,7 @@ const defaultView = z
     id: z.uuid(),
     name: z.string().meta({ example: "manager" }),
     description: z.string().meta({ example: "Gerente da loja" }),
-    appliesTo: z.enum(ProfileKind).nullable(),
+    appliesTo: z.enum(ProfileKind),
     features: z.array(
       z.object({
         id: z.uuid(),

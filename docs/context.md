@@ -1,297 +1,321 @@
-# pet-oasis — Contexto Detalhado (Ciclo 1)
+# pet-oasis — Índice do contexto
 
-> Referência de consulta. O essencial acionável está no `CLAUDE.md`; o estado das tarefas no `docs/todo.md`. Aqui ficam os detalhes longos: contratos de view, racional das decisões, gotchas técnicos aprendidos. Consulte quando precisar do "porquê" ou de um detalhe específico.
-
----
-
-## 1. Contratos de view (presenter)
-
-Cada recurso tem views resolvidas pela **capability do viewer** (não pelo role). `.parse()` derruba campos não listados → nada sensível vaza por omissão.
-
-**User** — progressão por capability:
-- `default` (id, name) → qualquer um vê de qualquer user
-- `owner` (+ email, cpf, status, customer/employee aninhados nullable) → o próprio dono
-- `me` (owner + features efetivas `string[]`) → o próprio, em `/me`
-- `admin` (+ createdAt, updatedAt, roles `[{role:{id,name}}]`, features `[{granted,grantedAt,feature}]`) → quem tem `read:user:others`
-
-cpf aparece em `owner` (dado próprio) e `admin` (gerente vê — normal em pet shop, vendas ligadas a cpf).
-
-**Role**: id, name, description (obrigatória), appliesTo (`enum.nullable()`), features `[{id,name,description}]` — junção achatada no service (`role.features.map(rf => rf.feature)`).
-
-**Feature**: id, name, description.
-
-**Permission**: `/features` = overrides crus `[{granted, grantedAt, feature}]`; `/permissions` = efetivas `string[]`.
-
-**Erros**: 422 VALIDATION_ERROR (`errors` por campo), 409 CONFLICT, 404 NOT_FOUND, 403 FORBIDDEN (action nomeia a feature exigida), 401 UNAUTHORIZED. DELETE de recurso = 204 (tanto user quanto perfil — no perfil o user continua existindo, só o Customer/Employee é soft-deletado).
-
----
-
-## 2. Racional das decisões (o "porquê" longo)
-
-**Por que presenter por whitelist e não blacklist:** listar o que PODE sair é à prova de futuro — um campo sensível novo no model não vaza por omissão (não está na view). Blacklist exigiria lembrar de excluir cada campo novo.
-
-**Por que view por capability e não por role:** a feature `read:user:others` pode vir de role OU de override. Resolver por role perderia quem tem a capability por override. A capability é a verdade.
-
-**Por que autorização antes da busca:** se buscasse primeiro, alguém sem `:others` saberia se um id existe (404) ou não (sem erro) — vaza existência. Checando `canActOnResource(user, feature, targetId)` antes (usando o id da URL como ownerId, sem query), quem não tem `:others` recebe 403 igual para id existente ou não.
-
-**Por que P2002 no handler e não check antecipado:** o check `findByEmail` antes de criar tem corrida (entre o SELECT e o INSERT, outro request insere). O constraint `@unique` é a garantia real; traduzir o P2002 fecha a corrida e cobre todos os campos únicos de uma vez.
-
-**Por que soft delete de UserFeature/UserRole (autorização, não histórico de negócio):** decidido POR auditoria de segurança — "quem podia o quê, quando". Sem isso, seria hard delete (autorização não costuma precisar de histórico). A escolha trocou a PK composta por `id` próprio (para permitir múltiplos registros do mesmo par: deletados + 1 ativo) e a unicidade do ativo passou a ser controlada por código.
-
-**Por que não-escalação checa role admin (não a feature):** se checasse a feature `manage:permission`, ela mesma poderia ser concedida por override → escalação. A role admin é "dura" (vem de atribuição de role), por isso é a âncora. Um attendant com `manage:permission` emprestada não é admin → não mexe em PERMISSION_FEATURES.
-
-**Por que a não-escalação foi generalizada para roles (não só overrides):** atribuir ou revogar uma ROLE pode conceder o mesmo poder que um override de feature — a role `admin` carrega o wildcard `"*"`, e `manager` já carrega as próprias `PERMISSION_FEATURES`. Sem essa checagem, um ator com `manage:permission` (mas sem a role `admin`) contornaria a proteção de overrides só atribuindo a role `admin`/`manager` a si mesmo ou a outro usuário — a mesma escalação, por uma porta diferente. `assertAdminForRoleAssignment` usa a mesma âncora (`role admin`, não a feature), mas o gatilho muda: dispara quando a role concedida/revogada carrega alguma `PERMISSION_FEATURES` OU o wildcard `"*"`. Vale tanto para conceder (POST) quanto para revogar (DELETE) — remover a role `admin` de alguém é tão sensível quanto concedê-la.
-
-**Por que FeatureName/string boundary:** tipo estreito (union literal) descreve o que você SABE em compile-time — vale onde digita o literal. Dado do banco é `string` em runtime (o banco não conhece o union). Forçar o union além dessa fronteira gera `as` (mentira ao compilador). A fronteira é onde Zod valida.
-
-**Por que perfis antes de user↔role:** atribuir role exige o perfil compatível já existir (a regra "sem perfil → crie primeiro, não silencioso"). Se user↔role viesse antes, dependeria de algo inexistente.
-
-**Por que `authenticate` saiu do `app.ts` (global) e foi para `routes/index.ts` (por grupo de rota):** rotas públicas de autenticação (`/auth/login`, `/auth/signup`, `/auth/refresh`) não podem depender de já estar autenticado — em especial `/auth/refresh`, cujo propósito é justamente recuperar acesso quando o access token expirou; com `authenticate` global, um Bearer expirado nesse header derrubava a requisição com 401 antes de chegar na rota, mesmo sem `canAccess`. A correção aplica `authenticate` só nos grupos protegidos (`/me`, `/users`, `/users/:userId`, `/features`, `/roles`), deixando `/status` e `/auth` de fora — de propósito, não por omissão. `logout`, `GET /auth/sessions` e `DELETE /auth/sessions/:id` são protegidos mas vivem dentro do `/auth` público, então cada uma aplica `authenticate`+`canAccess` diretamente na própria definição de rota (`auth.routes.ts`), não no grupo inteiro — já implementado, não é mais trabalho futuro.
-
-**Design de `Session` (Fase 3 — access JWT + refresh opaco rotativo):** cada linha de `Session` representa um token de refresh emitido, não uma "sessão" no sentido de família de dispositivo — não existe um id de família separado agregando rotações sucessivas do mesmo login. Um login cria uma linha; cada rotação bem-sucedida em `/refresh` marca a linha antiga com `usedAt` e cria uma linha nova (mesmo `userId`, hash novo). Três campos, três formas independentes de uma sessão "morrer": `usedAt` (já foi trocada por uma rotação — reuso dela é sinal de roubo), `invalidatedAt` (revogada explicitamente — logout, revogação pontual, ou resposta a roubo), `expiresAt` (TTL de 7 dias, deslizante a cada rotação). "Sessão viva" = as três condições simultaneamente (`usedAt IS NULL AND invalidatedAt IS NULL AND expiresAt > now()`) — é o filtro usado em `findLiveSessionsByUserId` (base de `GET /auth/sessions` e de `revokeSession`/`DELETE /auth/sessions/:id`, que trata "não encontrada" e "encontrada mas morta" com o mesmo 404 genérico, não vazando qual dos dois aconteceu).
-
-**Ordem de checagem no `refresh`:** reuso (`usedAt` setado) → invalidada → expirada, sempre a mesma mensagem 401 genérica em qualquer uma das três (não revela qual checagem falhou). A ordem importa: `usedAt` é checado primeiro porque é o único caso que dispara efeito colateral — replay de um token já usado aciona `invalidateAllUserSessions(userId)`, matando TODAS as sessões do usuário (não só a reutilizada), já que reuso é o sinal mais forte de que o refresh token vazou e o dispositivo legítimo não é mais o único de posse dele. Nota de consistência: `invalidateAllUserSessions` (resposta a roubo) e `softDeleteUserAndInvalidateSessions` (usuário deletado) usam critérios de `where` diferentes de propósito — a primeira invalida por `invalidatedAt: null, expiresAt: { gt: now }` (sem excluir `usedAt`), porque numa resposta a roubo o objetivo é marcar `invalidatedAt` em TODA sessão do usuário para auditoria completa, inclusive as já usadas; a segunda já inclui `usedAt: null` porque o objetivo ali é só limpar sessões que ainda poderiam ser usadas — não é uma resposta a incidente, é encerramento de conta.
-
-**Roles default na criação de usuário:** employee nasce com `attendant`, customer com `customer` (`DEFAULT_EMPLOYEE_ROLES`/`DEFAULT_CUSTOMER_ROLES` em `user.service.ts`). Criar sem `roleNames` usa o default; passar `roleNames` valida `appliesTo` via `validateRoles` (incompatível → 422 com `errors`).
-
-**POST de perfil — 409 distinto para ativo vs inativo:** criar `/customer`|`/employee` num user que já tem aquele perfil **ativo** → 409 "já possui"; que tem o perfil **soft-deletado** → 409 com mensagem distinta (não reativa — sem recovery no ciclo 1, coerente com a regra de soft delete do `CLAUDE.md`). Os dois casos são conflito, mas a mensagem diferencia pra não confundir "já existe" com "existe mas está preso".
-
-**DELETE de override (feature) → 404 quando não há override ativo:** decidido avisar (404) em vez de 204 silencioso — o caller pediu para remover algo que não existe, então é informado, não enganado com um sucesso vazio. (`assertAdminForPermissionFeature` reusado tanto no PUT quanto no DELETE.)
-
-**user↔role POST — orienta, não cria perfil:** se `role.appliesTo` é incompatível com os perfis ativos do user → **422** cujo `action` orienta criar o perfil primeiro; o endpoint **não** cria o perfil automaticamente (efeito colateral silencioso é pior que um erro claro). Se o user já tem a role ativa → **409** (idempotência). Casa com "perfis antes de user↔role" acima.
-
-**user↔role DELETE — protege o último vínculo do perfil:** se remover a role deixaria o perfil correspondente (customer/employee) sem nenhuma role ativa → **409**, com `action` apontando pro DELETE do perfil (a via correta de encerrar o perfil inteiro). Impede um user ficar com um perfil "órfão" sem role.
-
-**GET /me:** exige a feature `read:user` (mesmo padrão de `GET /users/:id`); perfil soft-deletado aparece como `null` (não sobe perfil morto); roles aninhadas dentro de `customer`/`employee` em shape enxuto (`{id,name,description,appliesTo}`, sem features aninhadas — as capacidades já estão cobertas pelo `features` efetivo do topo).
-
----
-
-## 2.1 Fase 4 (implementada) — decisões e racional
-
-> Decisões da Fase 4 (status de conta, verificação de email, email genérico, troca/recuperação de senha, banimento), firmadas no planejamento e confirmadas na implementação (4.0–4.5, todas feitas). O passo-a-passo atômico está no `docs/todo.md` (seção "Fase 4"). Estas são as regras de negócio e o "porquê" de cada uma.
-
-**Por que status e ban são ortogonais (`enum PENDING/ACTIVE` + `bannedAt`, não `enum PENDING/ACTIVE/BANNED`):** um único enum obrigaria banir a sobrescrever `PENDING`/`ACTIVE`, e desbanir teria que "adivinhar" para onde voltar (um `PENDING` banido volta pra quê?). Modelar ban como timestamp-flag separado (`bannedAt`/`bannedBy`/`banReason`) — mesmo idioma de `deletedAt`/`usedAt`/`invalidatedAt` já usado no projeto — mantém o `status` de verificação intacto durante o ban: desbanir é só limpar as três colunas e a conta volta exatamente ao estado anterior. A regra de login vira uma conjunção explícita: `status == ACTIVE && bannedAt == null`.
-
-**Por que todo usuário nasce PENDING (inclusive os criados por admin):** o objetivo da verificação é provar que o email é válido e pertence à pessoa (recebe recados). Isso vale igual para o funcionário criado por um admin — o email dele também precisa ser verificado. Uma regra única ("todo mundo verifica") evita um `status` condicional por origem de criação e não abre exceção que depois vira dívida. O custo é um passo de verificação para contas internas — aceito.
-
-**Por que verificação/reset/forgot ficam sob `/auth` e não têm feature:** são operações de autenticação self-service, no mesmo grupo público de `login`/`signup`/`refresh` — quem as usa por definição ainda não está autenticado (ou está agindo sobre a própria identidade). O recurso central de cada uma é o **token** (verificação, reset), não um recurso de domínio, por isso `POST /auth/verify-email`, `/forgot-password`, `/reset-password` em vez de aninhar em `/users/:id`. `change-password` é a exceção autenticada: exige `authenticate` mas nenhuma feature, porque é o dono agindo na própria conta, travado pela senha atual.
-
-**Por que 403 (e não 401) no login quando a senha está certa mas a conta não está ACTIVE:** senha errada é 401 genérico (não se sabe quem é). Já uma credencial correta estabelece a identidade — o que falta é permissão de entrar (conta não verificada ou suspensa), que é semanticamente 403. Mensagens distintas (PENDING → "verifique seu email"; BANNED → "conta suspensa, contate o suporte") orientam o dono. Trade-off aceito: o 403 revela que a senha estava correta, mas quem chegou até aqui provou posse da senha, então é o próprio dono.
-
-**Por que anti-enumeração em forgot/resend/signup:** `forgot-password` e `verify-email/resend` respondem **sempre 200 genérico** independentemente de o email existir/estar ACTIVE/estar banido — senão a resposta viraria um oráculo de "quais emails têm conta". O email real só é disparado quando a condição interna é satisfeita. No mesmo espírito, signup com email de um banido mantém o **409 genérico** já produzido pelo `@unique` (a linha do banido persiste, não é deletada), sem mensagem especial "banido".
-
-**Por que reset e change-password invalidam TODAS as sessões:** trocar a senha é o ponto natural de "expulsar quem não deveria estar". Se a senha vazou, invalidar todas as sessões (reusa `invalidateAllUserSessions`) corta o invasor imediatamente, em vez de esperar o refresh expirar (7 dias). Vale para reset (não logado) e change (logado — o próprio usuário reloga; atrito aceito pela garantia de segurança).
-
-**Por que change-password é single-step e sem código por email:** o usuário já está logado; exigir a senha atual já protege contra sessão sequestrada (um invasor com o access token não sabe a senha). Um segundo fator por email para um usuário logado seria mais atrito do que segurança neste momento — descartado. (Contraste: reset, para usuário NÃO logado, precisa do token por email porque não há outra prova de identidade.)
-
-**Por que ban reusa a âncora admin da não-escalação:** banir/desbanir usa a feature `manage:user:status` (em `USER_ADMINISTRATION_FEATURES`, logo manager e admin a têm), mas banir/desbanir um alvo **privilegiado** (role com `PERMISSION_FEATURES` ou wildcard `*`) exige role **admin** — mesma lógica de `assertAdminForRoleAssignment`. Sem isso, um manager poderia neutralizar um admin banindo-o (escalação lateral). Ban também invalida as sessões do alvo no ato: um banido não deve continuar usando o access token até expirar.
-
-**Por que "conta congelada":** banido não faz **nada** com a conta — login bloqueado (403 suporte), forgot/reset e resend-verification viram no-op (200 genérico, nenhum email sai), sessões vivas derrubadas. O ban é um estado terminal (reversível só por desban de um admin), não um "login negado" isolado.
-
-**Por que um `VerificationToken` genérico (com `purpose` enum) e não models separados por finalidade:** email-verification e password-reset compartilham exatamente a mesma forma (token opaco, hash SHA-256 salvo, `expiresAt`, `usedAt`, `userId`) — a única diferença é a finalidade e o TTL. Um model com `purpose (EMAIL_VERIFICATION|PASSWORD_RESET)` evita dois repositórios quase idênticos. Reusa `hashToken` de `src/lib/token.ts` (mesmo padrão do refresh: guarda só o hash, entrega o token cru ao usuário). `change-password` não usa esse model (não há token — a prova é a senha atual).
-
-**Por que serviço de email genérico:** o `send({to,subject,html,text})` em `src/lib/email.ts` não sabe de verificação/reset — recebe o email pronto. Isso o deixa reusável para o que vem depois (lembretes de agendamento, confirmações de serviço/venda). Transporter configurado por `env` (dev aponta pro mailpit no docker; produção usa credenciais SMTP do Resend com `secure: true`). Falha de envio → `createServiceUnavailableError` (503).
-
-### Fases 4.1–4.4 (implementadas) — decisões firmadas na execução
-
-**Por que só a criação de usuário emite verificação (e os POSTs de perfil NÃO):** a emissão do `VerificationToken(EMAIL_VERIFICATION)` + email mora em `user.service.createCustomer`/`createEmployee`, que cobre os dois caminhos que criam um usuário novo (signup self-service e `POST /users` do admin). `POST /users/:id/customer|employee` **não** emite: adiciona um 2º perfil a um usuário que **já existe** (já tem `status` e já recebeu o email na criação) — re-emitir ali só geraria ruído (reenvio a um user talvez já `ACTIVE`) sem provar nada de novo sobre o email. Verificação é sobre a identidade do email, que não muda ao ganhar um perfil.
-
-**Por que token inválido/expirado/usado no `verify-email` é 400 genérico (não 422/401):** o token é sintaticamente válido (passou no Zod) mas imprestável — não é erro de validação de campo (o 422 do projeto carrega `errors` por campo, que não encaixa num token opaco) nem credencial de sessão (401 é para Bearer/refresh). É um `createBadRequestError` genérico que não vaza **qual** condição falhou (inexistente vs expirado vs usado). Mesmo 400 será reusado no `reset-password` (4.2). Sucesso do `verify-email` → **204** (idioma do projeto para ação sem corpo: logout, DELETE de sessão/perfil).
-
-**Por que a orquestração de verificação vive em `verification.service.ts` (e não em `auth.service`):** `auth.service` já importa `user.service` (para `signup`), e `user.service` precisa disparar a emissão na criação — pôr a emissão em `auth.service` fecharia um ciclo `user.service → auth.service → user.service`. `src/modules/auth/verification.service.ts` concentra `issueEmailVerification`/`verifyEmail`/`resendVerification` importando só `auth.repository` (CRUD do token), `user.repository`, `lib/email` e `lib/token` — ninguém que ele importa reimporta ele. O gate de login continua em `auth.service.login` (só lê `user.status`/`user.bannedAt`, que já vêm no `findUserByEmail`). Análogo: recuperação/troca de senha vive em `password.service.ts` (`requestPasswordReset`/`resetPassword`/`changePassword`), mesma razão de coesão e anti-ciclo.
-
-**Por que 204 em reset/change e 400 em token de reset ruim:** `reset-password` e `change-password` seguem o idioma de ação-sem-corpo → **204** no sucesso (sessões já caíram, o front redireciona pro login). Token de reset inexistente/expirado/usado/`purpose` errado → **400 genérico** (mesmo racional do `verify-email`), `newPassword` fraca → **422** (reusa `passwordSchema`).
-
-**Por que change-password com senha atual errada é 403 (não 401):** a request já está autenticada (Bearer válido) — um 401 seria lido pelo front como "token expirou" e dispararia refresh/logout indevido. O que falhou foi a prova da senha atual (re-autenticação para uma ação sensível), semanticamente 403. (Contraste: no `login`, senha errada é 401 porque ainda não há identidade estabelecida.)
-
-**Por que auto-ban/-unban é 409 e o guard de privilegiado do ban difere do de role:** banir/desbanir a si mesmo é bloqueado com **409** (evita um admin se trancar para fora — único caso alcançável, já que manager/attendant caem antes no guard de privilegiado, pois manager tem `PERMISSION_FEATURES`). O `assertAdminForBan` reusa a âncora "ator precisa ser role admin", mas identifica o **alvo privilegiado** computando as features **efetivas do usuário-alvo** (`getUserForFeatureComputation` + `computeEffectiveFeatures`, checando `*`/`PERMISSION_FEATURES`) — diferente de `assertAdminForRoleAssignment`, que olha as features da *role* sendo atribuída. Ban seta `bannedAt`/`bannedBy`/`banReason` + invalida sessões numa transação; unban limpa as três colunas e preserva o `status`.
-
-**Por que "conta congelada" cobre também reset e change:** além de login/forgot/resend (que já barravam banido desde 4.1/4.2), `reset-password` (token válido) e `change-password` (Bearer válido) passam a recusar dono banido com **403** — fecha a brecha de um token/Bearer emitido enquanto ativo ser usado logo após o ban. Completa o princípio "banido não faz NADA com a conta".
-
----
-
-## 2.2 Fase 7 (implementada) — decisões e racional
-
-> Fase 7 amplia o escopo original do roadmap (que previa só "rate limiting, account lockout") para incluir observabilidade completa e polimento das features de auth/authz/gestão de usuário já construídas. Decisões tomadas no planejamento, antes de qualquer feat-branch abrir — passo-a-passo atômico e divisão em sessões de trabalho no `docs/todo.md`.
+> **Não leia este documento inteiro, e não leia todos os arquivos que ele lista.** Ele é um
+> roteador: ache no índice a decisão de que você precisa, abra **só** o arquivo dela. Uma sessão
+> de trabalho típica lê este índice e um ou dois arquivos temáticos.
 >
-> Documentos irmãos, para não duplicar racional: **`docs/logging-policy.md`** (as três categorias de log, taxonomia de audit, dados proibidos, retenção), **`docs/adr/rate-limiting-and-lockout.md`** e **`docs/adr/pagination.md`**. Esta seção registra o que se decidiu e por quê; os documentos acima detalham o *como*.
-
-### Segurança e autorização
-
-**Por que Redis (não in-memory) para rate limiting e lockout:** os dois mecanismos compartilham a mesma necessidade — um contador que sobreviva a restart do processo e funcione corretamente mesmo se a app um dia rodar em mais de uma instância. In-memory (`express-rate-limit` puro) resolveria o caso atual (single-instance) mas quebraria silenciosamente no primeiro dia de scale-out horizontal, e zeraria a cada deploy. Custo aceito: um serviço novo (`redis`) nos overrides do Compose e mais uma peça de infra em produção.
-
-**Por que rate limit é por IP e lockout é por conta (dois mecanismos, não um só):** têm alvos diferentes. Rate limit por IP protege contra volume (DoS, scraping, spam de criação de conta) sem se importar com qual conta está sendo tentada. Lockout por conta protege uma credencial específica contra força bruta direcionada, mesmo vinda de IPs diferentes (distribuída/credential stuffing). Um não substitui o outro. Existe ainda uma **terceira chave**, por email destinatário, em `forgot-password` e `verify-email/resend`: ela fecha o furo do atacante que rotaciona IP para bombardear a caixa de uma vítima específica — cada request vem de um IP novo (o limite por IP não vê nada), mas a caixa do alvo recebe tudo e a reputação do domínio remetente queima.
-
-**Lockout híbrido (janela fixa → backoff exponencial):** `N` tentativas erradas consecutivas trava a conta por uma janela fixa; se, depois da janela liberar, a próxima tentativa também errar, o tempo de espera dobra a cada ciclo até um teto. Reseta (contador **e** nível de backoff) no login certo. Motivo do híbrido: janela fixa sozinha é previsível e barata de testar, mas um atacante que espera exatamente o tempo da janela nunca é penalizado mais que isso; o backoff crescente fecha essa lacuna sem penalizar pesadamente o usuário legítimo que só errou a senha uma vez (só entra em jogo depois de repetidos ciclos de erro).
-
-**Por que fail-open quando o Redis cai (risco aceito, não esquecido):** Redis indisponível → rate limit e lockout são ignorados, o request segue, e a falha emite `error` no application log (e no Sentry). Fail-closed (503 nas rotas de auth) eliminaria a janela sem proteção, mas transformaria o Redis em ponto único de falha do **login inteiro** — um restart do container derrubaria a autenticação. Disponibilidade do fluxo principal vence; a mitigação é a falha ser barulhenta, não silenciosa. Racional completo e alternativas no ADR.
-
-**O que a 7.0 mostrou sobre o fail-open:** ele não sai de graça só por estar decidido — depende de o client Redis **falhar rápido**. Com o default do ioredis, um comando emitido enquanto o Redis está fora do ar fica na fila de offline esperando reconexão, e o login pendura em vez de seguir sem o limitador: o fail-open viraria fail-hang. Por isso o client sobe com `enableOfflineQueue: false` e `maxRetriesPerRequest: 1` (e os timeouts da 7.12 fecham o caso do Redis que aceita a conexão e não responde). Verificado derrubando o container com a app no ar: `/status` 200 e login 401, nunca 5xx.
-
-**Por que corpo grande demais é 413, e não 400/422:** com `express.json({ limit })` ligado, o body-parser lança um erro `entity.too.large` que ninguém mapeava — a API respondia **500** a um request que ela mesma recusou de propósito (o mesmo tipo de furo do JSON malformado, corrigido na 4.5). 413 é o status que existe exatamente para isso e o que um cliente HTTP sabe interpretar; 400 perderia a distinção entre "JSON quebrado" e "JSON grande demais", e 422 é para corpo bem-formado com semântica inválida — aqui o corpo nem chega a ser lido. A mensagem é genérica: não revela o teto configurado.
-
-**Por que a resposta de conta travada é 429 genérico (não 401, não revela qual mecanismo disparou):** login com senha errada continua 401 genérico (nenhuma identidade estabelecida). Rate limit por IP e lockout por conta devolvem o mesmo 429 ("muitas tentativas, tente novamente mais tarde"), sem indicar qual dos dois disparou nem confirmar a existência da conta além do que as tentativas anteriores já revelam — mesmo espírito anti-enumeração já usado em `forgot-password`/`verify-email/resend`.
-
-**Por que existe desbloqueio manual pelo admin, e por que reseta por completo:** um usuário legítimo travado (ex. esqueceu a senha e errou várias vezes antes de pedir reset) não deveria precisar esperar o backoff vencer sozinho. O desbloqueio (`manage:user:status`, mesma feature do ban/unban) limpa contador e nível de backoff — mesmo idioma de unban (restaura o estado anterior, não deixa resíduo). Não existe "lock manual" pelo admin nesta fase (lock só acontece automaticamente por tentativas erradas) — fora de escopo, registrado no `docs/backlog.md`.
-
-**Por que desbloquear um alvo privilegiado exige ator admin (mesma guarda do ban):** destravar não concede privilégio novo, mas remove uma proteção de segurança sobre a conta-alvo. Um manager comprometido (ou mal-intencionado) poderia destravar uma conta admin no meio de um ataque de força bruta, anulando o lockout bem na hora que ele mais protege — o mesmo raciocínio de escalação lateral já usado em `assertAdminForBan`.
-
-**Por que os 3 guards de escalação (`assertAdminForBan`, `assertAdminForPermissionFeature`, `assertAdminForRoleAssignment`) viram um só:** os três repetem o mesmo miolo — busca o ator, checa `roles.some(r => r.role.name === "admin")`, lança 403 — e só o predicado de "o alvo/feature/role é privilegiado" muda entre eles. Consolidar num `assertActorIsAdmin` compartilhado (em `src/lib/authorization.ts`, ao lado de `can`/`hasFeature`/`canActOnResource`) é o próprio item que o roadmap já sinalizava como pendente ("revisitar proteção de escalação"), e é pré-requisito do `DELETE /users/:id/lock`, que seria o quarto guard copiado. Refactor comportamento-preservado — nenhuma regra de negócio muda, só reduz duplicação. **Ajuste na execução (7.2):** o helper recebe o ator **já buscado** em vez de buscá-lo. Buscar dentro dele eliminaria mais uma linha por chamador, mas obrigaria `src/lib/` a importar `userRepository` — `lib` é a camada transversal e não conhece módulo nenhum; furar isso por uma linha sairia mais caro que a duplicação restante.
-
-**Por que auto-hospedar o bundle da UI Scalar em vez de allowlistar o CDN:** ligar `helmet()` traz uma CSP com `script-src 'self'`, que bloqueia o `cdn.jsdelivr.net` de onde o `/reference` carrega o Scalar hoje (Fase 5.3). Allowlistar o CDN seria uma linha, mas autorizaria um terceiro a executar script na própria origem — enfraquecendo exatamente o que o helmet foi ligado para dar. Servir o bundle do próprio domínio mantém a CSP estrita de verdade e faz o `/reference` funcionar sem internet. Custo: um asset no build e atualização manual quando o Scalar subir de versão.
-
-**Correção de rota da 7.1 (o que a implementação mostrou):** a análise acima concluía que "um nonce não resolveria, porque o script continua sendo externo" — verdadeiro para o script do CDN, e **insuficiente** na prática. Com o bundle auto-hospedado, sobrou um segundo script: o Scalar inicia por um `<script>` **inline** (`Scalar.createApiReference(...)`), que `script-src 'self'` também bloqueia. Sem nonce, `/reference` responde 200 com a UI em branco — falha invisível para `curl` e para qualquer teste que só cheque status. Então **as duas peças são necessárias**: auto-hospedagem para o bundle, nonce por request para o init inline (nunca `'unsafe-inline'`, que anularia a proteção). Daí também a regra de sempre validar CSP no navegador, e não no terminal.
-
-**Por que sobram violações de CSP no console de `/reference` e por que ficam:** três coisas continuam bloqueadas e nenhuma quebra a UI — um `eval` que o bundle usa como *feature detection* (com fallback), um `<script>` que ele injeta em runtime sem repassar o nonce, e as chamadas ao diretório público de APIs do próprio Scalar (`api.scalar.com`). Silenciá-las custaria `'unsafe-eval'` (a diretiva mais perigosa da CSP) e um `connect-src` para terceiro — preço alto para trocar ruído de console por segurança real. Ficam documentadas em `src/docs/reference.ts` como esperadas, para não serem lidas como regressão depois.
-
-**Por que "refresh token hasheado em repouso" saiu da fase:** o item foi levantado e, na análise, **já estava implementado desde a Fase 3** — `Session.refreshTokenHash` guarda `sha256(token)` (`src/lib/token.ts`), e o token opaco nunca é persistido em plaintext. A comparação em tempo constante que o item pedia também não se aplica: o lookup é `findUnique` pelo hash, não comparação byte a byte de segredo. Restou formalizar em teste de regressão (a coluna nunca contém o token entregue ao cliente; token adulterado → 401). Trocar o sha256 por HMAC com `PEPPER` foi considerado e **recusado**: com token de 32 bytes de entropia não há dicionário a montar, o ganho é marginal, e o custo seria uma migration invalidando todas as sessões vivas — registrado no `docs/backlog.md` caso o cenário mude.
-
-**Fecho (7.19):** o item terminou em teste, não em código — dois casos de regressão em `auth.test.ts` (`describe("POST /api/v1/auth/refresh")`) afirmam que `Session.refreshTokenHash` nunca é igual ao token cru do cookie (e é igual a `hashToken(token cru)`) e que um token adulterado por um caractere devolve 401. Formaliza o comportamento já existente desde a Fase 3, sem mudar nada em produção.
-
-### Observabilidade
-
-**Por que três categorias de log e não uma:** access log (tráfego), application log (o que aconteceu dentro do processo) e audit log (quem fez o quê, em quem) têm emissor, volume, destino, mutabilidade e ciclo de vida diferentes. Misturá-los faz cada um herdar o pior do outro — o log de negócio afogado em ruído de tráfego, e o log de tráfego pagando o custo de escrita transacional no banco. A tabela comparativa, a regra de decisão em uma frase e a taxonomia fechada de ações estão em **`docs/logging-policy.md`**, que é a fonte única disso — não duplicar aqui.
-
-**Por que `AsyncLocalStorage` (exceção consciente a "explicit over implicit"):** correlacionar as três categorias exige um `requestId` disponível em qualquer camada. A alternativa explícita seria passar um `context` em toda assinatura de service — dezenas de assinaturas poluídas para entregar um valor usado só no fundo da pilha. A exceção fica **limitada ao contexto de observabilidade**: nenhuma regra de negócio lê do store.
-
-**O que a Sessão B acrescentou (7.3–7.5):** três decisões tomadas na execução, todas com o mesmo espírito de "a política só vale se for testável e localizável".
-
-- **O ambiente de teste não silencia o logger — ele não monta o stdout.** `LOG_LEVEL=silent` deixaria a suíte limpa, mas também impediria testar qualquer linha, e a política depende de teste para valer (§10). Com os destinos escolhidos por ambiente, o test escreve **só no ring buffer**: saída limpa e linhas assertáveis, sem mock, pelo mesmo mecanismo que `GET /logs/recent` vai expor na 7.8.
-- **O `requestId` volta ao cliente** — no header `x-request-id` e no corpo de toda resposta de erro. Sem isso, a correlação existe mas é inalcançável a partir do relato de um usuário ("deu erro ontem"); com ela, o id citado recupera access, application e audit log daquele request. O id não é segredo e o corpo de erro continua sem stack.
-- **A rota do access log vem do contexto, não de `req.url`.** O Express reescreve `req.url` ao descer nos routers montados e o access log só sai no fim do request — `/api/v1/status` chegava como `/`, e a regra de rota-de-ruído (o healthcheck do Compose, que bate a cada 5s) nunca casava. Um caso em que o teste do comportamento, não do código, foi o que pegou.
-
-**O que a Sessão C fixou na execução (7.6):** duas decisões de encaixe, ambas para respeitar regras que já existiam.
-
-- **A gravação transacional do audit vive no repository, e o service passa o descritor.** A política §4.5 exige que a linha de audit de uma ação que muda estado entre na mesma `$transaction` da mutação; a regra de camadas diz que só o repo toca o Prisma, e é lá que a transação vive. Conciliar os dois: o service decide a semântica (action/targetType/targetId/metadata — decisão de negócio) e passa um `AuditDescriptor` ao método de escrita do repo, que roda mutação + `record(descriptor, tx)` numa transação interativa. A alternativa (service abrir `prisma.$transaction` e passar `tx` ao repo) daria call sites mais idiomáticos, mas furaria "só o repo toca o Prisma" — preterida.
-- **`record` é lib de observabilidade, não repository.** Ela pode escrever no Prisma de qualquer camada (o login falho grava direto do service), pelo mesmo enquadramento do `logger`/`AsyncLocalStorage` — observabilidade, não dado de negócio. Com `tx` propaga o erro (rollback §4.5); sem `tx` engole e loga (§4.6).
-- **Escopo 12/18:** a sessão ligou só os pontos cujo código já existe; os 6 restantes (lockout, rate limit, forçar senha, troca de email, demo-reset) são das sessões E/H/G, como a coluna "Sub-fase" da taxonomia §4.3 já atribuía. A taxonomia inteira (18) foi declarada como union em tempo de compilação para as futuras já validarem.
-
-**O que a Sessão E fixou na execução (7.9–7.10):** duas decisões tomadas na abertura/execução, nenhuma reabrindo o ADR de rate limiting/lockout — só preenchendo o que ele deixou como implementação.
-
-- **Rate limit por env var vira duas vars por regra (`_MAX` + `_WINDOW_MS`), não uma string composta.** O ADR listava um nome só por regra (`RATE_LIMIT_LOGIN`, default "20 / 15 min"), mas D8 exige a janela configurável também — e não existe no projeto um parser para "contagem/janela" num valor só (ao contrário de `JSON_BODY_LIMIT`, que reusa a lib `bytes`). Confirmado com o usuário na abertura: duas vars, mesmo idioma do `LOCKOUT_THRESHOLD`/`_WINDOW_MS`/`_MAX_MS` que o próprio ADR já separava.
-- **A checagem de lockout entra no ramo de senha CORRETA, não antes de verificar a senha.** Colocá-la antes bloquearia toda tentativa (certa ou errada) assim que a conta trava, mas romperia o espírito anti-enumeração dos gates de `bannedAt`/`status` (que só revelam o estado da conta depois de provar a senha). A leitura certa: o rate limit por IP/email-alvo (7.9) já cobre o *volume* de tentativas; o papel do lockout é só impedir que uma senha eventualmente certa — vinda de credential stuffing distribuído — complete o login dentro da janela de bloqueio. Por isso basta checar depois da senha bater, no mesmo lugar dos outros gates. O estado do lockout (`failures`/`backoffLevel`/`lockedUntil`) fica só no Redis, e a transição (`applyFailure`) foi extraída como função **pura** — mesmo idioma de `computeEffectiveFeatures` — testável por unidade sem tocar Redis; os wrappers de leitura/escrita ficam finos em volta dela.
-
-**Por que o audit log passou a ganhar endpoint de leitura (decisão anterior revertida):** o plano original adiava `GET /audit-logs` para uma fase futura, deixando a trilha consultável só via banco. Revertido: uma trilha que só o mantenedor consegue ler não demonstra nada num projeto de portfólio, e a regra de PII da política (`metadata` só com ids e enums) foi tomada justamente para tornar a leitura segura. O endpoint entra com paginação **cursor** e filtros, e é **só `GET`** — a ausência de `PATCH`/`DELETE` é imutabilidade intencional, coberta por teste.
-
-**Por que `read:audit-log:full` e não uma role como âncora:** o `ip` do audit log sai mascarado (`192.168.1.***`) por padrão; a feature `read:audit-log:full` destrava o valor inteiro. Segue o padrão `ação:recurso:modificador` já usado no catálogo (`read:user:others` — o modificador nem sempre é `:others`). Assim o mascaramento vira demonstração de RBAC dentro da própria resposta (o demo lê a trilha e vê IP mascarado; um admin vê inteiro), e a visibilidade de IP fica concedível por override, sem carregar junto o poder de banir que reusar `manage:user:status` traria. Features novas, no singular como o resto do catálogo: **`read:log`** (ring buffer) e **`read:audit-log`** (+ `:full`).
-
-**Por que o ring buffer em memória (`GET /logs/recent`) existe mesmo havendo Axiom:** é a única leitura de log disponível *de dentro da API*, sem conta de terceiro — o que torna a observabilidade demonstrável para quem avalia o projeto. As limitações (é por processo, some no restart) são declaradas no `meta` da própria resposta, em vez de escondidas.
-
-**Por que Axiom e Sentry entram mesmo sem conta configurada:** ambos ativam apenas se as env vars existirem; ausentes, a app degrada para stdout + ring buffer e **boota normalmente**. O subsistema de log nunca pode derrubar a aplicação — nem no boot, nem no request (por isso o Axiom vai em worker thread, fora do caminho síncrono, com `flush` no shutdown; senão os últimos logs antes do SIGTERM se perdem justamente quando mais importam). No Sentry, só falha de verdade é capturada (≥500, não-tratado, `unhandledRejection`, `uncaughtException`): um 404 ou 422 é comportamento correto da API, não incidente. E o `beforeSend` replica a lista de campos proibidos do `redact` — senão o Sentry vazaria pela porta dos fundos o que a política protege na porta da frente.
-
-### Contrato de API
-
-**Por que duas estratégias de paginação e um envelope só:** offset (para listas de CRUD, com `total` e salto para página arbitrária) e cursor/keyset (para listas append-only ordenadas por tempo, onde offset pula e repete registros sob escrita concorrente). Naturezas diferentes, ferramentas diferentes — mas **todas** as listagens passam a devolver `{ data, meta }`, inclusive as que não paginam, para o cliente ter um contrato único e para paginar uma delas amanhã ser aditivo em vez de breaking. Exceção: `GET /users/:userId/permissions` segue `string[]` cru (é um conjunto de capacidades computado, não uma coleção de recursos). O tiebreaker por `id` na chave do cursor é **obrigatório** — sem ele, dois registros com o mesmo timestamp fazem a borda da página pular ou repetir. Racional completo, alternativas e limites (`limit` default 20 / máx 100) no `docs/adr/pagination.md`.
-
-### Higiene e ciclo de vida
-
-**Sessões: teto de sessões vivas e faxina de tokens mortos são higiene, não perda de auditoria:** o teto evita um usuário acumular sessões vivas indefinidamente (evict da mais antiga ao exceder, login nunca é recusado). A faxina faz **hard delete** (não soft delete) de `Session`/`VerificationToken` já mortos há tempo suficiente — são registros técnicos, não dados de negócio, e o rastro de auditoria de verdade agora vive no `AuditLog`, não nessas linhas.
-
-**Por que timeouts em toda dependência externa (7.12, implementado):** sem timeout, uma dependência pendurada exaure o pool e derruba a app inteira — o modo de falha mais comum em produção e o menos exercitado em teste. Cobre HTTP server (`server.headersTimeout`/`requestTimeout`/`keepAliveTimeout`, setados logo após `listen()` — `requestTimeout` > `headersTimeout` é exigido pelo próprio Node), Prisma (`transactionOptions.maxWait`/`timeout` no `PrismaClient`, aplicado a toda `$transaction()`) e Redis (`connectTimeout`/`commandTimeout` — sem os quais o fail-open acima é ilusório, porque um Redis que aceita a conexão mas não responde penduraria o login) e **SMTP via nodemailer** (`connectionTimeout`/`greetingTimeout`/`socketTimeout` no transporter — não `AbortSignal`, que seria o mecanismo se o envio fosse pela API HTTP da Resend em vez de SMTP). Todos por env var, defaults conservadores: `SERVER_HEADERS_TIMEOUT_MS=65000` / `SERVER_REQUEST_TIMEOUT_MS=70000` / `SERVER_KEEP_ALIVE_TIMEOUT_MS=61000` (keep-alive acima do que proxies reversos tipicamente mantêm — ~60s — evita a race clássica de o backend fechar um socket ocioso que o proxy acabou de reaproveitar), `PRISMA_TX_MAX_WAIT_MS=5000` / `PRISMA_TX_TIMEOUT_MS=8000`, `DB_POOL_CONNECT_TIMEOUT_MS=5000`, `REDIS_CONNECT_TIMEOUT_MS=2000` / `REDIS_COMMAND_TIMEOUT_MS=2000`, `SMTP_CONNECTION_TIMEOUT_MS=10000` / `SMTP_GREETING_TIMEOUT_MS=5000` / `SMTP_SOCKET_TIMEOUT_MS=20000`.
->
-> **Correção em relação ao planejamento original:** o item falava em "timeout de pool na connection string", mas o projeto usa `@prisma/adapter-pg` (driver adapter), não o pool nativo do Prisma — os parâmetros clássicos de URL (`connection_limit`, `pool_timeout`) não são lidos por esse caminho. O timeout de aquisição de conexão é `connectionTimeoutMillis`, um campo irmão de `connectionString` no `pg.PoolConfig` passado ao `PrismaPg`. O objetivo (pool não trava pra sempre esperando conexão) é o mesmo; só a forma de configurar mudou.
-
-**Por que o reset do ambiente demo é truncate+reseed, e por que não infere de `NODE_ENV`:** "deletar o que não é seed" exigiria um marcador em toda tabela e cresceria a cada model novo da Fase 9; truncate+reseed é determinístico e não cresce. A guarda é uma flag explícita `DEMO_MODE=true` — **não** `NODE_ENV`, porque o deploy demo *é* production, e inferir apagaria o banco de produção de verdade caso o projeto ganhe um. Sem a flag: erro barulhento, exit ≠ 0, nada apagado. O reset é **diário** (não a cada 3 dias) para que ninguém encontre a bagunça do visitante anterior, com o horário publicado na doc — o que transforma um logout inesperado em comportamento documentado. Corte de responsabilidade: `src/scripts/` é código (importa Prisma/`env`/`logger`, bundlado pelo tsup); `infra/` é agendamento (systemd timer, preferido a cron por dar `journalctl`, `Persistent=` e proteção contra sobreposição). O reset é **higiene**, não o que garante o demo read-only — isso é RBAC (role `demo`, Fase 5); são duas defesas independentes.
-
-**O que a Sessão H fixou no desenho (7.15–7.16), antes da implementação:** as duas mudam decisões de negócio já fechadas antes (email era imutável) ou introduzem um estado novo de conta (`mustChangePassword`) com implicações de UX — por isso, ao contrário do resto da fase, ficaram sem desenho até serem confirmadas com o usuário em 2026-08-03. Passo a passo completo no `docs/todo.md` (7.15/7.16); aqui só o "porquê" das escolhas não-óbvias.
-
-- **Troca de email é 2 passos, e o alvo mora no token, não só em `User.pendingEmail`.** `pendingEmail` existe pra exibição (`GET /me`) e pro `PATCH /users/:id` continuar recusando email (reabre `user.schema.ts:56`, mas por um endpoint dedicado). A verdade sobre qual email um token confirma vive na própria linha do `VerificationToken` (`newEmail`) — se isso dependesse só de reler `pendingEmail` no confirm, um usuário que pedisse a troca duas vezes seguidas (A depois B) poderia ter o link antigo (de A) confirmando B, porque a coluna já teria sido sobrescrita. Uma nova chamada de `change-email` invalida o token anterior e sobrescreve `pendingEmail` — mesmo idioma de "unicidade do ativo por código" que `UserFeature`/`UserRole` já usam — e isso dobra como mecanismo de cancelamento: o dono real, se ainda souber a própria senha, sobrescreve uma troca maliciosa pedindo a troca de volta pro próprio email.
-- **Por que o endpoint de troca revela conflito (409) e o `forgot-password` não:** o `forgot-password` é anônimo — qualquer um pode testar emails para descobrir quais existem, então a resposta é sempre genérica. `change-email` exige a senha atual da própria conta; para alguém abusar do 409 pra enumerar, precisaria já ter comprometido essa conta, ponto em que enumerar emails de terceiros é o menor dos danos possíveis. Mesma lógica que já vale pro signup, que expõe 409 de unicidade hoje.
-- **Por que o aviso de segurança vai para o email antigo, e no pedido — não na confirmação:** o cenário que essa notificação existe para cobrir é sessão/senha comprometida. Nesse cenário, o atacante tem a senha mas não necessariamente a caixa de entrada antiga — então é o dono real, ainda com acesso ao email antigo, quem recebe o aviso. Mandar só depois de confirmada a troca chegaria tarde demais pra reagir; mandar no pedido é a única janela em que a troca ainda não é definitiva.
-- **Por que email trocado fica reservado para sempre (`PreviousEmail`, tabela dedicada, unique global):** mesmo racional do email "preso" de conta soft-deletada (nota da Fase 8) — sem isso, alguém que reconquiste uma caixa de entrada antiga poderia se cadastrar do zero se passando pelo dono original. Ser tabela (não array em `User`) segue o idioma de histórico do projeto (`AuditLog`, `VerificationToken`): cada entrada tem timestamp próprio, é indexável e sobra espaço pra metadado futuro. A reserva só funciona se o signup também consultar essa tabela — não só o unique de `User.email` — senão dá pra furar a regra simplesmente criando conta nova em vez de pedir a troca.
-- **Por que forçar-troca-de-senha bloqueia o login inteiro, em vez de deixar entrar sinalizando a troca:** um admin força esse reset justamente porque a senha atual pode estar comprometida. Deixar essa senha completar login — mesmo que só para cair numa tela de "troque agora" — dá a quem tiver a senha (inclusive um atacante) uma sessão válida antes da troca acontecer, o que anula o motivo do reset. O único caminho de volta é o link por email, mesmo desenho do `forgot-password` — só a origem do token muda (admin em vez do próprio usuário), e `resetPassword` (já existente) só precisou ganhar mais um passo: limpar `mustChangePassword` ao consumir o token.
-- **Por que a checagem de `mustChangePassword` entra depois do `bannedAt` e antes do `status`, na ordem do login:** banimento é a decisão mais severa e terminal (um humano cortou o acesso de propósito); `mustChangePassword` é recuperável via email. Se as duas condições coexistirem (conta banida **e** com reset forçado pendente — ex. durante uma investigação), a mensagem de banido é a que aparece, porque é a informação dominante para quem está tentando entrar.
-- **Por que o admin dispara o email de reset na hora, em vez de esperar o usuário pedir "esqueci minha senha":** reaproveita o `buildPasswordResetEmail` já existente, mas some com a ambiguidade de "por que fui deslogado e não consigo mais entrar" — o usuário recebe o porquê e o link no mesmo momento em que a sessão cai.
+> O essencial acionável está no `CLAUDE.md`; o estado das tarefas no [`todo.md`](todo.md); as
+> decisões estruturais nos [ADRs](adr/). Aqui fica o *porquê* longo de cada escolha.
 
 ---
 
-## 2.3 Fase 5 (implementada) — Documentação + Deploy
+## Onde está cada coisa
 
-> Decisões da Fase 5 (OpenAPI gerado dos schemas Zod → UI Scalar → coleção Bruno; usuário demo read-only; containerização full-stack), firmadas no planejamento e confirmadas na implementação (5.0–5.9). Passo-a-passo atômico no `docs/todo.md` (seção "Fase 5"). Esta fase fecha o Ciclo 1 como peça de portfólio: **nenhuma regra de negócio nova** — é documentação e empacotamento do que já existia.
+| Arquivo | Abra quando o assunto for |
+|---|---|
+| [`context/authorization.md`](context/authorization.md) | RBAC, features, overrides escopados, não-escalação, quem pode o quê |
+| [`context/lifecycle.md`](context/lifecycle.md) | soft delete, cascata de deleção, restauração, reativação de conta ou perfil |
+| [`context/identity-and-sessions.md`](context/identity-and-sessions.md) | login, JWT/refresh, status de conta, ban, verificação e troca de email, senha |
+| [`context/api-contracts.md`](context/api-contracts.md) | o que a API devolve: views, status de erro, validação, paginação, tipos |
+| [`context/architecture.md`](context/architecture.md) | camadas, roteamento, em que arquivo uma responsabilidade nova deve morar |
+| [`context/security.md`](context/security.md) | rate limit, lockout, Redis, CSP/CORS/helmet, limites de corpo |
+| [`context/observability.md`](context/observability.md) | logs, audit trail, Axiom/Sentry, ring buffer, timeouts |
+| [`context/infrastructure.md`](context/infrastructure.md) | Compose e ambientes, deploy, imagem, OpenAPI/Scalar/Bruno, seeds e demo |
+| [`context/pet-domain.md`](context/pet-domain.md) | Ciclo 2 — pets e catálogo (quase só ponteiros para os ADRs) |
+| [`context/schema.md`](context/schema.md) | por que uma coluna é assim, o que cada migration mudou, invariantes |
+| [`context/history.md`](context/history.md) | narrativa de o que cada fase entregou — **leitura rara** |
 
-**Por que a doc é gerada dos próprios schemas Zod (fonte única), e não escrita à mão:** o contrato da API já vive nos `*.schema.ts` (request) e `*.presenter.ts` (response). Escrever um OpenAPI paralelo à mão criaria duas fontes que divergem no primeiro refactor. Com o `.meta({ description, example })` **nativo do Zod 4** (sem monkey-patch, sem `zod-to-openapi` patchando o protótipo), cada schema carrega a própria doc e o `createDocument` (`zod-openapi`) monta o `/openapi.json`. O envelope `{ body, params, query }` que os controllers já usam é extraído por `.shape.*` num helper (`fromEnvelope`), com guarda de presença — sem quebrar a convenção existente.
-
-**Por que os presenters (views por whitelist) garantem que a doc não vaza segredo:** as views já derrubam campos não listados via `.parse()` (`passwordHash`, `tokenHash`, `refreshTokenHash` nunca entram na resposta). Como os exemplos de response no OpenAPI saem **das mesmas views**, o documento herda a mesma garantia — verificado por teste (`openapi.test.ts`: a spec não contém nenhum desses campos). Documentar a partir da whitelist é mais seguro do que anotar exemplos à mão, que poderiam reintroduzir um campo sensível por descuido.
-
-**Por que `/openapi.json` e `/reference` são públicas e montadas no router de topo (fora de `/api/v1`):** documentação de API é para ser lida sem credencial; travá-la atrás de `authenticate` só atrapalharia. Ficam no router de topo, antes dos grupos protegidos, sem token. A UI Scalar (`/reference`) consome o `/openapi.json` e tem "try it" com Bearer preenchível — daí o `securitySchemes.bearerAuth` global no documento, com as operações públicas sobrescrevendo `security: []`.
-
-**Por que o token da coleção Bruno é salvo com `bru.setVar` e não `setEnvVar`:** o `script:post-response` do request `Login` encadeia o access token nas demais requests da coleção. `setEnvVar` grava o valor no arquivo do environment, que é **versionado** — o token do usuário demo acabaria commitado no `api-collection/`. `bru.setVar` guarda em memória, só durante a execução (também o caminho já preferido no Bruno v4, que está descontinuando `setEnvVar` para esse uso).
-
-**Por que um usuário demo read-only, com a role sempre semeada mas o usuário atrás de um flag:** o objetivo é deixar qualquer visitante exercitar o RBAC ao vivo (todo `GET` → 200, toda escrita → 403) sem poder sujar ou quebrar dados. A role `demo` (`appliesTo EMPLOYEE`, só features de leitura) é sempre semeada — faz parte do catálogo. Já o **usuário** demo só nasce com `SEED_DEMO_USER=true` (ligado no Docker/prod, desligado em dev/test para não sujar a suíte). Assim o mesmo seed serve dev, teste e produção sem ramificar por ambiente além desse único flag. As credenciais são públicas de propósito (`env.DEMO_EMAIL`/`DEMO_PASSWORD`), e o seed limpa `bannedAt/bannedBy/banReason` no update (um redeploy sempre restaura o demo utilizável).
-
-**Por que produção usa `migrate deploy` (nunca `migrate dev`) no entrypoint:** `migrate dev` é interativo, pode gerar/aplicar migrations novas e resetar o banco em caso de drift — comportamento inaceitável num servidor. `migrate deploy` só aplica as migrations já versionadas, de forma idempotente e não-interativa. O entrypoint do container faz `migrate deploy → seed → start`: a subida deixa um ambiente do zero funcionando. O seed é idempotente (upserts), então rodar a cada start é seguro.
-
-**Por que o seed é bundlado pelo tsup (`dist/seed.js`) em vez de rodar via `prisma db seed`/tsx:** o `prisma db seed` invoca `tsx prisma/seed.ts`, que importa de `src/` — nada disso existe na imagem de produção (só `dist/` + node_modules de prod, sem `tsx` nem código-fonte). Adicionar o `prisma/seed.ts` como 2ª entry do tsup (`entry: { server, seed }`) produz um `dist/seed.js` auto-contido (o client Prisma gerado é embutido no bundle, o wasm do query-compiler vem de `@prisma/client` em runtime), que o entrypoint roda com `node dist/seed.js`. O fluxo de dev segue usando `prisma db seed` (tsx) inalterado.
-
-**Por que o serviço `app` do compose fica atrás de um profile (`full`) e deriva a própria `DATABASE_URL`:** o fluxo de dev roda o app **no host** (via `tsx`, hot-reload) com só a infra em container (`db`/`db_test`/`mailpit`) — `npm run services:up` (= `docker compose up -d`) não pode passar a subir também um app-em-container e brigar pela porta. Pondo o `app` sob `profiles: ["full"]`, o `up` sem profile o ignora; ele só sobe com `npm run stack:up` (`--profile full`). E como o app-em-container alcança o Postgres pelo **nome do serviço** (`db`), não por `localhost`, o serviço `app` monta sua própria `DATABASE_URL` (`@db:5432`, derivada de `POSTGRES_*`) no compose, deixando o `DATABASE_URL` do `.env` (localhost) intacto para o tooling do host. Um `.env`, dois consumidores, sem conflito.
-
-**Por que a imagem é multi-stage e não-root:** o build (deps completas, `prisma generate`, `tsup`) é pesado e não precisa ir para produção; um stage `deps` isola as dependências de produção, o stage `build` gera o `dist/`, e o `runtime` copia só `node_modules` de prod + `dist/` + o schema/migrations (para o `migrate deploy`). Roda como `USER node` (não-root) — higiene básica de container.
-
----
-
-## 2.4 Fase 6 (implementada) — Ambientes + Deploy
-
-> Reformulação de ambientes (dev/test/prod), motivada por dois bugs de deploy e um débito estrutural. Nenhuma regra de negócio nova. ADR dedicado em `docs/adr/environments-and-deploy.md`; passo-a-passo no `docs/todo.md`.
-
-**Os dois bugs corrigidos:** (1) o app nunca falava com a Resend — o compose único **hardcodava** `SMTP_HOST: mailpit`/`SMTP_PORT: 1025` no serviço `app` e não repassava `SMTP_USER`/`SMTP_PASS`; (2) um bring-up de "produção" subia `db_test` e `mailpit` (sem profile, sempre ligados).
-
-**Por que Compose base + overrides (supera o profile `full`/app-no-host da §2.3):** um `docker-compose.yml` base (só o esqueleto do `app`) + `docker-compose.{dev,prod,test}.yml`. Mailpit e Postgres-de-dev existem só no override de dev; **prod sobe só `app` + Postgres-de-prod**; test sobe só Postgres-de-test (mailpit-de-test atrás de `--profile mail`, inerte porque os testes mockam `@/lib/email`). Isolamento por **nome de projeto** (`-p pet-oasis-{dev,test,prod}`) + `container_name`/volumes/portas distintos → dev e test rodam juntos. O SMTP do app agora vem inteiro do `env_file` (mata o bug 1); prod não instancia infra de dev/test (mata o bug 2). O app-em-dev também passa a rodar **em container** (via `tsx watch` lendo `src/` por bind-mount), não mais no host.
-
-**Por que envs por arquivo + dotenv-cli (colapsa 5 fontes numa por ambiente):** `.env.development`/`.env.test`/`.env.production` (fora do git) + `.env.example` versionado. Containers recebem via `env_file:`. No host, o `vitest.config.ts` carrega `.env.test` (`override:true`) — então `npx vitest run <arquivo>` funciona sozinho — e a autoria de migration usa `dotenv-cli` (`dotenv -e .env.development -- prisma …`). A URL do banco de teste, antes duplicada em 4 lugares, vive só no `.env.test`. `src/config/env.ts`/`prisma.config.ts` ficam intocados (o `import "dotenv/config"` vira no-op sem `.env` na raiz).
-
-**Por que graceful shutdown nativo do Compose (não script com `spawn`):** healthchecks + `depends_on: service_healthy` + `--wait` (prod/test); dev em **foreground** (incompatível com `--wait`), Ctrl+C → SIGTERM gracioso. O app trata SIGTERM/SIGINT via `createShutdownHandler` (`src/lib/shutdown.ts`, injeção de dependência → testável): `server.close()` (drena in-flight) → `prisma.$disconnect()` → exit, com timeout de força-saída (10s < `stop_grace_period` 15s do prod). O entrypoint faz `exec` do Node/tsx para ele ser **PID 1** e receber o sinal.
-
-**Por que o client Prisma do dev num volume anônimo:** o generator escreve em `src/generated`, que o bind-mount de `./src` mascararia; um volume anônimo em `/app/src/generated` preserva o client gerado no container (o entrypoint de dev roda `prisma generate` no start). Evita churn nos imports `@/generated`. O stage `dev` do Dockerfile para no `npm ci` completo (sem bundle/prune) e fica root (evita EACCES de uid no bind-mount); o `runtime` de prod segue intocado.
-
-**Achado — `clearDatabase` não era bug:** só apaga tabelas transacionais; `Feature`/`Role`/`RoleFeature` (seed do `globalSetup`) já eram preservadas entre testes — que é o que as factories precisam. Adicionado teste-guarda (`clearDatabase.guard.test.ts`) contra regressão futura.
+Documentos irmãos, que são fonte única do que cobrem (não duplicar aqui):
+[`reference/logging-policy.md`](reference/logging-policy.md) (categorias de log, taxonomia de
+audit, dados proibidos, retenção), [`reference/endpoints.md`](reference/endpoints.md) (índice de
+rotas), [`reference/backlog.md`](reference/backlog.md) (o que ficou de fora e por quê) e os
+[ADRs](adr/).
 
 ---
 
-## 2.5 Seed de dados fake (implementado) — usuários
+## Índice de decisões
 
-> Trabalho pontual entre a Fase 7 e a Fase 8 (não é fase numerada). Passo-a-passo no `docs/todo.md`, seção "Seed de dados fake (usuários)".
+Uma linha por decisão registrada. O título é a decisão; o arquivo linkado tem o argumento
+completo, os contra-argumentos e os gotchas.
 
-**Por que duas flags independentes (`SEED_FAKE_DATA` e `SEED_ADMIN_USER`), e não uma só:** o dataset fake (customers/employees/híbridos) é seguro no demo público — mesmo com escrita disponível via roles `manager`, o dano fica contido ao próprio dataset fake e o `demo-reset` diário restaura. Já o usuário admin de teste tem acesso total (`*`), e diferente do usuário demo (só leitura, já com credencial pública assumida como risco baixo), uma conta de escrita irrestrita exposta na internet é uma superfície de ataque real, mesmo que os dados voltem todo dia. Separar as flags permite ligar o dataset fake em produção/demo sem nunca ligar o admin lá — decisão confirmada com o usuário antes da implementação: `SEED_ADMIN_USER` só existe em `.env.development`.
+### [Autorização](context/authorization.md)
 
-**Por que o dataset fake inclui roles com escrita (`manager`) mesmo sabendo do risco:** sinalizado explicitamente ao usuário antes de implementar (mesmo racional de "credencial pública, risco baixo, dado sempre restaurável" já usado para o `DEMO_PASSWORD`) — sem isso, o dataset não demonstraria as features de gestão de usuário (ban, force-password-reset, permission override) na prática. Aceito conscientemente, não por omissão.
+*Ordem e forma da checagem*
 
-**Por que a idempotência depende só do email fixo, não de dado determinístico ponta-a-ponta:** a primeira versão do design cogitava semear nome/cpf/telefone com um `faker.seed()` fixo para que o dataset fosse idêntico a cada reseed. Na implementação, ficou claro que isso não é necessário: a checagem de idempotência é "existe um user com este email? se sim, pula" — uma vez criado, reruns nunca voltam a tocar CPF/nome/telefone daquele registro. `cpf-cnpj-validator` (`cpf.generate()`) também não é determinístico via seed do Faker (usa `Math.random` internamente, biblioteca própria), então perseguir determinismo total exigiria mais uma dependência tratável — descartado por não comprar nada: ninguém depende do CPF exato de um usuário fake. Nome/telefone ainda usam uma instância própria de Faker com seed fixo (mais consistente entre execuções, sem custo), mas isso é estética, não a garantia de idempotência.
+- Autorização sempre antes da busca
+- Autorização em duas etapas quando o ramo depende do banco
+- Cômputo em dois laços, não um aninhado
 
-**Por que uma instância própria de Faker, não o `faker` singleton dos testes:** `@faker-js/faker` exporta um singleton compartilhado; chamar `.seed()` nele mudaria o stream de valores consumido por qualquer teste que rode no mesmo processo depois do módulo de seed ser importado — flakiness sutil dependente de ordem de import. `new Faker({ locale: [en] })` isola completamente o gerador do dataset fake do gerador usado pelas factories de teste.
+*Não-escalação*
 
-**Por que o dataset fake é criado direto via `userRepository`, não via `user.service`:** `user.service.createCustomer`/`createEmployee` dispara `issueEmailVerification` (email real, via SMTP). Rodando o seed a cada boot do container (entrypoint `migrate deploy → seed → start`), isso bombardearia o relay de emails de verificação inúteis a cada restart. O repository (mesma técnica de `tests/factories/user.factory.ts`) cria o usuário sem esse efeito colateral, e o `status` é forçado direto por `prisma.user.update` depois — idêntico ao que os testes já faziam.
+- A âncora é a role admin, não a feature
+- O guard vale para roles, não só para overrides
+- Furo fechado na 8.3 — nascer com a role é ser atribuído a ela
+- Nos três guards, o alvo é o mesmo conceito
 
-**Achado, corrigido junto (não era objetivo original):** `demo-reset.ts` truncava 8 tabelas na mesma ordem FK-safe de `clearDatabase()`, mas esqueceu `previousEmail` — a tabela só nasceu na Fase 7.15, depois da 7.14 ter sido escrita, e ninguém voltou para atualizar a lista. Sem o fix, um email trocado via `change-email` no ambiente demo ficaria **preso para sempre** mesmo após o reset diário (`PreviousEmail.email` é unique global, sem reativação no ciclo 1).
+*Escopo do override*
+
+- O override pendura na atribuição de role, não no usuário (D2)
+- Uma linha por `(userId, roleId)` para sempre (D3)
+- A role vai no path (D9)
+- 422 no `PUT` sem a role ativa, mas 404 no `DELETE`
+- `DELETE` de override sem override ativo → 404, não 204
+- Consequência na view
+
+*Vínculo user↔role*
+
+- Perfis vêm antes de user↔role
+- `POST` orienta, não cria perfil
+- `DELETE` protege o último vínculo do perfil
+- Roles default na criação
+
+*Catálogo de features*
+
+- O nome diz o recurso (`create:customer-profile`, não `create:profile`)
+- `reactivate:*` é feature separada de `create:*` (K12)
+- `create:`/`reactivate:customer-profile` moram em `SELF_MANAGEMENT_FEATURES`
+- `read:audit-log:full` entrou em `PRIVILEGED_FEATURES`
+
+### [Ciclo de vida](context/lifecycle.md)
+
+*Soft delete*
+
+- Por que `UserFeature`/`UserRole` também têm soft delete
+- A cascata é escrita à mão, não pelo banco
+- Um único `new Date()` por transação (D4)
+
+*Restauração*
+
+- Correlação por data, não por coluna de "motivo" (D5)
+- A restauração para na role (D6')
+- O nível `User` → perfil deixou de correlacionar (K20)
+- Os três níveis nasceram como primitivas de repositório (K7)
+- `grantRolesToUser` nasceu como primitiva
+
+*Perfil — os fluxos de produto*
+
+- A mesma rota cria e reativa (8.3)
+- `roleNames` é "com que roles o perfil volta", não filtro
+
+*Conta — deleção e reativação*
+
+- A reativação exige senha nova (K17)
+- O signup que dispara reativação responde 202 (K18)
+- O admin não reativa nada sozinho
+- O `phone` é pedido na confirmação, não no pedido (K23)
+- O guard corre sobre as roles que vão voltar (K22)
+
+### [Identidade e sessões](context/identity-and-sessions.md)
+
+*Sessão e refresh*
+
+- Design de `Session` — access JWT 15min + refresh opaco rotativo
+- Ordem de checagem no `refresh`: reuso → invalidada → expirada
+- Refresh token hasheado em repouso — item que virou teste, não código
+- Teto de sessões vivas
+
+*Status da conta*
+
+- Status e ban são ortogonais
+- Todo usuário nasce PENDING, inclusive os criados por admin
+- 403 (não 401) no login quando a senha está certa mas a conta não está ACTIVE
+- Anti-enumeração em forgot / resend / signup
+
+*Ban — a conta congelada*
+
+- Ban reusa a âncora admin da não-escalação
+- O guard do ban difere do de role, e auto-ban é 409
+- "Conta congelada" cobre também reset e change
+
+*Verificação de email*
+
+- `/auth` sem feature
+- Um `VerificationToken` genérico, com `purpose`
+- Só a criação de usuário emite verificação — os POSTs de perfil não
+- Token inválido/expirado/usado é 400 genérico
+- A orquestração vive em `verification.service.ts`, não em `auth.service`
+
+*Senha*
+
+- Reset e change invalidam TODAS as sessões
+- Change-password é single-step, sem código por email
+- Senha atual errada no change é 403, não 401
+- Forçar troca de senha bloqueia o login inteiro
+- A checagem de `mustChangePassword` entra depois do `bannedAt` e antes do `status`
+- O admin dispara o email de reset na hora
+
+*Troca de email*
+
+- Dois passos, e o alvo mora no token
+- O endpoint de troca revela conflito (409), o `forgot-password` não
+- O aviso de segurança vai para o email antigo, no pedido — não na confirmação
+- `PreviousEmail` reservava o endereço para sempre — e parou de reservar (D13, 8.6)
+- O `@unique` de `PreviousEmail.email` saiu junto (K25)
+
+### [Contratos de API](context/api-contracts.md)
+
+*Views (presenter)*
+
+- Whitelist e não blacklist
+- Por capability, não por role
+- User — progressão por capability
+- Demais recursos
+- `GET /me`
+
+*Erros*
+
+- P2002 no handler, não check antecipado
+- Validação sintática × semântica
+
+*Paginação*
+
+- Duas estratégias, um envelope só
+
+*Tipos*
+
+- A fronteira `FeatureName` × `string`
+
+### [Arquitetura](context/architecture.md)
+
+*Roteamento*
+
+- `authenticate` saiu do `app.ts` (global) e foi para o grupo de rota
+
+*Onde cada coisa vive*
+
+- A gravação transacional do audit vive no repository; o service passa o descritor
+- `record` é lib de observabilidade, não repository
+- `src/lib/` não conhece módulo nenhum
+- `src/scripts/` é código; `infra/` é agendamento
+- SQL cru vive exclusivamente no repository
+
+*Ordem de construção*
+
+- Perfis antes de user↔role
+- Primitiva de repositório antes da rota que a expõe
+- Código reaproveitado entre entrypoints não pode carregar auto-execução
+
+### [Segurança](context/security.md)
+
+*Rate limit e lockout*
+
+- Redis, não in-memory
+- Rate limit por IP e lockout por conta são dois mecanismos, não um
+- Lockout híbrido — janela fixa → backoff exponencial
+- A checagem de lockout entra no ramo da senha CORRETA
+- Configuração: duas env vars por regra, não uma string composta
+- Conta travada responde 429 genérico
+- Desbloqueio manual pelo admin, e reset completo
+- Destravar alvo privilegiado exige ator admin
+- Conta demo isenta do lockout (8.8)
+- Rate limit dos fluxos novos vive no service, não em middleware (8.7)
+- O admin divide o balde com o `forgot-password` (K27)
+- As três rotas públicas de token ganharam limite juntas (K26)
+
+*Fail-open e o que a execução ensinou*
+
+- Fail-open quando o Redis cai é risco aceito, não esquecido
+- O fail-open não sai de graça só por estar decidido (7.0)
+- Isolamento de teste do Redis é por arquivo, não global
+
+*Hardening HTTP*
+
+- `app.set("trust proxy", 1)` (D7)
+- Corpo grande demais é 413
+- CORS de origem não-permitida responde sem os headers, não com erro
+- Auto-hospedar o bundle do Scalar em vez de allowlistar o CDN
+- A auto-hospedagem sozinha não bastou — o nonce é a segunda peça (7.1)
+- Sobram violações de CSP no console de `/reference`, e elas ficam
+
+### [Observabilidade](context/observability.md)
+
+*As três categorias*
+
+- Por que três e não uma
+- `AsyncLocalStorage` é exceção consciente a "explicit over implicit"
+- O ambiente de teste não silencia o logger — ele não monta o stdout
+- O `requestId` volta ao cliente
+- A rota do access log vem do contexto, não de `req.url`
+
+*Audit log*
+
+- Endpoint de leitura — decisão anterior revertida
+- `read:audit-log:full` e não uma role como âncora
+- Escopo 12/18 na primeira leva (7.6)
+
+*Destinos*
+
+- O ring buffer existe mesmo havendo Axiom
+- Axiom e Sentry entram mesmo sem conta configurada
+
+*Higiene e resiliência*
+
+- Teto de sessões e faxina de tokens são higiene, não perda de auditoria
+- Timeout em toda dependência externa (7.12)
+
+### [Infraestrutura](context/infrastructure.md)
+
+*Ambientes*
+
+- Os dois bugs que motivaram a reformulação (Fase 6)
+- Compose base + overrides
+- Envs por arquivo + dotenv-cli
+- Graceful shutdown nativo do Compose, não script com `spawn`
+- O client Prisma do dev num volume anônimo
+
+*Imagem e boot de produção*
+
+- `migrate deploy`, nunca `migrate dev`
+- O seed é bundlado pelo tsup (`dist/seed.js`)
+- Imagem multi-stage e não-root
+
+*Documentação da API*
+
+- Gerada dos próprios schemas Zod, não escrita à mão
+- Os presenters garantem que a doc não vaza segredo
+- `/openapi.json` e `/reference` são públicas, no router de topo
+- O token da coleção Bruno usa `bru.setVar`, não `setEnvVar`
+
+*Seeds e ambiente demo*
+
+- Role `demo` sempre semeada, usuário demo atrás de flag
+- Reset do demo é truncate+reseed, e a guarda é flag explícita
+- Gotcha do reseed compartilhado (7.14)
+- `demo-reset` esquecia a tabela `previousEmail`
+
+*Dataset fake*
+
+- Duas flags independentes: `SEED_FAKE_DATA` e `SEED_ADMIN_USER`
+- O dataset inclui roles com escrita (`manager`), com o risco assumido
+- A idempotência depende só do email fixo
+- Instância própria de Faker, não o singleton dos testes
+- Criado via `userRepository`, não via `user.service`
+
+*Achado de teste*
+
+- `clearDatabase` não era bug
+
+### [Schema](context/schema.md)
+
+*O que cada fase mudou nas tabelas*
+
+- Fase 4 — status de conta
+- Fase 7
+- Fase 8
+
 
 ---
 
-## 3. Schema — pontos de atenção
+## Como manter
 
-- **User**: id, name, cpf @unique, email @unique, passwordHash, createdAt, updatedAt, deletedAt?. Relações: employee?, customer?, roles[], features[], sessions[].
-- **Session** (Fase 3): id, userId, refreshTokenHash @unique, usedAt?, invalidatedAt?, expiresAt, userAgent?, ipAddress?, createdAt. Sem campo `token` (era o design antigo, validado no banco a cada request) — o access token é um JWT stateless, validado só localmente por assinatura+expiração; só o refresh (opaco, hash salvo) toca essa tabela, e só em `/refresh`, `/logout` e nos endpoints de sessão.
-- **Customer/Employee**: id, userId @unique, deletedAt?, campos próprios (Customer: phone obrigatório, address?, birthDate?; Employee: hiringDate @default(now())). `onDelete: Cascade` no user.
-- **UserRole/UserFeature**: `id @id @default(uuid())` (NÃO par composto — mudou para soft delete), deletedAt?. UserFeature: granted, grantedAt @default(now()), updatedAt @updatedAt.
-- **Role**: code-seeded, description obrigatória, appliesTo (ProfileKind?). **Feature**: code-seeded.
-- Unicidade de override/role ativo: garantida por código (busca ativo → update/create), não por constraint SQL.
-
-**Roles** (em `role.constants.ts`): customer (CUSTOMER), attendant/manager/admin (EMPLOYEE). admin tem `["*"]`. Compostas por grupos semânticos (SELF_MANAGEMENT, USER_ADMINISTRATION, PERMISSION_FEATURES) deduplicados via `[...new Set()]`. `DEFAULT_ROLES as const satisfies readonly RoleDefinition[]`.
-
-**PERMISSION_FEATURES**: read:feature, read:role, read:permission, manage:permission.
-
-**Fase 4 (implementada):** `User` ganhou `status UserStatus @default(PENDING)` (`enum UserStatus { PENDING, ACTIVE }`) + `bannedAt?`/`bannedBy?`/`banReason?` (ban ortogonal ao status). Model `VerificationToken` (id, userId, tokenHash @unique, purpose, expiresAt, usedAt?, createdAt, `onDelete: Cascade`) + `enum VerificationPurpose { EMAIL_VERIFICATION, PASSWORD_RESET }` — mesmo padrão hash-do-token da `Session`. Feature `manage:user:status` em `USER_ADMINISTRATION_FEATURES`. `clearDatabase` limpa `verificationToken` antes de `user`. Migration aplicada em dev+teste (backfill `status='ACTIVE'` para linhas pré-existentes).
-
-
----
-
-## 4. Histórico de versões deste contexto
-Esta versão consolida o ciclo 1 até o ponto: CRUD de user, soft delete (user/perfil/override/role), módulos role e permission, POSTs de perfil completos, DELETEs de perfil completos (customer e employee) — inclusive remoção seletiva de roles por `appliesTo`, transação atômica, e recusa de deleção do último perfil ativo. Feature `delete:profile` adicionada a `USER_ADMINISTRATION_FEATURES`. Vínculo user↔role completo (`GET`/`POST`/`DELETE` em `/api/v1/users/:userId/roles`), com `toRoleDTO` centralizando o shape de resposta (extraído de `role.service.ts`, reusado em `/roles` e `/users/:userId/roles`) e não-escalação generalizada (`assertAdminForRoleAssignment`) cobrindo atribuição e revogação de roles privilegiadas.
-
-**Fase 3 (fechada):** auth migrada de "1 JWT guardado como Session, validado no banco a cada request" para "access JWT 15min validado localmente + refresh opaco rotativo em `Session`, só tocado em `/refresh`". `authenticate` saiu de global para por-grupo-de-rota; `logout`/`GET`/`DELETE /auth/sessions` aplicam `authenticate`+`canAccess` na própria definição de rota. Endpoints: `login` (sempre cria `Session` nova, sem o quirk de reuso antigo), `refresh` (rotação + detecção de roubo via reuso de token), `logout` (por refresh token + ownership), `GET /auth/sessions` (lista só sessões vivas), `DELETE /auth/sessions/:id` (revogação pontual, 404 unificado pra "não existe" e "existe mas está morta"). No fecho da fase, uma auditoria geral confirmou o resto do app coerente com a mudança e corrigiu dois achados que não eram objetivo original da fase: `canAccess.middleware.ts` migrado de `res.json` cru para `create*Error` (o mesmo padrão já fechado para `authenticate` nesta fase, mas que não tinha sido estendido a `canAccess`), e `refreshSessionSchema` (código morto, pré-datava o design atual) removido. Também foi adicionado um teste de integração ponta-a-ponta (signup real → login → rota protegida → refresh → sessions → logout) e reativados dois testes de regressão em `permission.test.ts` que estavam comentados desde antes da fase por causa de um import de `prisma` faltando (sem relação com a Fase 3, mas achado durante a mesma auditoria).
-
-**Fase 4 (fechada):** status de conta com verificação de email obrigatória (`status PENDING → ACTIVE` via `POST /auth/verify-email`; só `ACTIVE` loga), ban ortogonal ao status (`bannedAt`/`bannedBy`/`banReason`), serviço de email genérico (`src/lib/email.ts`, nodemailer; mailpit em dev via docker, Resend em prod), recuperação de senha (`forgot`/`reset`, anti-enumeração + invalidação total de sessões), troca de senha logado single-step (só senha atual), e banimento (`POST`/`DELETE /users/:id/ban`, feature `manage:user:status`, proteção de privilegiado via `assertAdminForBan`, conta congelada incluindo reset/change). Orquestração em `verification.service.ts` e `password.service.ts` (anti-ciclo). Racional completo na seção 2.1; passo-a-passo no `docs/todo.md`. Também nesta fase nasceu o `docs/endpoints.md`. Fechos (4.5): 2 bugs pré-existentes corrigidos — `getUserById` passou a autorizar antes de buscar (403 vence 404, não vaza existência de id) e o error handler passou a mapear corpo JSON malformado do body-parser para **400** (antes 500). Adotado o fluxo de branches por fase (`main` → `fase-<n>` → `feat/fase-<n>-<m>-<slug>`).
-
-**Fase 5 (fechada):** documentação da API + containerização, fechando o Ciclo 1 como peça de portfólio (nenhuma regra de negócio nova). OpenAPI 3.1 gerado dos próprios schemas Zod via `.meta()` nativo (`src/docs/`, `zod-openapi`) → **`GET /openapi.json`** + UI Scalar interativa em **`GET /reference`** (ambas públicas, no router de topo) → coleção **Bruno** versionada em `api-collection/` (por módulo, environments `local`/`prod`). Usuário **demo read-only** (role `demo` sempre semeada; usuário só com `SEED_DEMO_USER=true`) — leitura 200 / escrita 403, RBAC ao vivo. Containerização full-stack: `Dockerfile` multi-stage não-root, `docker compose` com o serviço `app` sob profile `full` (dev via `services:up` intacto, app no host via tsx), entrypoint `migrate deploy → seed → start`, seed **bundlado** pelo tsup (`dist/seed.js`, sem tsx/src no runtime), app derivando a própria `DATABASE_URL` (`@db`). Scripts `stack:up`/`stack:down`/`db:deploy`. Racional completo na seção 2.3; nesta fase nasceu o `README.md`.
-
-**Fase 6 (fechada):** reformulação de ambientes (dev/test/prod), sem regra de negócio nova — motivada por dois bugs de deploy (app hardcodado no mailpit em vez da Resend; prod subindo db/mailpit de dev). Compose **base + overrides** por ambiente (isolados por `-p pet-oasis-{dev,test,prod}`, container/volume/porta distintos), envs por arquivo (`.env.{development,test,production}` fora do git + `.env.example`) com `env_file` nos containers e `dotenv-cli`/`vitest.config` no host, boot determinístico via `migrate deploy`, **graceful shutdown** (`src/lib/shutdown.ts`, SIGTERM/SIGINT, PID 1 via `exec`) e stage `dev` no Dockerfile (tsx watch por bind-mount, client Prisma em volume anônimo). Scripts `dev`/`prod:up`/`test` por ambiente (o profile `full` e os `services:*`/`stack:*`/`db:test:*` foram removidos). Racional completo na seção 2.4 e no ADR `docs/adr/environments-and-deploy.md`. A antiga "§2.2 Fase 5 (planejada)" (rate limiting, lockout, audit log) foi renumerada de "Fase 6 (planejada)" para **"Fase 7 (planejada)"** ao inserir esta fase de infra entre a 5 e a de hardening.
-
-**Fase 7 (fechada):** hardening + observabilidade, em 9 sessões de trabalho (A–I). **Segurança:** Redis para rate limit (por IP + por email destinatário) e account lockout (janela fixa → backoff exponencial), fail-open explícito em ambos quando o Redis cai, helmet com CSP estrita (Scalar auto-hospedado + nonce por request), CORS explícito, os 3 guards de escalação consolidados em `assertActorIsAdmin`, corpo grande demais virando 413 (não mais 500). **Observabilidade:** três categorias de log (access/application/audit) sobre `pino` + `AsyncLocalStorage`, taxonomia fechada de 18 ações de audit com regra de PII (só ids/enums), endpoints de leitura (`GET /audit-logs` com IP mascarado sem `read:audit-log:full`, `GET /logs/recent` sobre o ring buffer), Axiom (worker thread) e Sentry (só falha ≥500) opcionais por env var, timeouts em toda dependência externa (HTTP server, Prisma, Redis, SMTP). **Higiene:** paginação reutilizável (offset + cursor) com envelope `{ data, meta }` em todas as listagens, teto de sessões vivas + scripts de faxina (`cleanup-sessions`/`cleanup-audit-log`) agendados via systemd timer, reset diário do ambiente demo (truncate+reseed sob `DEMO_MODE`). **Polimento de conta** (Sessão H, desenho confirmado com o usuário em 2026-08-03): troca de email em 2 passos com `PreviousEmail` reservado para sempre, reset de senha forçado pelo admin (bloqueia login até o reset), `GET /auth/sessions` com `device` parseado do user-agent e `current`. **Fecho (7.19, sem regra de negócio nova):** teste de regressão do refresh token hasheado (D1 — já implementado desde a Fase 3) e sincronização de toda a documentação da fase (`docs/endpoints.md`, `docs/logging-policy.md`, ADRs, `docs/backlog.md`, `README.md`) com o que as sub-fases de fato entregaram. Racional completo na seção 2.2, `docs/logging-policy.md` e nos ADRs `rate-limiting-and-lockout.md`/`pagination.md`.
+- **Decisão nova** → escreva no arquivo temático (um `###` com o título da decisão) e acrescente a
+  linha correspondente neste índice. O índice e os arquivos são atualizados juntos ou nenhum dos
+  dois vale.
+- **Decisão estrutural** (modelagem, escolha de tecnologia, algo que se re-questiona daqui a um
+  ano) → vira **ADR** em [`adr/`](adr/), e aqui fica só o ponteiro. O ADR é o dono do texto.
+- **Decisão revertida** → reescreva a entrada existente narrando a reversão, em vez de deixar
+  decisão + errata em dois lugares. O histórico do git guarda a versão anterior.
+- **Fecho de fase** → o *porquê* migra do `todo.md` para o arquivo temático **antes** de o
+  passo-a-passo expandido ser removido; o que a fase entregou vai para
+  [`context/history.md`](context/history.md).
+- `npm run docs:check` valida que todo caminho e toda âncora citados na documentação existem.

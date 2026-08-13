@@ -39,6 +39,19 @@ export function isLocked(state: LockoutState, now: number): boolean {
   return state.lockedUntil !== null && state.lockedUntil > now;
 }
 
+type UserWithRoles = { roles: { role: { name: string } }[] };
+
+/**
+ * Isenção do lockout (8.8): a senha do usuário demo é pública (README), então
+ * o lockout ali não protege credencial nenhuma — só abre um DoS contra a
+ * porta de entrada do projeto. Identificado pela role `demo`, não por email,
+ * para generalizar a futuras contas de demonstração. Mesmo idioma de `isAdmin`
+ * (`src/lib/authorization.ts`).
+ */
+export function isLockoutExempt(user: UserWithRoles): boolean {
+  return user.roles.some((r) => r.role.name === "demo");
+}
+
 export type FailureOutcome =
   | { state: LockoutState; triggered: false }
   | {

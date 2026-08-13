@@ -1,5 +1,5 @@
 /**
- * Taxonomia fechada de ações de auditoria (docs/logging-policy.md §4.3).
+ * Taxonomia fechada de ações de auditoria (docs/reference/logging-policy.md §4.3).
  *
  * `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit registra o
  * que **já aconteceu**. A lista é a fonte única: nenhuma ação nasce fora dela
@@ -7,8 +7,8 @@
  * `FeatureName`/`RoleName` — evita uma migration a cada ação nova.
  *
  * Declaradas mesmo antes de cada ponto ser ligado — evita reabrir este
- * arquivo a cada sub-fase nova. `DEMO_RESET_EXECUTED` (7.14) é a mais
- * recente; forçar senha/troca de email (Sessão H) ainda não têm call site.
+ * arquivo a cada sub-fase nova. As mais recentes são o par de reativação de
+ * conta (8.4/8.5); hoje todas as ações da lista têm call site.
  */
 export const AUDIT_ACTIONS = [
   "AUTH_LOGIN_FAILED",
@@ -17,12 +17,23 @@ export const AUDIT_ACTIONS = [
   "AUTH_RATE_LIMIT_EXCEEDED",
   "USER_CREATED",
   "USER_DELETED",
+  // Perfil (não a conta). Criação e restauração entraram na 8.3; a deleção,
+  // na 8.1 (K8), porque com a cascata ela derruba roles e overrides —
+  // inclusive privilegiados — sem nada disso aparecer na resposta 204.
+  "USER_PROFILE_CREATED",
+  "USER_PROFILE_RESTORED",
+  "USER_PROFILE_DELETED",
   "USER_BANNED",
   "USER_UNBANNED",
   "USER_ROLE_GRANTED",
   "USER_ROLE_REVOKED",
   "USER_PERMISSION_GRANTED",
   "USER_PERMISSION_REVOKED",
+  // Reativação de conta soft-deletada (8.4/8.5). O pedido e a confirmação são
+  // ações separadas porque acontecem em momentos e por atores diferentes: quem
+  // pede é o signup ou um admin; quem confirma é o dono da conta, com o token.
+  "ACCOUNT_REACTIVATION_REQUESTED",
+  "ACCOUNT_REACTIVATION_COMPLETED",
   "PASSWORD_RESET_REQUESTED",
   "PASSWORD_RESET_COMPLETED",
   "PASSWORD_CHANGED",

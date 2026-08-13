@@ -1,0 +1,32 @@
+meta {
+  name: Confirm Account Reactivation
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/auth/confirm-account-reactivation
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "token": "cole-aqui-o-token-do-email",
+    "newPassword": "NovaSenha1!",
+    "phone": "11987654321"
+  }
+}
+
+docs {
+  Reativa uma conta soft-deletada. O token vem do email disparado pelo signup
+  (quando email e cpf batem com a conta excluída) ou pelo POST /users/:id/reactivate.
+
+  A senha nova é obrigatoria: a conta nunca volta com a credencial de antes.
+  O `phone` so e exigido quando a reativacao precisa criar o perfil de cliente
+  do zero — remova o campo quando o perfil ja existia e sera apenas restaurado.
+}

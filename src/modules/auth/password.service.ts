@@ -37,7 +37,7 @@ export function buildPasswordResetEmail(rawToken: string) {
 export async function requestPasswordReset(email: string) {
   const user = await findUserByEmail(email);
 
-  if (!user || user.status !== "ACTIVE" || user.bannedAt !== null) {
+  if (user?.status !== "ACTIVE" || user.bannedAt !== null) {
     return;
   }
 
@@ -70,8 +70,7 @@ export async function resetPassword(token: string, newPassword: string) {
   );
 
   if (
-    !resetToken ||
-    resetToken.purpose !== "PASSWORD_RESET" ||
+    resetToken?.purpose !== "PASSWORD_RESET" ||
     resetToken.usedAt !== null ||
     resetToken.expiresAt < new Date()
   ) {

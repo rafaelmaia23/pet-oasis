@@ -1,7 +1,9 @@
 import { faker } from "@faker-js/faker";
 import {
+  attachOverrides,
   buildCustomer,
   buildEmployee,
+  buildHybrid,
   makeEmployeeData,
 } from "@tests/factories/user.factory";
 import {
@@ -122,6 +124,35 @@ describe("POST /api/v1/users", () => {
     expectValidationError(response, ["roleNames"]);
   });
 
+  it("should return 403 if a non-admin creates a user with a privileged role", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    const data = makeEmployeeData({ roleNames: ["admin"] });
+
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(data);
+
+    // Criar já com a role é atribuir a role: sem este guard, `POST /users`
+    // seria um desvio de `POST /users/:id/roles/:roleId`, que o exige.
+    expect(response.status).toBe(403);
+
+    expect(response.body).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Apenas administradores podem atribuir roles privilegiadas",
+    });
+
+    // Recusa é recusa: a conta não nasceu de qualquer jeito.
+    const created = await prisma.user.findFirst({
+      where: { email: data.email },
+    });
+
+    expect(created).toBeNull();
+  });
+
   it("should return 409 if email is already in use", async () => {
     const user = await buildEmployee({ roleNames: ["manager"] });
 
@@ -140,7 +171,7 @@ describe("POST /api/v1/users", () => {
     });
   });
 
-  it("should return the same generic 409 when the email was previously used by another account", async () => {
+  it("should allow creating an employee with an email a previous account changed away from (8.6)", async () => {
     const user = await buildEmployee({ roleNames: ["manager"] });
     const token = await loginAs(user.email, user.password);
 
@@ -159,12 +190,8 @@ describe("POST /api/v1/users", () => {
       .set("Authorization", `Bearer ${token}`)
       .send(makeEmployeeData({ email: reservedEmail }));
 
-    expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({
-      code: "CONFLICT",
-      message: "O email informado já está em uso",
-      action: "Tente outro valor para o campo email",
-    });
+    expect(response.status).toBe(201);
+    expect(response.body.email).toBe(reservedEmail);
   });
 
   it("should return 409 if cpf is already in use", async () => {
@@ -1290,6 +1317,135 @@ describe("DELETE /api/v1/users/:id", () => {
       message: "Usuário não encontrado",
       action: "Verifique o ID e tente novamente",
     });
+  });
+
+  // ─── Cascata de deleção (D1/D4) ──────────────────────────────────────────
+  //
+  // Deletar a conta derruba o grafo inteiro com **um único** timestamp. Se a
+  // igualdade dos timestamps vazar, a restauração por correlação (8.2) falha em
+  // silêncio — nenhum teste de comportamento pega.
+
+  it("should stamp the very same deletedAt on the user, both profiles, the roles and the overrides", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "attendant",
+    });
+    await attachOverrides(target.id, {
+      denies: ["update:user"],
+      overrideRole: "customer",
+    });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { userId: target.id },
+    });
+    const employee = await prisma.employee.findUniqueOrThrow({
+      where: { userId: target.id },
+    });
+    const roles = await prisma.userRole.findMany({
+      where: { userId: target.id },
+    });
+    const overrides = await prisma.userFeature.findMany({
+      where: { userRole: { userId: target.id } },
+    });
+
+    assert(user.deletedAt !== null, "o usuário deveria estar deletado");
+    expect(roles).toHaveLength(2);
+    expect(overrides).toHaveLength(2);
+
+    const stamps = [
+      customer.deletedAt,
+      employee.deletedAt,
+      ...roles.map((role) => role.deletedAt),
+      ...overrides.map((override) => override.deletedAt),
+    ];
+
+    for (const stamp of stamps) {
+      expect(stamp?.getTime()).toBe(user.deletedAt.getTime());
+    }
+  });
+
+  it("should leave no active profile, role or override under a deleted user", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "attendant",
+    });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(
+      await prisma.customer.count({
+        where: { userId: target.id, deletedAt: null },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.employee.count({
+        where: { userId: target.id, deletedAt: null },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.userRole.count({
+        where: { userId: target.id, deletedAt: null },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.userFeature.count({
+        where: { userRole: { userId: target.id }, deletedAt: null },
+      }),
+    ).toBe(0);
+  });
+
+  it("should keep the original deletedAt of what was already dead before the account was deleted", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    await attachOverrides(target.id, {
+      grants: ["read:log"],
+      overrideRole: "attendant",
+    });
+
+    // Override removido de propósito, muito antes: é o `deletedAt` que **não**
+    // pode ser sobrescrito pela cascata, senão ele ressuscitaria na 8.2.
+    const earlier = new Date("2020-01-01T00:00:00.000Z");
+    const override = await prisma.userFeature.findFirstOrThrow({
+      where: { userRole: { userId: target.id } },
+    });
+    await prisma.userFeature.update({
+      where: { id: override.id },
+      data: { deletedAt: earlier },
+    });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const untouched = await prisma.userFeature.findUniqueOrThrow({
+      where: { id: override.id },
+    });
+
+    expect(untouched.deletedAt?.getTime()).toBe(earlier.getTime());
   });
 });
 

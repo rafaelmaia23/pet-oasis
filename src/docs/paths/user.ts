@@ -5,6 +5,7 @@ import {
   createEmployeeSchema,
   forcePasswordResetSchema,
   listUsersSchema,
+  reactivateAccountSchema,
   updateUserSchema,
   userParamsSchema,
 } from "@/modules/user/user.schema";
@@ -118,6 +119,23 @@ export const userPaths: ZodOpenApiPathsObject = {
         403: errorResponses[403],
         404: errorResponses[404],
         409: errorResponses[409],
+      },
+    },
+  },
+  "/users/{id}/reactivate": {
+    post: {
+      tags: ["Users"],
+      summary:
+        "Dispara a reativação de uma conta excluída, escolhendo perfis e roles — exige reactivate:user; a conta só volta quando o dono confirma via /auth/confirm-account-reactivation",
+      ...fromEnvelope(reactivateAccountSchema),
+      responses: {
+        204: noContentResponse,
+        401: errorResponses[401],
+        403: errorResponses[403],
+        404: errorResponses[404],
+        409: errorResponses[409],
+        422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },

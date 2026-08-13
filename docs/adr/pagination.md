@@ -104,7 +104,7 @@ existe, só não tem elementos.
   Scalar, e o cursor não cabe bem em header. Preterido.
 - **Envelope só onde pagina:** ver acima — troca um breaking change grande por
   vários pequenos. Preterido.
-- **Ordenação configurável (`?sort=`):** fora de escopo, no `docs/backlog.md`. É
+- **Ordenação configurável (`?sort=`):** fora de escopo, no `docs/reference/backlog.md`. É
   trivial em offset e complexo em cursor (a chave teria que codificar o campo de
   ordenação).
 
@@ -122,3 +122,35 @@ existe, só não tem elementos.
 desde a 7.7/7.8 — o único consumidor de cursor continua sendo `GET /audit-logs`
 e o único de offset é `GET /users`. A hipótese de "servir sem fork" só será
 testada de fato quando a Fase 9 chegar; até lá, nada a revisar aqui.
+
+## Adendo (Fase 9.2) — ordenação configurável
+
+`?sort=` saiu do `docs/reference/backlog.md` na Fase 9: as listagens novas de domínio
+(pets, produtos) tornam ordenação por campo (preço, nome, data de criação)
+relevante o suficiente para não ficar mais pendente.
+
+**Sintaxe:** `?sort=<campo>&order=asc|desc`, decidido no planejamento da fase.
+
+**Allowlist por recurso.** O campo nunca vai cru para o `orderBy` do Prisma —
+cada recurso declara os campos que aceita ordenar (para `Product`: `price`,
+`name`, `createdAt`, e possivelmente relevância quando houver busca textual
+`q`, ver `docs/adr/text-search.md`). Campo fora da allowlist → **422**, mesmo
+idioma de erro por campo do resto do projeto. Um `orderBy` construído
+diretamente do query param seria uma superfície de erro (nome de coluna
+inválido vira 500) e, dependendo da implementação, de injeção.
+
+**Tiebreaker por `id` continua obrigatório**, agora também no `?sort=`
+customizado — a mesma lição da 7.7: dois registros com o mesmo valor no campo
+de ordenação, em páginas diferentes, se repetem ou somem sem um desempate
+determinístico.
+
+**Entra só no offset.** No cursor, a chave do cursor teria que codificar o
+próprio campo de ordenação (hoje é sempre `(campo_fixo_do_recurso, id)`) — a
+limitação já registrada permanece: cursor não ganha `?sort=` nesta fase.
+
+**Caso especial — ordenar por preço com N variantes:** quando um recurso (como
+`Product`) tem preço na variante, não no próprio registro, ordenar por "preço"
+exige uma decisão de contrato adicional (menor preço entre variantes ativas?
+preço da variante default?) — tratada como pendência de negócio da sub-fase
+9.8, não uma extensão deste ADR.
+

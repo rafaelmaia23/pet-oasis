@@ -5,7 +5,7 @@ meta {
 }
 
 put {
-  url: {{baseUrl}}/users/{{userId}}/features/{{featureId}}
+  url: {{baseUrl}}/users/{{userId}}/roles/{{roleId}}/features/{{featureId}}
   body: json
   auth: inherit
 }
@@ -21,5 +21,7 @@ body:json {
 }
 
 docs {
-  Exige manage:permission (o demo não tem → 403). featureId vem de "List Features".
+  Exige manage:permission (o demo não tem → 403). featureId vem de "List Features";
+  roleId vem de "List User Roles" — o override pertence à atribuição de role, e sem
+  ela ativa a resposta é 422 em roleId.
 }

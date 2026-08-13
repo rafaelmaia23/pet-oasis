@@ -94,7 +94,7 @@ Trilha durável de ações sensíveis, em `AuditLog`. Cada linha é evidência: 
 1. **Append-only.** A aplicação não faz `UPDATE` nem `DELETE` em `AuditLog`. A única exceção é o script de retenção (§7), que remove linhas por idade.
 2. **Sem endpoint de escrita.** Nenhuma rota grava audit diretamente; a gravação nasce sempre de uma ação de negócio.
 3. **Taxonomia fechada.** Toda ação vem da tabela em §4.3. Ação nova exige entrada nesta política antes do código.
-4. **`metadata` sem PII.** Apenas ids e enums. Nunca email, nome, telefone ou endereço.
+4. **`metadata` sem PII.** Apenas ids e enums. Nunca email, nome, telefone ou endereço. **Conjunto** de enums também vale (`string[]`, aberto na 8.4): a reativação de conta precisa dizer *quais* perfis voltaram, não quantos, e um `ProfileKind[]` continua sendo enum. O que a regra proíbe é dado pessoal, não cardinalidade.
 5. **Consistência transacional.** Ação que muda estado grava o audit na **mesma `$transaction`**: se o audit falha, a ação é desfeita. Uma trilha com buracos é pior que trilha nenhuma, porque induz a conclusões erradas. **Como (7.6):** a transação vive no **repository** (regra "só o repo toca o Prisma"); o **service** decide a semântica e passa um `AuditDescriptor` ao método de escrita, que roda a mutação e `record(descriptor, tx)` na mesma `$transaction` interativa. Com `tx`, `record` deixa o erro **propagar** — a transação inteira reverte.
 6. **Eventos sem transação** (login falho, e futuramente rate limit e lockout) gravam direto: `record` sem `tx` escreve fora de transação, **engole** a falha e emite `error` no application log — não derruba o request.
 7. **`record` é lib de observabilidade**, a mesma classe de exceção do `logger`/`AsyncLocalStorage` (§6): pode ser chamada de qualquer camada, mas nenhuma regra de negócio lê dela.
@@ -118,13 +118,18 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `AUTH_LOCKOUT_CLEARED` | `User` | `clearedBy` (enum: `ADMIN`, `SUCCESSFUL_LOGIN`) | 7.10 |
 | `AUTH_RATE_LIMIT_EXCEEDED` | `Route` | `rule`, `scope` (enum: `IP`, `EMAIL`) | 7.9 |
 | `USER_CREATED` | `User` | `source` (enum: `SIGNUP`, `ADMIN`, `SEED`) | 7.6 |
-| `USER_DELETED` | `User` | — | 7.6 |
+| `USER_DELETED` | `User` | `cascadedProfiles`, `cascadedRoles`, `cascadedOverrides` (nº de filhos derrubados junto) | 7.6 · 8.1 |
+| `USER_PROFILE_CREATED` | `User` | `profileKind`, `roles` (nº de roles concedidas) | 8.3 |
+| `USER_PROFILE_RESTORED` | `User` | `profileKind`, `restoredRoles` (voltaram por correlação de data), `grantedRoles` (nomeadas pelo ator) | 8.3 |
+| `USER_PROFILE_DELETED` | `User` | `profileKind` (enum: `CUSTOMER`, `EMPLOYEE`), `cascadedRoles`, `cascadedOverrides` | 8.1 |
 | `USER_BANNED` | `User` | `reasonProvided` (bool — o texto **não** entra) | 7.6 |
 | `USER_UNBANNED` | `User` | — | 7.6 |
 | `USER_ROLE_GRANTED` | `User` | `roleId`, `roleName` | 7.6 |
-| `USER_ROLE_REVOKED` | `User` | `roleId`, `roleName` | 7.6 |
-| `USER_PERMISSION_GRANTED` | `User` | `featureName`, `effect` | 7.6 |
-| `USER_PERMISSION_REVOKED` | `User` | `featureName` | 7.6 |
+| `USER_ROLE_REVOKED` | `User` | `roleId`, `roleName`, `cascadedOverrides` (nº de overrides derrubados junto) | 7.6 · 8.0 |
+| `USER_PERMISSION_GRANTED` | `User` | `featureName`, `roleId`, `roleName`, `effect` | 7.6 · 8.0 |
+| `USER_PERMISSION_REVOKED` | `User` | `featureName`, `roleId` | 7.6 · 8.0 |
+| `ACCOUNT_REACTIVATION_REQUESTED` | `User` | `source` (enum: `SELF`, `ADMIN`), `profiles` (`ProfileKind[]`), `roles` (nº de roles nomeadas) | 8.4 · 8.5 |
+| `ACCOUNT_REACTIVATION_COMPLETED` | `User` | `profilesRestored`, `profilesCreated` (`ProfileKind[]`), `restoredRoles`, `grantedRoles` (nº — restaurada por correlação de data ≠ concedida pelo ator, só a segunda é autoridade nova) | 8.4 |
 | `PASSWORD_RESET_REQUESTED` | `User` | — | 7.6 |
 | `PASSWORD_RESET_COMPLETED` | `User` | — | 7.6 |
 | `PASSWORD_CHANGED` | `User` | — | 7.6 |
@@ -132,6 +137,19 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `EMAIL_CHANGE_REQUESTED` | `User` | — | 7.15 |
 | `EMAIL_CHANGE_COMPLETED` | `User` | — | 7.15 |
 | `DEMO_RESET_EXECUTED` | `System` | `tablesTruncated`, `rowsDeleted`, `durationMs` | 7.14 |
+| `PET_CREATED` | `Pet` | `customerId`, `species`, `source` (enum: `SELF`, `STAFF`) | 9.4 |
+| `PET_UPDATED` | `Pet` | `customerId`, `fieldsChanged` (`string[]`) | 9.4 |
+| `PET_DELETED` | `Pet` | `customerId` | 9.4 |
+| `PET_DECEASED` | `Pet` | `customerId` | 9.4 |
+
+Nome do pet **não** entra em `metadata` de nenhuma das quatro ações acima — não
+por ser PII do pet, mas porque nome de pet é frequentemente usado como resposta
+de pergunta de segurança e como componente de senha; e porque a política
+vigente é "ids e enums", que só vale se não for flexibilizada caso a caso
+(planejamento da Fase 9, `docs/context/pet-domain.md`). Ações de catálogo (produto,
+variante, categoria etc.) entram na tabela quando a sub-fase 9.1/9.7 fechar a
+granularidade de features do domínio — ainda não estão aqui de propósito, não
+por esquecimento.
 
 `actorId` é nulo quando não há ator identificado (login falho de email inexistente, script automatizado). `AUTH_LOGIN_FAILED` de conta existente registra o `targetId` do dono, mesmo sem ator.
 
@@ -150,6 +168,8 @@ Aplicado via `redact` do pino (§ `src/lib/logger.ts`) e replicado no `beforeSen
 - body das rotas de autenticação (login, signup, reset, change)
 
 A lista é única e compartilhada: qualquer destino novo (Axiom, Sentry, ring buffer) consome a mesma configuração. Um destino que escapasse do `redact` anularia a política inteira.
+
+**Gotcha ao acrescentar campo à lista:** no pino os caminhos de `redact` são **literais**, não padrões — declarar `password` censura só a chave de topo. Cada campo entra também na forma `*.password`, senão o mesmo dado aninhado num objeto (`{ body: { password } }`) passa direto. Ao incluir um campo novo, incluir as duas formas.
 
 ### 5.2 Permitidos
 
@@ -184,6 +204,8 @@ Efeito prático: com um `requestId` você recupera a linha de access log, todas 
 | Audit log | `AUDIT_LOG_RETENTION_DAYS` | 21 dias | 365 dias |
 | Sessões e tokens mortos | `SESSION_RETENTION_DAYS` | 30 dias | 30 dias |
 
+O ring buffer (`src/lib/logBuffer.ts`) se defende sozinho, porque é memória do processo: entrada acima de `MAX_ENTRY_SIZE` é **truncada** (uma linha gigante não pode comer a memória das outras) e linha malformada é **descartada em silêncio**. É a mesma regra que já governa o `record` sem transação (§4.1, item 6): o subsistema de log nunca derruba quem loga.
+
 O descarte do `AuditLog` acontece **exclusivamente** em `src/scripts/cleanup-audit-log.ts`, rodado por agendador externo, nunca dentro do ciclo request/response. É o único ponto do código autorizado a deletar audit log.
 
 ---
@@ -213,7 +235,7 @@ Documentadas em vez de escondidas:
 - **Ring buffer é por processo.** Com mais de uma réplica, `GET /logs/recent` mostra apenas a fatia da instância que atendeu o request. A resposta declara isso em `meta`.
 - **Ring buffer é volátil.** Reinício do processo zera o conteúdo.
 - **Falha do destino externo degrada, não derruba.** Axiom indisponível → a aplicação continua escrevendo em stdout e no buffer. Sentry indisponível → o erro continua sendo logado normalmente. Nenhum request falha por causa do subsistema de log.
-- **Sem LGPD nesta fase.** O projeto é portfólio e não trata dado real de titular. O delete de usuário é soft delete e **preserva** `actorId`/`targetId` no audit. Anonimização, base legal e resposta a requisição de titular estão no `docs/backlog.md`.
+- **Sem LGPD nesta fase.** O projeto é portfólio e não trata dado real de titular. O delete de usuário é soft delete e **preserva** `actorId`/`targetId` no audit. Anonimização, base legal e resposta a requisição de titular estão no `docs/reference/backlog.md`.
 
 ---
 

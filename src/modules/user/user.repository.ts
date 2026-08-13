@@ -3,6 +3,10 @@ import type { UserStatus } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import type { RoleName } from "../role/role.constants";
+import {
+  type CascadeCounts,
+  cascadeDeleteUserGraph,
+} from "./user.lifecycle.repository";
 
 type createUserData = {
   name: string;
@@ -31,12 +35,12 @@ export const userInclude = {
     where: { deletedAt: null },
     include: {
       role: true,
-    },
-  },
-  features: {
-    where: { deletedAt: null },
-    include: {
-      feature: true,
+      // Overrides pendurados na atribuição de role (D2): não existe mais
+      // `user.features`, e um override de role morta nunca é alcançado.
+      features: {
+        where: { deletedAt: null },
+        include: { feature: true },
+      },
     },
   },
 } as const;
@@ -53,10 +57,6 @@ export async function findUserByEmail(email: string) {
     where: { email, deletedAt: null },
     include: userInclude,
   });
-}
-
-export async function findPreviousEmailByEmail(email: string) {
-  return prisma.previousEmail.findFirst({ where: { email } });
 }
 
 export type UserListFilters = {
@@ -169,25 +169,38 @@ export async function updateUser(id: string, data: updateUserData) {
   });
 }
 
+/**
+ * Encerra a conta e **cascateia** para o grafo inteiro (D1): perfis, roles e
+ * overrides. Um único `new Date()` para toda a transação (D4) — é a igualdade
+ * desses timestamps que a restauração (8.2) usa como chave.
+ *
+ * O audit chega como thunk, e não como descritor pronto, porque as contagens da
+ * cascata só existem dentro da transação (mesmo idioma do `removeUserRole`).
+ */
 export async function softDeleteUserAndInvalidateSessions(
   userId: string,
-  audit?: AuditDescriptor,
+  describeAudit?: (counts: CascadeCounts) => AuditDescriptor,
 ) {
   return prisma.$transaction(async (tx) => {
+    const deletedAt = new Date();
+
     await tx.session.updateMany({
       where: {
         userId,
         usedAt: null,
         invalidatedAt: null,
-        expiresAt: { gt: new Date() },
+        expiresAt: { gt: deletedAt },
       },
-      data: { invalidatedAt: new Date() },
+      data: { invalidatedAt: deletedAt },
     });
     const user = await tx.user.update({
       where: { id: userId, deletedAt: null },
-      data: { deletedAt: new Date() },
+      data: { deletedAt },
     });
-    if (audit) await record(audit, tx);
+
+    const counts = await cascadeDeleteUserGraph(tx, userId, deletedAt);
+
+    if (describeAudit) await record(describeAudit(counts), tx);
     return user;
   });
 }
@@ -260,6 +273,13 @@ export async function unbanUser(userId: string, audit?: AuditDescriptor) {
   });
 }
 
+export async function findDeletedUserByEmail(email: string) {
+  return prisma.user.findFirst({
+    where: { email, deletedAt: { not: null } },
+    include: userInclude,
+  });
+}
+
 export async function findDeletedUserById(id: string) {
   return prisma.user.findFirst({
     where: { id, deletedAt: { not: null } },
@@ -279,11 +299,11 @@ export async function getUserForFeatureComputation(userId: string) {
               features: { include: { feature: true } },
             },
           },
+          features: {
+            where: { deletedAt: null },
+            include: { feature: true },
+          },
         },
-      },
-      features: {
-        where: { deletedAt: null },
-        include: { feature: true },
       },
     },
   });

@@ -94,7 +94,7 @@ bem na hora em que ele mais protege — a mesma escalação lateral que
 `assertAdminForBan` já barra.
 
 **Não existe lock manual** nesta fase (o lock só acontece automaticamente por
-tentativas erradas). Está no `docs/backlog.md`: exigiria decidir como um lock
+tentativas erradas). Está no `docs/reference/backlog.md`: exigiria decidir como um lock
 administrativo convive com `bannedAt` e `status`, reabrindo desenho já fechado.
 
 ## Valores
@@ -128,7 +128,7 @@ mundos — nem protege, nem responde.
 - Falha do Redis → `error` no application log (é a evidência de que a janela de
   fail-open aconteceu).
 
-Taxonomia e `metadata` de cada ação em `docs/logging-policy.md` §4.3.
+Taxonomia e `metadata` de cada ação em `docs/reference/logging-policy.md` §4.3.
 
 ## Alternativas consideradas
 
@@ -161,3 +161,78 @@ por uma falha real em produção; segue sem dado de produção para reavaliar o
 ponto acima. Single-instance segue valendo (nenhuma réplica nova), e nenhum
 volume de envio chegou perto de pressionar o limite por email destinatário.
 Os quatro gatilhos acima continuam de pé, sem novidade a registrar ainda.
+
+## Adendo (Fase 8.7) — dois pontos de consumo novos e um balde novo
+
+A Fase 8 abriu duas superfícies que também disparam email para um endereço **sem
+que o ator prove posse da conta**: o ramo de reativação self-service dentro de
+`POST /auth/signup` (8.4, quando email+cpf batem com uma conta soft-deletada) e
+`POST /users/:id/reactivate` (8.5, o admin forçando o envio). É a mesma superfície
+do item 3 do problema original ("bombardeio de caixa alheia"), então os dois
+passaram a consumir o **mesmo** `RATE_LIMIT_EMAIL_TARGET_*` já usado por
+`forgot-password`/`verify-email/resend` — não um limitador novo.
+
+**Por que o mesmo balde, inclusive para a rota autenticada de admin (K27):** o
+orçamento é do **email**, não do ator. Dois baldes somariam na caixa da mesma
+vítima e furariam exatamente a proteção que o limite por email-alvo existe para
+dar. A contrapartida — um admin legítimo pode levar 429 porque um terceiro gastou
+o orçamento daquele endereço — é um bloqueio temporário numa ação rara, e a `rule`
+(`signup-reactivation`/`account-reactivation`) distingue a origem no audit log.
+No caminho do admin o consumo acontece **depois** de todos os guards: um pedido
+recusado por 403/404/422 não gasta o orçamento do alvo.
+
+**Diferença técnica dos dois casos originais:** `rateLimitByEmailTarget` é um
+middleware Express que lê `req.body.email` antes do controller. Nenhum dos dois
+pontos novos se encaixa nesse formato — o signup só deve consumir no *ramo* de
+reativação (não em todo cadastro), e o endpoint de admin não recebe email nenhum
+no request (só `:id`; o email só existe depois da busca do alvo, dentro do
+service). Solução: `enforce()` (`src/lib/rateLimit.ts`) parou de precisar de
+`res` — o 429 passou a carregar o `Retry-After` no próprio `AppError`
+(campo `headers`), aplicado pelo error handler central, que já era o ponto único
+de saída desde a 7.5. Isso abriu um `consumeEmailTargetLimit(limiter, email, rule)`
+chamável direto do service, sem middleware.
+
+**Balde novo por IP para as rotas de token (K26):** `/auth/reset-password`,
+`/auth/confirm-email-change` e `/auth/confirm-account-reactivation` são públicas,
+consomem credencial opaca e não tinham freio nenhum. Ganharam o `tokenIpLimiter`
+(`RATE_LIMIT_TOKEN_*`, default 20 / 15 min — o par do login, porque consumir
+token é clique de link e precisa absorver NAT). Balde **próprio**, não o
+`emailIpLimiter`: enviar email e consumir token são superfícies diferentes, e
+dividir faria um reset legítimo comer o orçamento do outro. A decisão cobriu as
+três de uma vez porque proteger só a rota nova deixaria duas irmãs idênticas
+desprotegidas, sem razão de negócio que as distinga.
+
+## Adendo (Fase 8.8) — conta demo isenta do lockout
+
+Bug descoberto em produção pós-deploy da Fase 7 (2026-08-04): o account
+lockout conta falhas por `userId`, sem distinção de origem — ao contrário do
+rate limit por IP, que mantém baldes separados por origem. A senha do
+usuário demo é pública (`README.md`), então o lockout, ali, deixa de proteger
+qualquer credencial e vira só um vetor de negação de serviço: qualquer
+visitante que erre a senha do demo trava a conta para **todo mundo** por até
+24h (o backoff dobra a cada ciclo), derrubando a porta de entrada do projeto
+para recrutadores. O demo-reset diário (7.14) não resolve — o estado do
+lockout vive no Redis, fora do alcance do truncate/reseed do Postgres.
+
+**Decisão:** a conta demo fica isenta do lockout, mas continua sujeita ao
+rate limit por IP (que já é por-origem e não sofre do mesmo problema).
+Isenção identificada pela **role `demo`**, não por comparação de email
+contra uma env var — generaliza para futuras contas de demonstração e não
+custa query extra: `userRepository.findUserByEmail` (usado por `login()`) já
+inclui `roles` no mesmo fetch, então o predicado (`isLockoutExempt`,
+`src/lib/lockout.ts`) roda sobre dado já em memória.
+
+**Critério simples, sem qualificação (K28):** basta *ter* a role `demo` —
+nada de "só se for a única role" nem de cruzar com features privilegiadas. A
+primeira alternativa quebra em silêncio se uma conta de demonstração futura
+precisar de uma segunda role; a segunda traria `computeEffectiveFeatures`
+para o caminho quente do login e misturaria lockout com não-escalação.
+Efeito colateral aceito e registrado: conceder a role `demo` a uma conta real
+isenta aquela conta do lockout — hoje inalcançável na prática, já que só o
+usuário demo semeado tem a role (o seed de dados fake não a usa).
+
+**Alternativa descartada:** fazer o demo-reset diário também limpar as
+chaves `lockout:*` do Redis. Descartada porque a janela de indisponibilidade
+entre um reset e o próximo continuaria em até 24h — o ataque ainda derrubaria
+o demo por quase um dia inteiro antes do próximo reset, só adiando o
+problema em vez de eliminá-lo.

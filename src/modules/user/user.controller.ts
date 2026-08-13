@@ -7,6 +7,7 @@ import {
   createEmployeeSchema,
   forcePasswordResetSchema,
   listUsersSchema,
+  reactivateAccountSchema,
   updateUserSchema,
   userParamsSchema,
 } from "./user.schema";
@@ -16,7 +17,7 @@ import { resolveUserView } from "./user.view-resolver";
 export const createEmployee = async (req: Request, res: Response) => {
   const { body } = createEmployeeSchema.parse({ body: req.body });
 
-  const user = await userService.createEmployee(body);
+  const user = await userService.createEmployee(getAuthUser(req).id, body);
 
   return res
     .status(201)
@@ -91,6 +92,20 @@ export const unlockAccount = async (req: Request, res: Response) => {
   const { params } = userParamsSchema.parse({ params: req.params });
 
   await userService.unlockAccount(getAuthUser(req).id, params.id);
+
+  return res.status(204).send();
+};
+
+export const reactivateAccount = async (req: Request, res: Response) => {
+  const { params, body } = reactivateAccountSchema.parse({
+    params: req.params,
+    body: req.body,
+  });
+
+  await userService.reactivateAccount(getAuthUser(req).id, params.id, {
+    profiles: body.profiles,
+    ...(body.roleNames && { roleNames: body.roleNames }),
+  });
 
   return res.status(204).send();
 };

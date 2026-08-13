@@ -58,5 +58,5 @@
   // tests/ precisa estar no programa: é o que mantém o typecheck cobrindo os
   // testes e o que faz o `declare module "vitest"` de tests/setup/vitest.d.ts
   // (matcher toMatchView) ser aplicado.
-  "include": ["src/**/*", "tests/**/*"]
+  "include": ["src/**/*", "tests/**/*", "tools/**/*"]
 }

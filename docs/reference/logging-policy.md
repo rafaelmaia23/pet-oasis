@@ -137,6 +137,19 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `EMAIL_CHANGE_REQUESTED` | `User` | — | 7.15 |
 | `EMAIL_CHANGE_COMPLETED` | `User` | — | 7.15 |
 | `DEMO_RESET_EXECUTED` | `System` | `tablesTruncated`, `rowsDeleted`, `durationMs` | 7.14 |
+| `PET_CREATED` | `Pet` | `customerId`, `species`, `source` (enum: `SELF`, `STAFF`) | 9.4 |
+| `PET_UPDATED` | `Pet` | `customerId`, `fieldsChanged` (`string[]`) | 9.4 |
+| `PET_DELETED` | `Pet` | `customerId` | 9.4 |
+| `PET_DECEASED` | `Pet` | `customerId` | 9.4 |
+
+Nome do pet **não** entra em `metadata` de nenhuma das quatro ações acima — não
+por ser PII do pet, mas porque nome de pet é frequentemente usado como resposta
+de pergunta de segurança e como componente de senha; e porque a política
+vigente é "ids e enums", que só vale se não for flexibilizada caso a caso
+(planejamento da Fase 9, `docs/context/pet-domain.md`). Ações de catálogo (produto,
+variante, categoria etc.) entram na tabela quando a sub-fase 9.1/9.7 fechar a
+granularidade de features do domínio — ainda não estão aqui de propósito, não
+por esquecimento.
 
 `actorId` é nulo quando não há ator identificado (login falho de email inexistente, script automatizado). `AUTH_LOGIN_FAILED` de conta existente registra o `targetId` do dono, mesmo sem ator.
 
@@ -155,6 +168,8 @@ Aplicado via `redact` do pino (§ `src/lib/logger.ts`) e replicado no `beforeSen
 - body das rotas de autenticação (login, signup, reset, change)
 
 A lista é única e compartilhada: qualquer destino novo (Axiom, Sentry, ring buffer) consome a mesma configuração. Um destino que escapasse do `redact` anularia a política inteira.
+
+**Gotcha ao acrescentar campo à lista:** no pino os caminhos de `redact` são **literais**, não padrões — declarar `password` censura só a chave de topo. Cada campo entra também na forma `*.password`, senão o mesmo dado aninhado num objeto (`{ body: { password } }`) passa direto. Ao incluir um campo novo, incluir as duas formas.
 
 ### 5.2 Permitidos
 
@@ -189,6 +204,8 @@ Efeito prático: com um `requestId` você recupera a linha de access log, todas 
 | Audit log | `AUDIT_LOG_RETENTION_DAYS` | 21 dias | 365 dias |
 | Sessões e tokens mortos | `SESSION_RETENTION_DAYS` | 30 dias | 30 dias |
 
+O ring buffer (`src/lib/logBuffer.ts`) se defende sozinho, porque é memória do processo: entrada acima de `MAX_ENTRY_SIZE` é **truncada** (uma linha gigante não pode comer a memória das outras) e linha malformada é **descartada em silêncio**. É a mesma regra que já governa o `record` sem transação (§4.1, item 6): o subsistema de log nunca derruba quem loga.
+
 O descarte do `AuditLog` acontece **exclusivamente** em `src/scripts/cleanup-audit-log.ts`, rodado por agendador externo, nunca dentro do ciclo request/response. É o único ponto do código autorizado a deletar audit log.
 
 ---
@@ -218,7 +235,7 @@ Documentadas em vez de escondidas:
 - **Ring buffer é por processo.** Com mais de uma réplica, `GET /logs/recent` mostra apenas a fatia da instância que atendeu o request. A resposta declara isso em `meta`.
 - **Ring buffer é volátil.** Reinício do processo zera o conteúdo.
 - **Falha do destino externo degrada, não derruba.** Axiom indisponível → a aplicação continua escrevendo em stdout e no buffer. Sentry indisponível → o erro continua sendo logado normalmente. Nenhum request falha por causa do subsistema de log.
-- **Sem LGPD nesta fase.** O projeto é portfólio e não trata dado real de titular. O delete de usuário é soft delete e **preserva** `actorId`/`targetId` no audit. Anonimização, base legal e resposta a requisição de titular estão no `docs/backlog.md`.
+- **Sem LGPD nesta fase.** O projeto é portfólio e não trata dado real de titular. O delete de usuário é soft delete e **preserva** `actorId`/`targetId` no audit. Anonimização, base legal e resposta a requisição de titular estão no `docs/reference/backlog.md`.
 
 ---
 

@@ -94,7 +94,7 @@ bem na hora em que ele mais protege — a mesma escalação lateral que
 `assertAdminForBan` já barra.
 
 **Não existe lock manual** nesta fase (o lock só acontece automaticamente por
-tentativas erradas). Está no `docs/backlog.md`: exigiria decidir como um lock
+tentativas erradas). Está no `docs/reference/backlog.md`: exigiria decidir como um lock
 administrativo convive com `bannedAt` e `status`, reabrindo desenho já fechado.
 
 ## Valores
@@ -128,7 +128,7 @@ mundos — nem protege, nem responde.
 - Falha do Redis → `error` no application log (é a evidência de que a janela de
   fail-open aconteceu).
 
-Taxonomia e `metadata` de cada ação em `docs/logging-policy.md` §4.3.
+Taxonomia e `metadata` de cada ação em `docs/reference/logging-policy.md` §4.3.
 
 ## Alternativas consideradas
 

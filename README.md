@@ -32,7 +32,7 @@
 
 Uma API REST de pet shop levada a sério: modelagem de domínio, camadas rígidas, testes escritos antes do código e cada decisão de arquitetura registrada por escrito.
 
-O projeto tem dois propósitos que se reforçam. É uma **aplicação real** — a fundação de autenticação, autorização e gestão de usuários já está completa e no ar. E é um **veículo de aprendizado deliberado** de TDD e clean code: nenhuma feature entra sem teste que a guie, e o *porquê* de cada escolha vive em [`docs/context.md`](docs/context.md) e nos [ADRs](docs/adr/), não só na cabeça de quem escreveu.
+O projeto tem dois propósitos que se reforçam. É uma **aplicação real** — a fundação de autenticação, autorização e gestão de usuários já está completa e no ar. E é um **veículo de aprendizado deliberado** de TDD e clean code: nenhuma feature entra sem teste que a guie, e o *porquê* de cada escolha vive em [`docs/context/`](docs/context/) e nos [ADRs](docs/adr/), não só na cabeça de quem escreveu.
 
 O **Ciclo 1** — a fundação — está concluído: autenticação com refresh rotativo, RBAC com overrides por usuário, perfis, verificação de email, banimento e recuperação de senha. O **Ciclo 2** abre o domínio do pet shop em si.
 
@@ -159,7 +159,7 @@ Dali em diante dá para explorar o resto: `GET /auth/sessions` lista suas sessõ
 </td></tr>
 </table>
 
-📋 O índice completo de rotas está em [`docs/endpoints.md`](docs/endpoints.md) — e o contrato formal, sempre atualizado, é o próprio [`/openapi.json`](https://pet-oasis.maiahub.com.br/openapi.json).
+📋 O índice completo de rotas está em [`docs/reference/endpoints.md`](docs/reference/endpoints.md) — e o contrato formal, sempre atualizado, é o próprio [`/openapi.json`](https://pet-oasis.maiahub.com.br/openapi.json).
 
 ---
 
@@ -186,7 +186,7 @@ Cada camada só conversa com a adjacente. O **repository** é a única que toca 
 | Erros por *factory*, `throw` explícito no call site | Sem controle de fluxo escondido: dá para ler o service e saber exatamente onde a requisição termina. |
 | OpenAPI gerado dos schemas Zod | Fonte única de verdade. A doc não tem como divergir da validação, porque é a validação. |
 
-O raciocínio longo de cada uma está em [`docs/context.md`](docs/context.md); as decisões estruturais viraram [ADRs](docs/adr/).
+O raciocínio longo de cada uma está em [`docs/context/`](docs/context/), indexado por [`docs/context.md`](docs/context.md); as decisões estruturais viraram [ADRs](docs/adr/).
 
 ### Testes antes do código
 
@@ -210,8 +210,8 @@ npm run dev
 
 API em `http://localhost:3000/api/v1`, referência interativa em `/reference` e os emails de verificação caindo no [Mailpit](https://mailpit.axllent.org/) em `http://localhost:8025`.
 
-📘 **Passo a passo completo, comandos e fluxo de contribuição:** [`docs/dev.md`](docs/dev.md)
-🚢 **Deploy em produção (VPS ARM64, Compose por ambiente):** [`docs/deploy.md`](docs/deploy.md)
+📘 **Passo a passo completo, comandos e fluxo de contribuição:** [`docs/guides/dev.md`](docs/guides/dev.md)
+🚢 **Deploy em produção (VPS ARM64, Compose por ambiente):** [`docs/guides/deploy.md`](docs/guides/deploy.md)
 
 Há também uma coleção [Bruno](https://www.usebruno.com/) versionada em [`api-collection/`](api-collection/), organizada por módulo, com environments `local` e `prod` e o login já encadeando o token nas demais requests.
 
@@ -240,11 +240,11 @@ Ambos são idempotentes (`npm run db:seed` não duplica nada) e restaurados todo
 | ✅ | 7 | Hardening: rate limiting, account lockout, observabilidade (access/application/audit log), paginação e filtros, teto de sessões, troca de email, timeouts |
 | ✅ | 8 | Escopo de override, cascata de deleção e reativação de conta (por signup ou por admin, sempre confirmada pelo dono) |
 
-**A seguir**
+**Ciclo 2 — Domínio pet shop** 🔜 *a seguir* (a numeração das fases continua global)
 
 | | Fase | Entrega |
 |---|---|---|
-| 🔜 | 9 — Domínio pet shop | Pets ligados a Customers, CRUD aninhado, escopos *own*/*others* — e, adiante, vendas e pedidos |
+| 🔜 | 9 — Domínio pet shop | Pets ligados a Customers (CRUD, escopos *own*/*others*) e catálogo (produto/variante, marca, categoria, tag, busca textual, upload de imagem) — sem checkout ainda; carrinho e pedido ficam para a Fase 10 |
 
 Detalhe atômico de cada item em [`docs/todo.md`](docs/todo.md).
 
@@ -254,12 +254,13 @@ Detalhe atômico de cada item em [`docs/todo.md`](docs/todo.md).
 
 | Arquivo | Conteúdo |
 |---|---|
-| [`docs/context.md`](docs/context.md) | O *porquê* de cada decisão — o documento mais denso do repo |
-| [`docs/endpoints.md`](docs/endpoints.md) | Índice enxuto de todas as rotas, com a permissão exigida por cada uma |
-| [`docs/todo.md`](docs/todo.md) | Roadmap por fase, no nível da tarefa |
+| [`docs/context.md`](docs/context.md) | Índice do *porquê* de cada decisão — uma linha por decisão, apontando o arquivo |
+| [`docs/context/`](docs/context/) | O raciocínio longo, por tema: autorização, ciclo de vida, identidade, segurança, observabilidade… |
 | [`docs/adr/`](docs/adr/) | Architecture Decision Records das escolhas estruturais |
+| [`docs/todo.md`](docs/todo.md) | Roadmap por fase, no nível da tarefa |
+| [`docs/reference/`](docs/reference/) | Consulta pontual: [rotas](docs/reference/endpoints.md), [política de log](docs/reference/logging-policy.md), [backlog](docs/reference/backlog.md) |
+| [`docs/guides/`](docs/guides/) | Como fazer: [ambiente de dev](docs/guides/dev.md), [deploy](docs/guides/deploy.md), [documentar endpoint](docs/guides/documenting-endpoints.md) |
 | [`CLAUDE.md`](CLAUDE.md) | Convenções do projeto, escritas para orientar assistência de IA |
-| [`docs/dev.md`](docs/dev.md) · [`docs/deploy.md`](docs/deploy.md) | Ambiente de desenvolvimento e procedimento de deploy |
 
 ---
 

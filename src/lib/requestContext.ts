@@ -26,7 +26,7 @@ export const REQUEST_ID_HEADER = "x-request-id";
  * Contexto de observabilidade do request corrente.
  *
  * **Exceção consciente** ao "explicit over implicit" do projeto (registrada em
- * `docs/context.md` §2.2 e na política §6): correlacionar as três categorias de
+ * `docs/context/observability.md` e na política §6): correlacionar as três categorias de
  * log exige um `requestId` disponível em qualquer camada, e a alternativa
  * explícita seria arrastar um `context` por dezenas de assinaturas de service
  * para entregar um valor usado só no fundo da pilha. O escopo é estrito:

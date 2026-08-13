@@ -56,10 +56,37 @@ Dump agendado do banco do deploy, com um *restore* de fato testado — backup nu
 ## Produto e domínio
 
 ### Dummy data para a demo — **M**
-Hoje o seed cria o mínimo (roles, usuário demo). Um conjunto de dados fictício e coerente — clientes, pets, produtos, histórico — faz a demo mostrar a API funcionando em vez de mostrar listas vazias. Vira pré-requisito natural do `demo-reset` (Fase 7.14), que passaria a restaurar esse estado. Depende do domínio da Fase 9 existir.
+Hoje o seed cria o mínimo (roles, usuário demo). Um conjunto de dados fictício e coerente — clientes, pets, produtos, histórico — faz a demo mostrar a API funcionando em vez de mostrar listas vazias. Vira pré-requisito natural do `demo-reset` (Fase 7.14), que passaria a restaurar esse estado. **Agendado: a Fase 9 traz o domínio que faltava — resolvido na sessão 9.11 (`docs/todo.md`).**
 
 ### Ordenação configurável nas listagens — **P**
-`?sort=` nas listas paginadas por offset. Simples com o helper da Fase 7.7; complexo no cursor (a chave do cursor teria que codificar o campo de ordenação). Fazer só para offset, e documentar a limitação.
+`?sort=` nas listas paginadas por offset. Simples com o helper da Fase 7.7; complexo no cursor (a chave do cursor teria que codificar o campo de ordenação). Fazer só para offset, e documentar a limitação. **Agendado: resolvido na sessão 9.2 da Fase 9 (`docs/todo.md`), com adendo já registrado em `docs/adr/pagination.md`.**
+
+### Transferência de pet entre clientes — **M**
+Caso real (venda, doação, mudança de tutor de um pet já cadastrado). Deixado fora da Fase 9 por escopo — precisa de trilha de auditoria própria e de decisão sobre o que acontece com o histórico clínico do pet (que só existe quando a veterinária chegar). Levantado no planejamento da Fase 9.
+
+### Múltiplos donos por pet — **G**
+Família compartilhando o mesmo pet é caso real, mas a Fase 9 modela dono único (`Pet.customerId` obrigatório, sem N:N) — ver `docs/adr/pet-domain-modeling.md`. Gatilho de revisão: migrar `customerId` de FK direta para uma tabela de junção `PetOwner` (N:N), o que também reabre a pergunta acima (transferência de pet).
+
+### `/me/pets` — **P**
+Atalho de conveniência sobre `GET /customers/:customerId/pets`, evitando o cliente precisar primeiro resolver o próprio `customerId`. Fora da Fase 9 por duplicar rota/teste/documentação sem necessidade — `GET /me` já devolve `customer.id`, que é tudo que o cliente precisa para chamar a rota aninhada.
+
+### `StockMovement` (movimentação de estoque append-only) — **M**
+A Fase 9 modela só `ProductVariant.stockQuantity` como número, sem movimentação, reserva ou histórico. Uma entidade `StockMovement` auditável é natural e desejável, mas só faz sentido na fase do pedido (Fase 10), que é onde a movimentação passa a ter causa (venda, devolução, ajuste manual).
+
+### Imagem por variante (hoje é por produto) — **P**
+`ProductImage` pertence ao `Product`, não ao `ProductVariant` (Fase 9, `docs/adr/product-catalog-modeling.md`). Imagem por variante é caso real ("cores diferentes" precisa; "mesmo saco, tamanhos diferentes" quase nunca precisa) mas adiciona complexidade que o domínio de pet shop raramente cobra.
+
+### Meilisearch/Typesense como motor de busca — **G**
+A Fase 9 decide busca textual no Postgres nativo (`tsvector`+`unaccent`+`pg_trgm`, `docs/adr/text-search.md`), por escolha didática do usuário. Meilisearch/Typesense (typo tolerance por padrão, self-hosted) é a alternativa de mercado quando o volume justificar — custam um container a mais, um pipeline de sincronização produto→índice e uma segunda fonte de verdade que pode divergir do Postgres.
+
+### Storage externo (S3/R2) para upload — **M**
+A Fase 9 usa disco local atrás de um adaptador (`docs/adr/file-storage-and-uploads.md`), por restrição de custo (VPS ARM64, hospedagem própria) e intenção didática. O adaptador já deixa a porta aberta — trocar por S3/R2 é uma classe nova e uma env var. Gatilho: pressão de disco no VPS.
+
+### Histórico de preço do produto — **G**
+A Fase 9 guarda só o preço corrente (`ProductVariant.priceCents`). O congelamento de preço no pedido (Fase 10, já decidido: o item do pedido grava o preço no momento da compra) é outra coisa e é obrigatório — histórico de preço ao longo do tempo (para relatório, gráfico de variação) é o que fica de fora.
+
+### Peso do pet como medição datada — **G**
+`Pet.weightGrams` (Fase 9) é um instantâneo, não um histórico — o dono atualiza manualmente. Quando a veterinária chegar ao domínio, o peso vira uma medição datada no prontuário, e este campo passa a ser cache do último valor (ou é removido). Registrado para não reabrir a discussão de "por que o peso está no lugar errado" nessa hora.
 
 ### Migração de token para cookie httpOnly — **G**
 Trade-off já documentado e deferido no ADR de auth. Reabrir só se houver frontend próprio e o gatilho documentado ocorrer. Traria CSRF de volta ao escopo (hoje inexistente, por usar Bearer), então é decisão de arquitetura, não polimento.

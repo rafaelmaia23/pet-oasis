@@ -163,3 +163,75 @@ quem sobrou vivo.
 Ela destrava o IP inteiro no audit log; o racional está em
 [observability.md](observability.md#readaudit-logfull-e-não-uma-role-como-âncora).
 `read:log`/`read:audit-log` continuam normais, concedíveis sem ser admin.
+
+### O critério de granularidade, escrito na 9.1
+
+Até a Fase 8 o catálogo era fino em `user` (quatro verbos × dois escopos) e grosso em todo o
+resto (`manage:session`, `manage:permission`, `manage:user:status`) sem que a regra estivesse
+em lugar nenhum. A 9.1 escreveu o critério que já vinha sendo aplicado: **uma feature separada
+existe quando dá para imaginar um cargo real que tenha ela e não tenha a vizinha.** Ninguém
+precisa de "encerrar sessão mas não listar", então virou `manage:session`.
+
+O que se perde ao agrupar não é elegância, é delegação: a menor unidade concedível por
+override é o tamanho da feature. Com `manage:catalog` não existiria "conceder só cadastrar
+produto ao Fulano". O que se perde ao esmiuçar é o oposto — features que nenhuma role usa
+sozinha, que ninguém entende ao ler `GET /features`, e que inflam `DEFAULT_ROLES`. A alternativa
+descartada era CRUD completo por recurso: levaria o catálogo de 24 para ~55 features na Fase 9.
+
+### Pet — leitura × escrita, e não um verbo por operação
+
+`read:pet`/`manage:pet` e o par `:others`. Do lado do cliente os quatro verbos sobre o próprio
+pet andam sempre juntos — separar criaria feature morta. Do lado do staff, a fronteira que
+existe de verdade no balcão é "consultar a ficha" × "alterar a ficha", e ela justifica as duas.
+Marcar um pet como falecido é `manage:pet` comum: `deceasedAt` não destrói nada (é exatamente o
+ponto de [pet-domain.md](pet-domain.md)), então não merece feature própria.
+
+### Catálogo — quatro cortes, nenhum deles por recurso
+
+`manage:product` (produto, variante e imagem — variante não existe sem produto),
+`manage:catalog-structure` (marca, categoria e tag), `manage:stock` e as duas de leitura acima
+do baseline público, `read:product:internal` e `read:product:cost`.
+
+Os cortes seguem cargos, não tabelas. Autoria de catálogo separa-se da **estrutura** porque
+reorganizar a árvore de categorias reclassifica a loja inteira, enquanto corrigir a descrição
+de um produto não. **Estoque** é feature própria porque quem conta prateleira não é quem
+cadastra produto — e porque na Fase 10, quando `StockMovement` chegar, o nome já existe.
+**Custo** é próprio porque é o único campo do catálogo com regra social diferente: é ele que a
+view por capability consulta para decidir se `costCents` sai na resposta.
+
+### Custo/margem **não** entrou em `PRIVILEGED_FEATURES`
+
+O guard de não-escalação existe contra escalar o próprio sistema de permissão; `read:product:cost`
+é segredo comercial, não poder sobre o RBAC. Colocá-lo lá obrigaria o admin a intermediar todo
+ajuste comercial fino e diluiria o significado do conjunto para "dado sensível em geral" — e o
+próximo campo sensível quereria entrar também. O contra-argumento é honesto e ficou registrado:
+`read:audit-log:full` já é dado sensível, não escalação. A escolha foi manter o conjunto no
+sentido estrito e deixar a delegação de custo com o gerente, que é de quem a decisão é.
+
+---
+
+## Roles de funcionário
+
+### `stockist` e `catalog-manager` nasceram na 9.1
+
+Com o catálogo inteiro caindo em `manager`, ele viraria role-monólito e as features finas
+acima nasceriam sem nenhum dono — o sinal clássico de granularidade inventada. As duas roles
+novas dão cargo a cada corte: `stockist` = self-management + `read:product:internal` +
+`manage:stock`; `catalog-manager` = self-management + estoque + autoria + custo. Nenhuma das
+duas toca usuário, permissão ou ban.
+
+`manager` é **superconjunto** de `catalog-manager` (garantido por teste): as roles existem para
+delegar, não para tirar poder de quem já tinha. A sobreposição de `manage:stock` entre
+repositor e gerente de catálogo é intencional — quem cadastra o produto também corrige
+contagem.
+
+Recusadas por ora: `veterinarian` e `groomer`. Serviço é assunto da Fase 10 (ver
+[`adr/product-vs-service.md`](../adr/product-vs-service.md)), e role sem endpoint é role morta.
+
+### O `demo` enxerga o domínio novo, menos o custo
+
+Sem features novas, a credencial pública do demo responderia 403 justamente nas rotas mais
+vistosas da Fase 9. Ela recebeu `read:pet:others` e `read:product:internal`, e **não**
+`read:product:cost` — o mesmo desenho de `read:audit-log` sem `read:audit-log:full`: o visitante
+vê o recurso e vê o campo sensível ausente, então o RBAC se demonstra dentro do próprio payload.
+Nenhuma feature de escrita, garantido por teste que varre os verbos de escrita da role.

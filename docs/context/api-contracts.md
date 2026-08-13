@@ -58,6 +58,33 @@ Exige a feature `read:user` (mesmo padrão de `GET /users/:id`); perfil soft-del
 
 ---
 
+## Superfície pública
+
+### A vitrine do catálogo responde sem token (9.1)
+
+`GET /products`, `GET /products/:idOrSlug`, `/categories`, `/brands`, `/tags` e `/breeds` são
+**públicas**. O motivo é o produto, não a técnica: o e-commerce vive de alguém buscar "ração" no
+Google, cair na página do produto sem conta nenhuma e decidir se compra. Login entra só no
+carrinho, na Fase 10. Toda a escrita e todas as rotas de pet continuam autenticadas.
+
+Três consequências, todas herdadas pelas sessões 9.6/9.8:
+
+1. **Nasce uma autenticação opcional.** Hoje `authenticate` é tudo-ou-nada: ou exige token ou nem
+   olha. A vitrine precisa de um terceiro comportamento — se vier `Bearer`, identifica o ator; se
+   não vier, segue anônimo e **nunca** responde 401. É isso que faz o mesmo `GET /products`
+   devolver a view pública ao visitante e a interna a quem tem `read:product:internal`.
+2. **Não existe feature de leitura pública de catálogo.** Não há o que conceder ao cliente para
+   ele ver produto — a role `customer` sai da Fase 9 só com as features de pet. O sufixo
+   `:internal` já significa "acima do baseline", e o baseline aqui é o anônimo.
+3. **Rate limit e cache são por IP, sem identidade.** É a primeira leitura em volume do projeto
+   sem ator; o Redis já está disponível para as duas coisas.
+
+A view pública é à prova de vazamento **por definição** (whitelist do presenter), não por
+permissão: sem `costCents`, sem `stockQuantity` exato — disponibilidade como booleano derivado — e
+sem produto `DRAFT`/`DISCONTINUED`.
+
+---
+
 ## Erros
 
 422 VALIDATION_ERROR (`errors` por campo), 409 CONFLICT, 404 NOT_FOUND, 403 FORBIDDEN (`action`

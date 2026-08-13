@@ -118,7 +118,7 @@
 > A Fase 9 traz pets e catálogo, ainda **sem checkout**; a Fase 10 traz carrinho, pedido e
 > pagamento.
 
-## Fase 9 — Domínio pet shop: pets e catálogo
+## 🔄 Fase 9 — Domínio pet shop: pets e catálogo
 
 > Planejada em 2026-08-06, sessão de brainstorming/decisão consumida de
 > `docs/planning/fase-9-contexto.md` (mantido ou apagado ao final da fase — decisão do
@@ -152,6 +152,8 @@
 | N11 | Produto × Serviço (decisão **herdada pela Fase 10**) | Tabelas separadas (`Product`/`Service`), `OrderItem` **polimórfico** com CHECK constraint escrito à mão (nem `kind` único — armadilha confortável de colunas nulas —, nem supertipo/class table inheritance — junção a mais no caminho mais quente). Nada muda no schema da Fase 9; só o formato futuro de `OrderItem` já é conhecido. |
 | N12 | Busca textual | **Postgres nativo** (`tsvector` + `unaccent` + `pg_trgm`) — não `ILIKE`, não Meilisearch/Typesense agora. Escolha do usuário, explicitamente contra a recomendação inicial (`ILIKE`), com motivação **didática**: o objetivo é aprender busca com tolerância a erro de digitação. |
 | N13 | Upload de imagem | Disco local atrás de um **adaptador de storage** (`put`/`delete`/`url`, implementação `LocalDiskStorage`); path no banco (nunca URL completa); servido como estático pelo reverse proxy, sem passar por Node. |
+| N14 | RBAC do domínio (decidido na sessão 9.1) | Granularidade pelo critério "existe cargo real que tem esta feature e não a vizinha"; 9 features novas (4 de pet, 5 de catálogo), nenhuma privilegiada; duas roles novas de funcionário (`stockist`, `catalog-manager`). Detalhe no resumo da sessão 9.1 e em `docs/context/authorization.md`. |
+| N15 | Vitrine pública (decidido na sessão 9.1, era a pendência da 9.6) | Leitura de catálogo (`/products`, `/categories`, `/brands`, `/tags`, `/breeds`) responde **sem token** — o e-commerce vive de quem chega pelo Google sem conta. Exige um middleware de **autenticação opcional** (9.6) e nenhuma feature de leitura para o cliente. Racional em `docs/context/api-contracts.md`. |
 
 ### Sessões de trabalho
 
@@ -173,15 +175,16 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 | **9.11** | Seed fake do domínio + `demo-reset` | Depende do schema inteiro estar firme. Resolve a entrada "Dummy data para a demo" do `docs/reference/backlog.md`. |
 | **9.12** | Fechos | Docs, coleção Bruno, README, `context.md`, revisão do backlog. |
 
-### ⬜ [Sessão 9.1] Fase 9.1 — RBAC do domínio: decisão + seed
-> Sessão de conversa, não de código. Ver §9.1 do `docs/planning/fase-9-contexto.md`.
-- 🔸 **Pendência:** nomes das features de pet (`create:pet`, `read:pet` + variantes `:others`) e de catálogo (`create:product`, `manage:catalog`, `read:product:internal`, …).
-- 🔸 **Pendência:** granularidade — uma feature por operação por recurso (mais precisa, catálogo maior) vs. features agrupadas por domínio (`manage:catalog` cobrindo marca/categoria/tag — mais enxuto, menos flexível para override).
-- 🔸 **Pendência:** quais roles recebem o quê. Já decidido: atendente cadastra pet no nome de um cliente (`:others`). Em aberto: quem cadastra produto, quem mexe em estoque, quem vê custo/margem.
-- 🔸 **Pendência:** nascem roles novas de funcionário (`stockist`, `catalog-manager`)? Hoje `attendant` só tem self-management; o catálogo pode cair em `manager` ou justificar role própria.
-- 🔸 **Pendência:** a role `demo` precisa das features de leitura novas, senão o demo público mostra 403 onde deveria mostrar catálogo.
-- 🔸 **Pendência:** alguma feature nova é privilegiada (entra em `PRIVILEGED_FEATURES`)? Custo e margem são candidatos.
-- ⬜ Nomes definidos entram em `feature.constants.ts`/`role.constants.ts`; reseed necessário.
+### ✅ [Sessão 9.1] Fase 9.1 — RBAC do domínio: decisão + seed
+> Sessão de decisão com o usuário (2026-08-13). Racional em `docs/context/authorization.md` (§ "Catálogo de features" e § "Roles de funcionário") e, para a vitrine pública, em `docs/context/api-contracts.md` § "Superfície pública".
+- **Critério de granularidade** (vale daqui para frente): uma feature separada existe quando dá para imaginar **um cargo real que tenha ela e não tenha a vizinha**. Recusado o CRUD completo por recurso (levaria o catálogo de 24 para ~55 features).
+- **9 features novas**, nenhuma privilegiada: `read:pet`, `manage:pet`, `read:pet:others`, `manage:pet:others`, `manage:product` (produto+variante+imagem), `manage:catalog-structure` (marca+categoria+tag), `manage:stock`, `read:product:internal`, `read:product:cost`. Falecimento de pet é `manage:pet` comum; `GET /breeds` é pública e não tem feature.
+- **Custo/margem fora de `PRIVILEGED_FEATURES`**: o guard existe contra escalação do próprio RBAC; quem delega visibilidade de custo é o gerente, não o admin.
+- **Duas roles novas** (`appliesTo: EMPLOYEE`): `stockist` (self-management + `read:product:internal` + `manage:stock`) e `catalog-manager` (self-management + estoque + autoria + custo). Nenhuma toca usuário/permissão/ban. `manager` permanece superconjunto de `catalog-manager` (garantido por teste). Recusadas: `veterinarian`/`groomer` (serviço é Fase 10; role sem endpoint é role morta).
+- **Distribuição:** `customer` = `read:pet`+`manage:pet` (e **nenhuma** feature de catálogo — a vitrine é pública); `attendant` = pet `:others` + `read:product:internal`; `manager` = tudo do `catalog-manager` + pet `:others`; `demo` = `read:pet:others` + `read:product:internal`, **sem** `read:product:cost` (mesmo desenho de `read:audit-log:full` — o mascaramento se demonstra dentro do payload).
+- **Vitrine pública decidida junto** (era a pendência §9.2, ancorada na 9.6): `GET /products`, `/products/:idOrSlug`, `/categories`, `/brands`, `/tags`, `/breeds` respondem sem token. Consequências anotadas nas sessões que as executam (9.6/9.8).
+- ✅ Grupos novos em `role.constants.ts` (`PET_FEATURES`, `PET_SERVICE_FEATURES`, `STOCK_FEATURES`, `CATALOG_MANAGEMENT_FEATURES`); 35 features e 7 roles sincronizadas no seed.
+- ✅ Testes: `tests/unit/modules/role/role.constants.test.ts` (feature órfã, composição de cada role nova, `demo` read-only e sem custo, `PRIVILEGED_FEATURES` intacto) e `tests/integration/lib/seed/roleCatalog.test.ts` (o declarado chegou ao banco). Suíte 734 + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão 9.2] Fase 9.2 — Ordenação configurável no helper de paginação
 - ⬜ `?sort=<campo>&order=asc|desc` no helper de paginação **offset** (`src/lib/pagination.ts`).
@@ -204,7 +207,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 ### ⬜ [Sessão 9.4] Fase 9.4 — Pets: CRUD, escopo próprio
 - ⬜ `enum PetSex { MALE FEMALE UNKNOWN }`; model `Pet` completo (`customerId`, `name`, `species`, `breedId?`, `sex`, `birthDate?`, `birthDateIsEstimated`, `weightGrams?`, `neutered`, `microchipId?`, `color?`, `notes?`, `photoPath?`, `deceasedAt?`, soft delete — ver §2.3 do `fase-9-contexto.md`).
 - ⬜ `POST /customers/:customerId/pets`, `GET /customers/:customerId/pets`, `GET /pets/:petId`, `PATCH /pets/:petId`, `DELETE /pets/:petId` (soft delete).
-- ⬜ Autorização escopo `own`/`:others`, com os nomes de feature decididos na 9.1.
+- ⬜ Autorização escopo `own`/`:others` com as features da 9.1: `read:pet`/`manage:pet` (dono) e `read:pet:others`/`manage:pet:others` (staff). Marcar como falecido é `manage:pet`, não feature própria.
 - ⬜ Validação semântica no service (422): espécie em `SPECIES_WITH_BREED` exige `breedId`; espécie fora dela exige `breedId` ausente; raça informada precisa pertencer à espécie informada.
 - 🔸 **Pendência** (ver §9.3 do `fase-9-contexto.md`): unicidade de `microchipId` — unique global (aceita prender o valor de pet excluído) vs. unique parcial (`WHERE deleted_at IS NULL`, migration manual) vs. sem unique + validação no service. Agravante: duplicata pode ser erro de digitação ou pet transferido entre clientes (backlog).
 - 🔸 **Pendência** (ver §9.9 do `fase-9-contexto.md`): pets de um cliente soft-deletado voltam automaticamente na reativação de perfil da Fase 8, ou a reativação escolhe?
@@ -214,21 +217,24 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 ### ⬜ [Sessão 9.5] Fase 9.5 — Pets: escopo staff, listagem geral, filtros
 - ⬜ `GET /pets` — listagem geral para staff, paginada (offset, helper da 9.2) e filtrável.
 - ⬜ Ordenação via `?sort=&order=` (helper da 9.2).
-- ⬜ Testes: staff vê todos os pets; customer sem `:others` não acessa `GET /pets`; filtros combinados; ordenação com tiebreaker.
+- ⬜ `GET /pets` exige `read:pet:others` (é listagem de pet de terceiro por definição).
+- ⬜ Testes: staff vê todos os pets; customer sem `read:pet:others` não acessa `GET /pets`; filtros combinados; ordenação com tiebreaker.
 
 ### ⬜ [Sessão 9.6] Fase 9.6 — Taxonomia do catálogo: `Brand`, `Category` (árvore), `Tag`
 - ⬜ Model `Brand` (`id`, `name` @unique, `slug` @unique, `description?`, `logoPath?`, soft delete).
 - ⬜ Model `Category` em árvore (`parentId?` auto-relação, `position`, soft delete) — `ProductCategory` N:N com **mínimo de uma** por produto.
 - ⬜ Model `Tag` (`id`, `name` @unique, `slug` @unique) — `ProductTag` N:N **sem** mínimo.
-- ⬜ `GET/POST/PATCH/DELETE /categories`, `/brands`, `/tags`.
-- 🔸 **Pendência** (ver §9.2 do `fase-9-contexto.md`): catálogo público (sem token) ou autenticado? Primeira sessão do Bloco B a expor leitura — decide se `GET /categories|/brands|/tags` (e depois `/products`) responde sem Bearer. Consequências reais: rate limit próprio, cache (Redis já disponível), view à prova de vazamento por definição, não por permissão.
+- ⬜ `GET /categories`, `/brands`, `/tags` **públicos** (sem token); `POST/PATCH/DELETE` exigem `manage:catalog-structure` (9.1).
+- ⬜ **Autenticação opcional** — consequência da vitrine pública decidida na 9.1 (ver `docs/context/api-contracts.md` § "Superfície pública"): middleware que identifica o ator se vier `Bearer` e segue anônimo se não vier, **nunca** 401. Esta é a primeira sessão que precisa dele; a 9.8 depende do mesmo middleware para escolher a view. Registrar em `docs/context/architecture.md` § "Roteamento" (ao lado de "`authenticate` saiu do `app.ts`") e na seção "Mounting" de `docs/reference/endpoints.md`.
+- ⬜ Rate limit por IP nas rotas públicas de leitura (sem identidade para balde por usuário).
 - 🔸 **Pendência** (ver §9.7 do `fase-9-contexto.md`): regras da árvore de categoria — profundidade máxima? categoria com filhos pode ser excluída? produto vincula só a folha ou também categoria intermediária? excluir categoria com produtos vinculados bloqueia (409) ou desvincula?
 - 🔸 **Pendência** (ver §9.8 do `fase-9-contexto.md`): slug gerado a partir do nome (o que acontece quando o nome muda?) ou informado pelo staff (controle total, risco de colisão/slug feio)? Decisão vale para `Category`/`Brand`/`Tag` aqui e é reaplicada em `Product` na 9.7.
 - ⬜ Testes: árvore de categoria (criação, ciclo em `parentId` recusado); N:N de categoria com mínimo de uma; tag sem mínimo.
 
 ### ⬜ [Sessão 9.7] Fase 9.7 — `Product` + `ProductVariant`: escrita
 - ⬜ `enum ProductStatus { DRAFT ACTIVE DISCONTINUED }`; model `Product` (`targetSpecies: PetSpecies[]`, `brandId`, `status`, soft delete) + `ProductVariant` (`sku` @unique, `priceCents`, `compareAtPriceCents?`, `costCents?`, `stockQuantity`, `weightGrams?`, `volumeMl?`, `sizeLabel?`, `barcode?`, `isDefault`, soft delete).
-- ⬜ `POST/PATCH/DELETE /products`, `POST /products/:id/variants`, `PATCH/DELETE /variants/:id` (recurso plano, mesmo racional dos pets).
+- ⬜ `POST/PATCH/DELETE /products`, `POST /products/:id/variants`, `PATCH/DELETE /variants/:id` (recurso plano, mesmo racional dos pets) — todas sob `manage:product` (9.1).
+- ⬜ Ajuste de `stockQuantity` é `manage:stock`, **não** `manage:product` (9.1): o repositor conta prateleira sem poder editar o catálogo. Se o `PATCH` de variante aceitar os dois tipos de campo no mesmo corpo, decidir aqui como as duas features se combinam (caminho natural: exigir a feature de cada campo presente).
 - ⬜ Todo produto nasce com ≥1 variante — produto "sem variação" ganha variante única `isDefault: true`.
 - 🔸 **Pendência** (ver §9.3 do `fase-9-contexto.md`): unicidade de `sku` — unique global vs. unique parcial vs. validação no service (mesmo dilema do `microchipId` da 9.4, já documentado para email/cpf no `docs/reference/backlog.md`).
 - 🔸 **Pendência** (ver §9.4 do `fase-9-contexto.md`): estoque pode ficar negativo? Sem carrinho ainda, o único caminho de mudança é edição manual pelo staff — aceitar negativo (registra erro de contagem real) ou barrar em 422?
@@ -238,7 +244,9 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 ### ⬜ [Sessão 9.8] Fase 9.8 — Catálogo: leitura, views por capability, filtros
 - ⬜ `GET /products` — paginada (offset, 9.2), ordenável (`?sort=&order=`), filtrável (`species`, `category`, `tag` repetível, `brand`, `minPrice`, `maxPrice`, `status` só staff, `inStock`, `q` — busca da 9.9).
 - ⬜ `GET /products/:idOrSlug` — detalhe com variantes.
-- ⬜ Views por capability (presenter Zod): cliente não vê `costCents`/margem nem `stockQuantity` exato nem produtos `DRAFT`/`DISCONTINUED`; disponibilidade (booleano derivado) substitui quantidade exata na view pública.
+- ⬜ Views por capability (presenter Zod), resolvidas pelas features da 9.1: `read:product:internal` destrava `stockQuantity` exato e os produtos `DRAFT`/`DISCONTINUED`; `read:product:cost` destrava `costCents`/margem. Sem nenhuma das duas (inclusive **anônimo**), sai a view pública, com disponibilidade (booleano derivado) no lugar da quantidade.
+- ⬜ Depende da **autenticação opcional** da 9.6: sem ator, view pública; com ator, view pela capability — e nunca 401 nas rotas de leitura.
+- 🔸 **Pendência** (nasceu na 9.1): `?status=` é filtro de quem tem `read:product:internal`. Perguntar ao usuário o que acontece quando um anônimo o envia — **422** (coerente com o filtro estrito da 7.7, mas revela que o parâmetro existe) ou **ignorar silenciosamente** (a vitrine nunca vaza a existência do rascunho).
 - ⬜ Teste de contrato: view pública não contém `costCents` nem `stockQuantity`.
 - ⬜ Faixa de preço filtra pelas **variantes** (produto entra se alguma variante estiver na faixa) — documentar, é contraintuitivo.
 - 🔸 **Pendência** (ver §9.5 do `fase-9-contexto.md`): `GET /products/:idOrSlug` aceitando id **e** slug é ambíguo de contrato (o que acontece se um slug for um UUID válido?) — alternativa: rotas separadas, ou só id com slug em query (`?slug=`).
@@ -270,13 +278,15 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 ### ⬜ [Sessão 9.11] Fase 9.11 — Seed fake do domínio + `demo-reset`
 - ⬜ `src/lib/seed/fakePets.constants.ts` (já anunciado em comentário de `fakeUsers.constants.ts`), amarrado aos customers fake existentes por email fixo.
 - ⬜ Dataset fake de catálogo (marca, categoria, tag, produto, variante) coerente, para o demo não mostrar listas vazias.
+- ⬜ Roster fake ganha um funcionário de cada role nova da 9.1 (`stockist`, `catalog-manager`) — sem eles as duas roles existem só no seed e ninguém consegue exercitá-las em dev/demo.
 - ⬜ `demo-reset.ts` passa a truncar/restaurar as tabelas transacionais novas (pets, produtos, variantes — `Breed` segue como catálogo de referência tipo `Role`/`Feature`, preservado, não truncado — confirmar na implementação).
 - ⬜ `demo-reset.ts` passa a limpar o diretório de upload (dependência da 9.10).
 - ⬜ Marcar como resolvida a entrada "Dummy data para a demo" do `docs/reference/backlog.md` ao fechar esta sessão.
 - ⬜ Testes: seed idempotente; demo-reset restaura pets/produtos fake e limpa uploads.
 
 ### ⬜ [Sessão 9.12] Fase 9.12 — Fechos
-- ⬜ `docs/reference/endpoints.md` — todas as rotas novas de pet/breed/catálogo.
+- ⬜ `docs/reference/endpoints.md` — todas as rotas novas de pet/breed/catálogo, e a seção "Mounting" com a categoria nova de autenticação opcional (rotas públicas que enriquecem a resposta quando há token).
+- ⬜ `README.md`/`docs/context/authorization.md` — conferir que as roles novas (`stockist`, `catalog-manager`) aparecem onde o projeto descreve os cargos.
 - ⬜ Coleção Bruno — pastas novas por módulo (`pets`, `breeds`, `products`, `variants`, `categories`, `brands`, `tags`), environments `local`/`prod`.
 - ⬜ `docs/context/pet-domain.md` promovido de "planejada" a "implementada"; parágrafo "Fase 9 (fechada)" em `docs/context/history.md`; decisões novas indexadas em `docs/context.md`.
 - ⬜ `docs/reference/logging-policy.md` — conferir taxonomia final (ações de catálogo que a 9.1/9.7 tiverem definido, além das quatro de pet já registradas no planejamento).

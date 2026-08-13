@@ -728,6 +728,11 @@ de cada, recomendação, esperar a decisão) na abertura da sub-fase corresponde
 
 ### 9.1 RBAC do domínio — sub-fase 9.1
 
+> ✅ **Resolvida na sessão 9.1** (2026-08-13). O resultado está no resumo da sessão em
+> [`../todo.md`](../todo.md) e o racional em
+> [`../context/authorization.md`](../context/authorization.md). O texto abaixo é o
+> enunciado original da pendência.
+
 O usuário declarou explicitamente que quer pensar nisso com calma, olhando a lista de
 endpoints já pronta. O que precisa ser decidido:
 
@@ -749,6 +754,11 @@ endpoints já pronta. O que precisa ser decidido:
   são candidatos.
 
 ### 9.2 Catálogo público ou autenticado?
+
+> ✅ **Resolvida na sessão 9.1** (2026-08-13): **totalmente público** para leitura. Racional e
+> consequências em [`../context/api-contracts.md`](../context/api-contracts.md) §
+> "Superfície pública"; a autenticação opcional que ela exige está anotada na sessão 9.6 do
+> [`../todo.md`](../todo.md). O texto abaixo é o enunciado original da pendência.
 
 Se `GET /products` responde sem token, esse vira o **primeiro endpoint público de leitura
 em volume** do projeto. Consequências reais: rate limit próprio, cache (o Redis já está

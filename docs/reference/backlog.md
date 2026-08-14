@@ -58,8 +58,8 @@ Dump agendado do banco do deploy, com um *restore* de fato testado — backup nu
 ### Dummy data para a demo — **M**
 Hoje o seed cria o mínimo (roles, usuário demo). Um conjunto de dados fictício e coerente — clientes, pets, produtos, histórico — faz a demo mostrar a API funcionando em vez de mostrar listas vazias. Vira pré-requisito natural do `demo-reset` (Fase 7.14), que passaria a restaurar esse estado. **Agendado: a Fase 9 traz o domínio que faltava — resolvido na sessão 9.11 (`docs/todo.md`).**
 
-### Ordenação configurável nas listagens — **P**
-`?sort=` nas listas paginadas por offset. Simples com o helper da Fase 7.7; complexo no cursor (a chave do cursor teria que codificar o campo de ordenação). Fazer só para offset, e documentar a limitação. **Agendado: resolvido na sessão 9.2 da Fase 9 (`docs/todo.md`), com adendo já registrado em `docs/adr/pagination.md`.**
+### ~~Ordenação configurável nas listagens~~ — ✅ resolvido (Fase 9.2)
+`?sort=<campo>&order=asc|desc` entrou no helper de offset, com allowlist por recurso (fora dela → 422) e tiebreaker por `id` obrigatório também no offset. Primeiro consumidor: `GET /users`. Decisões de contrato no adendo de `docs/adr/pagination.md`. **A limitação do cursor permanece** — ordenar por campo ali exigiria a chave do cursor codificar o próprio campo de ordenação; se algum dia fizer falta, é entrada nova neste backlog.
 
 ### Transferência de pet entre clientes — **M**
 Caso real (venda, doação, mudança de tutor de um pet já cadastrado). Deixado fora da Fase 9 por escopo — precisa de trilha de auditoria própria e de decisão sobre o que acontece com o histórico clínico do pet (que só existe quando a veterinária chegar). Levantado no planejamento da Fase 9.

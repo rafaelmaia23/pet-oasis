@@ -183,6 +183,7 @@ completo, os contra-argumentos e os gotchas.
 *Paginação*
 
 - Duas estratégias, um envelope só
+- Ordenação configurável só no offset
 
 *Tipos*
 

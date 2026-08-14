@@ -17,6 +17,8 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 
 **Envelope de listagem (Fase 7.7 / D4):** toda rota de **lista** devolve `{ data, meta }` — `meta { page, limit, total }` no offset (`GET /users`), `meta { nextCursor, hasMore }` no cursor (`GET /audit-logs`), `meta {}` nas que não paginam. Exceção: `GET /users/:userId/permissions` segue `string[]` cru.
 
+**Ordenação (Fase 9.2):** listagens por **offset** aceitam `?sort=<campo>&order=asc|desc`, com allowlist própria de cada recurso (campo fora dela → 422; `order` sem `sort` → 422). Omitir `order` usa a direção natural do campo. O cursor não tem ordenação configurável.
+
 ---
 
 ## Docs — `src/routes/index.ts` (router de topo)
@@ -64,7 +66,7 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | Método + Path | Auth | Descrição |
 |---|---|---|
 | POST `/api/v1/users` | `create:user` | Cria um usuário employee |
-| GET `/api/v1/users` | `read:user:others` | Lista usuários (offset `?page=&limit=` + filtros `status`/`banned`/`role`) |
+| GET `/api/v1/users` | `read:user:others` | Lista usuários (offset `?page=&limit=` + filtros `status`/`banned`/`role` + ordenação `?sort=createdAt\|name\|email&order=asc\|desc`) |
 | GET `/api/v1/users/:id` | `read:user` | Busca um usuário por id |
 | PATCH `/api/v1/users/:id` | `update:user` | Atualiza um usuário |
 | DELETE `/api/v1/users/:id` | `delete:user` | Soft delete do usuário + invalida sessões |

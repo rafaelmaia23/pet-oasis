@@ -186,13 +186,15 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ✅ Grupos novos em `role.constants.ts` (`PET_FEATURES`, `PET_SERVICE_FEATURES`, `STOCK_FEATURES`, `CATALOG_MANAGEMENT_FEATURES`); 35 features e 7 roles sincronizadas no seed.
 - ✅ Testes: `tests/unit/modules/role/role.constants.test.ts` (feature órfã, composição de cada role nova, `demo` read-only e sem custo, `PRIVILEGED_FEATURES` intacto) e `tests/integration/lib/seed/roleCatalog.test.ts` (o declarado chegou ao banco). Suíte 734 + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão 9.2] Fase 9.2 — Ordenação configurável no helper de paginação
-- ⬜ `?sort=<campo>&order=asc|desc` no helper de paginação **offset** (`src/lib/pagination.ts`).
-- ⬜ Allowlist de campos ordenáveis por recurso — campo fora da allowlist → **422** (nunca vai cru para o `orderBy`).
-- ⬜ Tiebreaker por `id` obrigatório mesmo com `?sort=` — mesma lição da 7.7 (cursor).
-- ⬜ Ordenação entra **só no offset**; a limitação do cursor permanece documentada no `docs/reference/backlog.md`.
-- ⬜ Conferir que a implementação bate com o desenho já registrado no adendo de `docs/adr/pagination.md` (escrito no planejamento da fase, antes do código).
-- ⬜ Testes: campo fora da allowlist → 422; ordenação asc/desc corretas; tiebreaker por id evita duplicata/omissão com valores repetidos no campo de ordenação.
+### ✅ [Sessão 9.2] Fase 9.2 — Ordenação configurável no helper de paginação
+> Sessão de 2026-08-14. Quatro pontos de contrato que o adendo do ADR não especificava foram decididos com o usuário (S1–S4) e registrados no próprio adendo, em `docs/adr/pagination.md` § "O que a implementação (9.2) firmou além do adendo"; o resumo da decisão vive em `docs/context/api-contracts.md` § "Ordenação configurável só no offset".
+- **`?sort=<campo>&order=asc|desc` só no offset.** No cursor a chave teria que codificar o campo de ordenação — a limitação continua registrada no `docs/reference/backlog.md` (a entrada da ordenação foi fechada; a do cursor, não).
+- **A allowlist é um mapa, não uma lista:** cada recurso declara *campo → direção natural* (`defineSortConfig`), e é essa direção que responde `?sort=` sem `?order=` (data `desc`, texto `asc`) — assim `?sort=createdAt` não inverte a lista em relação a não mandar parâmetro nenhum (S2). Campo fora da allowlist → **422**; nome nenhum vindo do request chega ao `orderBy` do Prisma.
+- **`?order=` sem `?sort=` → 422** nomeando `order` (S3): aplicar ao campo default amarraria o significado da URL a um default implícito, que mudaria em silêncio.
+- **Tiebreaker por `id` agora também no offset**, seguindo a direção pedida (S4). Fechou um furo pré-existente: `GET /users` ordenava por `createdAt desc` **sem** desempate desde a Fase 2, então usuários com o mesmo timestamp já podiam repetir/sumir entre páginas.
+- **Forma:** `buildOffsetQuerySchema(config, filtros)` devolve a query inteira com a regra do S3 embutida (mora no helper, não em cada recurso, para ser impossível esquecer); `buildOrderBy(query, config)` entrega o `orderBy` pronto ao repository. O refinamento é aplicado no par `sort`/`order` **antes** dos `.extend()` — no Zod 4 os checks sobrevivem ao extend, e refinar no fim quebraria a inferência do callback.
+- ✅ Primeiro consumidor: `GET /users` (`createdAt`, `name`, `email`), com os query params novos no OpenAPI (de graça, via `fromEnvelope`) e na coleção Bruno.
+- ✅ Testes: 10 unitários em `tests/unit/lib/pagination.test.ts` (allowlist, direção natural, `order` explícito vencendo, `order` sem `sort`, tiebreaker seguindo o `order`, `.shape` preservado para o OpenAPI) + 6 de integração em `GET /users` (asc/desc, default `createdAt desc` intacto, 422 de `sort` e de `order`, caminhada paginada com 5 nomes idênticos sem repetir nem omitir). Suíte **750** + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão 9.3] Fase 9.3 — Espécies, raças e seed de `Breed`
 - ⬜ `enum PetSpecies { DOG CAT RABBIT BIRD RODENT REPTILE FISH }` no schema.

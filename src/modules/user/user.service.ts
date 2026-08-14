@@ -14,16 +14,17 @@ import {
 import { send } from "@/lib/email";
 import * as lockout from "@/lib/lockout";
 import { logger } from "@/lib/logger";
-import { buildOffsetArgs } from "@/lib/pagination";
+import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
 import { hashPassword } from "@/lib/password";
 import { consumeEmailTargetLimit, emailTargetLimiter } from "@/lib/rateLimit";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import * as userRepository from "@/modules/user/user.repository";
-import type {
-  CreateCustomerInput,
-  CreateEmployeeInput,
-  ListUsersQuery,
-  UpdateUserInput,
+import {
+  type CreateCustomerInput,
+  type CreateEmployeeInput,
+  type ListUsersQuery,
+  type UpdateUserInput,
+  USER_SORT,
 } from "@/modules/user/user.schema";
 import { validateRoles } from "@/utils/validateRoles";
 import { requestAccountReactivation } from "../auth/accountReactivation.service";
@@ -232,10 +233,12 @@ export async function getUserByEmail(
 
 export async function getAllUsers(query: ListUsersQuery) {
   const { skip, take } = buildOffsetArgs(query);
+  // O campo de ordenação sai da allowlist do recurso, nunca cru do query param.
+  const orderBy = buildOrderBy(query, USER_SORT);
 
   return userRepository.findAllUsers(
     { status: query.status, banned: query.banned, role: query.role },
-    { skip, take },
+    { skip, take, orderBy },
   );
 }
 

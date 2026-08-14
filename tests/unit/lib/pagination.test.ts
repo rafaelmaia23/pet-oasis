@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import type { AppError } from "@/errors";
 import {
   buildCursorFilter,
   buildOffsetArgs,
+  buildOffsetQuerySchema,
+  buildOrderBy,
   cursorEnvelope,
   cursorQuerySchema,
   DEFAULT_LIMIT,
   decodeCursor,
+  defineSortConfig,
   encodeCursor,
   listEnvelope,
   MAX_LIMIT,
@@ -71,6 +75,113 @@ describe("pagination", () => {
       expect(env).toEqual({
         data: ["a", "b"],
         meta: { page: 2, limit: 20, total: 42 },
+      });
+    });
+  });
+
+  // ── Ordenação configurável (Fase 9.2, só no offset) ──────────────────────
+  describe("ordenação configurável", () => {
+    // Recurso fictício: `createdAt` desce por natureza, `name` sobe (S2).
+    const sortConfig = defineSortConfig({
+      fields: { createdAt: "desc", name: "asc" },
+      default: "createdAt",
+    });
+
+    const schema = buildOffsetQuerySchema(sortConfig, {
+      status: z.enum(["ACTIVE", "PENDING"]).optional(),
+    });
+
+    describe("buildOffsetQuerySchema", () => {
+      it("should keep page/limit defaults and leave sort/order optional", () => {
+        const parsed = schema.parse({});
+        expect(parsed).toEqual({ page: 1, limit: DEFAULT_LIMIT });
+      });
+
+      it("should keep the resource filters alongside sort/order", () => {
+        const parsed = schema.parse({ status: "ACTIVE", sort: "name" });
+        expect(parsed.status).toBe("ACTIVE");
+        expect(parsed.sort).toBe("name");
+      });
+
+      it("should reject a sort field outside the allowlist", () => {
+        const result = schema.safeParse({ sort: "passwordHash" });
+        expect(result.success).toBe(false);
+        expect(result.error?.issues.some((i) => i.path.includes("sort"))).toBe(
+          true,
+        );
+      });
+
+      it("should reject an order value other than asc/desc", () => {
+        const result = schema.safeParse({ sort: "name", order: "sideways" });
+        expect(result.success).toBe(false);
+        expect(result.error?.issues.some((i) => i.path.includes("order"))).toBe(
+          true,
+        );
+      });
+
+      it("should reject order without sort, naming the order field (S3)", () => {
+        const result = schema.safeParse({ order: "asc" });
+        expect(result.success).toBe(false);
+        expect(result.error?.issues.some((i) => i.path.includes("order"))).toBe(
+          true,
+        );
+      });
+
+      it("should still expose .shape (the OpenAPI generator depends on it)", () => {
+        expect(Object.keys(schema.shape).sort()).toEqual([
+          "limit",
+          "order",
+          "page",
+          "sort",
+          "status",
+        ]);
+      });
+    });
+
+    describe("buildOrderBy", () => {
+      it("should fall back to the resource default field and its natural order", () => {
+        expect(buildOrderBy({}, sortConfig)).toEqual([
+          { createdAt: "desc" },
+          { id: "desc" },
+        ]);
+      });
+
+      it("should use the natural order of the requested field (S2)", () => {
+        expect(buildOrderBy({ sort: "name" }, sortConfig)).toEqual([
+          { name: "asc" },
+          { id: "asc" },
+        ]);
+        expect(buildOrderBy({ sort: "createdAt" }, sortConfig)).toEqual([
+          { createdAt: "desc" },
+          { id: "desc" },
+        ]);
+      });
+
+      it("should let an explicit order win over the natural one", () => {
+        expect(
+          buildOrderBy({ sort: "name", order: "desc" }, sortConfig),
+        ).toEqual([{ name: "desc" }, { id: "desc" }]);
+        expect(
+          buildOrderBy({ sort: "createdAt", order: "asc" }, sortConfig),
+        ).toEqual([{ createdAt: "asc" }, { id: "asc" }]);
+      });
+
+      it("should always append the id tiebreaker following the order (S4)", () => {
+        for (const query of [
+          {},
+          { sort: "name" as const },
+          { sort: "name" as const, order: "desc" as const },
+          { sort: "createdAt" as const, order: "asc" as const },
+        ]) {
+          const orderBy = buildOrderBy(query, sortConfig);
+          expect(orderBy).toHaveLength(2);
+          const [primary, tiebreaker] = orderBy as [
+            Record<string, string>,
+            Record<string, string>,
+          ];
+          expect(Object.keys(tiebreaker)).toEqual(["id"]);
+          expect(tiebreaker.id).toBe(Object.values(primary)[0]);
+        }
       });
     });
   });

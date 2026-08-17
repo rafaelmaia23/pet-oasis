@@ -24,6 +24,7 @@ export type DemoResetCounts = {
   session: number;
   verificationToken: number;
   previousEmail: number;
+  pet: number;
   employee: number;
   customer: number;
   user: number;
@@ -62,6 +63,7 @@ export async function runDemoReset(options: {
         session: await prisma.session.count(),
         verificationToken: await prisma.verificationToken.count(),
         previousEmail: await prisma.previousEmail.count(),
+        pet: await prisma.pet.count(),
         employee: await prisma.employee.count(),
         customer: await prisma.customer.count(),
         user: await prisma.user.count(),
@@ -74,6 +76,8 @@ export async function runDemoReset(options: {
         const verificationToken = (await tx.verificationToken.deleteMany())
           .count;
         const previousEmail = (await tx.previousEmail.deleteMany()).count;
+        // Antes de `customer` — a FK `Pet.customerId` é RESTRICT.
+        const pet = (await tx.pet.deleteMany()).count;
         const employee = (await tx.employee.deleteMany()).count;
         const customer = (await tx.customer.deleteMany()).count;
         const user = (await tx.user.deleteMany()).count;
@@ -84,6 +88,7 @@ export async function runDemoReset(options: {
           session,
           verificationToken,
           previousEmail,
+          pet,
           employee,
           customer,
           user,

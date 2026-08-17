@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { buildPet } from "@tests/factories/pet.factory";
 import {
   attachOverrides,
   buildCustomer,
@@ -1250,5 +1251,141 @@ describe("Cascata da deleção de perfil", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expect(after.body.data).toHaveLength(0);
+  });
+});
+
+/**
+ * Pet é o primeiro filho de **domínio** do grafo de ciclo de vida (9.4). Desce
+ * na cascata como `UserRole` e — ao contrário de `UserFeature` — **volta** por
+ * correlação de data: a assimetria da restauração existe contra vazamento de
+ * privilégio, e devolver a ficha do bichano não concede autoridade nenhuma.
+ */
+describe("Cascata e restauração dos pets do cliente", () => {
+  async function buildCustomerWithPet() {
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    assert(target.customer !== null, "o perfil de cliente deveria existir");
+
+    const pet = await buildPet(target.customer.id);
+
+    return { target, customerId: target.customer.id, pet };
+  }
+
+  it("should soft delete the pets with the same timestamp as the customer profile", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const { target, pet } = await buildCustomerWithPet();
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await request(app)
+      .delete(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { userId: target.id },
+    });
+    const petInDb = await prisma.pet.findUniqueOrThrow({
+      where: { id: pet.id },
+    });
+
+    assert(customer.deletedAt !== null, "o perfil deveria estar deletado");
+    expect(petInDb.deletedAt?.getTime()).toBe(customer.deletedAt.getTime());
+  });
+
+  it("should not touch pets when the employee profile is deleted", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const { target, pet } = await buildCustomerWithPet();
+    const token = await loginAs(manager.email, manager.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/employee`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const petInDb = await prisma.pet.findUniqueOrThrow({
+      where: { id: pet.id },
+    });
+
+    expect(petInDb.deletedAt).toBeNull();
+  });
+
+  it("should record the cascaded pet count in the audit metadata", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const { target } = await buildCustomerWithPet();
+    const token = await loginAs(manager.email, manager.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "USER_PROFILE_DELETED", targetId: target.id },
+    });
+
+    expect(audit?.metadata).toMatchObject({ cascadedPets: 1 });
+  });
+
+  it("should bring the pets back when the customer profile is reactivated", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const { target, pet } = await buildCustomerWithPet();
+    const token = await loginAs(manager.email, manager.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ phone: faker.phone.number({ style: "international" }) });
+
+    expect(response.status).toBe(201);
+
+    const petInDb = await prisma.pet.findUniqueOrThrow({
+      where: { id: pet.id },
+    });
+
+    expect(petInDb.deletedAt).toBeNull();
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "USER_PROFILE_RESTORED", targetId: target.id },
+    });
+    expect(audit?.metadata).toMatchObject({ restoredPets: 1 });
+  });
+
+  it("should NOT resurrect a pet the owner had deleted before the cascade", async () => {
+    // A correlação é por data: o que morreu noutro instante — de propósito —
+    // simplesmente não bate, e continua morto sem nenhuma regra extra.
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const { target, customerId, pet } = await buildCustomerWithPet();
+    const alive = await buildPet(customerId, { name: "Mimi" });
+
+    await prisma.pet.update({
+      where: { id: pet.id },
+      data: { deletedAt: new Date("2020-01-01T00:00:00.000Z") },
+    });
+
+    const token = await loginAs(manager.email, manager.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${token}`);
+
+    await request(app)
+      .post(`/api/v1/users/${target.id}/customer`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ phone: faker.phone.number({ style: "international" }) });
+
+    const deletedBefore = await prisma.pet.findUniqueOrThrow({
+      where: { id: pet.id },
+    });
+    const cascaded = await prisma.pet.findUniqueOrThrow({
+      where: { id: alive.id },
+    });
+
+    expect(deletedBefore.deletedAt).toEqual(
+      new Date("2020-01-01T00:00:00.000Z"),
+    );
+    expect(cascaded.deletedAt).toBeNull();
   });
 });

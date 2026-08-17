@@ -41,9 +41,26 @@ export const AUDIT_ACTIONS = [
   "EMAIL_CHANGE_REQUESTED",
   "EMAIL_CHANGE_COMPLETED",
   "DEMO_RESET_EXECUTED",
+  // Pet (9.4). O nome do pet **não** entra na metadata de nenhuma delas — não
+  // por ser PII do pet, mas porque nome de pet é resposta clássica de pergunta
+  // de segurança e componente de senha; e porque "só ids e enums" só vale se
+  // não for flexibilizada caso a caso (§4.4 da política).
+  "PET_CREATED",
+  "PET_UPDATED",
+  "PET_DELETED",
+  "PET_DECEASED",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
-/** O tipo de recurso sobre o qual a ação incidiu. */
-export type AuditTargetType = "User" | "Route" | "System";
+/**
+ * O tipo de recurso sobre o qual a ação incidiu.
+ *
+ * Lista const e não union escrita à mão porque o filtro `?targetType=` de
+ * `GET /audit-logs` precisa dela em runtime: enquanto eram duas declarações
+ * separadas, acrescentar um alvo exigia lembrar de editar as duas, e esquecer
+ * o schema não quebrava o build — só sumia silenciosamente com o filtro.
+ */
+export const AUDIT_TARGET_TYPES = ["User", "Pet", "Route", "System"] as const;
+
+export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];

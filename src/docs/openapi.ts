@@ -8,6 +8,7 @@ import { featurePaths } from "./paths/feature";
 import { logPaths } from "./paths/log";
 import { mePaths } from "./paths/me";
 import { permissionPaths } from "./paths/permission";
+import { petPaths } from "./paths/pet";
 import { profilePaths } from "./paths/profile";
 import { rolePaths } from "./paths/role";
 import { statusPaths } from "./paths/status";
@@ -138,6 +139,13 @@ const documentDefinition: ZodOpenApiObject = {
         "tem raça cadastrada.",
     },
     {
+      name: "Pets",
+      description:
+        "Pets dos clientes. Coleção aninhada no cliente, recurso plano no " +
+        "item. Escopo `own` para o dono e `:others` para o balcão; " +
+        "falecimento é estado próprio, distinto de exclusão.",
+    },
+    {
       name: "Audit",
       description:
         "Trilha durável de ações sensíveis (append-only, só leitura). " +
@@ -163,6 +171,7 @@ const documentDefinition: ZodOpenApiObject = {
     ...rolePaths,
     ...featurePaths,
     ...breedPaths,
+    ...petPaths,
     ...auditLogPaths,
     ...logPaths,
   },

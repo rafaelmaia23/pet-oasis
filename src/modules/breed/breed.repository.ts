@@ -11,3 +11,12 @@ export async function getBreeds(species?: PetSpecies) {
     orderBy: [{ species: "asc" }, { name: "asc" }],
   });
 }
+
+/**
+ * Consumida pelo `pet.service` (9.4) para a validação semântica de raça: é
+ * preciso saber a **espécie** da raça informada para recusar "Golden Retriever
+ * num gato". `findUnique` porque `Breed` não tem soft delete.
+ */
+export async function findBreedById(id: string) {
+  return prisma.breed.findUnique({ where: { id } });
+}

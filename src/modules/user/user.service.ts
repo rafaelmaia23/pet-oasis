@@ -285,7 +285,7 @@ export async function deleteUser(requestingUser: AuthUser, targetId: string) {
 
   const deleted = await userRepository.softDeleteUserAndInvalidateSessions(
     targetId,
-    ({ profiles, roles, overrides }) => ({
+    ({ profiles, roles, overrides, pets }) => ({
       action: "USER_DELETED",
       targetType: "User",
       targetId,
@@ -295,6 +295,7 @@ export async function deleteUser(requestingUser: AuthUser, targetId: string) {
         cascadedProfiles: profiles,
         cascadedRoles: roles,
         cascadedOverrides: overrides,
+        cascadedPets: pets,
       },
     }),
   );

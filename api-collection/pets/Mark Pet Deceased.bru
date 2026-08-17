@@ -1,0 +1,22 @@
+meta {
+  name: Mark Pet Deceased
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/pets/{{petId}}/deceased
+  body: none
+  auth: inherit
+}
+
+docs {
+  Falecimento é ESTADO, não exclusão: deceasedAt é separado de deletedAt, o
+  pet continua na lista do dono e o histórico futuro de prontuário permanece
+  legível. Rota própria pelo mesmo motivo do ban: transição de estado com
+  significado e ação de audit próprios (PET_DECEASED).
+
+  Idempotente — remarcar não reescreve a data já registrada. 204.
+
+  Feature: manage:pet comum (não há feature própria para falecimento).
+}

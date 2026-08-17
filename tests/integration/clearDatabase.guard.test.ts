@@ -1,4 +1,5 @@
-import { buildEmployee } from "@tests/factories/user.factory";
+import { buildPet } from "@tests/factories/pet.factory";
+import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
 import { clearDatabase } from "@tests/helpers/database";
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
@@ -20,6 +21,13 @@ describe("clearDatabase() reference-data preservation", () => {
         replacedAt: new Date(),
       },
     });
+
+    // Pet é transacional e tem FK RESTRICT para `Customer` (9.4): se ele não
+    // entrar no clearDatabase — e antes do cliente —, o teardown quebra por
+    // violação de chave estrangeira, não por asserção. Este setup garante que
+    // a falha apareça aqui, e não espalhada pela suíte inteira.
+    const customer = await buildCustomer();
+    await buildPet(customer.customer?.id ?? "");
   });
 
   it("removes transactional rows but keeps features, roles, role_features and breeds", async () => {
@@ -35,6 +43,7 @@ describe("clearDatabase() reference-data preservation", () => {
     expect(before.breeds).toBeGreaterThan(0);
     // sanity: the transactional rows exist before clearing
     expect(await prisma.user.count()).toBeGreaterThan(0);
+    expect(await prisma.pet.count()).toBeGreaterThan(0);
 
     await clearDatabase();
 
@@ -48,6 +57,8 @@ describe("clearDatabase() reference-data preservation", () => {
     expect(await prisma.user.count()).toBe(0);
     expect(await prisma.userRole.count()).toBe(0);
     expect(await prisma.employee.count()).toBe(0);
+    expect(await prisma.customer.count()).toBe(0);
+    expect(await prisma.pet.count()).toBe(0);
     expect(await prisma.previousEmail.count()).toBe(0);
   });
 });

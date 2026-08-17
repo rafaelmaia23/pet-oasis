@@ -15,6 +15,8 @@ import featureRouter from "@/modules/feature/feature.routes";
 import logRouter from "@/modules/log/log.routes";
 import meRouter from "@/modules/me/me.routes";
 import permissionRouter from "@/modules/permission/permission.routes";
+import petCustomerRouter from "@/modules/pet/pet.customer.routes";
+import petRouter from "@/modules/pet/pet.routes";
 import roleRouter from "@/modules/role/role.routes";
 import statusRouter from "@/modules/status/status.routes";
 import userProfileRouter from "@/modules/user/profile/user.profile.routes";
@@ -35,6 +37,10 @@ v1Router.use("/me", authenticate, meRouter);
 v1Router.use("/users", authenticate, userRouter);
 v1Router.use("/users/:userId", authenticate, userProfileRouter);
 v1Router.use("/users/:userId", authenticate, permissionRouter);
+// Pet (9.4): coleção aninhada no cliente, recurso plano no item. As duas
+// exigem token — a vitrine pública é do catálogo, não da ficha do pet.
+v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);
+v1Router.use("/pets", authenticate, petRouter);
 v1Router.use("/features", authenticate, featureRouter);
 v1Router.use("/roles", authenticate, roleRouter);
 v1Router.use("/audit-logs", authenticate, auditLogRouter);

@@ -1,0 +1,32 @@
+meta {
+  name: Update Pet
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/pets/{{petId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "weightGrams": 9200,
+    "notes": "Alérgico a frango."
+  }
+}
+
+docs {
+  Não são editáveis aqui: customerId (transferência de pet é backlog),
+  deceasedAt (use POST /pets/:petId/deceased) e photoPath (upload, fase 9.10).
+  Os três respondem 422 nomeando o campo.
+
+  species É editável, e a troca revalida a raça sobre o estado RESULTANTE:
+  mandar species=CAT sem ajustar breedId responde 422, porque a raça antiga
+  era de cão.
+}

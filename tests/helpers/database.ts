@@ -16,6 +16,9 @@ export async function clearDatabase() {
   await prisma.session.deleteMany();
   await prisma.verificationToken.deleteMany();
   await prisma.previousEmail.deleteMany();
+  // Antes de `customer`: a FK `Pet.customerId` é RESTRICT, então apagar o
+  // cliente com pet vivo estoura. `Breed` continua fora — é referência.
+  await prisma.pet.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.user.deleteMany();

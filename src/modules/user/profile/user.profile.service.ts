@@ -83,13 +83,19 @@ const describeProfileCreation =
 
 const describeProfileRestoration =
   (userId: string, profileKind: ProfileKind, grantedRoles: number) =>
-  ({ restoredRoles }: { restoredRoles: number }): AuditDescriptor => ({
+  ({
+    restoredRoles,
+    restoredPets,
+  }: {
+    restoredRoles: number;
+    restoredPets: number;
+  }): AuditDescriptor => ({
     action: "USER_PROFILE_RESTORED",
     targetType: "User",
     targetId: userId,
     // Restaurada ≠ concedida: a primeira voltou por correlação de data, a
     // segunda foi decisão do ator. Só a segunda é autoridade nova.
-    metadata: { profileKind, restoredRoles, grantedRoles },
+    metadata: { profileKind, restoredRoles, grantedRoles, restoredPets },
   });
 
 /**
@@ -98,7 +104,7 @@ const describeProfileRestoration =
  */
 const describeProfileDeletion =
   (userId: string, profileKind: ProfileKind) =>
-  ({ roles, overrides }: CascadeCounts): AuditDescriptor => ({
+  ({ roles, overrides, pets }: CascadeCounts): AuditDescriptor => ({
     action: "USER_PROFILE_DELETED",
     targetType: "User",
     targetId: userId,
@@ -108,6 +114,8 @@ const describeProfileDeletion =
       profileKind,
       cascadedRoles: roles,
       cascadedOverrides: overrides,
+      // Só o perfil de cliente tem pet; no de funcionário isto é sempre 0.
+      cascadedPets: pets,
     },
   });
 

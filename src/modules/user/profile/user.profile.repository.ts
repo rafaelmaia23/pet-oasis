@@ -9,6 +9,19 @@ import {
 } from "@/modules/user/user.lifecycle.repository";
 import { userInclude } from "@/modules/user/user.repository";
 
+/**
+ * Resolve o perfil de cliente **ativo** por id. Existe para o `pet.service`
+ * (9.4): a coleção de pets é aninhada em `/customers/:customerId`, e o
+ * `userId` daqui é o que se compara com o ator para separar `own` de
+ * `:others` — `customerId` sozinho não diz de quem o perfil é.
+ */
+export async function findActiveCustomerById(customerId: string) {
+  return prisma.customer.findFirst({
+    where: { id: customerId, deletedAt: null },
+    select: { id: true, userId: true },
+  });
+}
+
 type createCustomerProfileData = {
   phone: string;
   address?: string | undefined;
@@ -88,7 +101,10 @@ export async function reactivateProfile(
   userId: string,
   kind: ProfileKind,
   options: { roleIds?: string[]; phone?: string },
-  describeAudit?: (counts: { restoredRoles: number }) => AuditDescriptor,
+  describeAudit?: (counts: {
+    restoredRoles: number;
+    restoredPets: number;
+  }) => AuditDescriptor,
 ) {
   return prisma.$transaction(async (tx) => {
     const restored = await restoreProfile(tx, userId, kind, {
@@ -109,7 +125,13 @@ export async function reactivateProfile(
     }
 
     if (describeAudit) {
-      await record(describeAudit({ restoredRoles: restored?.roles ?? 0 }), tx);
+      await record(
+        describeAudit({
+          restoredRoles: restored?.roles ?? 0,
+          restoredPets: restored?.pets ?? 0,
+        }),
+        tx,
+      );
     }
 
     return tx.user.findUniqueOrThrow({

@@ -32,6 +32,12 @@ outra. Carrinho, pedido e pagamento ficam para a Fase 10.
 - **Dono único** (`Pet.customerId` obrigatório, sem N:N), com o gatilho de revisão registrado
 - **Falecimento é estado, não exclusão** (`deceasedAt` separado de `deletedAt`)
 - Peso é instantâneo, não histórico · `birthDateIsEstimated`
+- **O que a 9.3 firmou** (§ "O que a implementação (9.3) firmou além da decisão" do mesmo ADR):
+  só `DOG` e `CAT` em `SPECIES_WITH_BREED` — ave e roedor têm variedade, não raça; contrato do
+  `GET /breeds` (público, `?species=` opcional, sem paginação); `Breed` é dado de **referência**
+  (sobrevive ao `clearDatabase` e ao `demo-reset`); a constante mora em
+  `src/modules/breed/breed.constants.ts` e não em `src/lib/seed/`; e o seed usa `createMany` com
+  `skipDuplicates`, **sem** delete reconciliador — apagar raça com pet quebraria o boot
 
 ## Catálogo — [`adr/product-catalog-modeling.md`](../adr/product-catalog-modeling.md)
 

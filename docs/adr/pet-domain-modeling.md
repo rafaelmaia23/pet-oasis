@@ -48,9 +48,11 @@ model Breed {
 
 O caminho de aquisição do dado é: puxar **uma vez** de uma API pública de raças
 (TheDogAPI/TheCatAPI e equivalentes), curar o resultado à mão (nomes em pt-BR,
-remover duplicata e ruído), commitar como constante versionada em
-`src/lib/seed/`, e **nunca mais consultar a API**. Manutenção dali em diante é
-edição da constante — raça de animal não muda com frequência.
+remover duplicata e ruído), commitar como constante versionada, e **nunca mais
+consultar a API**. Manutenção dali em diante é edição da constante — raça de
+animal não muda com frequência. (O arquivo é
+`src/modules/breed/breed.constants.ts` — ver a seção da 9.3 no fim deste
+documento.)
 
 Consultar a API em runtime foi recusado por três razões: colocaria a
 disponibilidade da própria API refém de um terceiro (se ele cai ou faz rate
@@ -137,3 +139,19 @@ um único campo.
 - Se uma espécie sem raça cadastrada hoje (peixe, réptil) ganhar uma lista
   curada: adicionar ao `SPECIES_WITH_BREED` é uma decisão explícita, nunca
   automática.
+
+## O que a implementação (9.3) firmou além da decisão
+
+A sub-fase 9.3 executou a parte de espécie/raça deste ADR (o `Pet` em si é a
+9.4) e fechou cinco pontos que o texto acima não especificava.
+
+| # | Ponto | Escolha e por quê |
+|---|---|---|
+| T1 | Quem entra em `SPECIES_WITH_BREED` | **Só `DOG` e `CAT`.** O corpo do ADR dizia "cão e gato têm listas curadas; peixe e réptil, não" e deixava coelho, ave e roedor em aberto. Ficaram de fora: em ave e roedor o que existe não é raça, é espécie ou variedade (calopsita, periquito; hamster sírio × anão russo), e enfiar isso em `Breed` misturaria dois conceitos — além de obrigar todo dono de ave a escolher um valor que não é raça. Coelho tem raças de fato, mas entrar exigiria curar mais uma lista sem demanda que a justifique. As outras cinco espécies exigem `breedId` **ausente** (422 na 9.4). |
+| T2 | Contrato do `GET /breeds` | `?species=` **opcional** (sem ele sai o catálogo inteiro — ~140 linhas fixas, que é o que o seed fake e a coleção Bruno consomem), **sem paginação**, envelope `{ data, meta: {} }` via `listEnvelope`. Mesma classe de `GET /roles` e `GET /features` na tabela do [`pagination.md`](pagination.md). Espécie fora do enum → **422** nomeando `species`. Rota **pública**, sem `authenticate` nem feature (9.1/N15); como não tem view por capability, não depende da autenticação opcional que `/products` vai exigir na 9.6. |
+| T3 | `Breed` é dado de referência | `clearDatabase()` **não** o trunca (como `Feature`/`Role`/`RoleFeature`), e `demo-reset` também não. Consequência prática: os testes de pet da 9.4 encontram as raças já semeadas pelo `globalSetup`, sem setup próprio. Provado por `tests/integration/clearDatabase.guard.test.ts`. |
+| T4 | Onde a constante mora | **`src/modules/breed/breed.constants.ts`**, e não `src/lib/seed/` como dizia a redação original deste ADR. O que decide é `SPECIES_WITH_BREED`: ela é lida em **runtime** pelo `pet.service` (9.4), e um service de domínio importando do diretório de seed seria arquivo no lugar errado. Também é o que o `CLAUDE.md` já manda ("constantes de domínio em `*.constants.ts`, lidas pelo seed") e o que os próprios `DEFAULT_ROLES`/`DEFAULT_FEATURES` — nomeados aqui como o padrão a seguir — fazem. `src/lib/seed/` guarda dado fake/demo e rotinas, não o catálogo canônico. |
+| T5 | Forma do seed | `createMany({ skipDuplicates: true })`, **não** `upsert` em laço. `upsert` existe para `Role`/`Feature` porque elas têm campo mutável (`description`, `appliesTo`, vínculos); `Breed` não tem **nenhum** — `species` e `name` *são* a chave, então não há o que atualizar numa linha existente. Uma ida ao banco em vez de ~140, e ainda assim exatamente "idempotente por `@@unique([species, name])`". E, deliberadamente, **sem o delete reconciliador** que `runSeed` aplica às features: a partir da 9.4 `Pet.breedId` referencia estas linhas, e apagar uma raça que ainda tem pet quebraria o seed no boot do container (que roda `migrate deploy → seed → start` a cada restart). Remover raça do catálogo é migration deliberada. |
+
+Números da entrega: 142 raças (96 de cão, 46 de gato), cada espécie com a sua
+linha `SRD`.

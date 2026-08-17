@@ -253,3 +253,37 @@ model AuditLog {
   @@index([targetId])
   @@map("audit_logs")
 }
+
+// ─── Pet shop ────────────────────────────────────────────────────────────────
+
+// Espécie do pet: enum fechado, deliberadamente mais largo que o mínimo e
+// **sem `OUTRO`** — `OUTRO` seria buraco permanente de qualidade de dado (pet
+// sem raça válida, fora de todo filtro), e a pressão seguinte seria um
+// `speciesOther` de texto livre. Espécie nova é `ALTER TYPE ... ADD VALUE`,
+// migration barata. Racional em docs/adr/pet-domain-modeling.md.
+enum PetSpecies {
+  DOG
+  CAT
+  RABBIT
+  BIRD
+  RODENT
+  REPTILE
+  FISH
+}
+
+// Catálogo de raças — dado de **referência**, no mesmo idioma de Feature/Role:
+// semeado por constante versionada (src/modules/breed/breed.constants.ts),
+// nunca consultado em API de terceiro em runtime, e por isso sem `deletedAt`
+// nem `updatedAt` (não há campo mutável — `species` e `name` SÃO a chave).
+// Nem toda espécie tem raça: quem exige é a constante SPECIES_WITH_BREED, não
+// a presença de linha aqui (derivar faria pet já cadastrado violar a regra
+// retroativamente).
+model Breed {
+  id        String     @id @default(uuid())
+  name      String
+  species   PetSpecies
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@unique([species, name])
+  @@map("breeds")
+}

@@ -309,6 +309,25 @@ completo, os contra-argumentos e os gotchas.
 
 - `clearDatabase` não era bug
 
+### [Domínio pet shop](context/pet-domain.md)
+
+*O recorte* — a única decisão do Ciclo 2 sem ADR próprio; o resto é ponteiro
+
+- Bloco A (pets) + Bloco B (catálogo), sem checkout
+
+*Pets e raças* — [`adr/pet-domain-modeling.md`](adr/pet-domain-modeling.md)
+
+- Espécie como enum fechado sem `OUTRO`
+- Raça como tabela semeada por constante, nunca API em runtime
+- `SPECIES_WITH_BREED` é constante explícita, não derivada do dado
+- Dono único · falecimento é estado, não exclusão · peso é instantâneo
+- O que a implementação (9.3) firmou — só cão e gato exigem raça, contrato do
+  `GET /breeds`, `Breed` como dado de referência, onde a constante mora, e por
+  que o seed usa `createMany` sem delete reconciliador
+
+*Catálogo, busca, upload* — ver os ADRs listados em
+[`context/pet-domain.md`](context/pet-domain.md)
+
 ### [Schema](context/schema.md)
 
 *O que cada fase mudou nas tabelas*

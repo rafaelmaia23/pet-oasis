@@ -3,6 +3,7 @@ import { createDocument, type ZodOpenApiObject } from "zod-openapi";
 import { securitySchemes } from "./components";
 import { auditLogPaths } from "./paths/audit-log";
 import { authPaths } from "./paths/auth";
+import { breedPaths } from "./paths/breed";
 import { featurePaths } from "./paths/feature";
 import { logPaths } from "./paths/log";
 import { mePaths } from "./paths/me";
@@ -130,6 +131,13 @@ const documentDefinition: ZodOpenApiObject = {
         "que se pode autorizar no sistema.",
     },
     {
+      name: "Breeds",
+      description:
+        "Catálogo de raças, público e somente leitura. Semeado por constante " +
+        "versionada e nunca consultado em API de terceiro; nem toda espécie " +
+        "tem raça cadastrada.",
+    },
+    {
       name: "Audit",
       description:
         "Trilha durável de ações sensíveis (append-only, só leitura). " +
@@ -154,6 +162,7 @@ const documentDefinition: ZodOpenApiObject = {
     ...permissionPaths,
     ...rolePaths,
     ...featurePaths,
+    ...breedPaths,
     ...auditLogPaths,
     ...logPaths,
   },

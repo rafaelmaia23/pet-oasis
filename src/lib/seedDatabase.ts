@@ -3,6 +3,7 @@ import { UserStatus } from "@/generated/prisma/enums";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { seedAdminUser } from "@/lib/seed/seedAdminUser";
+import { seedBreeds } from "@/lib/seed/seedBreeds";
 import { seedFakeUsers } from "@/lib/seed/seedFakeUsers";
 import { DEFAULT_FEATURES } from "@/modules/feature/feature.constants";
 import { DEFAULT_ROLES } from "@/modules/role/role.constants";
@@ -16,13 +17,15 @@ const DEMO_CPF = "00000000000";
 export type SeedResult = {
   featuresCount: number;
   rolesCount: number;
+  breedsCreated: number;
   demoUserSeeded: boolean;
   adminUserSeeded: boolean;
   fakeUsersCreated: number;
 };
 
 /**
- * Sincroniza features/roles (upsert idempotente) e, se `SEED_DEMO_USER`, o
+ * Sincroniza os catálogos de referência — features/roles (upsert idempotente) e
+ * raças (9.3, idempotente por `skipDuplicates`) — e, se `SEED_DEMO_USER`, o
  * usuário demo. Reaproveitado por `prisma/seed.ts` (CLI) e por
  * `src/scripts/demo-reset.ts` (7.14).
  *
@@ -34,6 +37,8 @@ export type SeedResult = {
  * demo-reset, que herdava a saída/disconnect do `main()` do seed por baixo.
  */
 export async function runSeed(): Promise<SeedResult> {
+  let breedsCreated = 0;
+
   await prisma.$transaction(async (tx: Tx) => {
     for (const feature of DEFAULT_FEATURES) {
       await tx.feature.upsert({
@@ -78,6 +83,11 @@ export async function runSeed(): Promise<SeedResult> {
     await tx.feature.deleteMany({
       where: { name: { notIn: currentFeatureNames } },
     });
+
+    // Catálogo de raças (9.3) — mesma classe de dado que features/roles, por
+    // isso no mesmo bloco e sem flag de env. Note que ele NÃO tem o
+    // `deleteMany` reconciliador acima; o porquê está no JSDoc de seedBreeds.
+    breedsCreated = await seedBreeds(tx);
   });
 
   let demoUserSeeded = false;
@@ -132,6 +142,7 @@ export async function runSeed(): Promise<SeedResult> {
   return {
     featuresCount: DEFAULT_FEATURES.length,
     rolesCount: DEFAULT_ROLES.length,
+    breedsCreated,
     demoUserSeeded,
     adminUserSeeded,
     fakeUsersCreated,

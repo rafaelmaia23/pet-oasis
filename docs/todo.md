@@ -196,17 +196,19 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ✅ Primeiro consumidor: `GET /users` (`createdAt`, `name`, `email`), com os query params novos no OpenAPI (de graça, via `fromEnvelope`) e na coleção Bruno.
 - ✅ Testes: 10 unitários em `tests/unit/lib/pagination.test.ts` (allowlist, direção natural, `order` explícito vencendo, `order` sem `sort`, tiebreaker seguindo o `order`, `.shape` preservado para o OpenAPI) + 6 de integração em `GET /users` (asc/desc, default `createdAt desc` intacto, 422 de `sort` e de `order`, caminhada paginada com 5 nomes idênticos sem repetir nem omitir). Suíte **750** + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão 9.3] Fase 9.3 — Espécies, raças e seed de `Breed`
-- ⬜ `enum PetSpecies { DOG CAT RABBIT BIRD RODENT REPTILE FISH }` no schema.
-- ⬜ Model `Breed` (`id`, `name`, `species`, `@@unique([species, name])`).
-- ⬜ Curadoria da constante de raças em `src/lib/seed/` — puxada uma vez de API pública, nomes em pt-BR, sem duplicata/ruído; nunca mais consultada em runtime.
-- ⬜ `SPECIES_WITH_BREED` — constante explícita ao lado do enum.
-- ⬜ Linha **"SRD" (sem raça definida)** semeada para toda espécie com raça.
-- ⬜ Seed idempotente por `@@unique([species, name])`, mesmo padrão de `DEFAULT_ROLES`/`DEFAULT_FEATURES`.
-- ⬜ `GET /breeds?species=DOG` — leitura pública (popula select do frontend).
-- ⬜ Testes: seed idempotente (rerun não duplica); filtro por espécie; SRD presente em toda espécie com raça.
+### ✅ [Sessão 9.3] Fase 9.3 — Espécies, raças e seed de `Breed`
+> Sessão de 2026-08-17. Cinco pontos que o ADR não especificava foram decididos com o usuário e registrados em `docs/adr/pet-domain-modeling.md` § "O que a implementação (9.3) firmou além da decisão"; o resumo vive em `docs/context/pet-domain.md`.
+- **`enum PetSpecies`** (7 valores, sem `OUTRO`) e **model `Breed`** (`@@unique([species, name])`, `@@map("breeds")`) no schema. Sem `deletedAt` nem `updatedAt`: é tabela de referência, como `Feature`/`Role` — `species` e `name` *são* a chave, não há campo mutável. A back-relation `Breed.pets` fica para a 9.4.
+- **`SPECIES_WITH_BREED` = só `DOG` e `CAT`.** Ave e roedor ficaram de fora porque o que existe neles não é raça, é espécie/variedade (calopsita, periquito; hamster sírio × anão russo) — incluí-los misturaria dois conceitos e obrigaria o dono a escolher um valor que não é raça. As outras cinco espécies exigem `breedId` **ausente** (422 na 9.4).
+- **142 raças curadas** (96 cão, 46 gato) em `src/modules/breed/breed.constants.ts` — e **não** em `src/lib/seed/` como o ADR dizia: `SPECIES_WITH_BREED` é lida em runtime pelo `pet.service` da 9.4, e service de domínio importando do diretório de seed é arquivo no lugar errado. É também o que o `CLAUDE.md` já manda e o que `DEFAULT_ROLES`/`DEFAULT_FEATURES` fazem. A frase do ADR foi **reescrita**, não anotada como errata.
+- **Linha `SRD`** por espécie com raça, provada por invariante unitária.
+- **Seed por `createMany({ skipDuplicates: true })`**, não `upsert` em laço (não há o que atualizar), dentro da mesma transação de features/roles e sem flag de env. **Sem delete reconciliador** de propósito: a partir da 9.4 `Pet.breedId` referencia estas linhas, e apagar uma raça com pet quebraria o `migrate deploy → seed → start` do boot do container.
+- **`GET /breeds`** público (sem `authenticate`, sem feature — 9.1/N15), `?species=` **opcional**, sem paginação (`meta {}`, mesma classe de `/roles` e `/features`), espécie fora do enum → 422. Pública "seca": sem view por capability, não depende da autenticação opcional da 9.6.
+- **`Breed` é dado de referência** também no teardown: `clearDatabase()` não o trunca e `demo-reset` também não, então os testes de pet da 9.4 acham as raças já semeadas sem setup próprio.
+- ✅ Testes: 6 unitários de invariante da constante (par duplicado, raça de espécie que não exige, espécie que exige sem nenhuma raça, SRD, `SPECIES_WITH_BREED` dentro do enum, nomes limpos), 4 de integração do seed (declarado chegou ao banco, rerun cria 0, SRD, nenhuma raça órfã), 6 da rota (200 **sem token**, 200 com token, filtro, espécie válida sem raça → lista vazia, 422, ordem alfabética), mais o guard do `clearDatabase` e o assert de `security: []` no OpenAPI. Suíte **766** + `typecheck` + `lint` verdes.
 
 ### ⬜ [Sessão 9.4] Fase 9.4 — Pets: CRUD, escopo próprio
+> **Herdado da 9.3** (fazer nesta sessão, não antes): (a) `Pet` precisa entrar em `clearDatabase()` (`tests/helpers/database.ts`) e em `demo-reset.ts` **antes de `Customer`** — a FK `Pet.customerId` faz a ordem importar, e `Breed` continua fora dos dois, por ser referência; (b) a back-relation `Breed.pets` nasce aqui, junto do model `Pet`; (c) `SPECIES_WITH_BREED` (só `DOG`/`CAT`) já está em `src/modules/breed/breed.constants.ts` — é ela que decide os três 422 de raça/espécie, e o `pet.service` a importa de lá.
 - ⬜ `enum PetSex { MALE FEMALE UNKNOWN }`; model `Pet` completo (`customerId`, `name`, `species`, `breedId?`, `sex`, `birthDate?`, `birthDateIsEstimated`, `weightGrams?`, `neutered`, `microchipId?`, `color?`, `notes?`, `photoPath?`, `deceasedAt?`, soft delete — ver §2.3 do `fase-9-contexto.md`).
 - ⬜ `POST /customers/:customerId/pets`, `GET /customers/:customerId/pets`, `GET /pets/:petId`, `PATCH /pets/:petId`, `DELETE /pets/:petId` (soft delete).
 - ⬜ Autorização escopo `own`/`:others` com as features da 9.1: `read:pet`/`manage:pet` (dono) e `read:pet:others`/`manage:pet:others` (staff). Marcar como falecido é `manage:pet`, não feature própria.
@@ -228,7 +230,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ⬜ Model `Tag` (`id`, `name` @unique, `slug` @unique) — `ProductTag` N:N **sem** mínimo.
 - ⬜ `GET /categories`, `/brands`, `/tags` **públicos** (sem token); `POST/PATCH/DELETE` exigem `manage:catalog-structure` (9.1).
 - ⬜ **Autenticação opcional** — consequência da vitrine pública decidida na 9.1 (ver `docs/context/api-contracts.md` § "Superfície pública"): middleware que identifica o ator se vier `Bearer` e segue anônimo se não vier, **nunca** 401. Esta é a primeira sessão que precisa dele; a 9.8 depende do mesmo middleware para escolher a view. Registrar em `docs/context/architecture.md` § "Roteamento" (ao lado de "`authenticate` saiu do `app.ts`") e na seção "Mounting" de `docs/reference/endpoints.md`.
-- ⬜ Rate limit por IP nas rotas públicas de leitura (sem identidade para balde por usuário).
+- ⬜ Rate limit por IP nas rotas públicas de leitura (sem identidade para balde por usuário). **Cobrir também `GET /breeds`**, que subiu na 9.3 sem limiter: hoje não existe limiter global (todos são por rota, em `auth.routes.ts`), então a rota está descoberta desde então. Risco baixo e assumido — é lista estática e pequena —, mas é aqui que se fecha.
 - 🔸 **Pendência** (ver §9.7 do `fase-9-contexto.md`): regras da árvore de categoria — profundidade máxima? categoria com filhos pode ser excluída? produto vincula só a folha ou também categoria intermediária? excluir categoria com produtos vinculados bloqueia (409) ou desvincula?
 - 🔸 **Pendência** (ver §9.8 do `fase-9-contexto.md`): slug gerado a partir do nome (o que acontece quando o nome muda?) ou informado pelo staff (controle total, risco de colisão/slug feio)? Decisão vale para `Category`/`Brand`/`Tag` aqui e é reaplicada em `Product` na 9.7.
 - ⬜ Testes: árvore de categoria (criação, ciclo em `parentId` recusado); N:N de categoria com mínimo de uma; tag sem mínimo.
@@ -281,7 +283,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ⬜ `src/lib/seed/fakePets.constants.ts` (já anunciado em comentário de `fakeUsers.constants.ts`), amarrado aos customers fake existentes por email fixo.
 - ⬜ Dataset fake de catálogo (marca, categoria, tag, produto, variante) coerente, para o demo não mostrar listas vazias.
 - ⬜ Roster fake ganha um funcionário de cada role nova da 9.1 (`stockist`, `catalog-manager`) — sem eles as duas roles existem só no seed e ninguém consegue exercitá-las em dev/demo.
-- ⬜ `demo-reset.ts` passa a truncar/restaurar as tabelas transacionais novas (pets, produtos, variantes — `Breed` segue como catálogo de referência tipo `Role`/`Feature`, preservado, não truncado — confirmar na implementação).
+- ⬜ `demo-reset.ts` passa a truncar/restaurar as tabelas transacionais novas (pets, produtos, variantes). **`Breed` já está confirmado na 9.3** como catálogo de referência tipo `Role`/`Feature`: preservado, não truncado, nem no `demo-reset` nem no `clearDatabase` dos testes.
 - ⬜ `demo-reset.ts` passa a limpar o diretório de upload (dependência da 9.10).
 - ⬜ Marcar como resolvida a entrada "Dummy data para a demo" do `docs/reference/backlog.md` ao fechar esta sessão.
 - ⬜ Testes: seed idempotente; demo-reset restaura pets/produtos fake e limpa uploads.
@@ -289,7 +291,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 ### ⬜ [Sessão 9.12] Fase 9.12 — Fechos
 - ⬜ `docs/reference/endpoints.md` — todas as rotas novas de pet/breed/catálogo, e a seção "Mounting" com a categoria nova de autenticação opcional (rotas públicas que enriquecem a resposta quando há token).
 - ⬜ `README.md`/`docs/context/authorization.md` — conferir que as roles novas (`stockist`, `catalog-manager`) aparecem onde o projeto descreve os cargos.
-- ⬜ Coleção Bruno — pastas novas por módulo (`pets`, `breeds`, `products`, `variants`, `categories`, `brands`, `tags`), environments `local`/`prod`.
+- ⬜ Coleção Bruno — pastas novas por módulo (`pets`, `products`, `variants`, `categories`, `brands`, `tags`), environments `local`/`prod`. `breeds/` já entrou na 9.3.
 - ⬜ `docs/context/pet-domain.md` promovido de "planejada" a "implementada"; parágrafo "Fase 9 (fechada)" em `docs/context/history.md`; decisões novas indexadas em `docs/context.md`.
 - ⬜ `docs/reference/logging-policy.md` — conferir taxonomia final (ações de catálogo que a 9.1/9.7 tiverem definido, além das quatro de pet já registradas no planejamento).
 - ⬜ `docs/reference/backlog.md` revisado — nenhum item resolvido pela fase sem marcação, nenhuma entrada nova esquecida.

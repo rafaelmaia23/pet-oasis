@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 
 // Regression guard: clearDatabase() must wipe transactional rows but preserve
-// the reference seed (features/roles and their links). If a future change adds
-// a reference table to clearDatabase, the factories would stop finding the
-// roles/features they connect by name and the whole suite would break — this
-// test fails loudly and locally instead.
+// the reference seed (features/roles and their links, plus the breed catalog
+// from 9.3). If a future change adds a reference table to clearDatabase, the
+// factories would stop finding the roles/features they connect by name and the
+// whole suite would break — this test fails loudly and locally instead.
 describe("clearDatabase() reference-data preservation", () => {
   beforeEach(async () => {
     // Create transactional rows (a user with a role + profile) so we can prove
@@ -22,15 +22,17 @@ describe("clearDatabase() reference-data preservation", () => {
     });
   });
 
-  it("removes transactional rows but keeps features, roles and role_features", async () => {
+  it("removes transactional rows but keeps features, roles, role_features and breeds", async () => {
     const before = {
       features: await prisma.feature.count(),
       roles: await prisma.role.count(),
       roleFeatures: await prisma.roleFeature.count(),
+      breeds: await prisma.breed.count(),
     };
     expect(before.features).toBeGreaterThan(0);
     expect(before.roles).toBeGreaterThan(0);
     expect(before.roleFeatures).toBeGreaterThan(0);
+    expect(before.breeds).toBeGreaterThan(0);
     // sanity: the transactional rows exist before clearing
     expect(await prisma.user.count()).toBeGreaterThan(0);
 
@@ -40,6 +42,7 @@ describe("clearDatabase() reference-data preservation", () => {
     expect(await prisma.feature.count()).toBe(before.features);
     expect(await prisma.role.count()).toBe(before.roles);
     expect(await prisma.roleFeature.count()).toBe(before.roleFeatures);
+    expect(await prisma.breed.count()).toBe(before.breeds);
 
     // transactional data is gone
     expect(await prisma.user.count()).toBe(0);

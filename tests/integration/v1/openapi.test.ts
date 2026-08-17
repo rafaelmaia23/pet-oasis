@@ -28,10 +28,14 @@ describe("GET /openapi.json", () => {
     expect(body.paths?.["/auth/login"]?.post).toBeDefined();
     expect(body.paths?.["/users"]?.get).toBeDefined();
     expect(body.paths?.["/roles"]?.get).toBeDefined();
+    expect(body.paths?.["/breeds"]?.get).toBeDefined();
 
     // login é público (security: []); /users herda o bearer global
     expect(body.paths["/auth/login"].post.security).toEqual([]);
     expect(body.paths["/users"].get.security).toBeUndefined();
+    // a vitrine do catálogo (9.1) é pública — sem isto o Scalar mostraria
+    // cadeado e o "try it" exigiria token numa rota que responde sem ele
+    expect(body.paths["/breeds"].get.security).toEqual([]);
   });
 
   it("should not leak sensitive fields anywhere in the document", async () => {

@@ -10,6 +10,7 @@ import {
 import { authenticate } from "@/middlewares/authenticate.middleware";
 import auditLogRouter from "@/modules/audit-log/audit-log.routes";
 import authRouter from "@/modules/auth/auth.routes";
+import breedRouter from "@/modules/breed/breed.routes";
 import featureRouter from "@/modules/feature/feature.routes";
 import logRouter from "@/modules/log/log.routes";
 import meRouter from "@/modules/me/me.routes";
@@ -24,6 +25,10 @@ const v1Router = Router();
 // PÚBLICAS — sem authenticate
 v1Router.use("/status", statusRouter);
 v1Router.use("/auth", authRouter);
+// Vitrine do catálogo (9.1): responde sem token porque o e-commerce vive de
+// quem chega pelo Google sem conta. `/breeds` não tem view por capability, então
+// não precisa da autenticação opcional que `/products` vai exigir na 9.6.
+v1Router.use("/breeds", breedRouter);
 
 // PROTEGIDAS — com authenticate
 v1Router.use("/me", authenticate, meRouter);

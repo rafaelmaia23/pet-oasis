@@ -52,7 +52,8 @@ export async function runDemoReset(options: {
   const start = Date.now();
 
   // Mesma ordem FK-safe de tests/helpers/database.ts (clearDatabase) — não
-  // toca Role/Feature/RoleFeature, que são referência recriada pelo seed.
+  // toca Role/Feature/RoleFeature nem Breed (9.3), que são catálogos de
+  // referência recriados/preservados pelo seed, não dado transacional do demo.
   const counts: DemoResetCounts = options.dryRun
     ? {
         auditLog: await prisma.auditLog.count(),
@@ -96,6 +97,9 @@ export async function runDemoReset(options: {
     ? {
         featuresCount: DEFAULT_FEATURES.length,
         rolesCount: DEFAULT_ROLES.length,
+        // 0, e não DEFAULT_BREEDS.length: o reset não trunca `breeds`, então o
+        // `runSeed()` real também não criaria nenhuma.
+        breedsCreated: 0,
         demoUserSeeded: false,
         adminUserSeeded: false,
         fakeUsersCreated: 0,

@@ -7,11 +7,13 @@
 
 As rotas de negócio ficam sob **`/api/v1`** (`src/routes/index.ts`). `authenticate` é aplicado **por grupo de rota**, não global:
 
-- **Públicas** (sem `authenticate`): `/status`, `/auth`.
+- **Públicas** (sem `authenticate`): `/status`, `/auth`, `/breeds`.
 - **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/features`, `/roles`, `/audit-logs`, `/logs`.
 - Exceção: 3 rotas dentro de `/auth` (público) aplicam `authenticate` **inline** na própria definição (`logout`, `GET /sessions`, `DELETE /sessions/:id`).
 
 As rotas de **documentação** (`/openapi.json`, `/reference`) ficam no router de topo, **fora** de `/api/v1` e de `authenticate` — são públicas.
+
+**Vitrine do catálogo (Fase 9.1 / N15):** a leitura de catálogo responde **sem token** — o e-commerce vive de quem chega pelo Google sem conta. `/breeds` (9.3) é a primeira dessas rotas e é pública "seca": não tem view por capability, então basta não montar `authenticate`. As rotas de produto (9.6/9.8) vão precisar de um middleware de **autenticação opcional** (identifica o ator se vier `Bearer`, segue anônimo se não vier, **nunca** 401), porque ali a view muda conforme as features do viewer.
 
 Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado; `feature` = exige a feature via `canAccess(...)`.
 
@@ -146,6 +148,12 @@ nele, então override só volta por `PUT` explícito, que revive a linha soft-de
 |---|---|---|
 | GET `/api/v1/roles` | `read:role` | Lista todas as roles |
 | GET `/api/v1/roles/:id` | `read:role` | Busca uma role por id |
+
+## Breed — `src/modules/breed/breed.routes.ts`
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/breeds` | público | Catálogo de raças. Filtro opcional `?species=DOG\|CAT\|RABBIT\|BIRD\|RODENT\|REPTILE\|FISH` (valor fora do enum → 422); sem paginação (`meta {}`). Só cão e gato têm raça cadastrada — espécie válida sem raça devolve lista vazia, não erro |
 
 ## Audit log — `src/modules/audit-log/audit-log.routes.ts`
 

@@ -7,9 +7,13 @@ import {
   SCALAR_BUNDLE_PATH,
   scalarBundleFile,
 } from "@/docs/reference";
-import { authenticate } from "@/middlewares/authenticate.middleware";
+import {
+  authenticate,
+  optionalAuthenticate,
+} from "@/middlewares/authenticate.middleware";
 import auditLogRouter from "@/modules/audit-log/audit-log.routes";
 import authRouter from "@/modules/auth/auth.routes";
+import brandRouter from "@/modules/brand/brand.routes";
 import breedRouter from "@/modules/breed/breed.routes";
 import featureRouter from "@/modules/feature/feature.routes";
 import logRouter from "@/modules/log/log.routes";
@@ -28,9 +32,16 @@ const v1Router = Router();
 v1Router.use("/status", statusRouter);
 v1Router.use("/auth", authRouter);
 // Vitrine do catálogo (9.1): responde sem token porque o e-commerce vive de
-// quem chega pelo Google sem conta. `/breeds` não tem view por capability, então
-// não precisa da autenticação opcional que `/products` vai exigir na 9.6.
+// quem chega pelo Google sem conta. `/breeds` fica aqui, seco: é só leitura, não
+// tem escrita nem view por capability, então não precisa nem identificar o ator.
 v1Router.use("/breeds", breedRouter);
+
+// PÚBLICAS COM AUTENTICAÇÃO OPCIONAL (9.6) — leem sem token, escrevem com
+// feature. O middleware identifica o ator quando o `Bearer` vem e segue anônimo
+// quando não vem (ou quando o token é ruim), sem nunca responder 401; quem
+// exige identidade é o `canAccess` das rotas de escrita, dentro de cada router.
+// A 9.8 depende do mesmo middleware para escolher a view de `/products`.
+v1Router.use("/brands", optionalAuthenticate, brandRouter);
 
 // PROTEGIDAS — com authenticate
 v1Router.use("/me", authenticate, meRouter);

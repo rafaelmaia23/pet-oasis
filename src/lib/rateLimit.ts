@@ -29,7 +29,11 @@ export type RateLimitRule =
   // só (mesmo idioma do `emailIpLimiter`, compartilhado por duas rules).
   | "reset-password"
   | "confirm-email-change"
-  | "confirm-account-reactivation";
+  | "confirm-account-reactivation"
+  // 9.6: leitura pública do catálogo. Uma `rule` só para as quatro rotas (e
+  // para `/products` na 9.8) — o orçamento é da vitrine inteira, não de cada
+  // lista; separar faria um scraper ganhar N baldes pelo preço de um.
+  | "catalog-read";
 
 type Limiter = Pick<RateLimiterRedis, "consume">;
 
@@ -72,6 +76,17 @@ export const tokenIpLimiter = new RateLimiterRedis({
   keyPrefix: "rl:token:ip",
   points: env.RATE_LIMIT_TOKEN_MAX,
   duration: env.RATE_LIMIT_TOKEN_WINDOW_MS / 1000,
+});
+
+// Leitura pública do catálogo (9.6). Balde próprio e por IP porque aqui não há
+// identidade nenhuma: é a primeira superfície do projeto que responde em volume
+// a quem não tem conta. Cobre também `GET /breeds`, que subiu na 9.3 sem
+// limiter — risco baixo e assumido na época, fechado aqui.
+export const catalogIpLimiter = new RateLimiterRedis({
+  storeClient: redis,
+  keyPrefix: "rl:catalog:ip",
+  points: env.RATE_LIMIT_CATALOG_MAX,
+  duration: env.RATE_LIMIT_CATALOG_WINDOW_MS / 1000,
 });
 
 async function enforce(

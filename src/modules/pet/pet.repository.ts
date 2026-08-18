@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import type { PetSex, PetSpecies } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
@@ -35,6 +36,56 @@ export async function findPetsByCustomerId(customerId: string) {
     // `id` mantém a ordem total mesmo com dois pets cadastrados no mesmo ms.
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
+}
+
+export type PetListFilters = {
+  species?: PetSpecies | undefined;
+  sex?: PetSex | undefined;
+  customerId?: string | undefined;
+  breedId?: string | undefined;
+  microchipId?: string | undefined;
+  neutered?: boolean | undefined;
+  deceased?: boolean | undefined;
+};
+
+/**
+ * Listagem geral (staff). Pet de conta ou perfil excluído não precisa de
+ * cláusula própria: a cascata da 9.4 já o soft-deletou, então `deletedAt: null`
+ * basta. `deceased` omitido não filtra nada — traz vivos e falecidos.
+ */
+export async function findAllPets(
+  filters: PetListFilters,
+  pagination: {
+    skip: number;
+    take: number;
+    orderBy: Prisma.PetOrderByWithRelationInput[];
+  },
+) {
+  const where: Prisma.PetWhereInput = {
+    deletedAt: null,
+    ...(filters.species ? { species: filters.species } : {}),
+    ...(filters.sex ? { sex: filters.sex } : {}),
+    ...(filters.customerId ? { customerId: filters.customerId } : {}),
+    ...(filters.breedId ? { breedId: filters.breedId } : {}),
+    ...(filters.microchipId ? { microchipId: filters.microchipId } : {}),
+    ...(filters.neutered === undefined ? {} : { neutered: filters.neutered }),
+    ...(filters.deceased === undefined
+      ? {}
+      : { deceasedAt: filters.deceased ? { not: null } : null }),
+  };
+
+  const [pets, total] = await prisma.$transaction([
+    prisma.pet.findMany({
+      where,
+      include: petInclude,
+      orderBy: pagination.orderBy,
+      skip: pagination.skip,
+      take: pagination.take,
+    }),
+    prisma.pet.count({ where }),
+  ]);
+
+  return { pets, total };
 }
 
 export async function createPet(

@@ -1,10 +1,11 @@
 import type { Request, Response } from "express";
-import { listEnvelope } from "@/lib/pagination";
+import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { petPresenter } from "./pet.presenter";
 import {
   createPetSchema,
   listCustomerPetsSchema,
+  listPetsSchema,
   petParamsSchema,
   updatePetSchema,
 } from "./pet.schema";
@@ -37,6 +38,18 @@ export const listCustomerPets = async (req: Request, res: Response) => {
   // `GET /users/:userId/roles`). O envelope existe mesmo assim para que
   // paginar amanhã seja aditivo, não breaking.
   res.status(200).json(listEnvelope(petPresenter.presentMany(pets, "default")));
+};
+
+export const listPets = async (req: Request, res: Response) => {
+  const { query } = listPetsSchema.parse({ query: req.query });
+
+  const { pets, total } = await petService.getAllPets(query);
+
+  return res
+    .status(200)
+    .json(
+      offsetEnvelope(petPresenter.presentMany(pets, "default"), query, total),
+    );
 };
 
 export const getPetById = async (req: Request, res: Response) => {

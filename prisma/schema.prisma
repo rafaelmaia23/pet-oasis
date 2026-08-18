@@ -65,6 +65,7 @@ model Customer {
   deletedAt DateTime? @map("deleted_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pets Pet[]
 
   @@map("customers")
 }
@@ -284,6 +285,64 @@ model Breed {
   species   PetSpecies
   createdAt DateTime   @default(now()) @map("created_at")
 
+  pets Pet[]
+
   @@unique([species, name])
   @@map("breeds")
+}
+
+enum PetSex {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+// Pet — primeiro recurso de domínio do projeto (9.4). Dono único: `customerId`
+// é obrigatório e não há tabela de junção; família compartilhando pet e
+// transferência entre clientes ficaram no backlog, juntas, porque uma reabre a
+// outra.
+//
+// Três colunas de tempo com significados distintos, e é de propósito:
+// `deceasedAt` (o pet morreu) NÃO é `deletedAt` (o registro não deve mais
+// aparecer). Pet falecido continua na lista do dono e mantém legível todo o
+// histórico clínico futuro; tratar falecimento como exclusão destruiria
+// informação clinicamente relevante. Ver docs/adr/pet-domain-modeling.md.
+//
+// `breedId` é nullable no banco porque a obrigatoriedade é **semântica**: quem
+// exige raça é SPECIES_WITH_BREED, lida em runtime pelo pet.service (as três
+// 422 de espécie/raça). `weightGrams` é inteiro pelo mesmo racional do preço em
+// centavos, e é um **instantâneo** — quando a veterinária chegar, o peso vira
+// medição datada no prontuário.
+model Pet {
+  id                   String     @id @default(uuid())
+  customerId           String     @map("customer_id")
+  name                 String
+  species              PetSpecies
+  breedId              String?    @map("breed_id")
+  sex                  PetSex     @default(UNKNOWN)
+  birthDate            DateTime?  @map("birth_date")
+  birthDateIsEstimated Boolean    @default(false) @map("birth_date_is_estimated")
+  weightGrams          Int?       @map("weight_grams")
+  neutered             Boolean    @default(false)
+  // Unique **global**, valendo também para a linha soft-deletada — mesmo
+  // idioma de User.email/User.cpf/Customer.phone (U1, 9.4). Num identificador
+  // do mundo real isso é o comportamento certo: o chip preso por um pet
+  // excluído é o sinal "este pet já foi cadastrado aqui". Duplicata vira 409
+  // pelo handler de P2002. NULL não colide (Postgres permite N nulos).
+  microchipId          String?    @unique @map("microchip_id")
+  color                String?
+  notes                String?
+  // Preenchida só a partir da 9.10 (upload); nasce aqui para não exigir uma
+  // migration de uma coluna só depois.
+  photoPath            String?    @map("photo_path")
+  deceasedAt           DateTime?  @map("deceased_at")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+  deletedAt            DateTime?  @map("deleted_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  breed    Breed?   @relation(fields: [breedId], references: [id])
+
+  @@index([customerId])
+  @@map("pets")
 }

@@ -100,6 +100,8 @@ completo, os contra-argumentos e os gotchas.
 - O nível `User` → perfil deixou de correlacionar (K20)
 - Os três níveis nasceram como primitivas de repositório (K7)
 - `grantRolesToUser` nasceu como primitiva
+- Pet é o primeiro filho de **domínio** do grafo (9.4) — desce como todo mundo, sobe como
+  `UserRole`, e o critério é "restaurar isto concede autoridade?"
 
 *Perfil — os fluxos de produto*
 
@@ -169,7 +171,7 @@ completo, os contra-argumentos e os gotchas.
 - Por capability, não por role
 - User — progressão por capability
 - Demais recursos
-- `GET /me`
+- `GET /me` — e o id de perfil que entrou nele na 9.4
 
 *Superfície pública*
 
@@ -324,6 +326,9 @@ completo, os contra-argumentos e os gotchas.
 - O que a implementação (9.3) firmou — só cão e gato exigem raça, contrato do
   `GET /breeds`, `Breed` como dado de referência, onde a constante mora, e por
   que o seed usa `createMany` sem delete reconciliador
+- O que a implementação (9.4) firmou — `microchipId` unique global, pets na
+  cascata e na restauração, falecimento em rota própria, `species` editável, e o
+  alvo inexistente falhando fechado em 403
 
 *Catálogo, busca, upload* — ver os ADRs listados em
 [`context/pet-domain.md`](context/pet-domain.md)

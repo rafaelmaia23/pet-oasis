@@ -8,7 +8,7 @@
 As rotas de negócio ficam sob **`/api/v1`** (`src/routes/index.ts`). `authenticate` é aplicado **por grupo de rota**, não global:
 
 - **Públicas** (sem `authenticate`): `/status`, `/auth`, `/breeds`.
-- **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/features`, `/roles`, `/audit-logs`, `/logs`.
+- **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/customers/:customerId` (pets), `/pets`, `/features`, `/roles`, `/audit-logs`, `/logs`.
 - Exceção: 3 rotas dentro de `/auth` (público) aplicam `authenticate` **inline** na própria definição (`logout`, `GET /sessions`, `DELETE /sessions/:id`).
 
 As rotas de **documentação** (`/openapi.json`, `/reference`) ficam no router de topo, **fora** de `/api/v1` e de `authenticate` — são públicas.
@@ -61,7 +61,7 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
-| GET `/api/v1/me` | `read:user` | Perfil do usuário autenticado + features efetivas |
+| GET `/api/v1/me` | `read:user` | Perfil do usuário autenticado + features efetivas. `customer.id`/`employee.id` são os ids de **perfil** — é `customer.id` que endereça `/customers/:customerId/pets` (9.4) |
 
 ## User — `src/modules/user/user.routes.ts`
 
@@ -154,6 +154,24 @@ nele, então override só volta por `PUT` explícito, que revive a linha soft-de
 | Método + Path | Auth | Descrição |
 |---|---|---|
 | GET `/api/v1/breeds` | público | Catálogo de raças. Filtro opcional `?species=DOG\|CAT\|RABBIT\|BIRD\|RODENT\|REPTILE\|FISH` (valor fora do enum → 422); sem paginação (`meta {}`). Só cão e gato têm raça cadastrada — espécie válida sem raça devolve lista vazia, não erro |
+
+## Pet — `src/modules/pet/pet.routes.ts` e `pet.customer.routes.ts`
+
+**Coleção aninhada, recurso plano (Fase 9.4 / N4):** o `POST`/`GET` moram sob o cliente porque ali o pai é parte da identificação — é *onde* o pet nasce. O item é plano porque `petId` é UUID global: repetir o `customerId` no caminho seria redundante, e redundante pode **discordar** do dono real, obrigando a inventar uma regra para um caso que só a rota criou.
+
+**`:customerId` é o id do perfil** (`Customer.id`), não o do usuário — `GET /me` o devolve em `customer.id`. Não há `/me/pets` nesta fase (backlog).
+
+**Escopo em duas etapas:** `canAccess` admite dono e staff indistintamente (forma frouxa de `can`); quem separa é o service. Como o dono só é conhecido depois do banco, o alvo **inexistente falha fechado** — sem `:others`, responde **403**, não 404, senão a rota vira oráculo de existência de `customerId`/`petId`.
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| POST `/api/v1/customers/:customerId/pets` | `manage:pet` \| `manage:pet:others` | Cadastra um pet para o cliente. Espécie em `SPECIES_WITH_BREED` (cão, gato) **exige** `breedId`; as demais o **proíbem**; raça de outra espécie → 422 — os três nomeiam `breedId`. `microchipId` duplicado → 409 (unique global) |
+| GET `/api/v1/customers/:customerId/pets` | `read:pet` \| `read:pet:others` | Pets do cliente, sem paginação (`meta {}`), `createdAt desc` com desempate por `id`. Pet **falecido continua na lista**; excluído, não |
+| GET `/api/v1/pets/:petId` | `read:pet` \| `read:pet:others` | Detalhe do pet, com a raça achatada (`{ id, name }` ou `null`) |
+| PATCH `/api/v1/pets/:petId` | `manage:pet` \| `manage:pet:others` | Atualiza a ficha. `customerId` (transferência é backlog), `deceasedAt` (rota própria) e `photoPath` (upload, 9.10) → 422. `species` **é** editável e revalida a raça sobre o estado resultante |
+| DELETE `/api/v1/pets/:petId` | `manage:pet` \| `manage:pet:others` | Soft delete (204) |
+| POST `/api/v1/pets/:petId/deceased` | `manage:pet` \| `manage:pet:others` | Registra o falecimento (204). Idempotente — remarcar não reescreve a data. `deceasedAt` ≠ `deletedAt`: o pet **permanece** na lista do dono |
+| DELETE `/api/v1/pets/:petId/deceased` | `manage:pet` \| `manage:pet:others` | Desfaz o registro feito no pet errado (204) |
 
 ## Audit log — `src/modules/audit-log/audit-log.routes.ts`
 

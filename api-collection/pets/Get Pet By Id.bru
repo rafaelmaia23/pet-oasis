@@ -1,0 +1,18 @@
+meta {
+  name: Get Pet By Id
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/pets/{{petId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Recurso plano: petId é UUID global, então repetir o customerId no caminho
+  seria redundante — e redundante pode discordar do dono real.
+
+  Exige read:pet (dono) ou read:pet:others (staff).
+}

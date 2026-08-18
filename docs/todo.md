@@ -207,21 +207,24 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - **`Breed` é dado de referência** também no teardown: `clearDatabase()` não o trunca e `demo-reset` também não, então os testes de pet da 9.4 acham as raças já semeadas sem setup próprio.
 - ✅ Testes: 6 unitários de invariante da constante (par duplicado, raça de espécie que não exige, espécie que exige sem nenhuma raça, SRD, `SPECIES_WITH_BREED` dentro do enum, nomes limpos), 4 de integração do seed (declarado chegou ao banco, rerun cria 0, SRD, nenhuma raça órfã), 6 da rota (200 **sem token**, 200 com token, filtro, espécie válida sem raça → lista vazia, 422, ordem alfabética), mais o guard do `clearDatabase` e o assert de `security: []` no OpenAPI. Suíte **766** + `typecheck` + `lint` verdes.
 
-### ⬜ [Sessão 9.4] Fase 9.4 — Pets: CRUD, escopo próprio
-> **Herdado da 9.3** (fazer nesta sessão, não antes): (a) `Pet` precisa entrar em `clearDatabase()` (`tests/helpers/database.ts`) e em `demo-reset.ts` **antes de `Customer`** — a FK `Pet.customerId` faz a ordem importar, e `Breed` continua fora dos dois, por ser referência; (b) a back-relation `Breed.pets` nasce aqui, junto do model `Pet`; (c) `SPECIES_WITH_BREED` (só `DOG`/`CAT`) já está em `src/modules/breed/breed.constants.ts` — é ela que decide os três 422 de raça/espécie, e o `pet.service` a importa de lá.
-- ⬜ `enum PetSex { MALE FEMALE UNKNOWN }`; model `Pet` completo (`customerId`, `name`, `species`, `breedId?`, `sex`, `birthDate?`, `birthDateIsEstimated`, `weightGrams?`, `neutered`, `microchipId?`, `color?`, `notes?`, `photoPath?`, `deceasedAt?`, soft delete — ver §2.3 do `fase-9-contexto.md`).
-- ⬜ `POST /customers/:customerId/pets`, `GET /customers/:customerId/pets`, `GET /pets/:petId`, `PATCH /pets/:petId`, `DELETE /pets/:petId` (soft delete).
-- ⬜ Autorização escopo `own`/`:others` com as features da 9.1: `read:pet`/`manage:pet` (dono) e `read:pet:others`/`manage:pet:others` (staff). Marcar como falecido é `manage:pet`, não feature própria.
-- ⬜ Validação semântica no service (422): espécie em `SPECIES_WITH_BREED` exige `breedId`; espécie fora dela exige `breedId` ausente; raça informada precisa pertencer à espécie informada.
-- 🔸 **Pendência** (ver §9.3 do `fase-9-contexto.md`): unicidade de `microchipId` — unique global (aceita prender o valor de pet excluído) vs. unique parcial (`WHERE deleted_at IS NULL`, migration manual) vs. sem unique + validação no service. Agravante: duplicata pode ser erro de digitação ou pet transferido entre clientes (backlog).
-- 🔸 **Pendência** (ver §9.9 do `fase-9-contexto.md`): pets de um cliente soft-deletado voltam automaticamente na reativação de perfil da Fase 8, ou a reativação escolhe?
-- ⬜ Falecimento como estado distinto de exclusão (`deceasedAt`).
-- ⬜ Testes: CRUD completo; 422 dos três casos de raça/espécie; escopo `own` recusa acesso a pet de outro customer; escopo `:others` (atendente) cadastra/edita pet no nome de um cliente; falecimento não remove o pet da listagem do dono.
+### ✅ [Sessão 9.4] Fase 9.4 — Pets: CRUD, escopo próprio
+> Sessão de 2026-08-17. Núcleo do Bloco A e primeiro recurso de **domínio** do projeto. As duas pendências de negócio (§9.3 e §9.9 do `fase-9-contexto.md`) foram decididas com o usuário e, com mais três pontos de contrato, registradas em `docs/adr/pet-domain-modeling.md` § "O que a implementação (9.4) firmou além da decisão" (U1–U5).
+- **`enum PetSex`** e **model `Pet`** conforme o §2.3 do planejamento, com uma alteração: **`microchipId` é `@unique` global** (U1) — precedente de `User.email`/`cpf` e `Customer.phone`, valendo também para a linha soft-deletada. Num identificador do mundo real prender o número é o comportamento certo (é o sinal "este pet já foi cadastrado aqui"), e a duplicata sai como **409** pelo handler de P2002, sem código novo. Índice parcial e validação no service foram recusados.
+- **Rotas:** coleção aninhada (`POST`/`GET /customers/:customerId/pets`) e recurso plano (`GET`/`PATCH`/`DELETE /pets/:petId`), mais **`POST`/`DELETE /pets/:petId/deceased`** (U3) — falecimento tem rota própria no idioma do ban, é idempotente, e `deceasedAt` fica fora do `PATCH`. `:customerId` é o id do **perfil**.
+- **Autorização em duas etapas:** o `canAccess` da rota admite dono e staff (forma frouxa de `can`), o service separa. Como o dono não está na URL, o alvo inexistente **falha fechado** — 403 e não 404 para quem não tem `:others` (U5), senão a rota vira oráculo de existência.
+- **`PATCH` aceita tudo menos `customerId`, `deceasedAt` e `photoPath`** (U4). `species` **é** editável, e a validação de raça corre sobre o **estado resultante**: trocar a espécie sem ajustar a raça no mesmo corpo é 422.
+- **`Pet` entrou no grafo de ciclo de vida** (U2): cascateia na deleção (perfil de cliente e conta inteira, com o `new Date()` único da transação) e **volta por correlação de data**, como `UserRole` — a assimetria do D6' é sobre vazamento de privilégio, e devolver a ficha do bichano não concede autoridade. Pet excluído à mão antes não volta. Contagens novas no audit: `cascadedPets`/`restoredPets`. Racional em `docs/context/lifecycle.md` § "Pet é o primeiro filho de domínio do grafo (9.4)".
+- **Dois achados anteriores à sessão, corrigidos junto:** (a) **`GET /me` não devolvia `customer.id`**, embora a recusa de `/me/pets` no backlog se apoiasse explicitamente nisso — a coleção aninhada era inalcançável pelo próprio dono; o id de perfil entrou nas views de `me` e na `owner` de `user`. (b) A taxonomia de alvo do audit existia **em duplicata** (union `AuditTargetType` + `z.enum` à mão no filtro de `GET /audit-logs`); esquecer a segunda não quebrava o build, só recusava em silêncio um `?targetType=` legítimo — as duas passaram a derivar de `AUDIT_TARGET_TYPES`.
+- ✅ `src/utils/definedOnly.ts` nasceu para reconciliar o opcional do Zod (`campo?: T | undefined`) com o do Prisma (`campo?: T`) sob `exactOptionalPropertyTypes` — o idioma de spread condicional não escala para os onze campos opcionais do pet.
+- ✅ Testes: 40 de integração em `pet.test.ts` (CRUD, os três 422 de raça/espécie, `own` × `:others`, 403-antes-de-404 nas duas pontas, 409 de microchip, falecimento idempotente e fora da exclusão, nome do pet ausente do audit), 6 de cascata/restauração (`user.profile.test.ts`, `user.test.ts`, `account-reactivation.test.ts`), 4 de `definedOnly`, 5 do filtro de `targetType`, mais `pet` no guard do `clearDatabase`. Suíte **822** + `typecheck` + `lint` verdes.
+- 🔸 Fica para a **9.10**: `Pet.photoPath` nasceu sem endpoint que a preencha (anotado na seção da 9.10).
 
 ### ⬜ [Sessão 9.5] Fase 9.5 — Pets: escopo staff, listagem geral, filtros
+> **Herdado da 9.4** (fazer nesta sessão): (a) o módulo `src/modules/pet/` já existe inteiro — `assertScope`/`resolveCustomer`/`resolvePet` no service e `petViews.default` no presenter são para reusar, não reescrever; (b) `GET /customers/:customerId/pets` **não pagina** de propósito (coleção limitada pelo dono, `meta {}`, classe de `GET /users/:userId/roles`) — é `GET /pets` que estreia o offset em pet, e a assimetria entre as duas precisa ficar visível no `endpoints.md`; (c) a rota nova é `petRouter.get("/")` em `pet.routes.ts` (montado em `/pets`), que hoje só tem `/:petId` e as duas de falecimento.
 - ⬜ `GET /pets` — listagem geral para staff, paginada (offset, helper da 9.2) e filtrável.
-- ⬜ Ordenação via `?sort=&order=` (helper da 9.2).
-- ⬜ `GET /pets` exige `read:pet:others` (é listagem de pet de terceiro por definição).
+- ⬜ Ordenação via `?sort=&order=` (helper da 9.2), com `defineSortConfig` próprio do recurso (candidatos: `createdAt`, `name`, `species`).
+- ⬜ `GET /pets` exige `read:pet:others` (é listagem de pet de terceiro por definição) — declarada direto na rota, como `GET /users`, e não na forma base.
+- ⬜ Decidir com o usuário se a listagem geral inclui pet **falecido** por padrão, ou se `deceasedAt` vira filtro (`?deceased=true|false`). A listagem do dono inclui, mas ali o critério é afetivo; numa lista operacional de balcão pode ser ruído.
 - ⬜ Testes: staff vê todos os pets; customer sem `read:pet:others` não acessa `GET /pets`; filtros combinados; ordenação com tiebreaker.
 
 ### ⬜ [Sessão 9.6] Fase 9.6 — Taxonomia do catálogo: `Brand`, `Category` (árvore), `Tag`
@@ -275,25 +278,25 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ⬜ Órfãos: exclusão de produto remove arquivo no mesmo fluxo; script de varredura (`src/scripts/` + systemd timer em `infra/cron/`, se necessário) para os que escaparem.
 - ⬜ Ordem de escrita: disco antes da linha; linha falha → apaga o arquivo (disco não participa da transação do Postgres).
 - ⬜ Role `demo` sem acesso de upload (teste explícito); `demo-reset` passa a limpar o diretório de upload sob `DEMO_MODE=true`; rate limit próprio para o endpoint + teto de tamanho agressivo.
-- ⬜ Foto de pet (`Pet.photoPath`, já no schema da 9.4) reaproveita o mesmo adaptador, se couber nesta sessão.
+- ⬜ Foto de pet: **`Pet.photoPath` já existe no schema desde a 9.4 e não tem endpoint que a preencha** — a coluna nasceu órfã de propósito (evitar uma migration de um campo só), e é aqui que ela ganha dono. O `PATCH /pets/:petId` recusa `photoPath` no corpo (422), então o upload é o **único** caminho; se esta sessão não cobrir pet, a coluna segue órfã e isso precisa ser dito em voz alta no fecho da fase.
 - ⬜ Env vars novas em `.env.example` (diretório de upload, teto de tamanho, base URL pública) — nomes definidos aqui, na implementação.
 - ⬜ Testes: magic bytes recusa arquivo disfarçado; nome do usuário nunca chega ao disco; teto de tamanho/quantidade; órfão removido pela varredura; demo não sobe arquivo.
 
 ### ⬜ [Sessão 9.11] Fase 9.11 — Seed fake do domínio + `demo-reset`
-- ⬜ `src/lib/seed/fakePets.constants.ts` (já anunciado em comentário de `fakeUsers.constants.ts`), amarrado aos customers fake existentes por email fixo.
+- ⬜ `src/lib/seed/fakePets.constants.ts` (já anunciado em comentário de `fakeUsers.constants.ts`), amarrado aos customers fake existentes por email fixo. **Herdado da 9.4:** o molde de escrita é `tests/factories/pet.factory.ts` (parse pelo schema do módulo → `petRepository.createPet` sem audit); a raça se resolve por **nome** (`SRD_BREED_NAME`) sobre o catálogo já semeado, nunca por id fixo; e `microchipId` é unique global, então o roster precisa de números distintos e idempotência por chave estável.
 - ⬜ Dataset fake de catálogo (marca, categoria, tag, produto, variante) coerente, para o demo não mostrar listas vazias.
 - ⬜ Roster fake ganha um funcionário de cada role nova da 9.1 (`stockist`, `catalog-manager`) — sem eles as duas roles existem só no seed e ninguém consegue exercitá-las em dev/demo.
-- ⬜ `demo-reset.ts` passa a truncar/restaurar as tabelas transacionais novas (pets, produtos, variantes). **`Breed` já está confirmado na 9.3** como catálogo de referência tipo `Role`/`Feature`: preservado, não truncado, nem no `demo-reset` nem no `clearDatabase` dos testes.
+- ⬜ `demo-reset.ts` passa a truncar/restaurar as tabelas transacionais novas (produtos, variantes). **`pet` já entrou na 9.4** (nos três pontos do script, antes de `customer` — a FK é RESTRICT), e **`Breed` já está confirmado na 9.3** como catálogo de referência tipo `Role`/`Feature`: preservado, não truncado, nem no `demo-reset` nem no `clearDatabase` dos testes.
 - ⬜ `demo-reset.ts` passa a limpar o diretório de upload (dependência da 9.10).
 - ⬜ Marcar como resolvida a entrada "Dummy data para a demo" do `docs/reference/backlog.md` ao fechar esta sessão.
 - ⬜ Testes: seed idempotente; demo-reset restaura pets/produtos fake e limpa uploads.
 
 ### ⬜ [Sessão 9.12] Fase 9.12 — Fechos
-- ⬜ `docs/reference/endpoints.md` — todas as rotas novas de pet/breed/catálogo, e a seção "Mounting" com a categoria nova de autenticação opcional (rotas públicas que enriquecem a resposta quando há token).
+- ⬜ `docs/reference/endpoints.md` — as rotas novas de catálogo, e a seção "Mounting" com a categoria nova de autenticação opcional (rotas públicas que enriquecem a resposta quando há token). **`breeds` (9.3) e `pets` (9.4) já entraram**; conferir, não reescrever.
 - ⬜ `README.md`/`docs/context/authorization.md` — conferir que as roles novas (`stockist`, `catalog-manager`) aparecem onde o projeto descreve os cargos.
-- ⬜ Coleção Bruno — pastas novas por módulo (`pets`, `products`, `variants`, `categories`, `brands`, `tags`), environments `local`/`prod`. `breeds/` já entrou na 9.3.
+- ⬜ Coleção Bruno — pastas novas por módulo (`products`, `variants`, `categories`, `brands`, `tags`), environments `local`/`prod`. `breeds/` já entrou na 9.3 e `pets/` na 9.4 (com `Get Me` gravando `customerId`, que é o que encadeia a coleção aninhada).
 - ⬜ `docs/context/pet-domain.md` promovido de "planejada" a "implementada"; parágrafo "Fase 9 (fechada)" em `docs/context/history.md`; decisões novas indexadas em `docs/context.md`.
-- ⬜ `docs/reference/logging-policy.md` — conferir taxonomia final (ações de catálogo que a 9.1/9.7 tiverem definido, além das quatro de pet já registradas no planejamento).
+- ⬜ `docs/reference/logging-policy.md` — conferir a taxonomia final (ações de catálogo que a 9.7 tiver definido). As quatro de pet e o `targetType` `Pet` já foram ligados na 9.4, junto de `cascadedPets`/`restoredPets` nas ações de ciclo de vida.
 - ⬜ `docs/reference/backlog.md` revisado — nenhum item resolvido pela fase sem marcação, nenhuma entrada nova esquecida.
 - ⬜ `README.md` — roadmap promove a Fase 9 a ✅, contagem de testes atualizada.
 - ⬜ Decisão do usuário: apagar `docs/planning/fase-9-contexto.md` ou mantê-lo em `docs/planning/` como registro histórico.

@@ -1,0 +1,15 @@
+meta {
+  name: Undo Pet Deceased
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/pets/{{petId}}/deceased
+  body: none
+  auth: inherit
+}
+
+docs {
+  Desfaz um registro feito no pet errado — zera deceasedAt. 204.
+}

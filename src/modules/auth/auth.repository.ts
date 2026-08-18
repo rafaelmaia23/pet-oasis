@@ -306,6 +306,7 @@ export async function consumeAccountReactivation(
     profilesCreated: ProfileKind[];
     restoredRoles: number;
     grantedRoles: number;
+    restoredPets: number;
   }) => AuditDescriptor,
 ) {
   return prisma.$transaction(async (tx) => {
@@ -352,6 +353,7 @@ export async function consumeAccountReactivation(
           profilesCreated,
           restoredRoles: restored.roles,
           grantedRoles,
+          restoredPets: restored.pets,
         }),
         tx,
       );

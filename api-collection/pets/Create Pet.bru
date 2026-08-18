@@ -1,0 +1,51 @@
+meta {
+  name: Create Pet
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/customers/{{customerId}}/pets
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Bidu",
+    "species": "DOG",
+    "breedId": "{{breedId}}",
+    "sex": "MALE",
+    "birthDate": "2021-03-14",
+    "birthDateIsEstimated": false,
+    "weightGrams": 8400,
+    "neutered": true,
+    "color": "Caramelo"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("petId", res.getBody().id);
+  }
+}
+
+docs {
+  {{customerId}} é o id do PERFIL de cliente, não o do usuário — rode
+  "Get Me" (ou "Get User By Id" como staff) antes: os dois gravam a variável.
+
+  {{breedId}} vem de "List Breeds" (pasta breeds), que grava a primeira raça
+  do catálogo. Cão e gato EXIGEM breedId; as outras cinco espécies o PROÍBEM,
+  e os dois desvios respondem 422 nomeando breedId. Raça de outra espécie
+  também é 422.
+
+  Escopo: o dono usa manage:pet; o balcão, manage:pet:others. Sem :others, um
+  customerId que não é o seu responde 403 — inclusive quando não existe, para
+  a rota não virar oráculo de existência.
+
+  microchipId é unique global: repetir o número responde 409.
+}

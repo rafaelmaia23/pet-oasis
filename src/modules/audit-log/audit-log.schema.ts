@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AUDIT_ACTIONS } from "@/lib/auditLog.constants";
+import { AUDIT_ACTIONS, AUDIT_TARGET_TYPES } from "@/lib/auditLog.constants";
 import { cursorQuerySchema } from "@/lib/pagination";
 
 export const listAuditLogsSchema = z.object({
@@ -13,7 +13,7 @@ export const listAuditLogsSchema = z.object({
       .optional()
       .meta({ description: "Filtra pelo ator (uuid)" }),
     targetType: z
-      .enum(["User", "Route", "System"])
+      .enum(AUDIT_TARGET_TYPES)
       .optional()
       .meta({ description: "Filtra pelo tipo de alvo", example: "User" }),
     targetId: z

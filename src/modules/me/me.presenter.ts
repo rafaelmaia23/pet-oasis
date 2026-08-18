@@ -20,6 +20,11 @@ const defaultView = z
     cpf: z.string().meta({ example: "12345678901" }),
     customer: z
       .object({
+        // O id do **perfil**, e não o do usuário: é ele que endereça a coleção
+        // aninhada `/customers/:customerId/pets` (9.4). Sem este campo o
+        // cliente não teria como chegar aos próprios pets — não existe
+        // `/me/pets` nesta fase, por decisão registrada no backlog.
+        id: z.uuid(),
         phone: z.string().meta({ example: "11987654321" }),
         address: z.string().nullable(),
         birthDate: z.coerce.date().nullable(),
@@ -28,6 +33,7 @@ const defaultView = z
       .nullable(),
     employee: z
       .object({
+        id: z.uuid(),
         hiringDate: z.coerce.date(),
         roles: z.array(roleSummaryView),
       })

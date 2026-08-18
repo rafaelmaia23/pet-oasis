@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { buildPet } from "@tests/factories/pet.factory";
 import {
   attachOverrides,
   buildCustomer,
@@ -1565,6 +1566,38 @@ describe("DELETE /api/v1/users/:id", () => {
     });
 
     expect(untouched.deletedAt?.getTime()).toBe(earlier.getTime());
+  });
+
+  it("should cascade down to the pets of the customer profile (9.4)", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    assert(target.customer !== null, "o perfil de cliente deveria existir");
+
+    const pet = await buildPet(target.customer.id);
+
+    const token = await loginAs(admin.email, admin.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const deletedUser = await prisma.user.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    const petInDb = await prisma.pet.findUniqueOrThrow({
+      where: { id: pet.id },
+    });
+
+    // D1 não admite filho ativo de pai morto — e o timestamp é um só por
+    // transação (D4), que é a chave de correlação da restauração.
+    assert(deletedUser.deletedAt !== null, "a conta deveria estar deletada");
+    expect(petInDb.deletedAt?.getTime()).toBe(deletedUser.deletedAt.getTime());
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "USER_DELETED", targetId: target.id },
+    });
+    expect(audit?.metadata).toMatchObject({ cascadedPets: 1 });
   });
 });
 

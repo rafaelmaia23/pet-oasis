@@ -3,6 +3,7 @@ import { petViews } from "@/modules/pet/pet.presenter";
 import {
   createPetSchema,
   listCustomerPetsSchema,
+  listPetsSchema,
   petParamsSchema,
   updatePetSchema,
 } from "@/modules/pet/pet.schema";
@@ -10,6 +11,7 @@ import {
   errorResponses,
   jsonResponse,
   noContentResponse,
+  offsetList,
   staticList,
 } from "../components";
 import { fromEnvelope } from "../helpers";
@@ -44,6 +46,21 @@ export const petPaths: ZodOpenApiPathsObject = {
         401: errorResponses[401],
         403: errorResponses[403],
         404: errorResponses[404],
+        422: errorResponses[422],
+      },
+    },
+  },
+  "/pets": {
+    get: {
+      tags: ["Pets"],
+      summary: "Lista pets de todos os clientes — exige read:pet:others",
+      description:
+        "Listagem de balcão, paginada por offset e ordenável (`?sort=&order=`). Sem `?deceased=` a lista traz vivos e falecidos; pet excluído nunca aparece. `customerId`/`breedId` são filtros: id bem-formado que não existe devolve lista vazia, nunca 404.",
+      ...fromEnvelope(listPetsSchema),
+      responses: {
+        200: jsonResponse("Lista de pets", offsetList(petViews.default)),
+        401: errorResponses[401],
+        403: errorResponses[403],
         422: errorResponses[422],
       },
     },

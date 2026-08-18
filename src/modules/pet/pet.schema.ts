@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PetSex, PetSpecies } from "@/generated/prisma/enums";
+import { buildOffsetQuerySchema, defineSortConfig } from "@/lib/pagination";
 
 /**
  * Validação **sintática** do pet — forma, tipo e faixa, sem banco. As três
@@ -12,6 +13,12 @@ const nameSchema = z
   .min(1, "Name is required")
   .max(60, "Name must be at most 60 characters")
   .meta({ example: "Bidu" });
+
+/** Extraído porque também é filtro de `GET /pets` (lá sem o `nullable`). */
+const microchipIdSchema = z
+  .string()
+  .min(1, "Microchip ID cannot be empty")
+  .max(50, "Microchip ID must be at most 50 characters");
 
 const petFieldsSchema = z.object({
   name: nameSchema,
@@ -41,10 +48,7 @@ const petFieldsSchema = z.object({
     .optional()
     .meta({ description: "Peso em gramas (inteiro)", example: 8400 }),
   neutered: z.boolean().optional().meta({ example: false }),
-  microchipId: z
-    .string()
-    .min(1, "Microchip ID cannot be empty")
-    .max(50, "Microchip ID must be at most 50 characters")
+  microchipId: microchipIdSchema
     .nullable()
     .optional()
     .meta({ description: "Número do microchip", example: "981098100123456" }),
@@ -82,6 +86,64 @@ export const createPetSchema = z.object({
 
 export const listCustomerPetsSchema = customerParamsSchema;
 
+/**
+ * Allowlist de ordenação de `GET /pets`. A direção declarada é a natural de cada
+ * campo (usada quando vem `?sort=` sem `?order=`): data desce, texto sobe.
+ *
+ * `species` é enum do Postgres, então ordena pela **ordem de declaração** do
+ * `PetSpecies` (cão, gato, coelho…), não alfabeticamente.
+ */
+export const PET_SORT = defineSortConfig({
+  fields: { createdAt: "desc", name: "asc", species: "asc" },
+  default: "createdAt",
+});
+
+/**
+ * Listagem geral (staff). Filtros são **filtro**, não resolução de recurso:
+ * `customerId`/`breedId` bem-formados que não existem devolvem lista vazia, e
+ * não 404. `deceased` omitido traz vivos e falecidos — a lista de balcão limpa
+ * é `?deceased=false`.
+ */
+export const listPetsSchema = z.object({
+  query: buildOffsetQuerySchema(PET_SORT, {
+    species: z
+      .enum(PetSpecies)
+      .optional()
+      .meta({ description: "Filtra pela espécie", example: PetSpecies.DOG }),
+    sex: z
+      .enum(PetSex)
+      .optional()
+      .meta({ description: "Filtra pelo sexo", example: PetSex.MALE }),
+    customerId: z
+      .uuid("Invalid customer ID")
+      .optional()
+      .meta({ description: "Filtra pelo id do perfil de cliente (dono)" }),
+    breedId: z
+      .uuid("Invalid breed ID")
+      .optional()
+      .meta({ description: "Filtra pela raça" }),
+    microchipId: microchipIdSchema.optional().meta({
+      description: "Busca exata pelo número do microchip",
+      example: "981098100123456",
+    }),
+    neutered: z
+      .stringbool({ truthy: ["true"], falsy: ["false"] })
+      .optional()
+      .meta({
+        description: "true = apenas castrados; false = apenas não castrados",
+        example: true,
+      }),
+    deceased: z
+      .stringbool({ truthy: ["true"], falsy: ["false"] })
+      .optional()
+      .meta({
+        description:
+          "true = apenas falecidos; false = apenas vivos; omitido = ambos",
+        example: false,
+      }),
+  }),
+});
+
 export const updatePetSchema = z.object({
   params: petParamsSchema.shape.params,
   body: petFieldsSchema
@@ -104,3 +166,4 @@ export const updatePetSchema = z.object({
 
 export type CreatePetInput = z.infer<typeof createPetSchema>["body"];
 export type UpdatePetInput = z.infer<typeof updatePetSchema>["body"];
+export type ListPetsQuery = z.infer<typeof listPetsSchema>["query"];

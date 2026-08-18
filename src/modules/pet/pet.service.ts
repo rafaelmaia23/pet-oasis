@@ -5,11 +5,17 @@ import {
 } from "@/errors";
 import type { PetSpecies } from "@/generated/prisma/enums";
 import { type AuthUser, hasFeature } from "@/lib/authorization";
+import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
 import { SPECIES_WITH_BREED } from "@/modules/breed/breed.constants";
 import { findBreedById } from "@/modules/breed/breed.repository";
 import { findActiveCustomerById } from "@/modules/user/profile/user.profile.repository";
 import * as petRepository from "./pet.repository";
-import type { CreatePetInput, UpdatePetInput } from "./pet.schema";
+import {
+  type CreatePetInput,
+  type ListPetsQuery,
+  PET_SORT,
+  type UpdatePetInput,
+} from "./pet.schema";
 
 /**
  * Autorização de escopo (`own` × `:others`) em duas etapas, no idioma da 8.3.
@@ -161,6 +167,31 @@ export async function getCustomerPets(actor: AuthUser, customerId: string) {
   const customer = await resolveCustomer(actor, customerId, "read:pet");
 
   return petRepository.findPetsByCustomerId(customer.id);
+}
+
+/**
+ * Listagem geral de balcão. **Sem `assertScope` e sem ator**: a rota já exige
+ * `read:pet:others` na forma privilegiada — listar pet de terceiro é a definição
+ * dela, não um ramo a separar aqui. Mesmo desenho de `userService.getAllUsers`.
+ */
+export async function getAllPets(query: ListPetsQuery) {
+  const { skip, take } = buildOffsetArgs(query);
+
+  // O campo de ordenação sai da allowlist do recurso, nunca cru do query param.
+  const orderBy = buildOrderBy(query, PET_SORT);
+
+  return petRepository.findAllPets(
+    {
+      species: query.species,
+      sex: query.sex,
+      customerId: query.customerId,
+      breedId: query.breedId,
+      microchipId: query.microchipId,
+      neutered: query.neutered,
+      deceased: query.deceased,
+    },
+    { skip, take, orderBy },
+  );
 }
 
 export async function getPetById(actor: AuthUser, petId: string) {

@@ -184,3 +184,28 @@ Dois achados corrigidos junto, ambos anteriores à sessão:
   `GET /audit-logs`. Acrescentar um alvo e esquecer o segundo não quebrava o
   build — só fazia `?targetType=` recusar em silêncio um valor legítimo. As duas
   passaram a derivar de `AUDIT_TARGET_TYPES`, com teste de regressão.
+
+## O que a implementação (9.5) firmou além da decisão
+
+A sub-fase 9.5 acrescentou a **listagem geral de balcão** (`GET /pets`) — a
+primeira leitura de pet que não parte de um dono conhecido. Três pontos de
+contrato foram decididos com o usuário; nenhum deles altera o modelo.
+
+| # | Ponto | Escolha e por quê |
+|---|---|---|
+| V1 | Pet falecido na listagem geral | Filtro `?deceased=true\|false`, e **sem o parâmetro a lista traz os dois**. O caminho alternativo — excluir falecidos por default, deixando a lista de balcão limpa — foi recusado porque um default que esconde linha faz `meta.total` mentir sobre o tamanho da base e obriga quem audita a saber de um filtro implícito. Aqui o default é "tudo que existe", e quem quer o recorte operacional manda `?deceased=false`. Fica coerente com a listagem do dono (9.4), que também traz o falecido — lá porque o critério é afetivo, aqui porque o default é honesto. |
+| V2 | Allowlist de filtros | `species`, `sex`, `customerId`, `breedId`, `microchipId`, `neutered`, `deceased`. Valor fora do enum é **422** nomeando o campo (o filtro estrito da 7.7); chave desconhecida é ignorada, como em `GET /users` — a estrita ali é a *allowlist de valores*, não a de chaves. `customerId` e `breedId` são **filtro, não resolução de recurso**: um uuid bem-formado que não existe devolve lista vazia com `total: 0`, nunca 404 — mesmo comportamento de `?role=` em `GET /users`, e o que evita que a listagem vire oráculo de existência de perfil. `microchipId` é busca exata: como o campo é unique global (U1), o filtro devolve no máximo uma linha, que é o caso de balcão "achei o bicho, quero o dono". |
+| V3 | Allowlist de ordenação | `createdAt` (natural `desc`, é o default), `name` (`asc`), `species` (`asc`). `birthDate` ficou de fora porque é anulável e convive com `birthDateIsEstimated` — ordenar por ele empilharia os nulos numa ponta e misturaria data real com estimada. `species` é enum do Postgres e ordena pela **ordem de declaração** do `PetSpecies`, não alfabeticamente: quem quer agrupar previsivelmente usa o filtro. |
+
+Duas assimetrias deliberadas ficaram registradas no
+`docs/reference/endpoints.md` junto com as rotas:
+
+- **Só uma das duas coleções pagina.** `GET /customers/:customerId/pets`
+  continua sem paginação (`meta {}`), porque a coleção já é limitada pelo dono;
+  `GET /pets` pagina por offset porque varre a base inteira. Quem quer os pets de
+  um cliente paginados usa `GET /pets?customerId=`.
+- **Só uma das rotas do módulo exige a forma `:others` direto.** As demais
+  declaram a forma base e deixam o `pet.service` separar dono de staff (U5). Em
+  `GET /pets` não há o que separar — listar pet de terceiro *é* a rota —, então a
+  feature vai na rota, como `read:user:others` em `GET /users`, e o service não
+  recebe ator.

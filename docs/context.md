@@ -329,6 +329,9 @@ completo, os contra-argumentos e os gotchas.
 - O que a implementação (9.4) firmou — `microchipId` unique global, pets na
   cascata e na restauração, falecimento em rota própria, `species` editável, e o
   alvo inexistente falhando fechado em 403
+- O que a implementação (9.5) firmou — `GET /pets` traz falecido por default
+  (filtro `?deceased=`), filtro não resolve recurso (uuid inexistente é lista
+  vazia), e só esta rota do módulo exige `:others` direto
 
 *Catálogo, busca, upload* — ver os ADRs listados em
 [`context/pet-domain.md`](context/pet-domain.md)

@@ -45,6 +45,14 @@ outra. Carrinho, pedido e pagamento ficam para a Fase 10.
   falecimento em **rota própria** e idempotente (U3); `species` editável, com a raça revalidada
   sobre o estado resultante (U4); e o alvo inexistente **falhando fechado** em 403 quando o ator
   não tem `:others` (U5)
+- **O que a 9.5 firmou** (§ "O que a implementação (9.5) firmou além da decisão" do mesmo ADR):
+  `GET /pets`, a listagem de balcão, traz vivos **e** falecidos por default — `?deceased=` é o
+  recorte, não o default, para que `meta.total` não minta (V1); allowlist de filtros com
+  `customerId`/`breedId` funcionando como **filtro e não resolução de recurso** (uuid inexistente
+  → lista vazia, nunca 404) e `microchipId` como busca exata de balcão (V2); allowlist de
+  ordenação `createdAt`/`name`/`species`, com `birthDate` recusado por ser anulável e estimável
+  (V3). Duas assimetrias deliberadas: só `GET /pets` pagina (a coleção do dono continua com
+  `meta {}`) e só ela exige `read:pet:others` direto na rota
 
 ## Catálogo — [`adr/product-catalog-modeling.md`](../adr/product-catalog-modeling.md)
 

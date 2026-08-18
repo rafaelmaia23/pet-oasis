@@ -161,12 +161,15 @@ nele, então override só volta por `PUT` explícito, que revive a linha soft-de
 
 **`:customerId` é o id do perfil** (`Customer.id`), não o do usuário — `GET /me` o devolve em `customer.id`. Não há `/me/pets` nesta fase (backlog).
 
-**Escopo em duas etapas:** `canAccess` admite dono e staff indistintamente (forma frouxa de `can`); quem separa é o service. Como o dono só é conhecido depois do banco, o alvo **inexistente falha fechado** — sem `:others`, responde **403**, não 404, senão a rota vira oráculo de existência de `customerId`/`petId`.
+**Escopo em duas etapas:** `canAccess` admite dono e staff indistintamente (forma frouxa de `can`); quem separa é o service. Como o dono só é conhecido depois do banco, o alvo **inexistente falha fechado** — sem `:others`, responde **403**, não 404, senão a rota vira oráculo de existência de `customerId`/`petId`. A exceção é `GET /pets` (9.5), que exige `read:pet:others` **direto na rota** — listar pet de terceiro é a definição dela, e por isso o service nem recebe ator.
+
+**Duas coleções, um paginado só:** `GET /customers/:customerId/pets` **não pagina** (`meta {}`, classe de `GET /users/:userId/roles`) porque a coleção já é limitada pelo dono e o critério ali é afetivo — pet falecido continua na lista. `GET /pets` pagina por offset porque é lista operacional sobre a base inteira. Quem quer os pets de um cliente **paginados** usa `GET /pets?customerId=`.
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
 | POST `/api/v1/customers/:customerId/pets` | `manage:pet` \| `manage:pet:others` | Cadastra um pet para o cliente. Espécie em `SPECIES_WITH_BREED` (cão, gato) **exige** `breedId`; as demais o **proíbem**; raça de outra espécie → 422 — os três nomeiam `breedId`. `microchipId` duplicado → 409 (unique global) |
 | GET `/api/v1/customers/:customerId/pets` | `read:pet` \| `read:pet:others` | Pets do cliente, sem paginação (`meta {}`), `createdAt desc` com desempate por `id`. Pet **falecido continua na lista**; excluído, não |
+| GET `/api/v1/pets` | `read:pet:others` | Listagem geral (balcão), **paginada por offset** e ordenável (`?sort=createdAt\|name\|species&order=asc\|desc`). Filtros: `species`, `sex`, `customerId`, `breedId`, `microchipId`, `neutered`, `deceased`. `customerId`/`breedId` são **filtro**, não resolução de recurso — id bem-formado inexistente devolve lista vazia, nunca 404 |
 | GET `/api/v1/pets/:petId` | `read:pet` \| `read:pet:others` | Detalhe do pet, com a raça achatada (`{ id, name }` ou `null`) |
 | PATCH `/api/v1/pets/:petId` | `manage:pet` \| `manage:pet:others` | Atualiza a ficha. `customerId` (transferência é backlog), `deceasedAt` (rota própria) e `photoPath` (upload, 9.10) → 422. `species` **é** editável e revalida a raça sobre o estado resultante |
 | DELETE `/api/v1/pets/:petId` | `manage:pet` \| `manage:pet:others` | Soft delete (204) |

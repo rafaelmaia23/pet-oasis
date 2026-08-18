@@ -13,7 +13,7 @@ import request from "supertest";
 import { afterEach, assert, describe, expect, it } from "vitest";
 import z from "zod";
 import app from "@/app";
-import { PetSpecies } from "@/generated/prisma/enums";
+import { PetSex, PetSpecies } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { petViews } from "@/modules/pet/pet.presenter";
 
@@ -333,6 +333,418 @@ describe("GET /api/v1/customers/:customerId/pets", () => {
 
     expect(response.status).toBe(422);
     expectValidationError(response, ["customerId"]);
+  });
+});
+
+describe("GET /api/v1/pets", () => {
+  /** Ator padrão da listagem geral: `attendant` tem `read:pet:others`. */
+  async function loginAsStaff() {
+    const staff = await buildEmployee({ roleNames: ["attendant"] });
+
+    return loginAs(staff.email, staff.password);
+  }
+
+  it("should return 401 if no token is provided", async () => {
+    const response = await request(app).get("/api/v1/pets");
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 403 for a customer without read:pet:others", async () => {
+    // O cliente tem `read:pet` (vê os próprios), mas a listagem geral é de pet
+    // de terceiro por definição — a feature é exigida direto na rota.
+    const { user } = await buildCustomerWithProfile();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .get("/api/v1/pets")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({
+      action: 'Verifique se você tem acesso a feature "read:pet:others"',
+    });
+  });
+
+  it("should return 200 with pets of every customer in the offset envelope", async () => {
+    const first = await buildCustomerWithProfile();
+    const second = await buildCustomerWithProfile();
+    await buildPet(first.customerId, { name: "Bidu" });
+    await buildPet(second.customerId, {
+      name: "Mimi",
+      species: PetSpecies.CAT,
+    });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(2);
+    expect(response.body.data).toMatchView(z.array(petViews.default));
+    expect(response.body.meta).toEqual({ page: 1, limit: 20, total: 2 });
+  });
+
+  it("should paginate with page/limit and report total in meta", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    await buildPet(customerId);
+    await buildPet(customerId);
+    await buildPet(customerId);
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?page=1&limit=2")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(2);
+    expect(response.body.meta).toEqual({ page: 1, limit: 2, total: 3 });
+  });
+
+  it("should return an empty page past the last one", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    await buildPet(customerId);
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?page=999")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual([]);
+    expect(response.body.meta.total).toBe(1);
+  });
+
+  it("should reject a limit above the maximum with 422", async () => {
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?limit=101")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["limit"]);
+  });
+
+  it("should omit a soft deleted pet from the list", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    const pet = await buildPet(customerId);
+    await prisma.pet.update({
+      where: { id: pet.id },
+      data: { deletedAt: new Date() },
+    });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data).toEqual([]);
+    expect(response.body.meta.total).toBe(0);
+  });
+
+  // ── Falecimento (V1: sem o parâmetro, a lista traz tudo) ──────────────────
+  it("should include deceased pets when no deceased filter is given", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    const alive = await buildPet(customerId);
+    const dead = await buildPet(customerId);
+    await prisma.pet.update({
+      where: { id: dead.id },
+      data: { deceasedAt: new Date() },
+    });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets")
+      .set("Authorization", `Bearer ${token}`);
+
+    const ids = response.body.data.map((pet: { id: string }) => pet.id);
+    expect(ids).toContain(alive.id);
+    expect(ids).toContain(dead.id);
+    expect(response.body.meta.total).toBe(2);
+  });
+
+  it("should list only deceased pets with ?deceased=true", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    await buildPet(customerId);
+    const dead = await buildPet(customerId);
+    await prisma.pet.update({
+      where: { id: dead.id },
+      data: { deceasedAt: new Date() },
+    });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?deceased=true")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(dead.id);
+    expect(response.body.meta.total).toBe(1);
+  });
+
+  it("should exclude deceased pets with ?deceased=false", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    const alive = await buildPet(customerId);
+    const dead = await buildPet(customerId);
+    await prisma.pet.update({
+      where: { id: dead.id },
+      data: { deceasedAt: new Date() },
+    });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?deceased=false")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(alive.id);
+  });
+
+  // ── Filtros (V2) ──────────────────────────────────────────────────────────
+  it("should filter by species", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    await buildPet(customerId, { species: PetSpecies.DOG });
+    const cat = await buildPet(customerId, { species: PetSpecies.CAT });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get(`/api/v1/pets?species=${PetSpecies.CAT}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(cat.id);
+  });
+
+  it("should filter by sex", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    await buildPet(customerId, { sex: PetSex.MALE });
+    const female = await buildPet(customerId, { sex: PetSex.FEMALE });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get(`/api/v1/pets?sex=${PetSex.FEMALE}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(female.id);
+  });
+
+  it("should filter by neutered", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    await buildPet(customerId, { neutered: false });
+    const neutered = await buildPet(customerId, { neutered: true });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?neutered=true")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(neutered.id);
+  });
+
+  it("should filter by breedId", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    const catBreedId = await findSrdBreedId(PetSpecies.CAT);
+    await buildPet(customerId, { species: PetSpecies.DOG });
+    const cat = await buildPet(customerId, {
+      species: PetSpecies.CAT,
+      breedId: catBreedId,
+    });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get(`/api/v1/pets?breedId=${catBreedId}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(cat.id);
+  });
+
+  it("should filter by customerId", async () => {
+    const first = await buildCustomerWithProfile();
+    const second = await buildCustomerWithProfile();
+    await buildPet(first.customerId);
+    const target = await buildPet(second.customerId);
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get(`/api/v1/pets?customerId=${second.customerId}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(target.id);
+  });
+
+  it("should filter by microchipId", async () => {
+    // O caso de balcão: achou o bicho, quer o dono. Como `microchipId` é unique
+    // global, o filtro devolve no máximo uma linha.
+    const { customerId } = await buildCustomerWithProfile();
+    await buildPet(customerId, { microchipId: "981098100000001" });
+    const chipped = await buildPet(customerId, {
+      microchipId: "981098100000002",
+    });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?microchipId=981098100000002")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(chipped.id);
+  });
+
+  it("should combine filters", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    await buildPet(customerId, { species: PetSpecies.CAT, neutered: false });
+    await buildPet(customerId, { species: PetSpecies.DOG, neutered: true });
+    const target = await buildPet(customerId, {
+      species: PetSpecies.CAT,
+      neutered: true,
+    });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get(`/api/v1/pets?species=${PetSpecies.CAT}&neutered=true`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(target.id);
+  });
+
+  it("should reject an unknown species value with 422", async () => {
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?species=DRAGON")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["species"]);
+  });
+
+  it("should reject a non-uuid customerId with 422", async () => {
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?customerId=not-a-uuid")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["customerId"]);
+  });
+
+  it("should return an empty list for a customerId that does not exist", async () => {
+    // Filtro, não resolução de recurso: id bem-formado que não existe é lista
+    // vazia, nunca 404.
+    const { customerId } = await buildCustomerWithProfile();
+    await buildPet(customerId);
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get(`/api/v1/pets?customerId=${faker.string.uuid()}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual([]);
+    expect(response.body.meta.total).toBe(0);
+  });
+
+  // ── Ordenação (V3) ────────────────────────────────────────────────────────
+  it("should sort by an allowlisted field ascending", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    const first = await buildPet(customerId, { name: "Ana" });
+    const middle = await buildPet(customerId, { name: "Bidu" });
+    const last = await buildPet(customerId, { name: "Carla" });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?sort=name&order=asc")
+      .set("Authorization", `Bearer ${token}`);
+
+    const ids = response.body.data.map((pet: { id: string }) => pet.id);
+    expect(ids).toEqual([first.id, middle.id, last.id]);
+  });
+
+  it("should keep createdAt desc as the default order when no sort is given", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    const older = await buildPet(customerId);
+    const newer = await buildPet(customerId);
+
+    await prisma.pet.update({
+      where: { id: older.id },
+      data: { createdAt: new Date("2020-01-01T00:00:00.000Z") },
+    });
+    await prisma.pet.update({
+      where: { id: newer.id },
+      data: { createdAt: new Date("2030-01-01T00:00:00.000Z") },
+    });
+
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets")
+      .set("Authorization", `Bearer ${token}`);
+
+    const ids = response.body.data.map((pet: { id: string }) => pet.id);
+    expect(ids).toEqual([newer.id, older.id]);
+  });
+
+  it("should reject a sort field outside the allowlist with 422", async () => {
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?sort=microchipId")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["sort"]);
+  });
+
+  it("should reject order without sort with 422", async () => {
+    const token = await loginAsStaff();
+
+    const response = await request(app)
+      .get("/api/v1/pets?order=asc")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["order"]);
+  });
+
+  it("should not skip nor repeat rows that share the sort value (id tiebreaker)", async () => {
+    const { customerId } = await buildCustomerWithProfile();
+    for (let i = 0; i < 5; i++) {
+      await buildPet(customerId, { name: "Xarope" });
+    }
+
+    const token = await loginAsStaff();
+
+    const seen: string[] = [];
+    for (const page of [1, 2, 3]) {
+      const response = await request(app)
+        .get(`/api/v1/pets?sort=name&limit=2&page=${page}`)
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(response.body.meta.total).toBe(5);
+      seen.push(...response.body.data.map((pet: { id: string }) => pet.id));
+    }
+
+    expect(seen).toHaveLength(5);
+    expect(new Set(seen).size).toBe(5);
   });
 });
 

@@ -155,3 +155,32 @@ A sub-fase 9.3 executou a parte de espécie/raça deste ADR (o `Pet` em si é a
 
 Números da entrega: 142 raças (96 de cão, 46 de gato), cada espécie com a sua
 linha `SRD`.
+
+## O que a implementação (9.4) firmou além da decisão
+
+A sub-fase 9.4 construiu o `Pet` em si — model, CRUD e escopo — e fechou as duas
+pendências de negócio que o planejamento tinha deixado em aberto (`§9.3` e
+`§9.9` de `docs/planning/fase-9-contexto.md`), mais dois pontos de contrato que
+o corpo deste ADR não especificava.
+
+| # | Ponto | Escolha e por quê |
+|---|---|---|
+| U1 | Unicidade de `microchipId` | **`@unique` global**, valendo também para a linha soft-deletada — o precedente já firmado em `User.email`, `User.cpf` e `Customer.phone`. Descartados o índice parcial (`WHERE deleted_at IS NULL`, migration à mão, primeira exceção ao padrão) e a validação no service (que devolveria a unicidade ao código, contra o "unicidade é do banco" do `CLAUDE.md`, e ainda abriria corrida entre o check e a escrita). O efeito colateral — um pet excluído prende o número para sempre — é, num identificador do **mundo real**, o comportamento certo: é o sinal "este pet já foi cadastrado aqui". Duplicata sai como **409** pelo handler de P2002, sem código novo. `NULL` não colide, então pet sem chip não é afetado. |
+| U2 | Pets de um cliente soft-deletado | **Descem na cascata e voltam por correlação de data**, como `UserRole`. `Pet` é o primeiro filho de **domínio** do grafo de `user.lifecycle.repository.ts` — entra porque D1 não admite filho ativo de pai morto, não porque seja privilégio. É essa distinção que decide a volta: a assimetria da restauração (D6' — desce quatro níveis, sobe dois) existe contra **vazamento de privilégio**, e devolver a ficha do bichano ao dono não concede autoridade nenhuma; *não* devolvê-la seria perda de dado, sem endpoint de restauração de pet que a compensasse. Pet que o dono excluiu **antes**, de propósito, não volta: o `deletedAt` dele não bate com o do perfil, e a regra recursiva já existente basta. As contagens entram no audit (`cascadedPets`, `restoredPets`) pelo mesmo critério de `cascadedOverrides` — a cascata derruba coisa que não aparece na resposta 204. |
+| U3 | Como se marca o falecimento | **Rota própria** `POST`/`DELETE /pets/:petId/deceased`, no idioma de `POST`/`DELETE /users/:id/ban`: transição de estado com significado e ação de audit (`PET_DECEASED`) próprios não é campo de update. `deceasedAt` fica **fora** do `PATCH` (422 se vier no corpo). O `POST` é idempotente — remarcar não reescreve a data já registrada, senão um clique repetido apagaria a informação verdadeira —, e o `DELETE` existe porque marcar o pet errado é erro real e sem ele viraria dado permanente. A feature continua sendo `manage:pet` comum (9.1). |
+| U4 | O que o `PATCH` aceita | Tudo menos `customerId` (transferência de pet é backlog: exige trilha própria e decisão sobre o histórico clínico), `deceasedAt` (U3) e `photoPath` (upload, 9.10). **`species` é editável**, porque erro de cadastro é caso real e a alternativa — excluir e recriar — perderia o `createdAt` e, no futuro, o prontuário. A consequência é que a validação de raça corre sobre o **estado resultante** (`body.species ?? pet.species`), não sobre o corpo isolado: trocar a espécie sem ajustar a raça no mesmo `PATCH` é 422. |
+| U5 | Onde o escopo é decidido, e o que responde o alvo inexistente | O dono de um pet **não está na URL** — `/customers/:customerId` traz o id do *perfil*, e `/pets/:petId` não traz dono nenhum —, então "autorizar antes de buscar" não se aplica ao pé da letra. O que preserva o princípio é o alvo inexistente **falhar fechado**: sem `:others`, um `customerId`/`petId` que não existe responde **403**, igual ao alheio. Distinguir 403 de 404 ali transformaria a rota em oráculo de existência para qualquer cliente logado. Com `:others`, o 404 volta a ser 404. |
+
+Dois achados corrigidos junto, ambos anteriores à sessão:
+
+- **`GET /me` não devolvia `customer.id`.** A decisão de recusar `/me/pets`
+  (`docs/reference/backlog.md`) se apoiava explicitamente em "o `GET /me` já
+  devolve `customer.id`, que é tudo que o cliente precisa" — e não devolvia. Sem
+  o campo, a coleção aninhada era **inalcançável pelo próprio dono**. O id de
+  perfil entrou nas views de `me` e na `owner` de `user` (cliente e funcionário,
+  por simetria).
+- **A taxonomia de alvo do audit existia em duplicata:** a union
+  `AuditTargetType` e um `z.enum([...])` escrito à mão no schema do filtro de
+  `GET /audit-logs`. Acrescentar um alvo e esquecer o segundo não quebrava o
+  build — só fazia `?targetType=` recusar em silêncio um valor legítimo. As duas
+  passaram a derivar de `AUDIT_TARGET_TYPES`, com teste de regressão.

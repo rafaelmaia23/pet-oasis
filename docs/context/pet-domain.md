@@ -38,6 +38,13 @@ outra. Carrinho, pedido e pagamento ficam para a Fase 10.
   (sobrevive ao `clearDatabase` e ao `demo-reset`); a constante mora em
   `src/modules/breed/breed.constants.ts` e não em `src/lib/seed/`; e o seed usa `createMany` com
   `skipDuplicates`, **sem** delete reconciliador — apagar raça com pet quebraria o boot
+- **O que a 9.4 firmou** (§ "O que a implementação (9.4) firmou além da decisão" do mesmo ADR):
+  `microchipId` com `@unique` **global** (U1, precedente de email/cpf/phone — o chip preso por um
+  pet excluído é o sinal certo num identificador do mundo real); pets **cascateiam e voltam por
+  correlação de data** (U2 — ver [lifecycle.md](lifecycle.md#pet-é-o-primeiro-filho-de-domínio-do-grafo-94));
+  falecimento em **rota própria** e idempotente (U3); `species` editável, com a raça revalidada
+  sobre o estado resultante (U4); e o alvo inexistente **falhando fechado** em 403 quando o ator
+  não tem `:others` (U5)
 
 ## Catálogo — [`adr/product-catalog-modeling.md`](../adr/product-catalog-modeling.md)
 

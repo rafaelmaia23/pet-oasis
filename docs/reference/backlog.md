@@ -68,7 +68,7 @@ Caso real (venda, doação, mudança de tutor de um pet já cadastrado). Deixado
 Família compartilhando o mesmo pet é caso real, mas a Fase 9 modela dono único (`Pet.customerId` obrigatório, sem N:N) — ver `docs/adr/pet-domain-modeling.md`. Gatilho de revisão: migrar `customerId` de FK direta para uma tabela de junção `PetOwner` (N:N), o que também reabre a pergunta acima (transferência de pet).
 
 ### `/me/pets` — **P**
-Atalho de conveniência sobre `GET /customers/:customerId/pets`, evitando o cliente precisar primeiro resolver o próprio `customerId`. Fora da Fase 9 por duplicar rota/teste/documentação sem necessidade — `GET /me` já devolve `customer.id`, que é tudo que o cliente precisa para chamar a rota aninhada.
+Atalho de conveniência sobre `GET /customers/:customerId/pets`, evitando o cliente precisar primeiro resolver o próprio `customerId`. Fora da Fase 9 por duplicar rota/teste/documentação sem necessidade — `GET /me` devolve `customer.id`, que é tudo que o cliente precisa para chamar a rota aninhada. **Ressalva registrada na 9.4:** essa justificativa era falsa quando foi escrita — a view de `/me` **não** expunha `customer.id`, e a coleção aninhada era inalcançável pelo próprio dono. O campo foi acrescentado na 9.4 e a premissa agora é verdadeira; a lição é que um item de backlog justificado por uma capacidade existente precisa citar onde ela está no código.
 
 ### `StockMovement` (movimentação de estoque append-only) — **M**
 A Fase 9 modela só `ProductVariant.stockQuantity` como número, sem movimentação, reserva ou histórico. Uma entidade `StockMovement` auditável é natural e desejável, mas só faz sentido na fase do pedido (Fase 10), que é onde a movimentação passa a ter causa (venda, devolução, ajuste manual).

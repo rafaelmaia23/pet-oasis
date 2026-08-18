@@ -769,6 +769,15 @@ público com campos reduzidos e detalhes só autenticado.
 
 ### 9.3 Unicidade de `microchipId` e `sku`
 
+> ✅ **Metade resolvida na sessão 9.4** (2026-08-17): `microchipId` ficou com **unique
+> global**, aceitando o efeito de prender o número de um pet excluído — que num
+> identificador do mundo real é o comportamento certo, e é o precedente já firmado em
+> email/cpf/phone. Racional em [`../adr/pet-domain-modeling.md`](../adr/pet-domain-modeling.md)
+> § "O que a implementação (9.4) firmou", U1. **`sku` continua em aberto** e volta na
+> sessão 9.7 — a decisão do microchip é forte precedente, mas não é a mesma pergunta:
+> SKU é identificador **nosso**, reemitível, e prendê-lo para sempre tem custo comercial
+> que o número de chip não tem. O texto abaixo é o enunciado original da pendência.
+
 Mesmo problema já documentado no `docs/reference/backlog.md` para email/cpf: `@unique` no Postgres
 vale também para a linha soft-deletada, então um produto excluído prende o SKU para sempre.
 Caminhos: unique global e aceitar o efeito · unique parcial (`WHERE deleted_at IS NULL`,
@@ -808,6 +817,13 @@ externo, ou congela?) ou informado pelo staff (controle total, risco de colisão
 feio)?
 
 ### 9.9 Pets de um cliente soft-deletado
+
+> ✅ **Resolvida na sessão 9.4** (2026-08-17): os pets **descem na cascata e voltam junto**,
+> por correlação de data, como `UserRole` — a reativação não escolhe. Racional em
+> [`../adr/pet-domain-modeling.md`](../adr/pet-domain-modeling.md) § "O que a implementação
+> (9.4) firmou", U2, e o critério generalizado para os próximos nós de domínio em
+> [`../context/lifecycle.md`](../context/lifecycle.md) § "Pet é o primeiro filho de domínio
+> do grafo (9.4)". O texto abaixo é o enunciado original da pendência.
 
 Confirmar o comportamento esperado na reativação de perfil da Fase 8: os pets voltam junto
 automaticamente, ou a reativação escolhe? O padrão do projeto sugere que voltam junto, mas

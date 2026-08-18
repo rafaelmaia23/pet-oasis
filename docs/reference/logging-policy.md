@@ -118,10 +118,10 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `AUTH_LOCKOUT_CLEARED` | `User` | `clearedBy` (enum: `ADMIN`, `SUCCESSFUL_LOGIN`) | 7.10 |
 | `AUTH_RATE_LIMIT_EXCEEDED` | `Route` | `rule`, `scope` (enum: `IP`, `EMAIL`) | 7.9 |
 | `USER_CREATED` | `User` | `source` (enum: `SIGNUP`, `ADMIN`, `SEED`) | 7.6 |
-| `USER_DELETED` | `User` | `cascadedProfiles`, `cascadedRoles`, `cascadedOverrides` (nº de filhos derrubados junto) | 7.6 · 8.1 |
+| `USER_DELETED` | `User` | `cascadedProfiles`, `cascadedRoles`, `cascadedOverrides`, `cascadedPets` (nº de filhos derrubados junto) | 7.6 · 8.1 · 9.4 |
 | `USER_PROFILE_CREATED` | `User` | `profileKind`, `roles` (nº de roles concedidas) | 8.3 |
-| `USER_PROFILE_RESTORED` | `User` | `profileKind`, `restoredRoles` (voltaram por correlação de data), `grantedRoles` (nomeadas pelo ator) | 8.3 |
-| `USER_PROFILE_DELETED` | `User` | `profileKind` (enum: `CUSTOMER`, `EMPLOYEE`), `cascadedRoles`, `cascadedOverrides` | 8.1 |
+| `USER_PROFILE_RESTORED` | `User` | `profileKind`, `restoredRoles` (voltaram por correlação de data), `grantedRoles` (nomeadas pelo ator), `restoredPets` | 8.3 · 9.4 |
+| `USER_PROFILE_DELETED` | `User` | `profileKind` (enum: `CUSTOMER`, `EMPLOYEE`), `cascadedRoles`, `cascadedOverrides`, `cascadedPets` (sempre 0 no perfil de funcionário) | 8.1 · 9.4 |
 | `USER_BANNED` | `User` | `reasonProvided` (bool — o texto **não** entra) | 7.6 |
 | `USER_UNBANNED` | `User` | — | 7.6 |
 | `USER_ROLE_GRANTED` | `User` | `roleId`, `roleName` | 7.6 |
@@ -129,7 +129,7 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `USER_PERMISSION_GRANTED` | `User` | `featureName`, `roleId`, `roleName`, `effect` | 7.6 · 8.0 |
 | `USER_PERMISSION_REVOKED` | `User` | `featureName`, `roleId` | 7.6 · 8.0 |
 | `ACCOUNT_REACTIVATION_REQUESTED` | `User` | `source` (enum: `SELF`, `ADMIN`), `profiles` (`ProfileKind[]`), `roles` (nº de roles nomeadas) | 8.4 · 8.5 |
-| `ACCOUNT_REACTIVATION_COMPLETED` | `User` | `profilesRestored`, `profilesCreated` (`ProfileKind[]`), `restoredRoles`, `grantedRoles` (nº — restaurada por correlação de data ≠ concedida pelo ator, só a segunda é autoridade nova) | 8.4 |
+| `ACCOUNT_REACTIVATION_COMPLETED` | `User` | `profilesRestored`, `profilesCreated` (`ProfileKind[]`), `restoredRoles`, `grantedRoles` (nº — restaurada por correlação de data ≠ concedida pelo ator, só a segunda é autoridade nova), `restoredPets` | 8.4 · 9.4 |
 | `PASSWORD_RESET_REQUESTED` | `User` | — | 7.6 |
 | `PASSWORD_RESET_COMPLETED` | `User` | — | 7.6 |
 | `PASSWORD_CHANGED` | `User` | — | 7.6 |
@@ -146,10 +146,17 @@ Nome do pet **não** entra em `metadata` de nenhuma das quatro ações acima —
 por ser PII do pet, mas porque nome de pet é frequentemente usado como resposta
 de pergunta de segurança e como componente de senha; e porque a política
 vigente é "ids e enums", que só vale se não for flexibilizada caso a caso
-(planejamento da Fase 9, `docs/context/pet-domain.md`). Ações de catálogo (produto,
-variante, categoria etc.) entram na tabela quando a sub-fase 9.1/9.7 fechar a
-granularidade de features do domínio — ainda não estão aqui de propósito, não
-por esquecimento.
+(planejamento da Fase 9, `docs/context/pet-domain.md`). Provado por teste: o
+`metadata` de `PET_CREATED` não contém o nome enviado no cadastro.
+
+`PET_DECEASED` só é gravada na transição — remarcar um pet já falecido é no-op e
+não gera linha nova. **Desfazer** a marcação (`DELETE /pets/:petId/deceased`) sai
+como `PET_UPDATED` com `fieldsChanged: ["deceasedAt"]`, e não como uma ação
+própria: corrigir um dado errado é update, não um evento de negócio.
+
+Ações de catálogo (produto, variante, categoria etc.) entram na tabela quando a
+sub-fase 9.7 ligar a escrita do catálogo — ainda não estão aqui de propósito,
+não por esquecimento.
 
 `actorId` é nulo quando não há ator identificado (login falho de email inexistente, script automatizado). `AUTH_LOGIN_FAILED` de conta existente registra o `targetId` do dono, mesmo sem ator.
 

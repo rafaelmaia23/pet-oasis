@@ -40,6 +40,11 @@ a cpf).
   8), features `[{id,name,description}]` — junção achatada no service
   (`role.features.map(rf => rf.feature)`).
 - **Feature**: id, name, description.
+- **Breed**: id, name, species — view única (catálogo público, sem campo sensível).
+- **Pet** (9.4): view **única** também, e por um motivo diferente do `Breed` — não há campo da
+  ficha que o funcionário veja e o dono não. O que separa os dois é a autorização de **escopo**
+  (`own` × `:others`), que decide *se* a ficha sai, não *quanto* dela. A raça sai achatada
+  (`breed: {id,name} | null`) em vez de repassar a linha inteira da junção.
 - **Permission**: `/features` = overrides crus `[{granted, grantedAt, updatedAt, role, feature}]`;
   `/permissions` = efetivas `string[]`.
 - **Session** (`GET /auth/sessions`): id, createdAt, expiresAt, ipAddress, `device` e `current`. A
@@ -55,6 +60,13 @@ Exige a feature `read:user` (mesmo padrão de `GET /users/:id`); perfil soft-del
 `null` (não sobe perfil morto); roles aninhadas dentro de `customer`/`employee` em shape enxuto
 (`{id,name,description,appliesTo}`, sem features aninhadas — as capacidades já estão cobertas pelo
 `features` efetivo do topo).
+
+**O id de perfil entrou na 9.4** (`customer.id`/`employee.id`, aqui e na view `owner` de user).
+Não é cosmético: a coleção de pets é aninhada em `/customers/:customerId/pets`, e a decisão de
+**não** ter `/me/pets` (`docs/reference/backlog.md`) se apoiava explicitamente em "o `GET /me` já
+devolve `customer.id`" — que era falso. Sem o campo, o dono não tinha como chegar aos próprios
+pets. Vale a pena registrar o padrão do erro: uma decisão de recorte foi tomada com base numa
+capacidade que se supunha existir e nunca foi conferida no código.
 
 ---
 

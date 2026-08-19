@@ -18,6 +18,19 @@ export async function findAllTags() {
   return prisma.tag.findMany({ orderBy: { name: "asc" } });
 }
 
+/**
+ * Quais dos ids informados existem — o produto (9.7) valida a lista inteira com
+ * uma query, e nomeia no 422 os que sobraram.
+ */
+export async function findExistingTagIds(ids: string[]) {
+  const tags = await prisma.tag.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+
+  return tags.map((tag) => tag.id);
+}
+
 export async function createTag(
   data: Prisma.TagUncheckedCreateInput,
   audit?: AuditDescriptor,

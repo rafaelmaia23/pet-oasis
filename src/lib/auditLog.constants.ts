@@ -64,6 +64,19 @@ export const AUDIT_ACTIONS = [
   // Hard delete (9.6/W5) — a linha some, então o audit é o único registro de
   // que a tag existiu.
   "TAG_DELETED",
+  // Produto e variante (9.7). A metadata leva ids, contagens e nomes de campo —
+  // nunca o nome comercial nem a descrição: "só ids e enums" (§4.4 da política).
+  "PRODUCT_CREATED",
+  "PRODUCT_UPDATED",
+  "PRODUCT_DELETED",
+  "PRODUCT_VARIANT_CREATED",
+  "PRODUCT_VARIANT_UPDATED",
+  "PRODUCT_VARIANT_DELETED",
+  // Ajuste de estoque tem linha própria porque é outro ato: outra feature
+  // (`manage:stock`, 9.7/X4), outro cargo (o repositor conta prateleira sem
+  // poder editar o catálogo) e outra pergunta na auditoria ("quem mexeu no
+  // estoque?"). Metadata leva `from`/`to` — números, não PII.
+  "PRODUCT_STOCK_ADJUSTED",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -82,6 +95,8 @@ export const AUDIT_TARGET_TYPES = [
   "Brand",
   "Category",
   "Tag",
+  "Product",
+  "ProductVariant",
   "Route",
   "System",
 ] as const;

@@ -15,6 +15,7 @@ import auditLogRouter from "@/modules/audit-log/audit-log.routes";
 import authRouter from "@/modules/auth/auth.routes";
 import brandRouter from "@/modules/brand/brand.routes";
 import breedRouter from "@/modules/breed/breed.routes";
+import categoryRouter from "@/modules/category/category.routes";
 import featureRouter from "@/modules/feature/feature.routes";
 import logRouter from "@/modules/log/log.routes";
 import meRouter from "@/modules/me/me.routes";
@@ -23,6 +24,7 @@ import petCustomerRouter from "@/modules/pet/pet.customer.routes";
 import petRouter from "@/modules/pet/pet.routes";
 import roleRouter from "@/modules/role/role.routes";
 import statusRouter from "@/modules/status/status.routes";
+import tagRouter from "@/modules/tag/tag.routes";
 import userProfileRouter from "@/modules/user/profile/user.profile.routes";
 import userRouter from "@/modules/user/user.routes";
 
@@ -42,6 +44,8 @@ v1Router.use("/breeds", breedRouter);
 // exige identidade é o `canAccess` das rotas de escrita, dentro de cada router.
 // A 9.8 depende do mesmo middleware para escolher a view de `/products`.
 v1Router.use("/brands", optionalAuthenticate, brandRouter);
+v1Router.use("/categories", optionalAuthenticate, categoryRouter);
+v1Router.use("/tags", optionalAuthenticate, tagRouter);
 
 // PROTEGIDAS — com authenticate
 v1Router.use("/me", authenticate, meRouter);

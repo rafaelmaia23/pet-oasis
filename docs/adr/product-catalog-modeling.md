@@ -70,13 +70,15 @@ catálogo — só existe um lugar onde preço/estoque moram.
 
 ```prisma
 model Category {
-  id       String     @id @default(uuid())
-  name     String
-  slug     String     @unique
-  parentId String?
-  position Int        @default(0)
-  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryTree")
+  id          String     @id @default(uuid())
+  name        String
+  slug        String     @unique
+  parentId    String?
+  description String?
+  position    Int        @default(0)
+  deletedAt   DateTime?
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryTree")
 }
 ```
 
@@ -171,6 +173,69 @@ Imagem pertence ao **produto**, não à variante — imagem por variante é caso
 real ("cores diferentes" precisa; "mesmo saco, tamanhos diferentes" quase
 nunca precisa) mas adiciona complexidade que o domínio raramente cobra
 (`docs/reference/backlog.md`).
+
+## O que a implementação (9.6) firmou além da decisão
+
+A decisão original modelou a taxonomia mas não disse como ela se comporta. Sete
+pontos foram fechados com o usuário na abertura da sub-fase 9.6 e valem daqui
+para frente — inclusive para `Product` na 9.7, que reaplica W4 e W6.
+
+**W1 — a árvore tem no máximo três níveis.** `Alimentação > Ração > Ração seca`
+é o caso real mais fundo que o catálogo precisa; um teto conhecido é o que deixa
+a navegação previsível e a consulta de subárvore com custo limitado. Sem limite,
+a única regra seria "não faça ciclo", e a UI não teria como se preparar. O teto
+não cabe no banco — nenhuma constraint expressa profundidade —, então vive no
+service (`category.service.ts`), medido pelas funções puras de
+`category.tree.ts` sobre a lista de todas as categorias ativas: **uma** leitura
+por escrita, em vez de uma query por nível.
+
+**W2 — produto vincula a qualquer nó, folha ou não.** Exigir folha criaria dois
+problemas: todo produto genérico precisaria de uma folha "Outros" artificial, e
+criar um filho numa categoria que já tem produtos tornaria o estado inválido de
+repente. O preço é herdado pela **9.8**: "produtos de X" passa a ser a união dos
+vinculados a X **mais** os dos descendentes, e a query de listagem precisa
+cobrir os dois.
+
+**W3 — excluir categoria com filha ativa ou produto vinculado é 409.** Sem
+cascata (apagar um pai não pode sumir com uma subárvore inteira sem o staff
+perceber) e sem reparenting silencioso (mudaria o significado de categorias que
+ninguém tocou, e poderia estourar a profundidade em outro ramo). Desvincular
+produtos em massa está fora de questão por um motivo mais forte: violaria o
+mínimo de uma categoria por produto. A metade das filhas está implementada na
+9.6; a dos produtos entra na **9.7**, quando `ProductCategory` existir.
+
+**W4 — slug derivado do nome na criação e congelado depois.** Renomear é a
+mudança mais banal do catálogo, e deixá-la mexer na URL quebraria todo link
+externo e a indexação. O `slug` explícito é aceito no corpo — no `POST` também,
+não só no `PATCH` — e vence o derivado. `slugify` (`src/utils/slugify.ts`)
+separa a letra do acento com `normalize("NFD")` e apaga só os diacríticos
+combinantes, que é o que faz "Ração" virar `racao` e não `ra-c-ao`.
+
+**W5 — `Tag` é hard delete.** Rótulo transversal e volátil não participa de
+venda, então não há histórico a preservar, e o nome volta a ficar livre. É a
+única tabela de domínio do projeto sem `deletedAt` (e sem `updatedAt`), no
+idioma do `Breed`; o audit log passa a ser o único registro de que a tag
+existiu, e por isso o descritor não é opcional no `deleteTag` do repositório.
+
+**W6 — `name`/`slug` são unique global, o índice ignora `deletedAt`.**
+Precedente de `User.email`, `Customer.phone` e `Pet.microchipId`: recriar uma
+marca excluída sai 409 pelo handler de P2002, sem código novo, e o 409 é o sinal
+correto ("isto já existiu aqui"), não um convite a duplicar. Índice parcial foi
+recusado pelo mesmo motivo da 9.4. Consequência combinada com W4: duas
+categorias homônimas em ramos diferentes colidem no slug — a saída é o `slug`
+explícito, e é por isso que ele é aceito no `POST`.
+
+**W7 — nenhuma das três leituras pagina.** `GET /categories` devolve a árvore
+aninhada (cortá-la no meio devolveria filho sem pai); `GET /brands` e
+`GET /tags` devolvem a lista completa ordenada por nome. As três com `meta {}`,
+mesma classe de `/roles`, `/features` e `/breeds` — taxonomia é conjunto pequeno
+e estável, e a vitrine monta o menu inteiro com uma chamada. O envelope existe
+mesmo assim para que paginar amanhã seja aditivo, não breaking.
+
+Duas consequências transversais nasceram junto e estão registradas fora daqui: o
+middleware de **autenticação opcional** (`docs/context/architecture.md`
+§ "Roteamento") e o **rate limit por IP** da vitrine
+(`docs/reference/endpoints.md` § "Mounting").
 
 ## Alternativas consideradas
 

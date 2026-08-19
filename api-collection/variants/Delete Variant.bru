@@ -1,0 +1,22 @@
+meta {
+  name: Delete Variant
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/variants/{{variantId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:product. Soft delete (204) — o SKU continua ocupado.
+
+  Responde 409 quando é a ÚLTIMA variante ativa do produto: todo produto tem
+  pelo menos uma. Para tirar o produto de circulação use status DISCONTINUED ou
+  exclua o produto.
+
+  Se a variante excluída era a default, a mais antiga entre as restantes é
+  promovida na mesma transação.
+}

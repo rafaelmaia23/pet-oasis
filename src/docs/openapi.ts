@@ -11,6 +11,7 @@ import { logPaths } from "./paths/log";
 import { mePaths } from "./paths/me";
 import { permissionPaths } from "./paths/permission";
 import { petPaths } from "./paths/pet";
+import { productPaths } from "./paths/product";
 import { profilePaths } from "./paths/profile";
 import { rolePaths } from "./paths/role";
 import { statusPaths } from "./paths/status";
@@ -161,6 +162,20 @@ const documentDefinition: ZodOpenApiObject = {
         "Leitura pública; exclusão é hard delete.",
     },
     {
+      name: "Products",
+      description:
+        "Produtos do catálogo — a identidade comercial. Escrita sob " +
+        "`manage:product`; custo e estoque aparecem conforme a capability do " +
+        "leitor. Todo produto tem pelo menos uma variante.",
+    },
+    {
+      name: "Variants",
+      description:
+        "Variantes — a unidade vendável (SKU, preço, estoque). Ajuste de " +
+        "estoque é `manage:stock`, o resto é `manage:product`, e a feature é " +
+        "exigida por campo presente no corpo.",
+    },
+    {
       name: "Pets",
       description:
         "Pets dos clientes. Coleção aninhada no cliente, recurso plano no " +
@@ -196,6 +211,7 @@ const documentDefinition: ZodOpenApiObject = {
     ...brandPaths,
     ...categoryPaths,
     ...tagPaths,
+    ...productPaths,
     ...petPaths,
     ...auditLogPaths,
     ...logPaths,

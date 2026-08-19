@@ -129,14 +129,15 @@ export async function updateCategory(
 }
 
 /**
- * Recusa a exclusão de categoria com filha ativa (9.6/W3) — sem cascata e sem
- * reparenting: apagar um pai não pode sumir com uma subárvore inteira sem o
- * staff perceber, nem mudar em silêncio o significado de categorias que ele não
- * tocou. O staff move ou apaga as filhas primeiro.
+ * Recusa a exclusão de categoria com filha ativa **ou com produto ativo
+ * vinculado** (9.6/W3, completado na 9.7) — sem cascata e sem reparenting:
+ * apagar um pai não pode sumir com uma subárvore inteira sem o staff perceber,
+ * nem mudar em silêncio o significado de categorias que ele não tocou. O staff
+ * move ou apaga as filhas primeiro.
  *
- * Nota para a 9.7: quando `ProductCategory` existir, o mesmo 409 vale para
- * categoria com produto vinculado — desvincular violaria o mínimo-de-uma
- * categoria por produto.
+ * Desvincular os produtos automaticamente está fora de questão: violaria o
+ * mínimo de uma categoria por produto (9.7/X7), então a saída é movê-los. O
+ * vínculo de produto **excluído** não segura nada — o filtro conta só ativo.
  */
 export async function deleteCategory(categoryId: string) {
   await resolveCategory(categoryId);
@@ -148,6 +149,16 @@ export async function deleteCategory(categoryId: string) {
     throw createConflictError({
       message: "A categoria ainda tem subcategorias ativas",
       action: "Mova ou exclua as subcategorias antes de excluir esta",
+    });
+  }
+
+  const activeProducts =
+    await categoryRepository.countActiveProducts(categoryId);
+
+  if (activeProducts > 0) {
+    throw createConflictError({
+      message: "A categoria ainda tem produtos vinculados",
+      action: "Mova os produtos para outra categoria antes de excluir esta",
     });
   }
 

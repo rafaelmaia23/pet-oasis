@@ -27,6 +27,7 @@ model Product {
   id            String         @id @default(uuid())
   name          String
   slug          String         @unique
+  description   String
   brandId       String
   status        ProductStatus  @default(DRAFT)
   targetSpecies PetSpecies[]
@@ -34,26 +35,33 @@ model Product {
   categories    ProductCategory[]
   tags          ProductTag[]
   variants      ProductVariant[]
-  images        ProductImage[]
 }
 
 model ProductVariant {
   id            String   @id @default(uuid())
   productId     String
   sku           String   @unique
+  label         String
   priceCents    Int
+  compareAtPriceCents Int?
   costCents     Int?
   stockQuantity Int      @default(0)
   isDefault     Boolean  @default(false)
   weightGrams   Int?
   volumeMl      Int?
   sizeLabel     String?
+  barcode       String?
 }
 ```
 
 `Product` é a identidade comercial (nome, descrição, marca, categorias, tags,
 espécies-alvo, status, imagens). `ProductVariant` é a unidade vendável (SKU,
 preço, custo, estoque, e o que varia — peso do pacote, volume, tamanho).
+
+Os dois models e as duas junções nasceram na **9.7**, com soft delete e
+timestamps em ambos. `ProductImage` não está acima porque é da **9.10**, junto do
+adaptador de storage: nada na escrita do catálogo a referencia, e uma tabela com
+FK é tão barata de criar depois quanto agora (X9).
 
 Produto plano (cada peso como produto independente) foi recusado: a vitrine
 mostraria três cards do mesmo produto, "escolher o tamanho" deixaria de existir
@@ -202,7 +210,8 @@ perceber) e sem reparenting silencioso (mudaria o significado de categorias que
 ninguém tocou, e poderia estourar a profundidade em outro ramo). Desvincular
 produtos em massa está fora de questão por um motivo mais forte: violaria o
 mínimo de uma categoria por produto. A metade das filhas está implementada na
-9.6; a dos produtos entra na **9.7**, quando `ProductCategory` existir.
+9.6; a dos produtos entrou na **9.7**, com `ProductCategory` (o vínculo de
+produto **excluído** não segura nada — a contagem é só de ativos).
 
 **W4 — slug derivado do nome na criação e congelado depois.** Renomear é a
 mudança mais banal do catálogo, e deixá-la mexer na URL quebraria todo link
@@ -236,6 +245,83 @@ Duas consequências transversais nasceram junto e estão registradas fora daqui:
 middleware de **autenticação opcional** (`docs/context/architecture.md`
 § "Roteamento") e o **rate limit por IP** da vitrine
 (`docs/reference/endpoints.md` § "Mounting").
+
+## O que a implementação (9.7) firmou além da decisão
+
+`Product` e `ProductVariant` estavam modelados, mas o comportamento da escrita
+não. Dez pontos foram fechados com o usuário na abertura da sub-fase 9.7.
+
+**X1 — `sku` é unique global**, valendo também para a variante soft-deletada.
+Mesmo precedente de `Pet.microchipId` (U1) e de W6: duplicata sai 409 pelo
+handler de P2002, sem código novo. O SKU de uma variante excluída fica preso, e
+esse é o sinal correto ("este código já foi usado aqui"); reemitir é escolher
+outro. Índice parcial (`WHERE deleted_at IS NULL`) foi recusado pela terceira
+vez, pelo mesmo motivo: exigiria editar a migration à mão e daria ao projeto
+duas gramáticas de unicidade.
+
+**X2 — `stockQuantity` não pode ficar negativo** (422). Sem carrinho, o único
+caminho de mudança é a edição manual do staff, e não existe caminho legítimo
+para negativo — o que existe é erro de digitação do repositor, barrado na
+entrada. A pergunta volta na Fase 10, onde reserva e venda dão a ela peso real.
+
+**X3 — `POST /products` exige `variants[]` com mínimo 1**, criados na mesma
+transação do produto e dos vínculos. O invariante "todo produto tem ≥1 variante"
+nunca é observável violado, nem por um instante — diferente do caminho "cria o
+produto, depois adiciona a variante", que deixaria produto invendável no banco e
+obrigaria toda leitura a tolerar `variants: []`.
+
+**X4 — a feature é exigida por campo presente no `PATCH /variants/:variantId`.**
+`stockQuantity` pede `manage:stock`; qualquer outro campo pede `manage:product`;
+corpo misto pede as duas. A rota admite as duas (`canAccess([...])`) e quem
+separa é o service, no idioma do `pet.service`. É o que permite ao repositor
+contar prateleira sem poder mexer no preço, com uma rota só. A lista de campos
+de estoque é explícita (`STOCK_FIELDS`) porque a Fase 10 acrescenta reserva, e o
+próximo campo não pode cair no lado errado em silêncio.
+
+**X5 — exatamente uma variante default por produto**, garantida pelo service: a
+primeira nasce default quando nenhuma vem marcada, promover outra rebaixa a
+anterior na mesma transação, e excluir a default promove a mais antiga entre as
+restantes. Duas marcadas no mesmo corpo é 422 (regra do schema — decide-se
+olhando só o corpo), e `isDefault: false` não é aceito no `PATCH`: rebaixar sem
+eleger outra deixaria a vitrine sem o que mostrar. Assim a 9.8 não precisa de
+critério de desempate.
+
+**X6 — excluir a última variante ativa é 409**, no idioma do W3. Tirar o produto
+de circulação é `status: DISCONTINUED` (some da vitrine, preserva histórico) ou
+`DELETE /products/:id`; nenhum dos dois é "apagar o último SKU". Cascatear o
+produto a partir da variante foi recusado: seria uma exclusão que ninguém pediu.
+
+**X7 — `categories[]`/`tags[]` são substituição total no corpo do produto.** O
+array enviado passa a ser o conjunto; o campo ausente preserva os vínculos
+atuais. Categoria exige mínimo 1 (vazio → 422), tag aceita vazio. Id inexistente
+ou excluído → 422 nomeando o campo e listando os ids que sobraram. Sub-rotas de
+vínculo (`POST /products/:id/categories/:id`) foram recusadas: quatro rotas a
+mais e um cadastro de produto virando N chamadas.
+
+**X8 — `DELETE /products/:id` cascateia nas variantes** com um único `new Date()`
+na transação, como o grafo do usuário (D4): nunca existe filho ativo de pai
+morto, e a igualdade do timestamp é a chave de correlação que um `restore` de
+produto usaria. Os vínculos de categoria e tag **ficam**: são aresta, não filho
+com ciclo de vida próprio, e quem filtra é o `deletedAt` do produto.
+
+**X9 — `ProductImage` fica para a 9.10.** O precedente de nascer órfão
+(`Pet.photoPath`, `Brand.logoPath`) existia para evitar uma migration de **uma
+coluna**; uma tabela com FK é igualmente barata de criar depois, e nada na 9.7 a
+referencia.
+
+**X10 — `description` do produto é obrigatória, com teto próprio de 2000
+caracteres** (os 500 do `catalogDescriptionSchema` servem ao rótulo de
+categoria, não à página de produto), e **`label` da variante é obrigatório**,
+informado pelo staff: derivar "15 kg" de `weightGrams: 15000` esconderia regra
+de formatação (unidade, arredondamento, idioma) num lugar onde ninguém a
+procuraria.
+
+Três premissas seguiram decisão já firmada e não foram reabertas: `brandId` é
+**obrigatório** (marca como entidade é o que dá filtro confiável — produto sem
+marca reabriria a string livre por outra porta); o slug do produto reaplica W4 e
+W6 literalmente, reusando `resolveSlug`/`slugSchema`; e a view da resposta de
+escrita é escolhida pelo **ator** (`read:product:cost`), não pela rota — a view
+pública, com disponibilidade derivada em vez de estoque exato, é da 9.8.
 
 ## Alternativas consideradas
 

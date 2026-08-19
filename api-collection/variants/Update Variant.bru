@@ -1,0 +1,29 @@
+meta {
+  name: Update Variant
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/variants/{{variantId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "priceCents": 22990,
+    "compareAtPriceCents": 24990
+  }
+}
+
+docs {
+  Campos de catálogo (preço, label, características) exigem manage:product.
+
+  "isDefault" só aceita true: para trocar a variante default, PROMOVA a outra —
+  rebaixar sem eleger ninguém deixaria o produto sem default, e responde 422.
+}

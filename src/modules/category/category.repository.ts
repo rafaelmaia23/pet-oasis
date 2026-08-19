@@ -29,6 +29,30 @@ export async function countActiveChildren(parentId: string) {
   return prisma.category.count({ where: { parentId, deletedAt: null } });
 }
 
+/**
+ * Quais dos ids informados existem e estão ativos — o produto (9.7) valida a
+ * lista inteira com uma query, e nomeia no 422 os que sobraram.
+ */
+export async function findActiveCategoryIds(ids: string[]) {
+  const categories = await prisma.category.findMany({
+    where: { id: { in: ids }, deletedAt: null },
+    select: { id: true },
+  });
+
+  return categories.map((category) => category.id);
+}
+
+/**
+ * Produtos **ativos** vinculados à categoria (9.6/W3, metade que faltava): é o
+ * que transforma a exclusão em 409. Categoria cujos produtos foram todos
+ * excluídos volta a ser excluível — o vínculo morto não guarda nada.
+ */
+export async function countActiveProducts(categoryId: string) {
+  return prisma.productCategory.count({
+    where: { categoryId, product: { deletedAt: null } },
+  });
+}
+
 export async function createCategory(
   data: Prisma.CategoryUncheckedCreateInput,
   audit?: AuditDescriptor,

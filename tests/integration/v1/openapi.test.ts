@@ -54,6 +54,20 @@ describe("GET /openapi.json", () => {
     expect(body.paths["/tags/{tagId}"].delete).toBeDefined();
   });
 
+  it("should document the product write routes as protected (9.7)", async () => {
+    const { body } = await request(app).get("/openapi.json");
+
+    // Produto ainda não tem `GET` — a leitura é da 9.8. O que se documenta
+    // aqui é a escrita, e ela herda o bearer global: nenhuma delas é pública.
+    expect(body.paths["/products"].post.security).toBeUndefined();
+    expect(body.paths["/products"].get).toBeUndefined();
+    expect(body.paths["/products/{productId}"].patch).toBeDefined();
+    expect(body.paths["/products/{productId}"].delete).toBeDefined();
+    expect(body.paths["/products/{productId}/variants"].post).toBeDefined();
+    expect(body.paths["/variants/{variantId}"].patch).toBeDefined();
+    expect(body.paths["/variants/{variantId}"].delete).toBeDefined();
+  });
+
   it("should emit the recursive category view without blowing up", async () => {
     const { body } = await request(app).get("/openapi.json");
 

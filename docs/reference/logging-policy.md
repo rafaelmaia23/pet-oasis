@@ -150,6 +150,13 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `TAG_CREATED` | `Tag` | — | 9.6 |
 | `TAG_UPDATED` | `Tag` | `fields` (`string[]`) | 9.6 |
 | `TAG_DELETED` | `Tag` | — | 9.6 |
+| `PRODUCT_CREATED` | `Product` | — | 9.7 |
+| `PRODUCT_UPDATED` | `Product` | `fields` (`string[]` — nomes dos campos enviados) | 9.7 |
+| `PRODUCT_DELETED` | `Product` | `cascadedVariants` (nº de variantes soft-deletadas junto) | 9.7 |
+| `PRODUCT_VARIANT_CREATED` | `ProductVariant` | `productId` | 9.7 |
+| `PRODUCT_VARIANT_UPDATED` | `ProductVariant` | `productId`, `fields` (`string[]`, só os de catálogo) | 9.7 |
+| `PRODUCT_VARIANT_DELETED` | `ProductVariant` | `productId`, `promotedVariantId` (só quando a excluída era a default) | 9.7 |
+| `PRODUCT_STOCK_ADJUSTED` | `ProductVariant` | `productId`, `from`, `to` | 9.7 |
 
 Nome do pet **não** entra em `metadata` de nenhuma das quatro ações acima — não
 por ser PII do pet, mas porque nome de pet é frequentemente usado como resposta
@@ -171,9 +178,16 @@ não gera linha nova. **Desfazer** a marcação (`DELETE /pets/:petId/deceased`)
 como `PET_UPDATED` com `fieldsChanged: ["deceasedAt"]`, e não como uma ação
 própria: corrigir um dado errado é update, não um evento de negócio.
 
-Ações de catálogo (produto, variante, categoria etc.) entram na tabela quando a
-sub-fase 9.7 ligar a escrita do catálogo — ainda não estão aqui de propósito,
-não por esquecimento.
+**Ajuste de estoque tem ação própria** (`PRODUCT_STOCK_ADJUSTED`, 9.7): é outro
+ato que um `PRODUCT_VARIANT_UPDATED` genérico esconderia — outra feature
+(`manage:stock`), outro cargo (o repositor, que não edita catálogo) e outra
+pergunta na auditoria. Um `PATCH` que mistura estoque e catálogo grava **as
+duas** linhas, porque as duas perguntas seguem válidas. `from`/`to` são
+quantidades, não PII, e é o par que torna a linha útil sem consultar o estado
+anterior.
+
+Nome comercial e descrição do produto **não** entram na `metadata`, pela mesma
+regra "só ids e enums" da taxonomia — provado por teste no `PRODUCT_CREATED`.
 
 `actorId` é nulo quando não há ator identificado (login falho de email inexistente, script automatizado). `AUTH_LOGIN_FAILED` de conta existente registra o `targetId` do dono, mesmo sem ator.
 

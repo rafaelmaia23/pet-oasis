@@ -773,10 +773,12 @@ público com campos reduzidos e detalhes só autenticado.
 > global**, aceitando o efeito de prender o número de um pet excluído — que num
 > identificador do mundo real é o comportamento certo, e é o precedente já firmado em
 > email/cpf/phone. Racional em [`../adr/pet-domain-modeling.md`](../adr/pet-domain-modeling.md)
-> § "O que a implementação (9.4) firmou", U1. **`sku` continua em aberto** e volta na
-> sessão 9.7 — a decisão do microchip é forte precedente, mas não é a mesma pergunta:
-> SKU é identificador **nosso**, reemitível, e prendê-lo para sempre tem custo comercial
-> que o número de chip não tem. O texto abaixo é o enunciado original da pendência.
+> § "O que a implementação (9.4) firmou", U1. **A outra metade fechou na sessão 9.7**
+> (2026-08-19): `sku` ficou com **unique global** também, pelo mesmo precedente — o custo
+> comercial de prender um código reemitível é menor que o de dar ao projeto duas
+> gramáticas de unicidade, e reemitir é escolher outro código. Racional em
+> [`../adr/product-catalog-modeling.md`](../adr/product-catalog-modeling.md) § "O que a
+> implementação (9.7) firmou", X1. O texto abaixo é o enunciado original da pendência.
 
 Mesmo problema já documentado no `docs/reference/backlog.md` para email/cpf: `@unique` no Postgres
 vale também para a linha soft-deletada, então um produto excluído prende o SKU para sempre.
@@ -787,6 +789,12 @@ O microchip tem um agravante próprio: é um identificador do mundo real, e dupl
 de erro de digitação — mas também de pet transferido entre clientes (que é backlog).
 
 ### 9.4 Estoque pode ficar negativo?
+
+> ✅ **Resolvida na sessão 9.7** (2026-08-19): **não** — `min(0)` no Zod, 422. Sem carrinho
+> não existe caminho legítimo para negativo; o que existe é erro de digitação do repositor,
+> barrado na entrada. A pergunta volta na Fase 10 com reserva e venda. Racional em
+> [`../adr/product-catalog-modeling.md`](../adr/product-catalog-modeling.md) § "O que a
+> implementação (9.7) firmou", X2.
 
 Sem carrinho ainda, o único caminho de mudança é edição manual pelo staff. Aceitar
 negativo (registra a realidade de um erro de contagem) ou barrar em 422? A decisão volta
@@ -811,6 +819,12 @@ uma categoria intermediária ou só a folha? Excluir categoria com produtos vinc
 bloqueia (409) ou desvincula?
 
 ### 9.8 Slug — gerado ou informado?
+
+> ✅ **Resolvida na sessão 9.6** (2026-08-18) para a taxonomia e **reaplicada na 9.7** ao
+> produto: derivado do nome na criação e **congelado** depois, com o `slug` explícito aceito
+> no corpo (no `POST` também) vencendo o derivado. Renomear não pode quebrar link externo.
+> Racional em [`../adr/product-catalog-modeling.md`](../adr/product-catalog-modeling.md),
+> W4/W6 — o produto reusa `resolveSlug`/`slugSchema`, sem regra nova.
 
 Gerado a partir do nome (e o que acontece quando o nome muda — slug muda e quebra link
 externo, ou congela?) ou informado pelo staff (controle total, risco de colisão e de slug

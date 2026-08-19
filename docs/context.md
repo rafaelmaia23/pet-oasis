@@ -343,6 +343,11 @@ completo, os contra-argumentos e os gotchas.
   em qualquer nó, 409 na exclusão com filha ou produto, slug derivado e
   congelado, `Tag` em hard delete, unique global e nenhuma das leituras
   paginando
+- O que a implementação (9.7) firmou em produto e variante — `sku` unique
+  global, estoque não-negativo, produto nasce com suas variantes numa
+  transação, feature exigida por campo no `PATCH` da variante, exatamente uma
+  default, 409 na última variante, vínculos por substituição total e cascata do
+  produto nas variantes
 
 *Busca e upload* — ver os ADRs listados em
 [`context/pet-domain.md`](context/pet-domain.md)

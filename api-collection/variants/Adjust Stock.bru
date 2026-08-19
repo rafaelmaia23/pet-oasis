@@ -1,0 +1,35 @@
+meta {
+  name: Adjust Stock
+  type: http
+  seq: 2
+}
+
+patch {
+  url: {{baseUrl}}/variants/{{variantId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "stockQuantity": 7
+  }
+}
+
+docs {
+  Esta é a requisição que o REPOSITOR (role stockist) faz: só "stockQuantity",
+  sob manage:stock.
+
+  A feature é exigida POR CAMPO PRESENTE no corpo: acrescente "priceCents" aqui
+  e o mesmo usuário passa a levar 403, porque preço é manage:product. Quem tem
+  as duas features manda os dois campos numa chamada só.
+
+  Estoque não pode ficar negativo: -1 responde 422.
+
+  O ajuste de estoque vira uma ação PRÓPRIA no audit log
+  (PRODUCT_STOCK_ADJUSTED, com from e to) — um corpo misto grava as duas ações.
+}

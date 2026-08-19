@@ -74,8 +74,8 @@ decisão" do mesmo ADR:
   única de todas as categorias ativas — não uma query por nível
 - Produto vincula a **qualquer nó**, folha ou não (W2) — o preço é herdado pela 9.8: "produtos de X"
   vira a união de X com os descendentes
-- Excluir categoria com filha ativa (ou, a partir da 9.7, com produto vinculado) é **409** (W3) —
-  sem cascata e sem reparenting; desvincular violaria o mínimo-de-uma-categoria por produto
+- Excluir categoria com filha ativa **ou com produto ativo vinculado** é **409** (W3, completado na
+  9.7) — sem cascata e sem reparenting; desvincular violaria o mínimo-de-uma-categoria por produto
 - **Slug derivado do nome e congelado** (W4) — renomear não muda a URL pública; o `slug` explícito é
   aceito no corpo e vence o derivado
 - **`Tag` é hard delete** (W5) — a única tabela de domínio do projeto sem `deletedAt`
@@ -83,6 +83,27 @@ decisão" do mesmo ADR:
   no precedente de `Pet.microchipId`
 - **Nenhuma das três leituras pagina** (W7) — `GET /categories` devolve a árvore aninhada, as outras
   duas a lista completa; as três com `meta {}`
+
+**Produto e variante, firmado na implementação (9.7)** — § "O que a implementação (9.7) firmou além
+da decisão" do mesmo ADR:
+
+- **`sku` unique global** (X1), valendo para a variante excluída — precedente de `Pet.microchipId` e
+  do W6; duplicata é 409 pelo P2002, sem código novo
+- **Estoque não fica negativo** (X2) — sem carrinho não há caminho legítimo para isso; a Fase 10
+  reabre a pergunta com reserva e venda
+- **`POST /products` exige `variants[]` com min 1** (X3), tudo numa transação — o invariante nunca é
+  observável violado
+- **Feature por campo presente no `PATCH /variants/:id`** (X4): `stockQuantity` é `manage:stock`, o
+  resto é `manage:product`, corpo misto exige as duas — o repositor conta prateleira sem editar o
+  catálogo, com uma rota só
+- **Exatamente uma variante default** (X5), garantida pelo service nas três escritas; excluir a
+  última variante ativa é **409** (X6)
+- **`categories[]`/`tags[]` são substituição total** no corpo do produto (X7), categoria com mínimo
+  de um; id inexistente ou excluído é 422 nomeando o campo
+- **Exclusão do produto cascateia nas variantes** com um `new Date()` único (X8), no idioma do grafo
+  do usuário; os vínculos ficam, porque aresta não é filho
+- `ProductImage` fica para a 9.10 (X9) · `description` obrigatória com teto próprio de 2000 e
+  `label` da variante informado pelo staff (X10)
 
 ## Produto × serviço — [`adr/product-vs-service.md`](../adr/product-vs-service.md)
 

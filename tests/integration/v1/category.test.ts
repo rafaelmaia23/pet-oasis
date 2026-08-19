@@ -1,3 +1,4 @@
+import { buildProduct } from "@tests/factories/product.factory";
 import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
@@ -42,23 +43,7 @@ async function seedProductIn(categoryId: string) {
     data: { name: "Golden", slug: "golden" },
   });
 
-  return prisma.product.create({
-    data: {
-      name: "Ração Golden Adulto",
-      slug: "racao-golden-adulto",
-      description: "Ração seca para cães adultos.",
-      brandId: brand.id,
-      categories: { create: { categoryId } },
-      variants: {
-        create: {
-          sku: "GOLDEN-AD-15KG",
-          label: "15 kg",
-          priceCents: 24990,
-          isDefault: true,
-        },
-      },
-    },
-  });
+  return buildProduct(brand.id, categoryId);
 }
 
 describe("GET /api/v1/categories", () => {

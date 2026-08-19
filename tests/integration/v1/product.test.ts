@@ -52,9 +52,7 @@ function makeProductBody(
     brandId,
     categories: [categoryId],
     targetSpecies: ["DOG"],
-    variants: [
-      { sku: "GOLDEN-AD-15KG", label: "15 kg", priceCents: 24990 },
-    ],
+    variants: [{ sku: "GOLDEN-AD-15KG", label: "15 kg", priceCents: 24990 }],
     ...overrides,
   };
 }

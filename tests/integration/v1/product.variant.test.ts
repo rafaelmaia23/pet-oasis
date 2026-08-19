@@ -103,9 +103,7 @@ describe("POST /api/v1/products/:productId/variants", () => {
     const token = await loginAsCatalogManager();
 
     const response = await request(app)
-      .post(
-        "/api/v1/products/11111111-1111-4111-8111-111111111111/variants",
-      )
+      .post("/api/v1/products/11111111-1111-4111-8111-111111111111/variants")
       .set("Authorization", `Bearer ${token}`)
       .send({ sku: "C", label: "3 kg", priceCents: 8990 });
 

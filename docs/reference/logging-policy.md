@@ -141,6 +141,15 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `PET_UPDATED` | `Pet` | `customerId`, `fieldsChanged` (`string[]`) | 9.4 |
 | `PET_DELETED` | `Pet` | `customerId` | 9.4 |
 | `PET_DECEASED` | `Pet` | `customerId` | 9.4 |
+| `BRAND_CREATED` | `Brand` | — | 9.6 |
+| `BRAND_UPDATED` | `Brand` | `fields` (`string[]` — nomes dos campos enviados) | 9.6 |
+| `BRAND_DELETED` | `Brand` | — | 9.6 |
+| `CATEGORY_CREATED` | `Category` | `parentId` (só quando não é raiz) | 9.6 |
+| `CATEGORY_UPDATED` | `Category` | `fields` (`string[]`) | 9.6 |
+| `CATEGORY_DELETED` | `Category` | — | 9.6 |
+| `TAG_CREATED` | `Tag` | — | 9.6 |
+| `TAG_UPDATED` | `Tag` | `fields` (`string[]`) | 9.6 |
+| `TAG_DELETED` | `Tag` | — | 9.6 |
 
 Nome do pet **não** entra em `metadata` de nenhuma das quatro ações acima — não
 por ser PII do pet, mas porque nome de pet é frequentemente usado como resposta
@@ -148,6 +157,14 @@ de pergunta de segurança e como componente de senha; e porque a política
 vigente é "ids e enums", que só vale se não for flexibilizada caso a caso
 (planejamento da Fase 9, `docs/context/pet-domain.md`). Provado por teste: o
 `metadata` de `PET_CREATED` não contém o nome enviado no cadastro.
+
+As nove ações de taxonomia (9.6) seguem a mesma regra do pet: **o nome não entra
+na `metadata`**. Aqui não é questão de PII — nome de marca é público — mas de não
+flexibilizar "só ids e enums" caso a caso; quem quiser o nome resolve o
+`targetId` pela própria rota do recurso. A exceção deliberada é `TAG_DELETED`:
+como a exclusão de tag é **hard** (9.6/W5), essa linha do audit é o único
+registro de que a tag existiu, e mesmo assim ela guarda só o id — recuperar o
+nome exige o `TAG_CREATED` correspondente, que tem o mesmo `targetId`.
 
 `PET_DECEASED` só é gravada na transição — remarcar um pet já falecido é no-op e
 não gera linha nova. **Desfazer** a marcação (`DELETE /pets/:petId/deceased`) sai

@@ -81,14 +81,18 @@ carrinho, na Fase 10. Toda a escrita e todas as rotas de pet continuam autentica
 
 Três consequências, todas herdadas pelas sessões 9.6/9.8:
 
-1. **Nasce uma autenticação opcional.** Hoje `authenticate` é tudo-ou-nada: ou exige token ou nem
-   olha. A vitrine precisa de um terceiro comportamento — se vier `Bearer`, identifica o ator; se
-   não vier, segue anônimo e **nunca** responde 401. É isso que faz o mesmo `GET /products`
-   devolver a view pública ao visitante e a interna a quem tem `read:product:internal`.
+1. **Nasceu uma autenticação opcional** (implementada na 9.6). `authenticate` era tudo-ou-nada:
+   tolerava header ausente, mas token malformado ou expirado ainda virava 401. A vitrine precisa de
+   um terceiro comportamento — se vier `Bearer`, identifica o ator; se não vier **ou se o token for
+   ruim**, segue anônimo e nunca responde 401. É isso que faz o mesmo `GET /products` devolver a
+   view pública ao visitante e a interna a quem tem `read:product:internal`. Detalhe do desenho em
+   [architecture.md](architecture.md#optionalauthenticate--o-terceiro-modo-para-a-vitrine-pública-96).
 2. **Não existe feature de leitura pública de catálogo.** Não há o que conceder ao cliente para
    ele ver produto — a role `customer` sai da Fase 9 só com as features de pet. O sufixo
    `:internal` já significa "acima do baseline", e o baseline aqui é o anônimo.
-3. **Rate limit e cache são por IP, sem identidade.** É a primeira leitura em volume do projeto
+3. **Rate limit e cache são por IP, sem identidade.** (O limite entrou na 9.6: balde único
+   `catalog-read` para as quatro leituras públicas — separar por rota daria N orçamentos a um
+   scraper pelo preço de um.) É a primeira leitura em volume do projeto
    sem ator; o Redis já está disponível para as duas coisas.
 
 A view pública é à prova de vazamento **por definição** (whitelist do presenter), não por

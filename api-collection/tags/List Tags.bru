@@ -1,0 +1,22 @@
+meta {
+  name: List Tags
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/tags
+  body: none
+  auth: none
+}
+
+script:post-response {
+  if (res.getStatus() === 200 && res.getBody().data.length > 0) {
+    bru.setVar("tagId", res.getBody().data[0].id);
+  }
+}
+
+docs {
+  Rota pública — responde sem token. Lista completa ordenada por nome, sem
+  paginação (meta vazio).
+}

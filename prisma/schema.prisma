@@ -346,3 +346,70 @@ model Pet {
   @@index([customerId])
   @@map("pets")
 }
+
+// ---------------------------------------------------------------------------
+// Catálogo — taxonomia (9.6). `Product`/`ProductVariant` e as join tables
+// ProductCategory/ProductTag chegam na 9.7: não existe join sem a ponta.
+// ---------------------------------------------------------------------------
+
+// Marca é entidade própria, não string livre no produto (ADR
+// product-catalog-modeling): filtro confiável, grafia única e página de marca
+// no futuro. `name` e `slug` são unique **global** — o índice ignora
+// `deletedAt`, como User.email e Pet.microchipId (9.6/W6): recriar uma marca
+// excluída sai 409 pelo handler de P2002, que é o sinal correto ("isto já
+// existiu aqui"), não um convite a duplicar.
+model Brand {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  // Gerado do nome na criação e congelado depois (9.6/W4) — renomear não muda
+  // a URL pública, senão uma correção de digitação quebraria link externo.
+  slug        String    @unique
+  description String?
+  // Preenchida só a partir da 9.10 (upload); nasce aqui pelo mesmo motivo da
+  // `Pet.photoPath`: evitar uma migration de uma coluna só depois.
+  logoPath    String?   @map("logo_path")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  @@map("brands")
+}
+
+// Categoria modela **função** do produto (Alimentação > Ração > Ração seca),
+// nunca espécie — espécie é faceta (`Product.targetSpecies`), fora da árvore.
+// Profundidade máxima de 3 níveis (9.6/W1), validada no service: o banco não
+// tem como expressar isso, e subir a cadeia em SQL a cada escrita seria caro.
+// `name` NÃO é unique — o mesmo rótulo pode existir em ramos diferentes; quem
+// arbitra a colisão é o `slug`, e quem quiser dois "Camas" manda o slug
+// explícito no corpo.
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  parentId    String?   @map("parent_id")
+  description String?
+  // Ordem entre irmãos, definida pelo staff; o desempate é o nome.
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+// Tag é rótulo transversal e volátil ("promoção", "filhote", "lançamento") —
+// não participa de venda, então não há histórico a preservar e o DELETE é
+// **hard** (9.6/W5). Por isso nasce sem `deletedAt` e sem `updatedAt`, no mesmo
+// idioma do Breed: o que existe aqui é nome e slug, e os dois são a identidade.
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("tags")
+}

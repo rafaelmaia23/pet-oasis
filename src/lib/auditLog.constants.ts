@@ -49,6 +49,21 @@ export const AUDIT_ACTIONS = [
   "PET_UPDATED",
   "PET_DELETED",
   "PET_DECEASED",
+  // Taxonomia do catálogo (9.6). Reorganizar a árvore reclassifica a loja
+  // inteira — por isso `manage:catalog-structure` é feature separada da autoria
+  // de produto, e por isso as três escritas são auditadas. A metadata leva id e
+  // (na categoria) o `parentId`, nunca o nome: "só ids e enums" (§4.4).
+  "BRAND_CREATED",
+  "BRAND_UPDATED",
+  "BRAND_DELETED",
+  "CATEGORY_CREATED",
+  "CATEGORY_UPDATED",
+  "CATEGORY_DELETED",
+  "TAG_CREATED",
+  "TAG_UPDATED",
+  // Hard delete (9.6/W5) — a linha some, então o audit é o único registro de
+  // que a tag existiu.
+  "TAG_DELETED",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -61,6 +76,14 @@ export type AuditAction = (typeof AUDIT_ACTIONS)[number];
  * separadas, acrescentar um alvo exigia lembrar de editar as duas, e esquecer
  * o schema não quebrava o build — só sumia silenciosamente com o filtro.
  */
-export const AUDIT_TARGET_TYPES = ["User", "Pet", "Route", "System"] as const;
+export const AUDIT_TARGET_TYPES = [
+  "User",
+  "Pet",
+  "Brand",
+  "Category",
+  "Tag",
+  "Route",
+  "System",
+] as const;
 
 export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];

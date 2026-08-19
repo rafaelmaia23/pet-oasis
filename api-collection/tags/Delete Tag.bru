@@ -1,0 +1,22 @@
+meta {
+  name: Delete Tag
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/tags/{{tagId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:catalog-structure.
+
+  HARD DELETE, ao contrário de marca e categoria: a linha SOME do banco e o
+  nome volta a ficar livre para ser recriado. Rótulo transversal não participa
+  de venda, então não há histórico a preservar — o audit log é o único registro
+  de que a tag existiu.
+
+  204 sem corpo. Excluir de novo responde 404.
+}

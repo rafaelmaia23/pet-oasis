@@ -1,0 +1,37 @@
+meta {
+  name: Create Tag
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/tags
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Promoção"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("tagId", res.getBody().id);
+  }
+}
+
+docs {
+  Exige manage:catalog-structure.
+
+  Tag é rótulo transversal e volátil (promoção, filhote, lançamento) — só nome
+  e slug, SEM description: um rótulo que precisa ser explicado não é rótulo, é
+  categoria. Mandar "description" responde 422.
+
+  O slug é derivado do nome e congelado. Nome e slug são únicos.
+}

@@ -176,6 +176,7 @@ completo, os contra-argumentos e os gotchas.
 *Superfície pública*
 
 - A vitrine do catálogo responde sem token (9.1)
+- Rate limit por IP da vitrine, balde único para as quatro leituras (9.6)
 
 *Erros*
 
@@ -196,6 +197,7 @@ completo, os contra-argumentos e os gotchas.
 *Roteamento*
 
 - `authenticate` saiu do `app.ts` (global) e foi para o grupo de rota
+- `optionalAuthenticate` — o terceiro modo, para a vitrine pública (9.6)
 
 *Onde cada coisa vive*
 
@@ -333,7 +335,16 @@ completo, os contra-argumentos e os gotchas.
   (filtro `?deceased=`), filtro não resolve recurso (uuid inexistente é lista
   vazia), e só esta rota do módulo exige `:others` direto
 
-*Catálogo, busca, upload* — ver os ADRs listados em
+*Catálogo* — [`adr/product-catalog-modeling.md`](adr/product-catalog-modeling.md)
+
+- `Product` + `ProductVariant`, nunca produto plano · categoria é função, espécie
+  é faceta · preço em centavos · status coexiste com soft delete
+- O que a implementação (9.6) firmou na taxonomia — árvore de 3 níveis, produto
+  em qualquer nó, 409 na exclusão com filha ou produto, slug derivado e
+  congelado, `Tag` em hard delete, unique global e nenhuma das leituras
+  paginando
+
+*Busca e upload* — ver os ADRs listados em
 [`context/pet-domain.md`](context/pet-domain.md)
 
 ### [Schema](context/schema.md)

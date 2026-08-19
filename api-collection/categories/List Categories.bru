@@ -1,0 +1,28 @@
+meta {
+  name: List Categories
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/categories
+  body: none
+  auth: none
+}
+
+script:post-response {
+  if (res.getStatus() === 200 && res.getBody().data.length > 0) {
+    bru.setVar("categoryId", res.getBody().data[0].id);
+  }
+}
+
+docs {
+  Rota pública — responde sem token.
+
+  Devolve a ÁRVORE ANINHADA, não a lista plana: data traz as raízes, cada uma
+  com as filhas em "children", ordenadas por position e depois por nome. Não
+  pagina — cortar uma árvore no meio devolveria filhos sem pai.
+
+  Categoria excluída não aparece. Se uma categoria viva tiver o pai excluído,
+  ela sobe para o nível raiz em vez de sumir.
+}

@@ -67,6 +67,23 @@ outra. Carrinho, pedido e pagamento ficam para a Fase 10.
 - Marca como entidade · views por capability (custo e estoque interno fora da view do cliente;
   público vê **disponibilidade**, não quantidade)
 
+**Taxonomia, firmado na implementação (9.6)** — § "O que a implementação (9.6) firmou além da
+decisão" do mesmo ADR:
+
+- **Árvore de no máximo 3 níveis** (W1), validada no service por funções puras sobre uma leitura
+  única de todas as categorias ativas — não uma query por nível
+- Produto vincula a **qualquer nó**, folha ou não (W2) — o preço é herdado pela 9.8: "produtos de X"
+  vira a união de X com os descendentes
+- Excluir categoria com filha ativa (ou, a partir da 9.7, com produto vinculado) é **409** (W3) —
+  sem cascata e sem reparenting; desvincular violaria o mínimo-de-uma-categoria por produto
+- **Slug derivado do nome e congelado** (W4) — renomear não muda a URL pública; o `slug` explícito é
+  aceito no corpo e vence o derivado
+- **`Tag` é hard delete** (W5) — a única tabela de domínio do projeto sem `deletedAt`
+- **`name`/`slug` unique global** (W6), o índice ignora `deletedAt` — recriar linha excluída é 409,
+  no precedente de `Pet.microchipId`
+- **Nenhuma das três leituras pagina** (W7) — `GET /categories` devolve a árvore aninhada, as outras
+  duas a lista completa; as três com `meta {}`
+
 ## Produto × serviço — [`adr/product-vs-service.md`](../adr/product-vs-service.md)
 
 Decisão tomada agora, **herdada pela Fase 10**: tabelas separadas + `OrderItem` polimórfico com

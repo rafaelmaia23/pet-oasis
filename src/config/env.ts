@@ -98,6 +98,17 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(15 * 60 * 1000),
+  // 9.6: leitura pública do catálogo (breeds, brands, categories, tags e, na
+  // 9.8, products), por IP — a primeira superfície de leitura em volume sem
+  // ator, então não há balde por usuário possível. O teto é folgado de
+  // propósito: navegar a vitrine são muitos GETs legítimos em sequência, e um
+  // limite apertado quebraria o visitante antes de incomodar o scraper.
+  RATE_LIMIT_CATALOG_MAX: z.coerce.number().int().positive().default(300),
+  RATE_LIMIT_CATALOG_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
 
   // Account lockout (7.10) — janela fixa inicial, dobrando a cada ciclo até o
   // teto. Contador vive no Redis (`src/lib/lockout.ts`), sem coluna nova no User.

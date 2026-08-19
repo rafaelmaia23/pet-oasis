@@ -8,12 +8,15 @@
 As rotas de negócio ficam sob **`/api/v1`** (`src/routes/index.ts`). `authenticate` é aplicado **por grupo de rota**, não global:
 
 - **Públicas** (sem `authenticate`): `/status`, `/auth`, `/breeds`.
+- **Públicas com autenticação opcional** (`optionalAuthenticate` no mount, Fase 9.6): `/brands`, `/categories`, `/tags`. Leem sem token e escrevem com feature — `optionalAuthenticate` identifica o ator quando o `Bearer` vem e segue anônimo quando não vem **ou quando o token é ruim**, sem nunca responder 401; quem exige identidade é o `canAccess` das rotas de escrita, dentro do router.
 - **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/customers/:customerId` (pets), `/pets`, `/features`, `/roles`, `/audit-logs`, `/logs`.
 - Exceção: 3 rotas dentro de `/auth` (público) aplicam `authenticate` **inline** na própria definição (`logout`, `GET /sessions`, `DELETE /sessions/:id`).
 
 As rotas de **documentação** (`/openapi.json`, `/reference`) ficam no router de topo, **fora** de `/api/v1` e de `authenticate` — são públicas.
 
-**Vitrine do catálogo (Fase 9.1 / N15):** a leitura de catálogo responde **sem token** — o e-commerce vive de quem chega pelo Google sem conta. `/breeds` (9.3) é a primeira dessas rotas e é pública "seca": não tem view por capability, então basta não montar `authenticate`. As rotas de produto (9.6/9.8) vão precisar de um middleware de **autenticação opcional** (identifica o ator se vier `Bearer`, segue anônimo se não vier, **nunca** 401), porque ali a view muda conforme as features do viewer.
+**Vitrine do catálogo (Fase 9.1 / N15):** a leitura de catálogo responde **sem token** — o e-commerce vive de quem chega pelo Google sem conta. `/breeds` (9.3) é pública "seca": não tem escrita nem view por capability, então basta não montar `authenticate`. A taxonomia (9.6) trouxe o middleware de **autenticação opcional**, porque ali leitura pública e escrita sob feature convivem no mesmo router; `/products` (9.8) reusa o mesmo middleware, ali para escolher a view pela capability do viewer.
+
+**Rate limit da vitrine (Fase 9.6):** as quatro leituras públicas de catálogo (`/breeds`, `/brands`, `/categories`, `/tags`) compartilham um balde **por IP** (`catalogIpLimiter`, rule `catalog-read`) — não há identidade para um balde por usuário. Balde único de propósito: separar por rota daria a um scraper N orçamentos pelo preço de um. `/breeds` subiu na 9.3 sem limiter e foi coberta aqui.
 
 Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado; `feature` = exige a feature via `canAccess(...)`.
 
@@ -154,6 +157,35 @@ nele, então override só volta por `PUT` explícito, que revive a linha soft-de
 | Método + Path | Auth | Descrição |
 |---|---|---|
 | GET `/api/v1/breeds` | público | Catálogo de raças. Filtro opcional `?species=DOG\|CAT\|RABBIT\|BIRD\|RODENT\|REPTILE\|FISH` (valor fora do enum → 422); sem paginação (`meta {}`). Só cão e gato têm raça cadastrada — espécie válida sem raça devolve lista vazia, não erro |
+
+## Brand — `src/modules/brand/brand.routes.ts`
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/brands` | público | Marcas ativas, ordenadas por nome; sem paginação (`meta {}`) |
+| POST `/api/v1/brands` | feature `manage:catalog-structure` | Cria marca. `slug` derivado do nome se ausente; nome/slug únicos **globalmente** (linha excluída inclusive) → recriar marca apagada é 409. Nome sem slug utilizável ("!!!") → 422 nomeando `name` |
+| PATCH `/api/v1/brands/:brandId` | feature `manage:catalog-structure` | Atualiza. Renomear **não** re-deriva o slug; mandar `slug` explicitamente é a porta de saída. `logoPath` é recusado no corpo (é do upload, 9.10) |
+| DELETE `/api/v1/brands/:brandId` | feature `manage:catalog-structure` | Soft delete (204). A linha continua ocupando nome e slug |
+
+## Category — `src/modules/category/category.routes.ts`
+
+**Árvore de no máximo 3 níveis (Fase 9.6 / W1)**, modelando a **função** do produto (`Alimentação > Ração > Ração seca`) — espécie é faceta do produto, nunca nível da árvore. Produto pode vincular a **qualquer nó**, folha ou não (W2).
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/categories` | público | **Árvore aninhada**: `data` traz as raízes, filhas em `children`, ordenadas por `position` e depois nome. Não pagina (`meta {}`) — cortar uma árvore no meio devolveria filho sem pai. Categoria viva com pai excluído sobe para a raiz em vez de sumir |
+| POST `/api/v1/categories` | feature `manage:catalog-structure` | Cria. `parentId` inexistente/excluído ou que criaria um 4º nível → 422. Slug único global + derivado do nome ⇒ homônimas em ramos diferentes colidem em 409; a saída é mandar `slug` |
+| PATCH `/api/v1/categories/:categoryId` | feature `manage:catalog-structure` | Atualiza e/ou move. `parentId: null` promove o nó (e a subárvore) à raiz. Três 422 de `parentId`: si mesma, descendente (ciclo) e estouro de profundidade — este último medindo a **altura da subárvore**, porque o nó movido carrega filhos junto. Responde o nó, com `children` vazio |
+| DELETE `/api/v1/categories/:categoryId` | feature `manage:catalog-structure` | Soft delete de **folha** (204). Com subcategoria ativa → **409**: sem cascata e sem reparenting (W3) |
+
+## Tag — `src/modules/tag/tag.routes.ts`
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/tags` | público | Tags ordenadas por nome; sem paginação (`meta {}`) |
+| POST `/api/v1/tags` | feature `manage:catalog-structure` | Cria. Só `name` e `slug` — **sem `description`** (rótulo que precisa de explicação é categoria); mandá-la é 422 |
+| PATCH `/api/v1/tags/:tagId` | feature `manage:catalog-structure` | Atualiza; renomear não mexe no slug |
+| DELETE `/api/v1/tags/:tagId` | feature `manage:catalog-structure` | **Hard delete** (204, W5) — a linha some e o nome fica livre. Única assimetria do trio; o audit log é o único registro de que a tag existiu |
 
 ## Pet — `src/modules/pet/pet.routes.ts` e `pet.customer.routes.ts`
 

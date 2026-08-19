@@ -36,6 +36,31 @@ async function seedBranch() {
   return { root, middle, leaf };
 }
 
+/** Um produto ativo pendurado na categoria — o que a torna inexcluível (9.7). */
+async function seedProductIn(categoryId: string) {
+  const brand = await prisma.brand.create({
+    data: { name: "Golden", slug: "golden" },
+  });
+
+  return prisma.product.create({
+    data: {
+      name: "Ração Golden Adulto",
+      slug: "racao-golden-adulto",
+      description: "Ração seca para cães adultos.",
+      brandId: brand.id,
+      categories: { create: { categoryId } },
+      variants: {
+        create: {
+          sku: "GOLDEN-AD-15KG",
+          label: "15 kg",
+          priceCents: 24990,
+          isDefault: true,
+        },
+      },
+    },
+  });
+}
+
 describe("GET /api/v1/categories", () => {
   it("should return 200 without any token and nest children inside the parent", async () => {
     const { root, middle, leaf } = await seedBranch();
@@ -368,6 +393,40 @@ describe("DELETE /api/v1/categories/:categoryId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/categories/${middle.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+  });
+
+  it("should return 409 when an active product is still linked (W3, 9.7)", async () => {
+    // A outra metade do W3, que só pôde nascer com `ProductCategory` (9.7).
+    // Desvincular está fora de questão: violaria o mínimo de uma categoria por
+    // produto, então a saída do staff é mover os produtos.
+    const token = await loginAsCatalogManager();
+    const { leaf } = await seedBranch();
+    await seedProductIn(leaf.id);
+
+    const response = await request(app)
+      .delete(`/api/v1/categories/${leaf.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+
+    const inDb = await prisma.category.findUnique({ where: { id: leaf.id } });
+    expect(inDb?.deletedAt).toBeNull();
+  });
+
+  it("should delete the category once the linked product is gone", async () => {
+    const token = await loginAsCatalogManager();
+    const { leaf } = await seedBranch();
+    const product = await seedProductIn(leaf.id);
+    await prisma.product.update({
+      where: { id: product.id },
+      data: { deletedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/categories/${leaf.id}`)
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(204);

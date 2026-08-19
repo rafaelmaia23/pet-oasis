@@ -500,3 +500,189 @@ describe("POST /api/v1/products", () => {
     );
   });
 });
+
+describe("PATCH /api/v1/products/:productId", () => {
+  it("should return 404 for an unknown product", async () => {
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .patch("/api/v1/products/11111111-1111-4111-8111-111111111111")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Outro nome" });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("should keep the slug frozen when the name changes (W4)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    const response = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Ração Golden Adulto Frango" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.name).toBe("Ração Golden Adulto Frango");
+    expect(response.body.slug).toBe("racao-golden-adulto");
+  });
+
+  it("should replace the whole category and tag sets (X7)", async () => {
+    const { brand, category, tag } = await seedTaxonomy();
+    const other = await prisma.category.create({
+      data: { name: "Petiscos", slug: "petiscos" },
+    });
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { tags: [tag.id] }));
+
+    const response = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ categories: [other.id], tags: [] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.categories).toHaveLength(1);
+    expect(response.body.categories[0].id).toBe(other.id);
+    expect(response.body.tags).toEqual([]);
+  });
+
+  it("should keep the current links when the fields are absent", async () => {
+    const { brand, category, tag } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { tags: [tag.id] }));
+
+    const response = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ status: "ACTIVE" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe("ACTIVE");
+    expect(response.body.categories).toHaveLength(1);
+    expect(response.body.tags).toHaveLength(1);
+  });
+
+  it("should reject an empty category set (X7)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    const response = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ categories: [] });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["categories"]);
+  });
+
+  it("should reject an empty body and a variants field", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    const empty = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+
+    const withVariants = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ variants: [{ sku: "X", label: "X", priceCents: 1 }] });
+
+    expect(empty.status).toBe(422);
+    expect(withVariants.status).toBe(422);
+  });
+});
+
+describe("DELETE /api/v1/products/:productId", () => {
+  it("should soft delete the product and cascade into its variants with one timestamp (X8)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          variants: [
+            { sku: "A", label: "1 kg", priceCents: 2990 },
+            { sku: "B", label: "15 kg", priceCents: 24990 },
+          ],
+        }),
+      );
+
+    const response = await request(app)
+      .delete(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const product = await prisma.product.findUnique({
+      where: { id: created.body.id },
+    });
+    const variants = await prisma.productVariant.findMany({
+      where: { productId: created.body.id },
+    });
+
+    expect(product?.deletedAt).not.toBeNull();
+    expect(variants).toHaveLength(2);
+    for (const variant of variants) {
+      expect(variant.deletedAt?.getTime()).toBe(product?.deletedAt?.getTime());
+    }
+  });
+
+  it("should record the cascaded variant count in the audit log", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    await request(app)
+      .delete(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const log = await prisma.auditLog.findFirst({
+      where: { action: "PRODUCT_DELETED" },
+    });
+
+    expect(log?.metadata).toMatchObject({ cascadedVariants: 1 });
+  });
+
+  it("should return 404 when deleting twice", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    await request(app)
+      .delete(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const response = await request(app)
+      .delete(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+  });
+});

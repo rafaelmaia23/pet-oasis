@@ -8,13 +8,13 @@
 As rotas de negócio ficam sob **`/api/v1`** (`src/routes/index.ts`). `authenticate` é aplicado **por grupo de rota**, não global:
 
 - **Públicas** (sem `authenticate`): `/status`, `/auth`, `/breeds`.
-- **Públicas com autenticação opcional** (`optionalAuthenticate` no mount, Fase 9.6): `/brands`, `/categories`, `/tags`. Leem sem token e escrevem com feature — `optionalAuthenticate` identifica o ator quando o `Bearer` vem e segue anônimo quando não vem **ou quando o token é ruim**, sem nunca responder 401; quem exige identidade é o `canAccess` das rotas de escrita, dentro do router.
-- **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/customers/:customerId` (pets), `/pets`, `/features`, `/roles`, `/audit-logs`, `/logs`.
+- **Públicas com autenticação opcional** (`optionalAuthenticate` no mount, Fase 9.6): `/brands`, `/categories`, `/tags` e — desde a 9.7, ainda só com escrita — `/products`. Leem sem token e escrevem com feature — `optionalAuthenticate` identifica o ator quando o `Bearer` vem e segue anônimo quando não vem **ou quando o token é ruim**, sem nunca responder 401; quem exige identidade é o `canAccess` das rotas de escrita, dentro do router.
+- **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/customers/:customerId` (pets), `/pets`, `/variants`, `/features`, `/roles`, `/audit-logs`, `/logs`.
 - Exceção: 3 rotas dentro de `/auth` (público) aplicam `authenticate` **inline** na própria definição (`logout`, `GET /sessions`, `DELETE /sessions/:id`).
 
 As rotas de **documentação** (`/openapi.json`, `/reference`) ficam no router de topo, **fora** de `/api/v1` e de `authenticate` — são públicas.
 
-**Vitrine do catálogo (Fase 9.1 / N15):** a leitura de catálogo responde **sem token** — o e-commerce vive de quem chega pelo Google sem conta. `/breeds` (9.3) é pública "seca": não tem escrita nem view por capability, então basta não montar `authenticate`. A taxonomia (9.6) trouxe o middleware de **autenticação opcional**, porque ali leitura pública e escrita sob feature convivem no mesmo router; `/products` (9.8) reusa o mesmo middleware, ali para escolher a view pela capability do viewer.
+**Vitrine do catálogo (Fase 9.1 / N15):** a leitura de catálogo responde **sem token** — o e-commerce vive de quem chega pelo Google sem conta. `/breeds` (9.3) é pública "seca": não tem escrita nem view por capability, então basta não montar `authenticate`. A taxonomia (9.6) trouxe o middleware de **autenticação opcional**, porque ali leitura pública e escrita sob feature convivem no mesmo router; `/products` já entrou nesse grupo na **9.7**, que só tem escrita: montá-lo assim desde já faz o `GET` público da 9.8 ser acréscimo, não remontagem. `/variants` fica do lado protegido — variante não tem leitura pública própria, ela aparece dentro do produto.
 
 **Rate limit da vitrine (Fase 9.6):** as quatro leituras públicas de catálogo (`/breeds`, `/brands`, `/categories`, `/tags`) compartilham um balde **por IP** (`catalogIpLimiter`, rule `catalog-read`) — não há identidade para um balde por usuário. Balde único de propósito: separar por rota daria a um scraper N orçamentos pelo preço de um. `/breeds` subiu na 9.3 sem limiter e foi coberta aqui.
 
@@ -176,7 +176,7 @@ nele, então override só volta por `PUT` explícito, que revive a linha soft-de
 | GET `/api/v1/categories` | público | **Árvore aninhada**: `data` traz as raízes, filhas em `children`, ordenadas por `position` e depois nome. Não pagina (`meta {}`) — cortar uma árvore no meio devolveria filho sem pai. Categoria viva com pai excluído sobe para a raiz em vez de sumir |
 | POST `/api/v1/categories` | feature `manage:catalog-structure` | Cria. `parentId` inexistente/excluído ou que criaria um 4º nível → 422. Slug único global + derivado do nome ⇒ homônimas em ramos diferentes colidem em 409; a saída é mandar `slug` |
 | PATCH `/api/v1/categories/:categoryId` | feature `manage:catalog-structure` | Atualiza e/ou move. `parentId: null` promove o nó (e a subárvore) à raiz. Três 422 de `parentId`: si mesma, descendente (ciclo) e estouro de profundidade — este último medindo a **altura da subárvore**, porque o nó movido carrega filhos junto. Responde o nó, com `children` vazio |
-| DELETE `/api/v1/categories/:categoryId` | feature `manage:catalog-structure` | Soft delete de **folha** (204). Com subcategoria ativa → **409**: sem cascata e sem reparenting (W3) |
+| DELETE `/api/v1/categories/:categoryId` | feature `manage:catalog-structure` | Soft delete de **folha** (204). Com subcategoria ativa **ou com produto ativo vinculado** → **409**: sem cascata e sem reparenting (W3). Desvincular o produto violaria o mínimo de uma categoria por produto (9.7/X7), então a saída é movê-lo; vínculo de produto excluído não segura nada |
 
 ## Tag — `src/modules/tag/tag.routes.ts`
 
@@ -186,6 +186,28 @@ nele, então override só volta por `PUT` explícito, que revive a linha soft-de
 | POST `/api/v1/tags` | feature `manage:catalog-structure` | Cria. Só `name` e `slug` — **sem `description`** (rótulo que precisa de explicação é categoria); mandá-la é 422 |
 | PATCH `/api/v1/tags/:tagId` | feature `manage:catalog-structure` | Atualiza; renomear não mexe no slug |
 | DELETE `/api/v1/tags/:tagId` | feature `manage:catalog-structure` | **Hard delete** (204, W5) — a linha some e o nome fica livre. Única assimetria do trio; o audit log é o único registro de que a tag existiu |
+
+## Product — `src/modules/product/product.routes.ts`
+
+**Só escrita nesta fase (9.7).** A leitura (`GET /products`, detalhe, filtros e views por capability) é da 9.8. `Product` é a identidade comercial e `ProductVariant` a unidade vendável: **todo produto tem ≥1 variante**, e exatamente uma delas é a default.
+
+A view da resposta é escolhida pelo **ator**, não pela rota: `costCents` só aparece para quem tem `read:product:cost`, mesmo em quem acabou de criar o produto.
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| POST `/api/v1/products` | feature `manage:product` | Cria produto **com** suas variantes (`variants` min 1, X3) e vínculos, numa transação. `categories` exige min 1 (X7); `tags` é opcional; `targetSpecies` vazio = qualquer espécie. `slug` derivado do nome se ausente e único global (409 na colisão, inclusive contra produto excluído). SKU repetido dentro do corpo → 422 nomeando `variants`; SKU já usado no banco → 409. Duas variantes marcadas default → 422; nenhuma marcada → a primeira é promovida (X5) |
+| PATCH `/api/v1/products/:productId` | feature `manage:product` | Atualiza. Renomear **não** re-deriva o slug (W4). `categories`/`tags` são **substituição total**: o array enviado vira o conjunto, campo ausente preserva o atual, `categories: []` → 422. `variants` não é aceito (variante tem rotas próprias) |
+| DELETE `/api/v1/products/:productId` | feature `manage:product` | Soft delete (204) **com cascata nas variantes**, um único timestamp para as duas tabelas (X8). Nome, slug e SKUs continuam ocupados; o audit registra `cascadedVariants` |
+
+## Product variant — `src/modules/product/product.variant.routes.ts`
+
+**Coleção aninhada, recurso plano** — mesmo racional dos pets: criar precisa do produto na URL, o item é global por UUID.
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| POST `/api/v1/products/:productId/variants` | feature `manage:product` | Cria variante. `sku` é unique **global**, valendo para a variante excluída (X1) → duplicata é 409. `isDefault: true` rebaixa a default anterior na mesma transação |
+| PATCH `/api/v1/variants/:variantId` | feature `manage:product` **e/ou** `manage:stock` | A feature é exigida **por campo presente** (X4): `stockQuantity` pede `manage:stock`, qualquer outro campo pede `manage:product`, corpo misto pede as duas — é o que deixa o repositor contar prateleira sem editar o catálogo. `stockQuantity` negativo → 422 (X2). `isDefault` só aceita `true`: rebaixar sem eleger outra é 422. Ajuste de estoque vira ação própria no audit (`PRODUCT_STOCK_ADJUSTED`, com `from`/`to`) |
+| DELETE `/api/v1/variants/:variantId` | feature `manage:product` | Soft delete (204). **409** quando é a última variante ativa do produto (X6) — para tirar o produto de circulação use `status: DISCONTINUED` ou exclua o produto. Se a excluída era a default, a mais antiga entre as restantes é promovida |
 
 ## Pet — `src/modules/pet/pet.routes.ts` e `pet.customer.routes.ts`
 

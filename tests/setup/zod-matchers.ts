@@ -12,7 +12,10 @@ import { z } from "zod";
  * estrita quando ela terminar de ser montada — o mesmo truque que o Zod usa
  * para o tipo recursivo original.
  */
-function strictify(schema: z.ZodType, seen: Map<z.ZodType, z.ZodType>) {
+function strictify(
+  schema: z.ZodType,
+  seen: Map<z.ZodType, z.ZodType>,
+): z.ZodType {
   const known = seen.get(schema);
   if (known) return known;
 

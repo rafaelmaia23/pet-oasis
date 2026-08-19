@@ -1,0 +1,21 @@
+meta {
+  name: Delete Category
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/categories/{{categoryId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:catalog-structure. Soft delete, e só de FOLHA.
+
+  Categoria com subcategoria ativa responde 409: não há cascata nem
+  reparenting, porque apagar um pai não pode sumir com uma subárvore inteira
+  sem o staff perceber. Mova ou exclua as filhas primeiro.
+
+  204 sem corpo. Excluir de novo responde 404.
+}

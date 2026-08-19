@@ -28,6 +28,18 @@ describe("clearDatabase() reference-data preservation", () => {
     // a falha apareça aqui, e não espalhada pela suíte inteira.
     const customer = await buildCustomer();
     await buildPet(customer.customer?.id ?? "");
+
+    // Taxonomia do catálogo (9.6): transacional, diferente de `Breed`. A
+    // categoria nasce com um filho de propósito — a FK é para a própria tabela,
+    // e é o caso que provaria um teardown que apaga na ordem errada.
+    await prisma.brand.create({ data: { name: "Golden", slug: "golden" } });
+    await prisma.tag.create({ data: { name: "Promoção", slug: "promocao" } });
+    const root = await prisma.category.create({
+      data: { name: "Alimentação", slug: "alimentacao" },
+    });
+    await prisma.category.create({
+      data: { name: "Ração", slug: "racao", parentId: root.id },
+    });
   });
 
   it("removes transactional rows but keeps features, roles, role_features and breeds", async () => {
@@ -44,6 +56,7 @@ describe("clearDatabase() reference-data preservation", () => {
     // sanity: the transactional rows exist before clearing
     expect(await prisma.user.count()).toBeGreaterThan(0);
     expect(await prisma.pet.count()).toBeGreaterThan(0);
+    expect(await prisma.category.count()).toBeGreaterThan(0);
 
     await clearDatabase();
 
@@ -60,5 +73,8 @@ describe("clearDatabase() reference-data preservation", () => {
     expect(await prisma.customer.count()).toBe(0);
     expect(await prisma.pet.count()).toBe(0);
     expect(await prisma.previousEmail.count()).toBe(0);
+    expect(await prisma.brand.count()).toBe(0);
+    expect(await prisma.category.count()).toBe(0);
+    expect(await prisma.tag.count()).toBe(0);
   });
 });

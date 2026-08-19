@@ -38,6 +38,33 @@ describe("GET /openapi.json", () => {
     expect(body.paths["/breeds"].get.security).toEqual([]);
   });
 
+  it("should mark every catalog read as public and every catalog write as protected", async () => {
+    const { body } = await request(app).get("/openapi.json");
+
+    // As três rotas da 9.6 têm leitura pública e escrita sob feature no mesmo
+    // path — é o par que justifica a autenticação opcional. Documentar só
+    // metade faria o Scalar mentir sobre uma das duas.
+    for (const path of ["/brands", "/categories", "/tags"]) {
+      expect(body.paths[path].get.security).toEqual([]);
+      expect(body.paths[path].post.security).toBeUndefined();
+    }
+
+    expect(body.paths["/brands/{brandId}"].patch).toBeDefined();
+    expect(body.paths["/categories/{categoryId}"].delete).toBeDefined();
+    expect(body.paths["/tags/{tagId}"].delete).toBeDefined();
+  });
+
+  it("should emit the recursive category view without blowing up", async () => {
+    const { body } = await request(app).get("/openapi.json");
+
+    // A view de categoria se referencia em `children`; se o gerador não
+    // resolvesse a recursão, o documento nem seria produzido.
+    const category = body.components?.schemas?.Category;
+
+    expect(category).toBeDefined();
+    expect(category.properties?.children?.type).toBe("array");
+  });
+
   it("should not leak sensitive fields anywhere in the document", async () => {
     const { text } = await request(app).get("/openapi.json");
 

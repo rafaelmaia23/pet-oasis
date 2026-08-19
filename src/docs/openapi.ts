@@ -3,7 +3,9 @@ import { createDocument, type ZodOpenApiObject } from "zod-openapi";
 import { securitySchemes } from "./components";
 import { auditLogPaths } from "./paths/audit-log";
 import { authPaths } from "./paths/auth";
+import { brandPaths } from "./paths/brand";
 import { breedPaths } from "./paths/breed";
+import { categoryPaths } from "./paths/category";
 import { featurePaths } from "./paths/feature";
 import { logPaths } from "./paths/log";
 import { mePaths } from "./paths/me";
@@ -12,6 +14,7 @@ import { petPaths } from "./paths/pet";
 import { profilePaths } from "./paths/profile";
 import { rolePaths } from "./paths/role";
 import { statusPaths } from "./paths/status";
+import { tagPaths } from "./paths/tag";
 import { userPaths } from "./paths/user";
 
 type OpenApiDocument = ReturnType<typeof createDocument>;
@@ -139,6 +142,25 @@ const documentDefinition: ZodOpenApiObject = {
         "tem raça cadastrada.",
     },
     {
+      name: "Brands",
+      description:
+        "Marcas do catálogo. Leitura pública; escrita sob " +
+        "`manage:catalog-structure`. Slug derivado do nome e congelado.",
+    },
+    {
+      name: "Categories",
+      description:
+        "Árvore de categorias — modela a **função** do produto, nunca a " +
+        "espécie (que é faceta do produto). Máximo de três níveis; leitura " +
+        "pública devolve a árvore aninhada.",
+    },
+    {
+      name: "Tags",
+      description:
+        "Rótulos transversais e voláteis (promoção, filhote, lançamento). " +
+        "Leitura pública; exclusão é hard delete.",
+    },
+    {
       name: "Pets",
       description:
         "Pets dos clientes. Coleção aninhada no cliente, recurso plano no " +
@@ -171,6 +193,9 @@ const documentDefinition: ZodOpenApiObject = {
     ...rolePaths,
     ...featurePaths,
     ...breedPaths,
+    ...brandPaths,
+    ...categoryPaths,
+    ...tagPaths,
     ...petPaths,
     ...auditLogPaths,
     ...logPaths,

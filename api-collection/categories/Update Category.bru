@@ -1,0 +1,36 @@
+meta {
+  name: Update Category
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/categories/{{categoryId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Comida",
+    "position": 1
+  }
+}
+
+docs {
+  Exige manage:catalog-structure. Pelo menos um campo é obrigatório.
+
+  Renomear NÃO mexe no slug. Para mover o nó, mande "parentId": "<id>";
+  "parentId": null promove a categoria (e a subárvore dela) ao nível raiz.
+
+  Três recusas de parentId, todas 422: apontar para si mesma, apontar para uma
+  DESCENDENTE (ciclo), e estourar os três níveis — inclusive quando o nó
+  movido caberia sozinho mas carrega filhos junto.
+
+  A resposta é o nó, com "children" vazio. Releia "List Categories" para ver a
+  árvore atualizada.
+}

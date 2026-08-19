@@ -22,9 +22,15 @@ export async function clearDatabase() {
   await prisma.employee.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.user.deleteMany();
-  // Taxonomia do catálogo (9.6) — dado transacional criado pelos testes, não
-  // referência semeada como Breed. `categories` tem FK para si mesma, mas o
-  // DELETE varre a tabela inteira, então nenhum pai sobra referenciado.
+  // Catálogo (9.6/9.7) — dado transacional criado pelos testes, não referência
+  // semeada como Breed. A ordem é de baixo para cima: junções, variantes,
+  // produto e só então a taxonomia, porque toda FK aqui é RESTRICT.
+  // `categories` tem FK para si mesma, mas o DELETE varre a tabela inteira,
+  // então nenhum pai sobra referenciado.
+  await prisma.productTag.deleteMany();
+  await prisma.productCategory.deleteMany();
+  await prisma.productVariant.deleteMany();
+  await prisma.product.deleteMany();
   await prisma.brand.deleteMany();
   await prisma.category.deleteMany();
   await prisma.tag.deleteMany();

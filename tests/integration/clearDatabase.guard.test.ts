@@ -32,13 +32,40 @@ describe("clearDatabase() reference-data preservation", () => {
     // Taxonomia do catálogo (9.6): transacional, diferente de `Breed`. A
     // categoria nasce com um filho de propósito — a FK é para a própria tabela,
     // e é o caso que provaria um teardown que apaga na ordem errada.
-    await prisma.brand.create({ data: { name: "Golden", slug: "golden" } });
-    await prisma.tag.create({ data: { name: "Promoção", slug: "promocao" } });
+    const brand = await prisma.brand.create({
+      data: { name: "Golden", slug: "golden" },
+    });
+    const tag = await prisma.tag.create({
+      data: { name: "Promoção", slug: "promocao" },
+    });
     const root = await prisma.category.create({
       data: { name: "Alimentação", slug: "alimentacao" },
     });
-    await prisma.category.create({
+    const child = await prisma.category.create({
       data: { name: "Ração", slug: "racao", parentId: root.id },
+    });
+
+    // Produto (9.7) amarra as três pontas da taxonomia: FK para `brands`, e as
+    // duas junções apontando para `categories` e `tags`. Todas RESTRICT — o
+    // produto tem que sair antes delas, e as junções antes do produto.
+    await prisma.product.create({
+      data: {
+        name: "Ração Golden Adulto",
+        slug: "racao-golden-adulto",
+        description: "Ração seca para cães adultos.",
+        brandId: brand.id,
+        targetSpecies: ["DOG"],
+        variants: {
+          create: {
+            sku: "GOLDEN-AD-15KG",
+            label: "15 kg",
+            priceCents: 24990,
+            isDefault: true,
+          },
+        },
+        categories: { create: { categoryId: child.id } },
+        tags: { create: { tagId: tag.id } },
+      },
     });
   });
 
@@ -57,6 +84,7 @@ describe("clearDatabase() reference-data preservation", () => {
     expect(await prisma.user.count()).toBeGreaterThan(0);
     expect(await prisma.pet.count()).toBeGreaterThan(0);
     expect(await prisma.category.count()).toBeGreaterThan(0);
+    expect(await prisma.product.count()).toBeGreaterThan(0);
 
     await clearDatabase();
 
@@ -76,5 +104,9 @@ describe("clearDatabase() reference-data preservation", () => {
     expect(await prisma.brand.count()).toBe(0);
     expect(await prisma.category.count()).toBe(0);
     expect(await prisma.tag.count()).toBe(0);
+    expect(await prisma.product.count()).toBe(0);
+    expect(await prisma.productVariant.count()).toBe(0);
+    expect(await prisma.productCategory.count()).toBe(0);
+    expect(await prisma.productTag.count()).toBe(0);
   });
 });

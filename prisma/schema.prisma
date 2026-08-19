@@ -348,8 +348,7 @@ model Pet {
 }
 
 // ---------------------------------------------------------------------------
-// Catálogo — taxonomia (9.6). `Product`/`ProductVariant` e as join tables
-// ProductCategory/ProductTag chegam na 9.7: não existe join sem a ponta.
+// Catálogo — taxonomia (9.6) e produto (9.7).
 // ---------------------------------------------------------------------------
 
 // Marca é entidade própria, não string livre no produto (ADR
@@ -371,6 +370,8 @@ model Brand {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
+
+  products Product[]
 
   @@map("brands")
 }
@@ -397,6 +398,8 @@ model Category {
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
 
+  products ProductCategory[]
+
   @@index([parentId])
   @@map("categories")
 }
@@ -411,5 +414,129 @@ model Tag {
   slug      String   @unique
   createdAt DateTime @default(now()) @map("created_at")
 
+  products ProductTag[]
+
   @@map("tags")
+}
+
+// "Isto está à venda?" e "isto existe?" são perguntas diferentes, e por isso o
+// status convive com o `deletedAt` (ADR product-catalog-modeling § "Status do
+// produto coexiste com soft delete"): descontinuado some da vitrine mas
+// preserva o histórico de venda, enquanto excluído é erro de cadastro.
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  DISCONTINUED
+}
+
+// Product é a **identidade comercial** ("Ração Golden Adulto"); quem é vendável
+// é a ProductVariant (SKU/preço/estoque). Nunca produto plano — ver o ADR. O
+// invariante "todo produto tem ≥1 variante" não cabe no banco (nenhuma
+// constraint expressa "a coleção não pode estar vazia"), então mora no service:
+// criar exige `variants[]` com min 1 (9.7/X3) e excluir a última variante ativa
+// é 409 (X6).
+//
+// `targetSpecies` é **faceta**, não nível da árvore de categoria (N7, "problema
+// da cama"): uma cama serve cão e gato sem virar duas categorias. Array vazio
+// significa "qualquer espécie", não "nenhuma".
+//
+// `brandId` é obrigatório: marca como entidade é o que dá filtro confiável e
+// grafia única, e produto sem marca reabriria a string livre por outra porta.
+model Product {
+  id            String        @id @default(uuid())
+  name          String
+  // Mesma regra da taxonomia (9.6/W4 e W6, reaplicadas em 9.7): derivado do
+  // nome na criação, congelado depois, explícito vence, unique **global** —
+  // recriar um produto excluído sai 409 pelo handler de P2002.
+  slug          String        @unique
+  description   String
+  brandId       String        @map("brand_id")
+  status        ProductStatus @default(DRAFT)
+  targetSpecies PetSpecies[]  @map("target_species")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  deletedAt     DateTime?     @map("deleted_at")
+
+  brand      Brand             @relation(fields: [brandId], references: [id])
+  variants   ProductVariant[]
+  categories ProductCategory[]
+  tags       ProductTag[]
+
+  @@index([brandId])
+  @@map("products")
+}
+
+// A unidade vendável: é para cá que o `OrderItem` da Fase 10 vai apontar, nunca
+// para o Product. Características em colunas fixas (N8) — EAV e JSON foram
+// recusados porque tipagem estrita é valor central do projeto; atributo novo é
+// migration, barata e explícita.
+//
+// Preço, custo e comparação em **centavos** inteiros (N9): sem ponto flutuante
+// e sem o `Decimal` do Prisma contaminando Zod e serialização. `costCents` é
+// dado interno — quem o vê é quem tem `read:product:cost`, e o corte é da view.
+//
+// `sku` é unique **global**, valendo para a linha soft-deletada (9.7/X1):
+// mesmo idioma de `Pet.microchipId`. O SKU de uma variante excluída fica preso,
+// e isso é o sinal "este código já foi usado aqui" — reemitir é escolher outro.
+//
+// `isDefault`: exatamente uma por produto, garantida pelo service (X5) — a
+// vitrine sempre tem o que mostrar sem precisar de critério de desempate.
+model ProductVariant {
+  id                  String    @id @default(uuid())
+  productId           String    @map("product_id")
+  sku                 String    @unique
+  // Rótulo que o cliente lê no seletor ("15 kg", "Tamanho M"), informado pelo
+  // staff (X10): derivar de `weightGrams` produziria "15000 g" e esconderia
+  // regra de formatação no código.
+  label               String
+  priceCents          Int       @map("price_cents")
+  compareAtPriceCents Int?      @map("compare_at_price_cents")
+  costCents           Int?      @map("cost_cents")
+  // Sem movimentação nem reserva nesta fase (StockMovement é da Fase 10, quando
+  // a mudança passa a ter causa). Não pode ficar negativo (X2).
+  stockQuantity       Int       @default(0) @map("stock_quantity")
+  weightGrams         Int?      @map("weight_grams")
+  volumeMl            Int?      @map("volume_ml")
+  sizeLabel           String?   @map("size_label")
+  barcode             String?
+  isDefault           Boolean   @default(false) @map("is_default")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  deletedAt           DateTime? @map("deleted_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+// As duas junções nascem aqui, não na 9.6: não existe join sem a ponta
+// `Product`. São **aresta**, não filho com ciclo de vida próprio — por isso sem
+// `deletedAt`: substituir os vínculos apaga a linha, e excluir o produto deixa
+// as arestas onde estão (o filtro de quem lê é o `deletedAt` do produto).
+//
+// O mínimo de uma categoria por produto (X7) é do service, como todo mínimo de
+// coleção. Tag não tem mínimo: rótulo transversal é opcional por natureza.
+model ProductCategory {
+  productId  String @map("product_id")
+  categoryId String @map("category_id")
+
+  product  Product  @relation(fields: [productId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
+  @@map("product_categories")
+}
+
+model ProductTag {
+  productId String @map("product_id")
+  tagId     String @map("tag_id")
+
+  product Product @relation(fields: [productId], references: [id])
+  tag     Tag     @relation(fields: [tagId], references: [id])
+
+  @@id([productId, tagId])
+  @@index([tagId])
+  @@map("product_tags")
 }

@@ -248,6 +248,26 @@ describe("POST /api/v1/products", () => {
     expect(response.body.slug).toBe("golden-adulto-15kg");
   });
 
+  it("should reject a slug shaped like a UUID (9.8/Y2)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          slug: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+        }),
+      );
+
+    // `GET /products/:idOrSlug` decide id × slug pela forma do valor: um slug
+    // com cara de uuid tornaria a rota ambígua para sempre. O corte é aqui, na
+    // escrita, e não lá — a leitura não pode consertar o que já está no banco.
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["slug"]);
+  });
+
   it("should name `name` when it produces no usable slug", async () => {
     const { brand, category } = await seedTaxonomy();
     const token = await loginAsCatalogManager();

@@ -348,6 +348,12 @@ completo, os contra-argumentos e os gotchas.
   transação, feature exigida por campo no `PATCH` da variante, exatamente uma
   default, 409 na última variante, vínculos por substituição total e cascata do
   produto nas variantes
+- O que a implementação (9.8) firmou na leitura — `?status=` ignorado em
+  silêncio, id-ou-slug numa rota só (com slug proibido de parecer UUID), preço
+  do produto = menor variante ativa, `inStock` derivado em todas as views,
+  espécie vazia casando com tudo, tag repetida como interseção, 404 (não 403)
+  para o que o ator não pode ver, e `read:product:cost` implicando a visão
+  interna
 
 *Busca e upload* — ver os ADRs listados em
 [`context/pet-domain.md`](context/pet-domain.md)

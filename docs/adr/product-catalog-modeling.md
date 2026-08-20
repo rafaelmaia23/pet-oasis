@@ -172,6 +172,11 @@ O presenter por whitelist Zod, já usado no módulo de usuário, resolve
 | disponibilidade (booleano derivado do estoque) | ✅ | ✅ |
 | produtos `DRAFT` e `DISCONTINUED` | ❌ | ✅ |
 
+> A implementação (9.8) transformou essas duas colunas numa **escada de três
+> views** — `public` → `internal` → `cost` —, porque `read:product:cost` implica
+> a visão interna (Y9). O campo `status` acabou do lado interno junto com o
+> estoque, e a disponibilidade virou `inStock`, presente nas três (Y10).
+
 Expor **disponibilidade** em vez de quantidade exata para o público é decisão
 consciente: quantidade exata é informação competitiva e não muda nada para
 quem compra. Um teste de contrato afirma que a view pública não contém
@@ -322,6 +327,82 @@ marca reabriria a string livre por outra porta); o slug do produto reaplica W4 e
 W6 literalmente, reusando `resolveSlug`/`slugSchema`; e a view da resposta de
 escrita é escolhida pelo **ator** (`read:product:cost`), não pela rota — a view
 pública, com disponibilidade derivada em vez de estoque exato, é da 9.8.
+
+## O que a implementação (9.8) firmou além da decisão
+
+A leitura era o lado que nunca tinha sido especificado: a decisão original tinha
+a tabela de views, mas não *quem* resolve a view, nem o que acontece quando o
+recorte e o filtro discordam. Dez pontos foram fechados com o usuário na abertura
+da 9.8 — três deles eram pendências registradas desde o planejamento da fase.
+
+**Y1 — `?status=` é ignorado em silêncio** para quem não tem
+`read:product:internal` (era a pendência aberta na 9.1). As alternativas eram 422
+(coerente com o filtro estrito de V2) e 403. As duas **confirmam** que existe um
+estado escondido: a mensagem de erro é a resposta. A vitrine não pode contar isso
+— e a incoerência com V2 é aparente, porque lá o valor é inválido e aqui o
+parâmetro é *invisível*, que é caso diferente.
+
+**Y2 — `GET /products/:idOrSlug` é uma rota só**, com a forma do valor
+desempatando: UUID → id, resto → slug (era a pendência §9.5). A ambiguidade que a
+pendência apontava é real, e não teórica — o regex de slug (hex minúsculo e
+hífens simples) **casa** com um UUID. Ela foi fechada na **escrita**, não na
+leitura: `slugSchema` passou a recusar slug com forma de UUID, e como o schema é
+compartilhado, a garantia vale para marca, categoria e tag também. Fechar na
+leitura seria impossível — um slug já gravado não teria como ser desempatado.
+
+**Y3 — `?sort=price` é o menor preço entre as variantes ativas** (era a pendência
+§9.6). É o "a partir de R$ X" que toda vitrine mostra, e é o único dos três
+candidatos que casa com a faixa de preço já decidida (produto entra se **alguma**
+variante couber): ordenar pela default deixaria um produto entrar na faixa e
+ordenar fora dela. Consequência técnica: o Prisma só ordena relação por `_count`,
+então a listagem por preço virou um segundo caminho no repository — `groupBy` de
+variante para a página de **ids** já ordenada, `findMany` para hidratar, ordem
+reimposta em memória (o `IN` do Postgres não a preserva). SQL cru foi recusado:
+o projeto o reserva para a busca textual.
+
+**Y4 — `inStock` aparece na variante e no produto.** Na variante é
+`stockQuantity > 0`; no produto, "alguma variante ativa tem estoque". Os dois
+níveis existem porque respondem a perguntas diferentes: o card da listagem quer
+saber se vale mostrar o produto, e o seletor da página de detalhe quer saber qual
+tamanho esgotou.
+
+**Y5 — `?species=X` casa também com `targetSpecies: []`.** Vazio significa
+"qualquer espécie" (N7), então o comedouro universal aparece na seção de cães sem
+estar marcado. A alternativa (filtro literal) obrigaria o staff a marcar todas as
+espécies em todo produto universal — e deixaria todos eles desatualizados no dia
+em que uma espécie nova nascesse.
+
+**Y6 — `?tag=` repetível é interseção**, não união: cada faceta marcada estreita
+a lista, como em qualquer e-commerce. No `where` isso é um `some` por tag dentro
+de um `AND`, e não um `in` — que daria união.
+
+**Y7 — ordenação default `createdAt` desc**, o mesmo de `PET_SORT`. Allowlist:
+`price`, `name`, `createdAt`; `relevance` entra na 9.9 com `?q=`.
+
+**Y8 — produto fora do conjunto visível é 404**, com a mesma mensagem de
+inexistente. A regra "403 vence 404" do projeto vale para rota **autenticada**,
+onde negar já pressupõe identidade; aqui a rota é pública e não tem gate, então
+403 apenas confirmaria o slug do rascunho para qualquer visitante. É a mesma
+lógica de Y1, aplicada ao detalhe.
+
+**Y9 — `read:product:cost` implica a visão interna.** As duas features podiam ser
+tratadas como independentes, e isso exigiria uma quarta view (custo sem estoque)
+para sustentar um cargo que não existe: na prática quem vê margem é gerente, e
+gerente vê rascunho. A escada de três views (`public` → `internal` → `cost`)
+mantém `internal` e `cost` exatamente como a 9.7 as deixou — só `public` nasceu.
+O predicado é uma disjunção (`internal ∨ cost`) escrita **uma vez**
+(`canSeeInternal`), usada tanto no `where` quanto na escolha da view: se os dois
+divergissem, a resposta mostraria um campo do conjunto que a lista diz não ter.
+
+**Y10 — `inStock` entra em todas as views**, inclusive nas respostas de escrita
+da 9.7. É derivado e não é sensível, e tê-lo só na pública obrigaria o cliente a
+ramificar por view para responder a pergunta mais banal do catálogo.
+
+Dois pontos de contrato seguiram padrão já firmado e não foram reabertos: os três
+filtros de taxonomia (`category`, `tag`, `brand`) são por **slug**, porque é a
+chave que a URL da vitrine carrega e `?category=` já tinha sido decidido assim; e
+slug de taxonomia inexistente é **filtro, não resolução** (V2) — devolve lista
+vazia, nunca 404, para a listagem não virar oráculo de existência.
 
 ## Alternativas consideradas
 

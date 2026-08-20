@@ -7,7 +7,7 @@ import type { AuditDescriptor } from "@/lib/auditLog";
 import { type AuthUser, hasFeature } from "@/lib/authorization";
 import { definedOnly } from "@/utils/definedOnly";
 import type { VariantView } from "./product.presenter";
-import { resolveProduct } from "./product.service";
+import { resolveProduct, withVariantAvailability } from "./product.service";
 import * as variantRepository from "./product.variant.repository";
 import type {
   CreateVariantInput,
@@ -84,7 +84,7 @@ export async function createVariant(
 ) {
   await resolveProduct(productId);
 
-  return variantRepository.createVariant(
+  const variant = await variantRepository.createVariant(
     {
       // Mesmo motivo do `withResolvedDefault`: o Prisma recusa a chave presente
       // valendo `undefined`, e os obrigatórios voltam explicitamente.
@@ -102,6 +102,11 @@ export async function createVariant(
       },
     ],
   );
+
+  // `inStock` é derivado e entra em **todas** as views (9.8/Y10), inclusive nas
+  // respostas de escrita — a view da variante o exige, e derivá-lo aqui é o que
+  // mantém uma regra só para leitura e escrita.
+  return withVariantAvailability(variant);
 }
 
 export async function updateVariant(
@@ -143,7 +148,9 @@ export async function updateVariant(
     });
   }
 
-  return variantRepository.updateVariant(variantId, input, audits);
+  return withVariantAvailability(
+    await variantRepository.updateVariant(variantId, input, audits),
+  );
 }
 
 export async function deleteVariant(variantId: string) {

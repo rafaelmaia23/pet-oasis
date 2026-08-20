@@ -41,20 +41,55 @@ export function viewFor(actor: AuthUser): ProductView {
 }
 
 /**
+ * Deriva a disponibilidade (9.8/Y4): `inStock` em cada variante e um no
+ * produto, verdadeiro quando **alguma** variante ativa tem estoque.
+ *
+ * O cálculo mora aqui, e não no presenter, porque o campo entra nas três views
+ * (Y10) — inclusive nas respostas de escrita da 9.7. Derivar por view seria
+ * escrever a mesma regra três vezes e deixá-la divergir na primeira mudança.
+ */
+export function withVariantAvailability<V extends { stockQuantity: number }>(
+  variant: V,
+) {
+  return { ...variant, inStock: variant.stockQuantity > 0 };
+}
+
+export function withAvailability<
+  V extends { stockQuantity: number },
+  P extends { variants: V[] },
+>(
+  product: P,
+): Omit<P, "variants"> & {
+  variants: (V & { inStock: boolean })[];
+  inStock: boolean;
+} {
+  const variants = product.variants.map(withVariantAvailability);
+
+  return {
+    ...product,
+    variants,
+    inStock: variants.some((variant) => variant.inStock),
+  };
+}
+
+/**
  * Achata as duas junções antes da view: o Prisma devolve `ProductCategory[]`
  * com a categoria dentro, e a API entrega a categoria direto. O `CLAUDE.md`
  * admite achatar no service ou espelhar o aninhamento na view — aqui achatar
  * ganha, porque `{ category: {...} }` na resposta pública seria detalhe de
  * modelagem vazando para o cliente.
+ *
+ * A disponibilidade entra no mesmo passo: toda resposta de produto do projeto
+ * passa por aqui, então é o único ponto onde `inStock` precisa nascer.
  */
 export function flattenProduct(product: ProductWithRelations) {
   const { categories, tags, ...rest } = product;
 
-  return {
+  return withAvailability({
     ...rest,
     categories: categories.map((link) => link.category),
     tags: tags.map((link) => link.tag),
-  };
+  });
 }
 
 async function assertBrandIsActive(brandId: string) {

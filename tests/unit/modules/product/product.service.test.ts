@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { withResolvedDefault } from "@/modules/product/product.service";
+import {
+  withAvailability,
+  withResolvedDefault,
+} from "@/modules/product/product.service";
 import type { VariantInput } from "@/modules/product/product.variant.schema";
 
 const variant = (sku: string, isDefault?: boolean): VariantInput => ({
@@ -48,5 +51,41 @@ describe("withResolvedDefault", () => {
     const result = withResolvedDefault([variant("A")]);
 
     expect(result[0]).not.toHaveProperty("weightGrams");
+  });
+});
+
+/**
+ * Disponibilidade derivada (9.8/Y4): a vitrine mostra "tem" ou "não tem", nunca
+ * a quantidade — que é informação competitiva e não muda nada para quem compra.
+ * O booleano entra em **todas** as views (Y10), então é calculado uma vez aqui e
+ * não em cada presenter.
+ */
+describe("withAvailability", () => {
+  const stocked = (stockQuantity: number) => ({ sku: "X", stockQuantity });
+
+  it("derives inStock per variant from the exact quantity", () => {
+    const result = withAvailability({ variants: [stocked(3), stocked(0)] });
+
+    expect(result.variants.map((item) => item.inStock)).toEqual([true, false]);
+  });
+
+  it("marks the product as in stock when any variant has stock", () => {
+    // O seletor da vitrine sabe qual tamanho esgotou; o card da listagem só
+    // precisa saber se vale mostrar o produto.
+    expect(
+      withAvailability({ variants: [stocked(0), stocked(1)] }),
+    ).toHaveProperty("inStock", true);
+  });
+
+  it("marks the product as out of stock when every variant is zeroed", () => {
+    expect(
+      withAvailability({ variants: [stocked(0), stocked(0)] }),
+    ).toHaveProperty("inStock", false);
+  });
+
+  it("keeps the other fields of the variant untouched", () => {
+    const result = withAvailability({ variants: [stocked(3)] });
+
+    expect(result.variants[0]).toMatchObject({ sku: "X", stockQuantity: 3 });
   });
 });

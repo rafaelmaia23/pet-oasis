@@ -5,6 +5,7 @@ import {
   depthOf,
   heightOf,
   isInSubtreeOf,
+  subtreeIdsOf,
 } from "@/modules/category/category.tree";
 
 /**
@@ -65,6 +66,43 @@ describe("isInSubtreeOf", () => {
 
   it("is false upwards — the ancestor is not inside its own descendant", () => {
     expect(isInSubtreeOf(nodes, "alimentacao", "racao")).toBe(false);
+  });
+});
+
+/**
+ * A expansão que o filtro `?category=` da 9.8 precisa (9.6/W2): produto vincula
+ * a qualquer nó, então filtrar só pelo nó exato esconderia metade da vitrine.
+ */
+describe("subtreeIdsOf", () => {
+  it("includes the node itself, which is what makes a leaf filter work", () => {
+    expect(subtreeIdsOf(nodes, "racao-seca")).toEqual(["racao-seca"]);
+  });
+
+  it("descends the whole branch from a root", () => {
+    expect(subtreeIdsOf(nodes, "alimentacao").sort()).toEqual([
+      "alimentacao",
+      "racao",
+      "racao-seca",
+    ]);
+  });
+
+  it("stops at the branch — a sibling never enters", () => {
+    expect(subtreeIdsOf(nodes, "alimentacao")).not.toContain("higiene");
+  });
+
+  it("returns an empty list for a node that is not in the tree", () => {
+    // O service traduz isso em "lista vazia", não em 404: slug inexistente é
+    // filtro, não resolução de recurso (V2).
+    expect(subtreeIdsOf(nodes, "inexistente")).toEqual([]);
+  });
+
+  it("does not loop forever on a cycle already stored in the database", () => {
+    const cyclic: CategoryNode[] = [
+      { id: "a", parentId: "b" },
+      { id: "b", parentId: "a" },
+    ];
+
+    expect(subtreeIdsOf(cyclic, "a").sort()).toEqual(["a", "b"]);
   });
 });
 

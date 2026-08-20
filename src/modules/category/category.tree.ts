@@ -64,6 +64,50 @@ export function isInSubtreeOf(
   return false;
 }
 
+/**
+ * Ids do nó **mais** os de todos os seus descendentes — a expansão que o filtro
+ * `?category=` da 9.8 usa (9.6/W2). Produto vincula a qualquer nó, folha ou
+ * não, então "produtos de X" significa X e tudo abaixo dele; filtrar pelo nó
+ * exato esconderia metade da vitrine.
+ *
+ * Nó ausente devolve lista vazia, e é o service que a traduz em "nenhum
+ * produto": slug inexistente é filtro, não resolução de recurso (V2).
+ *
+ * A varredura é em largura com um `Set` de visitados — que é também o que
+ * impede um ciclo já gravado no banco (as validações da 9.6 o impedem, mas o
+ * laço não pode confiar nisso) de girar para sempre.
+ */
+export function subtreeIdsOf(nodes: CategoryNode[], rootId: string): string[] {
+  if (!nodes.some((node) => node.id === rootId)) return [];
+
+  const childrenOf = new Map<string, string[]>();
+
+  for (const node of nodes) {
+    if (!node.parentId) continue;
+
+    const siblings = childrenOf.get(node.parentId) ?? [];
+    siblings.push(node.id);
+    childrenOf.set(node.parentId, siblings);
+  }
+
+  const collected = new Set<string>([rootId]);
+  const queue = [rootId];
+
+  while (queue.length > 0) {
+    // O `shift` é seguro: a fila tem no máximo o tamanho da lista de nós.
+    const current = queue.shift() as string;
+
+    for (const child of childrenOf.get(current) ?? []) {
+      if (collected.has(child)) continue;
+
+      collected.add(child);
+      queue.push(child);
+    }
+  }
+
+  return [...collected];
+}
+
 type TreeRow = {
   id: string;
   parentId: string | null;

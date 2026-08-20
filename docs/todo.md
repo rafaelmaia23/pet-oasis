@@ -269,15 +269,31 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ⬜ `GET /products/:idOrSlug` — detalhe com variantes.
 - ⬜ Views por capability (presenter Zod), resolvidas pelas features da 9.1: `read:product:internal` destrava `stockQuantity` exato e os produtos `DRAFT`/`DISCONTINUED`; `read:product:cost` destrava `costCents`/margem. Sem nenhuma das duas (inclusive **anônimo**), sai a view pública, com disponibilidade (booleano derivado) no lugar da quantidade.
 - ⬜ Depende da **autenticação opcional** da 9.6: sem ator, view pública; com ator, view pela capability — e nunca 401 nas rotas de leitura.
-- 🔸 **Pendência** (nasceu na 9.1): `?status=` é filtro de quem tem `read:product:internal`. Perguntar ao usuário o que acontece quando um anônimo o envia — **422** (coerente com o filtro estrito da 7.7, mas revela que o parâmetro existe) ou **ignorar silenciosamente** (a vitrine nunca vaza a existência do rascunho).
 - ⬜ Teste de contrato: view pública não contém `costCents` nem `stockQuantity`.
 - ⬜ Faixa de preço filtra pelas **variantes** (produto entra se alguma variante estiver na faixa) — documentar, é contraintuitivo.
-- 🔸 **Pendência** (ver §9.5 do `fase-9-contexto.md`): `GET /products/:idOrSlug` aceitando id **e** slug é ambíguo de contrato (o que acontece se um slug for um UUID válido?) — alternativa: rotas separadas, ou só id com slug em query (`?slug=`).
-- 🔸 **Pendência** (ver §9.6 do `fase-9-contexto.md`): ordenação por preço com N variantes — menor preço entre variantes ativas? preço da variante default? produto aparece uma vez por variante?
 - ⬜ Testes: filtros combinados; view por capability (cliente vs. staff); paginação+ordenação com tiebreaker; faixa de preço via variante.
+
+**Decisões de kickoff (Y1–Y10)** — as três pendências desta sessão (`?status=` anônimo, `:idOrSlug`, ordenação por preço) foram decididas com o usuário, com mais sete pontos de contrato:
+
+| # | Decisão | Consequência |
+|---|---|---|
+| **Y1** | `?status=` de quem não vê o interno é **ignorado silenciosamente** | Fecha a pendência da 9.1. A vitrine nunca vaza que rascunho existe, nem pela mensagem de erro — diverge do filtro estrito da 7.7/V2 de propósito: lá o valor é inválido, aqui o parâmetro é invisível. |
+| **Y2** | `GET /products/:idOrSlug` numa rota só; forma de UUID → id, senão slug | Fecha a pendência §9.5. A ambiguidade morre na **escrita**: `slugSchema` passa a recusar (422) slug com forma de UUID, e isso vale para marca, categoria, tag e produto — os quatro dividem o schema. |
+| **Y3** | `?sort=price` = **menor preço entre variantes ativas** | Fecha a pendência §9.6. Casa com o `minPrice`/`maxPrice` (produto entra se **alguma** variante está na faixa) e o produto aparece uma vez. Exige agregação: o Prisma só ordena relação por `_count`, então a listagem por preço é `groupBy` de variante (página de ids) + hidratação. |
+| **Y4** | `inStock` derivado na **variante e no produto** | Variante: `stockQuantity > 0`. Produto: alguma variante ativa com estoque. É o que `?inStock=` responde, e é o que o seletor de variante da vitrine precisa. |
+| **Y5** | `?species=DOG` traz também os de `targetSpecies: []` | Vazio significa "qualquer espécie" (N7) — o comedouro universal não pode sumir da seção "cães". |
+| **Y6** | `?tag=` repetível é **E (interseção)** | Cada faceta marcada estreita a lista, como em qualquer e-commerce. |
+| **Y7** | Ordenação default `createdAt` desc | Mesmo default de `PET_SORT`. Allowlist: `price`, `name`, `createdAt` — relevância entra na 9.9. |
+| **Y8** | Produto invisível pedido pelo slug exato → **404** | A rota é pública e não tem gate de autorização: o rascunho simplesmente não está no conjunto visível. Coerente com Y1, e não vira oráculo de existência de slug. |
+| **Y9** | `read:product:cost` **implica** a visão interna | Quem vê custo vê estoque exato, `status` e as linhas DRAFT/DISCONTINUED. As views seguem **três** (`public`, `internal`, `cost`), as duas de staff exatamente como a 9.7 as deixou; o gate de status é `internal ∨ cost`. |
+| **Y10** | `inStock` entra em **todas** as views | Acréscimo aditivo ao contrato de escrita da 9.7 — nenhum cliente ramifica por view para saber se tem estoque. |
+
+- ⬜ Taxonomia filtra por **slug** nos três casos (`category`, `tag`, `brand`): `?category=` já era slug e a URL da vitrine é slug — misturar id num e slug noutro seria duas gramáticas. Slug inexistente é **filtro, não resolução**: lista vazia, nunca 404 (V2).
 
 ### ⬜ [Sessão 9.9] Fase 9.9 — Busca textual
 > Ver ADR `docs/adr/text-search.md` para as armadilhas conhecidas antes de começar.
+- ⬜ **Herdado da 9.8:** `?q=` e `?sort=relevance` são acréscimo à listagem que já existe — a allowlist `LIST_PRODUCTS_SORT` (`product.schema.ts`) nasceu com `price`, `name` e `createdAt`, e `relevance` entra aqui. Cuidado: `relevance` **sem `?q=`** não tem sentido e precisa de um refinamento próprio, no molde do "`order` exige `sort`" que já vive em `buildOffsetQuerySchema`.
+- ⬜ **Herdado da 9.8:** a listagem já tem **dois** caminhos no repository (o normal e o `groupBy` de preço, Y3). A busca é um terceiro, e o `where` compartilhado (`buildProductWhere`) é o que impede os três de divergirem sobre visibilidade — todo filtro novo entra lá, nunca no `orderBy`.
 - ⬜ Migration manual com `CREATE EXTENSION` (`unaccent`, `pg_trgm`) — dev, test e prod precisam das extensões.
 - ⬜ Coluna `tsvector` gerada (wrapper `IMMUTABLE` sobre `unaccent`, ou trigger — decidir na implementação e registrar a escolha no ADR) com `setweight` (nome pesa mais que descrição/marca/tag).
 - ⬜ Índices GIN (`tsvector`) e GIN `gin_trgm_ops` (trigram) — sem eles a busca funciona e é lenta.

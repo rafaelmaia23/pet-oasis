@@ -190,6 +190,21 @@ describe("POST /api/v1/brands", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["slug"]);
   });
+
+  it("should reject a slug shaped like a UUID (9.8/Y2)", async () => {
+    const token = await loginAsCatalogManager();
+
+    // A regra nasceu para desambiguar `GET /products/:idOrSlug`, mas mora no
+    // `slugSchema` compartilhado — então vale para marca, categoria e tag
+    // também. Uma gramática de slug só, nos quatro recursos.
+    const response = await request(app)
+      .post("/api/v1/brands")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Golden", slug: "3f2504e0-4f89-41d3-9a0c-0305e82c3301" });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["slug"]);
+  });
 });
 
 describe("PATCH /api/v1/brands/:brandId", () => {

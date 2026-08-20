@@ -1,12 +1,54 @@
 import type { Request, Response } from "express";
+import { offsetEnvelope } from "@/lib/pagination";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { productPresenter } from "./product.presenter";
 import {
   createProductSchema,
+  listProductsSchema,
+  productDetailParamsSchema,
   productParamsSchema,
   updateProductSchema,
 } from "./product.schema";
 import * as productService from "./product.service";
+
+/**
+ * As duas leituras lêem `req.user` **direto**, e nunca por `getAuthUser`: a
+ * rota é montada com `optionalAuthenticate` (9.6) e `getAuthUser` joga 401 sem
+ * ator — que é exatamente o que a vitrine não pode fazer.
+ */
+export const listProducts = async (req: Request, res: Response) => {
+  const { query } = listProductsSchema.parse({ query: req.query });
+
+  const { products, total } = await productService.getProducts(req.user, query);
+
+  return res
+    .status(200)
+    .json(
+      offsetEnvelope(
+        productPresenter.presentMany(
+          products,
+          productService.readViewFor(req.user),
+        ),
+        query,
+        total,
+      ),
+    );
+};
+
+export const getProductByIdOrSlug = async (req: Request, res: Response) => {
+  const { params } = productDetailParamsSchema.parse({ params: req.params });
+
+  const product = await productService.getProductByIdOrSlug(
+    req.user,
+    params.idOrSlug,
+  );
+
+  return res
+    .status(200)
+    .json(
+      productPresenter.present(product, productService.readViewFor(req.user)),
+    );
+};
 
 export const createProduct = async (req: Request, res: Response) => {
   const { body } = createProductSchema.parse({ body: req.body });

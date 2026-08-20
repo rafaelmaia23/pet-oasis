@@ -1,4 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
+import type { PetSpecies } from "@/generated/prisma/enums";
+import { ProductStatus } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
@@ -36,6 +38,192 @@ export async function findProductById(id: string) {
     where: { id, deletedAt: null },
     include: productInclude,
   });
+}
+
+export async function findProductBySlug(slug: string) {
+  return prisma.product.findFirst({
+    where: { slug, deletedAt: null },
+    include: productInclude,
+  });
+}
+
+export type ProductListFilters = {
+  species?: PetSpecies | undefined;
+  /** Já expandido em subárvore pelo service (9.6/W2). */
+  categoryIds?: string[] | undefined;
+  tagSlugs?: string[] | undefined;
+  brandSlug?: string | undefined;
+  minPriceCents?: number | undefined;
+  maxPriceCents?: number | undefined;
+  status?: ProductStatus | undefined;
+  inStock?: boolean | undefined;
+  /** Verdadeiro só para quem tem `read:product:internal` (9.8/Y1, Y8). */
+  includeHidden?: boolean | undefined;
+};
+
+const activeVariant = {
+  deletedAt: null,
+} satisfies Prisma.ProductVariantWhereInput;
+
+/**
+ * O recorte do que é visível, num lugar só. Listagem e detalhe compartilham
+ * este `where` de propósito: se eles divergissem, um produto poderia sumir da
+ * lista e continuar acessível pela URL — que é exatamente o vazamento que Y8
+ * fecha. A busca da 9.9 é o terceiro caminho a entrar por aqui.
+ */
+export function buildProductWhere(
+  filters: ProductListFilters,
+): Prisma.ProductWhereInput {
+  const {
+    species,
+    categoryIds,
+    tagSlugs,
+    brandSlug,
+    minPriceCents,
+    maxPriceCents,
+    status,
+    inStock,
+    includeHidden,
+  } = filters;
+
+  // A faixa de preço olha as **variantes**: o produto entra se alguma delas
+  // couber, mesmo que a default esteja longe da faixa (§3.11 do contexto).
+  const priceRange =
+    minPriceCents === undefined && maxPriceCents === undefined
+      ? undefined
+      : {
+          ...(minPriceCents === undefined ? {} : { gte: minPriceCents }),
+          ...(maxPriceCents === undefined ? {} : { lte: maxPriceCents }),
+        };
+
+  return {
+    deletedAt: null,
+    // Sem a visão interna, DRAFT e DISCONTINUED não existem — e o filtro de
+    // status já foi descartado pelo service antes de chegar aqui (Y1).
+    ...(includeHidden
+      ? status === undefined
+        ? {}
+        : { status }
+      : { status: ProductStatus.ACTIVE }),
+    // Vazio significa "qualquer espécie" (N7/Y5): o comedouro universal
+    // aparece na seção de cães sem estar marcado como tal.
+    ...(species === undefined
+      ? {}
+      : {
+          OR: [
+            { targetSpecies: { has: species } },
+            { targetSpecies: { isEmpty: true } },
+          ],
+        }),
+    ...(categoryIds === undefined
+      ? {}
+      : { categories: { some: { categoryId: { in: categoryIds } } } }),
+    // Um `some` por tag, e não um `in`: interseção (Y6). Com `in`, ter
+    // qualquer uma das tags bastaria, e marcar mais facetas aumentaria a lista.
+    ...(tagSlugs === undefined || tagSlugs.length === 0
+      ? {}
+      : {
+          AND: tagSlugs.map((slug) => ({ tags: { some: { tag: { slug } } } })),
+        }),
+    ...(brandSlug === undefined ? {} : { brand: { slug: brandSlug } }),
+    ...(priceRange === undefined
+      ? {}
+      : { variants: { some: { ...activeVariant, priceCents: priceRange } } }),
+    ...(inStock === undefined
+      ? {}
+      : inStock
+        ? { variants: { some: { ...activeVariant, stockQuantity: { gt: 0 } } } }
+        : {
+            variants: { none: { ...activeVariant, stockQuantity: { gt: 0 } } },
+          }),
+  };
+}
+
+/**
+ * Listagem por preço (9.8/Y3) — o caminho de exceção.
+ *
+ * O Prisma só ordena por agregado de relação em `_count`, então "menor preço
+ * entre as variantes ativas" não cabe num `orderBy` de produto. A saída é
+ * agrupar as variantes, paginar **os ids** já ordenados e só então hidratar os
+ * produtos: duas idas ao banco em vez de SQL cru, que o projeto reserva para a
+ * busca textual.
+ */
+async function findProductsByPrice(
+  where: Prisma.ProductWhereInput,
+  pagination: { skip: number; take: number; order: "asc" | "desc" },
+) {
+  const groups = await prisma.productVariant.groupBy({
+    by: ["productId"],
+    where: { ...activeVariant, product: where },
+    _min: { priceCents: true },
+    // O tiebreaker por `productId` é obrigatório: sem ele, dois produtos com o
+    // mesmo preço mínimo se repetem ou somem na borda da página.
+    orderBy: [
+      { _min: { priceCents: pagination.order } },
+      { productId: pagination.order },
+    ],
+    skip: pagination.skip,
+    take: pagination.take,
+  });
+
+  const ids = groups.map((group) => group.productId);
+
+  const rows = await prisma.product.findMany({
+    where: { id: { in: ids } },
+    include: productInclude,
+  });
+
+  // O `IN` do Postgres não preserva ordem — a ordenação verdadeira é a dos ids.
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+}
+
+/**
+ * `total` sai do `count` de produtos, e não do tamanho do agrupamento, porque
+ * **todo produto ativo tem ≥1 variante ativa** (9.7/X3 + X6) — os dois conjuntos
+ * são o mesmo, e o `count` custa menos.
+ */
+export async function findAllProducts(
+  filters: ProductListFilters,
+  // União, e não um `orderBy` com `priceOrder` opcional ao lado: `price` não é
+  // coluna do produto, e um `orderBy: [{ price }]` que chegasse ao Prisma
+  // explodiria em runtime. O tipo é o que impede o par inválido de existir.
+  pagination: { skip: number; take: number } & (
+    | { priceOrder: "asc" | "desc"; orderBy?: never }
+    | { orderBy: Prisma.ProductOrderByWithRelationInput[]; priceOrder?: never }
+  ),
+) {
+  const where = buildProductWhere(filters);
+
+  if (pagination.priceOrder) {
+    const [products, total] = await Promise.all([
+      findProductsByPrice(where, {
+        skip: pagination.skip,
+        take: pagination.take,
+        order: pagination.priceOrder,
+      }),
+      prisma.product.count({ where }),
+    ]);
+
+    return { products, total };
+  }
+
+  const [products, total] = await prisma.$transaction([
+    prisma.product.findMany({
+      where,
+      include: productInclude,
+      orderBy: pagination.orderBy,
+      skip: pagination.skip,
+      take: pagination.take,
+    }),
+    prisma.product.count({ where }),
+  ]);
+
+  return { products, total };
 }
 
 export async function countActiveProductsOfBrand(brandId: string) {

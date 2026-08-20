@@ -34,6 +34,13 @@ export const slugSchema = z
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
     "Slug must contain only lowercase letters, digits and single hyphens",
   )
+  // Um uuid em minúsculas **casa** com o regex acima (hex e hífens simples), e
+  // `GET /products/:idOrSlug` decide id × slug pela forma do valor (9.8/Y2).
+  // Recusar aqui é o que impede a rota de nascer ambígua: a leitura não teria
+  // como desempatar um slug já gravado com cara de id.
+  .refine((slug) => !z.uuid().safeParse(slug).success, {
+    error: "Slug cannot be shaped like a UUID",
+  })
   .meta({ example: "racao-golden" });
 
 export const catalogDescriptionSchema = z

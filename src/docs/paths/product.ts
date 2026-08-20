@@ -5,6 +5,8 @@ import {
 } from "@/modules/product/product.presenter";
 import {
   createProductSchema,
+  listProductsSchema,
+  productDetailParamsSchema,
   productParamsSchema,
   updateProductSchema,
 } from "@/modules/product/product.schema";
@@ -13,7 +15,12 @@ import {
   updateVariantSchema,
   variantParamsSchema,
 } from "@/modules/product/product.variant.schema";
-import { errorResponses, jsonResponse, noContentResponse } from "../components";
+import {
+  errorResponses,
+  jsonResponse,
+  noContentResponse,
+  offsetList,
+} from "../components";
 import { fromEnvelope } from "../helpers";
 
 const VARIANT_NOTE =
@@ -22,8 +29,25 @@ const VARIANT_NOTE =
 const COST_NOTE =
   "`costCents` só aparece para quem tem `read:product:cost` — a view é escolhida pelo ator, não pela rota.";
 
+const VIEW_NOTE =
+  "A **forma** da resposta muda com a capability do ator, não só o acesso: sem `read:product:internal` (inclusive anônimo) sai a view pública, sem `costCents`, sem `stockQuantity` e sem `status`, com `inStock` derivado no lugar da quantidade. `read:product:internal` destrava o estoque exato, o `status` e os produtos DRAFT/DISCONTINUED; `read:product:cost` destrava o custo **e** implica a visão interna.";
+
 export const productPaths: ZodOpenApiPathsObject = {
   "/products": {
+    get: {
+      tags: ["Products"],
+      summary: "Lista o catálogo — público, sem token",
+      // Sem isto o Scalar mostraria cadeado e o "try it" exigiria token numa
+      // rota que responde sem ele.
+      security: [],
+      description: `${VIEW_NOTE}\n\nPaginada por offset e ordenável (\`?sort=&order=\`; \`price\` é o **menor preço entre as variantes ativas**). Três armadilhas que valem leitura: a faixa de preço filtra **pelas variantes** — o produto entra se alguma delas couber, mesmo que a default esteja fora —, \`?category=\` traz também os produtos das categorias **descendentes**, e \`?tag=\` repetido é **interseção** (o produto precisa ter todas). \`?species=\` casa também com os produtos sem espécie marcada, que valem para qualquer uma. Slug de marca, categoria ou tag que não existe é filtro, não erro: devolve lista vazia. \`?status=\` é **ignorado em silêncio** para quem não tem \`read:product:internal\`.`,
+      ...fromEnvelope(listProductsSchema),
+      responses: {
+        200: jsonResponse("Catálogo", offsetList(productViews.public)),
+        422: errorResponses[422],
+        429: errorResponses[429],
+      },
+    },
     post: {
       tags: ["Products"],
       summary: "Cria um produto com suas variantes — exige manage:product",
@@ -35,6 +59,21 @@ export const productPaths: ZodOpenApiPathsObject = {
         403: errorResponses[403],
         409: errorResponses[409],
         422: errorResponses[422],
+      },
+    },
+  },
+  "/products/{idOrSlug}": {
+    get: {
+      tags: ["Products"],
+      summary: "Detalha um produto por id ou slug — público, sem token",
+      security: [],
+      description: `${VIEW_NOTE}\n\nO valor no path é o **id ou o slug**: quem tem forma de UUID é tratado como id, o resto como slug — e a escrita recusa slug com forma de UUID, então não há caso ambíguo. Produto fora do conjunto visível do ator devolve **404**, com a mesma mensagem de inexistente: um 403 confirmaria o slug do rascunho para qualquer visitante. As variantes vêm com a default primeiro; variante excluída não acompanha o produto vivo.`,
+      ...fromEnvelope(productDetailParamsSchema),
+      responses: {
+        200: jsonResponse("Produto", productViews.public),
+        404: errorResponses[404],
+        422: errorResponses[422],
+        429: errorResponses[429],
       },
     },
   },

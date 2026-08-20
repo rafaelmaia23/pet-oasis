@@ -1,14 +1,23 @@
+import { z } from "zod";
 import { createNotFoundError, createValidationError } from "@/errors";
+import { ProductStatus } from "@/generated/prisma/enums";
 import { type AuthUser, hasFeature } from "@/lib/authorization";
+import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
 import * as brandRepository from "@/modules/brand/brand.repository";
 import { resolveSlug } from "@/modules/catalog/catalog.schema";
 import * as categoryRepository from "@/modules/category/category.repository";
+import { subtreeIdsOf } from "@/modules/category/category.tree";
 import * as tagRepository from "@/modules/tag/tag.repository";
 import { definedOnly } from "@/utils/definedOnly";
 import type { ProductView } from "./product.presenter";
 import type { ProductWithRelations } from "./product.repository";
 import * as productRepository from "./product.repository";
-import type { CreateProductInput, UpdateProductInput } from "./product.schema";
+import {
+  type CreateProductInput,
+  type ListProductsQuery,
+  PRODUCT_SORT,
+  type UpdateProductInput,
+} from "./product.schema";
 import type { VariantInput } from "./product.variant.schema";
 
 /**
@@ -41,20 +50,86 @@ export function viewFor(actor: AuthUser): ProductView {
 }
 
 /**
+ * O portão do catálogo interno (9.8/Y9): rascunho, descontinuado, estoque exato
+ * e o campo `status`. `read:product:cost` **implica** a visão interna — quem vê
+ * margem vê o resto —, então o predicado é uma disjunção e não duas perguntas.
+ *
+ * Existe como função própria porque é usado em dois lugares que não podem
+ * divergir: o `where` da listagem e a escolha da view. Se divergissem, a
+ * resposta mostraria um campo do conjunto que a lista diz não existir.
+ */
+export function canSeeInternal(actor: AuthUser | undefined): boolean {
+  if (!actor) return false;
+
+  return (
+    hasFeature(actor, "read:product:internal") ||
+    hasFeature(actor, "read:product:cost")
+  );
+}
+
+/**
+ * A view da **leitura**, que difere da escrita em um ponto: aqui o ator pode
+ * não existir. Visitante anônimo não é erro, é o caso comum da vitrine (N15) —
+ * daí `public` em vez de 401.
+ */
+export function readViewFor(actor: AuthUser | undefined): ProductView {
+  if (!actor) return "public";
+  if (hasFeature(actor, "read:product:cost")) return "cost";
+  if (hasFeature(actor, "read:product:internal")) return "internal";
+
+  return "public";
+}
+
+/**
+ * Deriva a disponibilidade (9.8/Y4): `inStock` em cada variante e um no
+ * produto, verdadeiro quando **alguma** variante ativa tem estoque.
+ *
+ * O cálculo mora aqui, e não no presenter, porque o campo entra nas três views
+ * (Y10) — inclusive nas respostas de escrita da 9.7. Derivar por view seria
+ * escrever a mesma regra três vezes e deixá-la divergir na primeira mudança.
+ */
+export function withVariantAvailability<V extends { stockQuantity: number }>(
+  variant: V,
+) {
+  return { ...variant, inStock: variant.stockQuantity > 0 };
+}
+
+export function withAvailability<
+  V extends { stockQuantity: number },
+  P extends { variants: V[] },
+>(
+  product: P,
+): Omit<P, "variants"> & {
+  variants: (V & { inStock: boolean })[];
+  inStock: boolean;
+} {
+  const variants = product.variants.map(withVariantAvailability);
+
+  return {
+    ...product,
+    variants,
+    inStock: variants.some((variant) => variant.inStock),
+  };
+}
+
+/**
  * Achata as duas junções antes da view: o Prisma devolve `ProductCategory[]`
  * com a categoria dentro, e a API entrega a categoria direto. O `CLAUDE.md`
  * admite achatar no service ou espelhar o aninhamento na view — aqui achatar
  * ganha, porque `{ category: {...} }` na resposta pública seria detalhe de
  * modelagem vazando para o cliente.
+ *
+ * A disponibilidade entra no mesmo passo: toda resposta de produto do projeto
+ * passa por aqui, então é o único ponto onde `inStock` precisa nascer.
  */
 export function flattenProduct(product: ProductWithRelations) {
   const { categories, tags, ...rest } = product;
 
-  return {
+  return withAvailability({
     ...rest,
     categories: categories.map((link) => link.category),
     tags: tags.map((link) => link.tag),
-  };
+  });
 }
 
 async function assertBrandIsActive(brandId: string) {
@@ -170,6 +245,90 @@ export async function updateProduct(
       metadata: { fields: Object.keys(input) },
     },
   );
+
+  return flattenProduct(product);
+}
+
+/**
+ * Traduz o slug de categoria na subárvore dele (9.6/W2). Slug que não existe
+ * vira lista **vazia**, e não `undefined`: o filtro tem que valer, senão a
+ * categoria inexistente devolveria o catálogo inteiro em vez de nada.
+ */
+async function resolveCategoryFilter(slug: string | undefined) {
+  if (!slug) return undefined;
+
+  const categories = await categoryRepository.findAllCategories();
+  const root = categories.find((category) => category.slug === slug);
+
+  if (!root) return [];
+
+  return subtreeIdsOf(categories, root.id);
+}
+
+export async function getProducts(
+  actor: AuthUser | undefined,
+  query: ListProductsQuery,
+) {
+  const includeHidden = canSeeInternal(actor);
+  const { skip, take } = buildOffsetArgs(query);
+
+  const { products, total } = await productRepository.findAllProducts(
+    {
+      species: query.species,
+      categoryIds: await resolveCategoryFilter(query.category),
+      tagSlugs: query.tag,
+      brandSlug: query.brand,
+      minPriceCents: query.minPrice,
+      maxPriceCents: query.maxPrice,
+      // Descartado em silêncio para quem não vê o interno (Y1): devolver 422
+      // confirmaria ao visitante que existe um estado escondido.
+      ...(includeHidden ? { status: query.status } : {}),
+      inStock: query.inStock,
+      includeHidden,
+    },
+    // `price` não é coluna: o repository o resolve por agregação (Y3), e o que
+    // ele precisa saber é só a direção. Nos demais campos o `orderBy` sai da
+    // allowlist do recurso, nunca cru do query param.
+    query.sort === "price"
+      ? {
+          skip,
+          take,
+          priceOrder: query.order ?? PRODUCT_SORT.fields.price,
+        }
+      : { skip, take, orderBy: buildOrderBy(query, PRODUCT_SORT) },
+  );
+
+  return { products: products.map(flattenProduct), total };
+}
+
+/**
+ * Detalhe por id **ou** slug na mesma rota (Y2). A forma do valor desempata, e
+ * isso só é não-ambíguo porque o `slugSchema` recusa slug com cara de uuid.
+ *
+ * Produto fora do conjunto visível do ator é **404**, com a mesma mensagem de
+ * "não existe" (Y8): a rota é pública e não tem gate de autorização, então um
+ * 403 aqui confirmaria o slug do rascunho para qualquer visitante.
+ */
+export async function getProductByIdOrSlug(
+  actor: AuthUser | undefined,
+  idOrSlug: string,
+) {
+  const isId = z.uuid().safeParse(idOrSlug).success;
+
+  const product = isId
+    ? await productRepository.findProductById(idOrSlug)
+    : await productRepository.findProductBySlug(idOrSlug);
+
+  const visible =
+    product !== null &&
+    (canSeeInternal(actor) || product.status === ProductStatus.ACTIVE);
+
+  if (!visible) {
+    throw createNotFoundError({
+      message: "Produto não encontrado",
+      action: "Verifique o identificador e tente novamente",
+    });
+  }
 
   return flattenProduct(product);
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PetSpecies, ProductStatus } from "@/generated/prisma/enums";
+import { buildOffsetQuerySchema, defineSortConfig } from "@/lib/pagination";
 import {
   catalogNameSchema,
   slugSchema,
@@ -77,6 +78,103 @@ export const productParamsSchema = z.object({
   }),
 });
 
+/**
+ * O detalhe aceita id **ou** slug na mesma rota (9.8/Y2), então o param é
+ * string livre: exigir uuid aqui mataria metade do contrato. Quem desempata é o
+ * service, pela forma do valor — e o que torna isso não-ambíguo é o `slugSchema`
+ * recusar, na escrita, slug com cara de uuid.
+ */
+export const productDetailParamsSchema = z.object({
+  params: z.object({
+    idOrSlug: z
+      .string()
+      .trim()
+      .min(1, "Product id or slug is required")
+      .max(80, "Product id or slug must be at most 80 characters"),
+  }),
+});
+
+/**
+ * Allowlist de ordenação de `GET /products` (Y7). `price` não é coluna do
+ * produto: é o **menor preço entre as variantes ativas** (Y3), e o repository o
+ * resolve por agregação. A direção declarada é a natural de cada campo —
+ * novidade primeiro, texto e preço subindo.
+ *
+ * `relevance` entra na 9.9, junto de `?q=`.
+ */
+export const PRODUCT_SORT = defineSortConfig({
+  fields: { createdAt: "desc", name: "asc", price: "asc" },
+  default: "createdAt",
+});
+
+/**
+ * `?tag=` é repetível e o Express entrega **string** quando vem um valor só e
+ * **array** quando vêm dois — normalizar aqui é o que deixa o resto do fluxo
+ * lidando sempre com lista.
+ */
+const repeatableSlug = z
+  .union([slugSchema, z.array(slugSchema)])
+  .transform((value) => (Array.isArray(value) ? value : [value]))
+  .optional()
+  .meta({
+    description: "Slug da tag; repetível — o produto precisa ter todas (E)",
+    example: "promocao",
+  });
+
+const priceFilter = (description: string) =>
+  z.coerce
+    .number()
+    .int("Price must be an integer number of cents")
+    .nonnegative("Price cannot be negative")
+    .optional()
+    .meta({ description, example: 1000 });
+
+/**
+ * Listagem da vitrine. Todo filtro de taxonomia é por **slug** — é a chave que
+ * a URL pública carrega —, e slug bem-formado que não existe devolve lista
+ * vazia, nunca 404: filtro não é resolução de recurso (V2).
+ *
+ * `status` é aceito de todo mundo no schema e **descartado no service** para
+ * quem não tem `read:product:internal` (Y1): recusá-lo aqui com 422 confirmaria
+ * ao visitante que existe um estado escondido.
+ */
+export const listProductsSchema = z.object({
+  query: buildOffsetQuerySchema(PRODUCT_SORT, {
+    species: z.enum(PetSpecies).optional().meta({
+      description:
+        "Filtra pela espécie-alvo; produtos sem espécie marcada entram em qualquer uma",
+      example: PetSpecies.DOG,
+    }),
+    category: slugSchema.optional().meta({
+      description: "Slug da categoria; inclui os produtos das descendentes",
+      example: "racao-seca",
+    }),
+    tag: repeatableSlug,
+    brand: slugSchema
+      .optional()
+      .meta({ description: "Slug da marca", example: "golden" }),
+    minPrice: priceFilter(
+      "Preço mínimo em centavos; o produto entra se alguma variante couber",
+    ),
+    maxPrice: priceFilter(
+      "Preço máximo em centavos; o produto entra se alguma variante couber",
+    ),
+    status: z.enum(ProductStatus).optional().meta({
+      description:
+        "Filtra pelo status — ignorado para quem não tem read:product:internal",
+      example: ProductStatus.ACTIVE,
+    }),
+    inStock: z
+      .stringbool({ truthy: ["true"], falsy: ["false"] })
+      .optional()
+      .meta({
+        description:
+          "true = apenas com estoque; false = apenas esgotados; omitido = ambos",
+        example: true,
+      }),
+  }),
+});
+
 export const createProductSchema = z.object({
   body: productFieldsSchema.extend({ variants: variantsArraySchema }).strict(),
 });
@@ -98,3 +196,4 @@ export const updateProductSchema = z.object({
 
 export type CreateProductInput = z.infer<typeof createProductSchema>["body"];
 export type UpdateProductInput = z.infer<typeof updateProductSchema>["body"];
+export type ListProductsQuery = z.infer<typeof listProductsSchema>["query"];

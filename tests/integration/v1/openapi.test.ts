@@ -54,13 +54,15 @@ describe("GET /openapi.json", () => {
     expect(body.paths["/tags/{tagId}"].delete).toBeDefined();
   });
 
-  it("should document the product write routes as protected (9.7)", async () => {
+  it("should document the product reads as public and the writes as protected", async () => {
     const { body } = await request(app).get("/openapi.json");
 
-    // Produto ainda não tem `GET` — a leitura é da 9.8. O que se documenta
-    // aqui é a escrita, e ela herda o bearer global: nenhuma delas é pública.
+    // O mesmo par das outras rotas de catálogo: leitura pública e escrita
+    // protegida no mesmo recurso — é o que justifica a autenticação opcional,
+    // e documentar só metade faria o Scalar mentir sobre a outra.
+    expect(body.paths["/products"].get.security).toEqual([]);
+    expect(body.paths["/products/{idOrSlug}"].get.security).toEqual([]);
     expect(body.paths["/products"].post.security).toBeUndefined();
-    expect(body.paths["/products"].get).toBeUndefined();
     expect(body.paths["/products/{productId}"].patch).toBeDefined();
     expect(body.paths["/products/{productId}"].delete).toBeDefined();
     expect(body.paths["/products/{productId}/variants"].post).toBeDefined();

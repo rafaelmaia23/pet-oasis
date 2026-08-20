@@ -105,6 +105,29 @@ da decisão" do mesmo ADR:
 - `ProductImage` fica para a 9.10 (X9) · `description` obrigatória com teto próprio de 2000 e
   `label` da variante informado pelo staff (X10)
 
+**Leitura do catálogo, firmado na implementação (9.8)** — § "O que a implementação (9.8) firmou além
+da decisão" do mesmo ADR:
+
+- **`?status=` é ignorado em silêncio** para quem não vê o interno (Y1) — 422 ou 403 confirmariam
+  que existe um estado escondido, e a mensagem de erro *é* a resposta
+- **`GET /products/:idOrSlug` é uma rota só** (Y2), UUID → id e resto → slug; a ambiguidade morre na
+  **escrita**, com o `slugSchema` compartilhado recusando slug com forma de UUID
+- **`?sort=price` é o menor preço entre as variantes ativas** (Y3) — o único candidato coerente com
+  a faixa de preço, que já olhava todas as variantes. Custo técnico: o Prisma não ordena relação por
+  agregado, então a listagem por preço é um segundo caminho no repository (`groupBy` de ids +
+  hidratação), sem SQL cru
+- **`inStock` derivado na variante e no produto** (Y4), presente em **todas** as views (Y10) —
+  inclusive nas respostas de escrita da 9.7
+- **`?species=X` casa também com `targetSpecies: []`** (Y5) — vazio é "qualquer espécie", e o
+  comedouro universal não some da seção de cães
+- **`?tag=` repetível é interseção** (Y6) · ordenação default `createdAt` desc, allowlist `price`,
+  `name`, `createdAt` (Y7)
+- **Produto fora do conjunto visível é 404**, não 403 (Y8) — "403 vence 404" vale para rota
+  autenticada; aqui a rota é pública e o 403 confirmaria o slug do rascunho
+- **`read:product:cost` implica a visão interna** (Y9) — três views em escada (`public` →
+  `internal` → `cost`), com o predicado `canSeeInternal` escrito **uma vez** e usado tanto no `where`
+  quanto na escolha da view, para lista e resposta nunca discordarem
+
 ## Produto × serviço — [`adr/product-vs-service.md`](../adr/product-vs-service.md)
 
 Decisão tomada agora, **herdada pela Fase 10**: tabelas separadas + `OrderItem` polimórfico com

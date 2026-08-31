@@ -150,6 +150,9 @@ aberto e trocou a estratégia de consulta que o ADR previa:
   lexemas que existem no catálogo e cada palavra ausente é trocada pela mais parecida **antes** de
   virar `tsquery`. As duas saídas previstas (fallback no vazio, pontuação combinada) falhavam no
   mesmo ponto: uma query com uma palavra certa e uma errada. O ranking continua `ts_rank` puro.
+  **A implementação tornou a correção condicional:** a busca literal roda primeiro e a reescrita só
+  entra quando ela volta vazia — corrigir sempre escondia produto novo, cuja palavra o dicionário
+  (derivado, defasado) ainda não conhece.
 - **O SQL cru só ranqueia** (Z4) — devolve `(id, rank)`, e quem decide o que é visível continua
   sendo o `buildProductWhere`. Uma query crua completa daria `total` exato, ao custo de uma segunda
   definição de "produto visível" — o vazamento que a Y8 fechou, por outra porta.

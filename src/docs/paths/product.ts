@@ -1,4 +1,6 @@
+import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
+import { offsetMetaSchema } from "@/lib/pagination";
 import {
   productViews,
   variantViews,
@@ -15,12 +17,7 @@ import {
   updateVariantSchema,
   variantParamsSchema,
 } from "@/modules/product/product.variant.schema";
-import {
-  errorResponses,
-  jsonResponse,
-  noContentResponse,
-  offsetList,
-} from "../components";
+import { errorResponses, jsonResponse, noContentResponse } from "../components";
 import { fromEnvelope } from "../helpers";
 
 const VARIANT_NOTE =
@@ -32,6 +29,30 @@ const COST_NOTE =
 const VIEW_NOTE =
   "A **forma** da resposta muda com a capability do ator, não só o acesso: sem `read:product:internal` (inclusive anônimo) sai a view pública, sem `costCents`, sem `stockQuantity` e sem `status`, com `inStock` derivado no lugar da quantidade. `read:product:internal` destrava o estoque exato, o `status` e os produtos DRAFT/DISCONTINUED; `read:product:cost` destrava o custo **e** implica a visão interna.";
 
+const SEARCH_NOTE =
+  "`?q=` busca em nome e descrição do produto e no nome da marca, sem acento e por radical. Quando a busca literal não encontra nada, **o erro de digitação é corrigido palavra a palavra**: cada palavra que não existe no catálogo é trocada pela mais parecida e a busca roda de novo — e o que de fato foi buscado volta em `meta.search.applied`. Palavra sem vizinha parecida vai como está: a busca devolve vazio em vez de descartá-la em silêncio. Ter `?q=` torna `relevance` a ordenação default; `sort=relevance` **sem** `?q=` é 422. O dicionário de correção conhece só o catálogo público e é atualizado pelo seed, não a cada escrita — produto recém-cadastrado é encontrado na hora pela busca literal, mas só entra na correção de typo depois da próxima atualização. Numa busca o `meta.total` é **limitado**: contam-se no máximo 500 resultados.";
+
+/**
+ * A listagem ganha `meta.search` **só** quando veio `?q=` (9.9/Z15) — o
+ * envelope de paginação segue idêntico ao das demais listagens do projeto.
+ */
+const searchMetaSchema = z
+  .object({
+    q: z.string().meta({ example: "racao golen" }),
+    applied: z.string().meta({ example: "racao golden" }),
+  })
+  .meta({
+    id: "ProductSearchMeta",
+    description: "O que foi digitado e o que de fato foi buscado",
+  });
+
+const productListMetaSchema = offsetMetaSchema
+  .extend({ search: searchMetaSchema.optional() })
+  .meta({
+    id: "ProductListMeta",
+    description: "Paginação por offset, mais o eco da busca quando há `?q=`",
+  });
+
 export const productPaths: ZodOpenApiPathsObject = {
   "/products": {
     get: {
@@ -40,10 +61,16 @@ export const productPaths: ZodOpenApiPathsObject = {
       // Sem isto o Scalar mostraria cadeado e o "try it" exigiria token numa
       // rota que responde sem ele.
       security: [],
-      description: `${VIEW_NOTE}\n\nPaginada por offset e ordenável (\`?sort=&order=\`; \`price\` é o **menor preço entre as variantes ativas**). Três armadilhas que valem leitura: a faixa de preço filtra **pelas variantes** — o produto entra se alguma delas couber, mesmo que a default esteja fora —, \`?category=\` traz também os produtos das categorias **descendentes**, e \`?tag=\` repetido é **interseção** (o produto precisa ter todas). \`?species=\` casa também com os produtos sem espécie marcada, que valem para qualquer uma. Slug de marca, categoria ou tag que não existe é filtro, não erro: devolve lista vazia. \`?status=\` é **ignorado em silêncio** para quem não tem \`read:product:internal\`.`,
+      description: `${VIEW_NOTE}\n\nPaginada por offset e ordenável (\`?sort=&order=\`; \`price\` é o **menor preço entre as variantes ativas**). Três armadilhas que valem leitura: a faixa de preço filtra **pelas variantes** — o produto entra se alguma delas couber, mesmo que a default esteja fora —, \`?category=\` traz também os produtos das categorias **descendentes**, e \`?tag=\` repetido é **interseção** (o produto precisa ter todas). \`?species=\` casa também com os produtos sem espécie marcada, que valem para qualquer uma. Slug de marca, categoria ou tag que não existe é filtro, não erro: devolve lista vazia. \`?status=\` é **ignorado em silêncio** para quem não tem \`read:product:internal\`.\n\n${SEARCH_NOTE}`,
       ...fromEnvelope(listProductsSchema),
       responses: {
-        200: jsonResponse("Catálogo", offsetList(productViews.public)),
+        200: jsonResponse(
+          "Catálogo",
+          z.object({
+            data: z.array(productViews.public),
+            meta: productListMetaSchema,
+          }),
+        ),
         422: errorResponses[422],
         429: errorResponses[429],
       },

@@ -18,6 +18,7 @@ import {
   PRODUCT_SORT,
   type UpdateProductInput,
 } from "./product.schema";
+import * as productSearchRepository from "./product.search.repository";
 import type { VariantInput } from "./product.variant.schema";
 
 /**
@@ -265,12 +266,87 @@ async function resolveCategoryFilter(slug: string | undefined) {
   return subtreeIdsOf(categories, root.id);
 }
 
+/**
+ * Resolve `?q=` em ids ranqueados (9.9). Três passos, nesta ordem:
+ *
+ * 1. cada palavra é conferida contra o dicionário e trocada se não existir (Z5);
+ * 2. a query já corrigida ranqueia os produtos (Z12);
+ * 3. um SKU digitado inteiro põe o produto dele em primeiro (Z2).
+ *
+ * O `applied` volta para a resposta (Z15) porque zero resultados por um erro de
+ * digitação que o cliente não enxerga é o pior desfecho possível — e porque é o
+ * que torna a correção afirmável em teste sem espiar a forma da query.
+ */
+async function resolveSearch(q: string, reverse: boolean) {
+  const words = q.split(/\s+/).filter(Boolean);
+  const literal = words.join(" ");
+
+  // A busca literal vem **primeiro**, e a correção só entra quando ela não acha
+  // nada. Corrigir sempre atropelaria quem digitou certo: o dicionário é
+  // derivado e defasado (Z14), então uma palavra legítima de um produto criado
+  // depois do último refresh seria trocada pela vizinha mais parecida — e o
+  // produto certo nunca apareceria. É o que sustenta a promessa de que produto
+  // novo é encontrado na hora por busca exata.
+  const literalIds =
+    await productSearchRepository.findRankedProductIds(literal);
+
+  const { applied, ranked } =
+    literalIds.length > 0
+      ? { applied: literal, ranked: literalIds }
+      : await correctAndSearch(words, literal, literalIds);
+
+  // O `?order=asc` inverte o **ranking**; o casamento exato de SKU continua em
+  // primeiro depois disso, senão pedir a ordem invertida mandaria o produto que
+  // se procurava por código para a última página.
+  const ordered = reverse ? [...ranked].reverse() : ranked;
+  const skuMatch = await productSearchRepository.findProductIdBySku(q);
+
+  const ids =
+    skuMatch === null
+      ? ordered
+      : [skuMatch, ...ordered.filter((id) => id !== skuMatch)];
+
+  return { q, applied, ids };
+}
+
+/**
+ * O segundo passo, pago só quando o primeiro volta vazio: cada palavra ausente
+ * do dicionário é trocada pela mais parecida (Z13) e a busca roda de novo.
+ * Quando nada muda — palavra incorrigível —, não há por que ir ao banco outra
+ * vez: o resultado seria o mesmo vazio.
+ */
+async function correctAndSearch(
+  words: string[],
+  literal: string,
+  literalIds: string[],
+) {
+  const applied = (await productSearchRepository.correctWords(words)).join(" ");
+
+  if (applied === literal) return { applied, ranked: literalIds };
+
+  return {
+    applied,
+    ranked: await productSearchRepository.findRankedProductIds(applied),
+  };
+}
+
 export async function getProducts(
   actor: AuthUser | undefined,
   query: ListProductsQuery,
 ) {
   const includeHidden = canSeeInternal(actor);
   const { skip, take } = buildOffsetArgs(query);
+
+  const search =
+    query.q === undefined
+      ? undefined
+      : await resolveSearch(query.q, query.order === "asc");
+
+  // Ter `?q=` troca o default de ordenação para `relevance` (Z3): uma busca
+  // ordenada por data de cadastro é uma busca ruim. O default do recurso segue
+  // `createdAt` quando não há busca — por isso a escolha mora aqui, e não no
+  // `defineSortConfig`, onde o default é constante.
+  const sort = query.sort ?? (search ? "relevance" : PRODUCT_SORT.default);
 
   const { products, total } = await productRepository.findAllProducts(
     {
@@ -285,20 +361,40 @@ export async function getProducts(
       ...(includeHidden ? { status: query.status } : {}),
       inStock: query.inStock,
       includeHidden,
+      ...(search === undefined ? {} : { ids: search.ids }),
     },
-    // `price` não é coluna: o repository o resolve por agregação (Y3), e o que
-    // ele precisa saber é só a direção. Nos demais campos o `orderBy` sai da
-    // allowlist do recurso, nunca cru do query param.
-    query.sort === "price"
+    // Nem `price` nem `relevance` são coluna (Y3, Z4): o repository resolve o
+    // primeiro por agregação e o segundo pela ordem dos ids da busca. Nos demais
+    // campos o `orderBy` sai da allowlist do recurso, nunca cru do query param.
+    sort === "relevance" && search
       ? {
           skip,
           take,
-          priceOrder: query.order ?? PRODUCT_SORT.fields.price,
+          // `?order=asc` numa busca inverte o ranking. É estranho e é honesto —
+          // aceitar o parâmetro e ignorá-lo seria mentir para o cliente. A
+          // inversão já veio aplicada de `resolveSearch`, antes do SKU.
+          relevanceOrder: search.ids,
         }
-      : { skip, take, orderBy: buildOrderBy(query, PRODUCT_SORT) },
+      : sort === "price"
+        ? {
+            skip,
+            take,
+            priceOrder: query.order ?? PRODUCT_SORT.fields.price,
+          }
+        : {
+            skip,
+            take,
+            orderBy: buildOrderBy({ ...query, sort }, PRODUCT_SORT),
+          },
   );
 
-  return { products: products.map(flattenProduct), total };
+  return {
+    products: products.map(flattenProduct),
+    total,
+    ...(search === undefined
+      ? {}
+      : { search: { q: search.q, applied: search.applied } }),
+  };
 }
 
 /**

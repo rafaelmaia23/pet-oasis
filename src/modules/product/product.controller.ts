@@ -19,19 +19,29 @@ import * as productService from "./product.service";
 export const listProducts = async (req: Request, res: Response) => {
   const { query } = listProductsSchema.parse({ query: req.query });
 
-  const { products, total } = await productService.getProducts(req.user, query);
+  const { products, total, search } = await productService.getProducts(
+    req.user,
+    query,
+  );
 
+  const envelope = offsetEnvelope(
+    productPresenter.presentMany(
+      products,
+      productService.readViewFor(req.user),
+    ),
+    query,
+    total,
+  );
+
+  // `meta.search` só existe quando veio `?q=` (9.9/Z15). O envelope de
+  // paginação continua idêntico em todas as listagens do projeto — o que a
+  // busca acrescenta é conteúdo **desta** resposta, não mecânica de paginação.
   return res
     .status(200)
     .json(
-      offsetEnvelope(
-        productPresenter.presentMany(
-          products,
-          productService.readViewFor(req.user),
-        ),
-        query,
-        total,
-      ),
+      search === undefined
+        ? envelope
+        : { ...envelope, meta: { ...envelope.meta, search } },
     );
 };
 

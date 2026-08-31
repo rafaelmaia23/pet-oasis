@@ -159,6 +159,44 @@ uma coluna de texto sem acento por tabela e o índice GIN trigrama sobre ela —
 trigrama do projeto fica no dicionário. A armadilha 3 acima continua valendo para os índices
 GIN de `tsvector`.
 
+### O que a implementação (9.9) acrescentou ao kickoff
+
+**O dicionário guarda palavra e lexema, não só lexema.** A Z5 falava em
+"dicionário de lexemas", e implementar isso ao pé da letra reabriria a armadilha
+de radicalizar duas vezes: a substituição devolveria um radical, que voltaria
+por `plainto_tsquery` e seria radicalizado outra vez. Guardando as duas colunas,
+a **presença** é conferida pelo radical (assim "racao" é palavra conhecida mesmo
+que o catálogo escreva "rações") e a **substituição** devolve a palavra escrita.
+Efeito colateral que vale por si: `meta.search.applied` sai legível
+(`racao golden`) em vez de um radical (`raca golden`).
+
+**A correção é condicional, não incondicional.** A Z5 dizia "cada palavra
+ausente é trocada"; implementado assim ao pé da letra, isso vira um bug: o
+dicionário é derivado e defasado, então uma palavra legítima de um produto
+criado depois do último refresh não está nele e é trocada pela vizinha mais
+parecida — buscar `whisky` respondia `whiskas` e o produto certo nunca
+aparecia. A busca **literal** passa a rodar primeiro; a reescrita só entra
+quando ela volta vazia. É o que sustenta a promessa de que a defasagem do
+dicionário é benigna: sem essa ordem, ela deixava de atrasar a correção de typo
+e passava a **esconder** produto.
+
+**O limiar entra por `SET LOCAL`, não por `set_limit()`.** A armadilha 6 dizia
+"por query, não por sessão"; `set_limit()` é justamente sessão-scoped e
+sobreviveria ao retorno da conexão ao pool. `SET LOCAL` morre no commit. Isso
+obriga a usar o operador `%` em vez de `similarity() >= 0.4` — que é o que faz o
+índice GIN trigrama ser usado de fato, e não só existir.
+
+**`REFRESH` é `CONCURRENTLY`.** Sem isso ele pega ACCESS EXCLUSIVE e bloqueia
+toda busca em curso enquanto roda — um `demo-reset` numa instância viva
+derrubaria os `?q=` em timeout. O índice unique sobre `word`, criado na
+migration, é exatamente o requisito da forma concorrente.
+
+**O `total` da busca é exato dentro do teto.** A Z9 aceitava um `total`
+aproximado; a implementação não precisou dele. O recorte visível é resolvido em
+ids (barato), a ordem do ranking é reimposta sobre o que sobrou, e o `total` é o
+tamanho dessa interseção. O teto de 500 continua sendo o limite do que a busca
+enxerga — o que ficou de fora é a imprecisão *dentro* dele.
+
 ## Alternativas consideradas
 
 - **`ILIKE` + `unaccent`:** suficiente para o volume real do projeto, mas sem

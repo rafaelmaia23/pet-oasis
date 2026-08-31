@@ -152,3 +152,21 @@ O **Ciclo 2 abre o domínio do pet shop**: a Fase 9 traz pets (ligados a `Custom
 ## Estilo de colaboração
 
 Fecha um assunto antes de abrir outro (um loop por vez; não introduza tópicos novos no meio). Explique o "porquê", não só o "o quê". Seja direto sobre problemas, mantendo a decisão final com o usuário.
+
+---
+
+## Agent skills
+
+> Configuração lida pelas skills do pacote `mattpocock-skills` (`triage`, `to-tickets`, `to-spec`, `wayfinder`, `domain-modeling`…). O detalhe de cada item vive em `docs/agents/`.
+
+### Issue tracker
+
+Tarefas vivem em **markdown no próprio repo**, não em tracker externo: `docs/todo.md` (trabalho ordenado e agendado) e `docs/reference/backlog.md` (levantado, não agendado). Não existe GitHub Issues em uso. Ver `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Vocabulário canônico dos cinco papéis, sem renomeação (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), gravado como linha `Triagem:` no item. Ver `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context, pela convenção já existente — índice `docs/context.md` → **só** o arquivo temático da decisão → ADRs em `docs/adr/`. Não há (nem deve haver) `CONTEXT.md` na raiz. Ver `docs/agents/domain.md`.

@@ -68,6 +68,18 @@ export async function updateBrand(
   return applyUpdate(id, definedOnly(data), audit);
 }
 
+/**
+ * Única escrita da coluna (9.10): o `PATCH /brands/:brandId` recusa `logoPath`
+ * no corpo (`z.never` no schema), então o upload é o único caminho de entrada.
+ */
+export async function setBrandLogoPath(
+  id: string,
+  logoPath: string | null,
+  audit?: AuditDescriptor,
+) {
+  return applyUpdate(id, { logoPath }, audit);
+}
+
 export async function softDeleteBrand(id: string, audit?: AuditDescriptor) {
   return applyUpdate(id, { deletedAt: new Date() }, audit);
 }

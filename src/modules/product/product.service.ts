@@ -5,6 +5,7 @@ import { type AuthUser, hasFeature } from "@/lib/authorization";
 import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
 import { imageUrls } from "@/lib/storage";
 import * as brandRepository from "@/modules/brand/brand.repository";
+import { withLogo } from "@/modules/brand/brand.service";
 import { resolveSlug } from "@/modules/catalog/catalog.schema";
 import * as categoryRepository from "@/modules/category/category.repository";
 import { subtreeIdsOf } from "@/modules/category/category.tree";
@@ -125,7 +126,7 @@ export function withAvailability<
  * passa por aqui, então é o único ponto onde `inStock` precisa nascer.
  */
 export function flattenProduct(product: ProductWithRelations) {
-  const { categories, tags, images, ...rest } = product;
+  const { categories, tags, images, brand, ...rest } = product;
 
   const presentedImages = images.map((image) => ({
     id: image.id,
@@ -135,6 +136,10 @@ export function flattenProduct(product: ProductWithRelations) {
 
   return withAvailability({
     ...rest,
+    // A marca aninhada passa pela mesma derivação da view dela (9.10): o
+    // `logoPath` vira as duas URLs aqui também, senão a marca teria uma forma
+    // dentro do produto e outra em `GET /brands`.
+    brand: withLogo(brand),
     categories: categories.map((link) => link.category),
     tags: tags.map((link) => link.tag),
     // Os dois campos nascem aqui e a view escolhe qual sai (9.10/AA14): o

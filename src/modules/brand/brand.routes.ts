@@ -1,6 +1,12 @@
 import { Router } from "express";
-import { catalogIpLimiter, rateLimitByIp } from "@/lib/rateLimit";
+import {
+  catalogIpLimiter,
+  rateLimitByIp,
+  rateLimitByUser,
+  uploadUserLimiter,
+} from "@/lib/rateLimit";
 import { canAccess } from "@/middlewares/canAccess.middleware";
+import { uploadSingleImage } from "@/middlewares/upload.middleware";
 import * as brandController from "./brand.controller";
 
 /**
@@ -31,6 +37,24 @@ brandRouter.patch(
   "/:brandId",
   canAccess("manage:catalog-structure"),
   brandController.updateBrand,
+);
+
+/**
+ * Logo (9.10): mesma feature da escrita da marca — `manage:catalog-structure`.
+ * Não existe cargo que renomeie a marca mas não possa trocar o logo dela.
+ */
+brandRouter.put(
+  "/:brandId/logo",
+  canAccess("manage:catalog-structure"),
+  rateLimitByUser(uploadUserLimiter, "image-upload"),
+  uploadSingleImage,
+  brandController.updateBrandLogo,
+);
+
+brandRouter.delete(
+  "/:brandId/logo",
+  canAccess("manage:catalog-structure"),
+  brandController.deleteBrandLogo,
 );
 
 brandRouter.delete(

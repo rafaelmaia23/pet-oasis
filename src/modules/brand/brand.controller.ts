@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { createValidationError } from "@/errors";
 import { listEnvelope } from "@/lib/pagination";
 import { brandPresenter } from "./brand.presenter";
 import {
@@ -36,6 +37,31 @@ export const updateBrand = async (req: Request, res: Response) => {
   const brand = await brandService.updateBrand(params.brandId, body);
 
   return res.status(200).json(brandPresenter.present(brand, "default"));
+};
+
+export const updateBrandLogo = async (req: Request, res: Response) => {
+  const { params } = brandParamsSchema.parse({ params: req.params });
+
+  if (!req.file) {
+    throw createValidationError({
+      errors: { file: ['Envie um arquivo no campo "file"'] },
+    });
+  }
+
+  const brand = await brandService.setBrandLogo(
+    params.brandId,
+    req.file.buffer,
+  );
+
+  return res.status(200).json(brandPresenter.present(brand, "default"));
+};
+
+export const deleteBrandLogo = async (req: Request, res: Response) => {
+  const { params } = brandParamsSchema.parse({ params: req.params });
+
+  await brandService.removeBrandLogo(params.brandId);
+
+  return res.status(204).send();
 };
 
 export const deleteBrand = async (req: Request, res: Response) => {

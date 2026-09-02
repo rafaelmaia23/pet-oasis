@@ -76,6 +76,12 @@ A Fase 9 modela só `ProductVariant.stockQuantity` como número, sem movimentaç
 ### Imagem por variante (hoje é por produto) — **P**
 `ProductImage` pertence ao `Product`, não ao `ProductVariant` (Fase 9, `docs/adr/product-catalog-modeling.md`). Imagem por variante é caso real ("cores diferentes" precisa; "mesmo saco, tamanhos diferentes" quase nunca precisa) mas adiciona complexidade que o domínio de pet shop raramente cobra.
 
+### Teto da busca aplicado antes do recorte de visibilidade — **P**
+A busca ranqueia no máximo 500 ids (9.9/Z9) e o SQL cru **não** filtra `deleted_at`/`status`, porque quem decide visibilidade é o `buildProductWhere` (Z4). Consequência: produto soft-deletado ou em rascunho consome cota do teto, e num catálogo com mais de 500 casamentos para o mesmo termo isso pode empurrar resultado visível para fora. Não morde no volume atual. **Correção quando morder:** paginação por keyset no próprio SQL, ou aceitar repetir `deleted_at IS NULL` lá — que é o primeiro passo da duplicação de "produto visível" que a Z4 recusou, e por isso não se faz sem motivo medido.
+
+### `?q=` nas demais listagens do catálogo — **P**
+A 9.9 põe busca textual **só** em `GET /products` (Z7). `/brands`, `/categories`, `/tags` e `/breeds` continuam sem `?q=`. Não é esquecimento: são listas curtas (dezenas de linhas), onde um `ILIKE` sobre o nome resolveria sem `tsvector`, coluna gerada, índice nem dicionário de lexemas — e replicar a infraestrutura da 9.9 por recurso multiplicaria o custo de manutenção pelo número de tabelas. **Gatilho:** alguém precisar filtrar essas listas por texto na interface; a correção é `ILIKE` com `f_unaccent` (a função já existirá desde a 9.9), não um segundo `tsvector`.
+
 ### Meilisearch/Typesense como motor de busca — **G**
 A Fase 9 decide busca textual no Postgres nativo (`tsvector`+`unaccent`+`pg_trgm`, `docs/adr/text-search.md`), por escolha didática do usuário. Meilisearch/Typesense (typo tolerance por padrão, self-hosted) é a alternativa de mercado quando o volume justificar — custam um container a mais, um pipeline de sincronização produto→índice e uma segunda fonte de verdade que pode divergir do Postgres.
 

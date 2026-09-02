@@ -100,10 +100,13 @@ export const productDetailParamsSchema = z.object({
  * resolve por agregação. A direção declarada é a natural de cada campo —
  * novidade primeiro, texto e preço subindo.
  *
- * `relevance` entra na 9.9, junto de `?q=`.
+ * `relevance` (9.9/Z3) também não é coluna: é a ordem dos ids que a busca
+ * devolve. Ela só existe com `?q=`, e o default do recurso continua sendo
+ * `createdAt` — quem troca o default quando há busca é o service, porque um
+ * default que depende de outro parâmetro não cabe no `defineSortConfig`.
  */
 export const PRODUCT_SORT = defineSortConfig({
-  fields: { createdAt: "desc", name: "asc", price: "asc" },
+  fields: { createdAt: "desc", name: "asc", price: "asc", relevance: "desc" },
   default: "createdAt",
 });
 
@@ -172,6 +175,25 @@ export const listProductsSchema = z.object({
           "true = apenas com estoque; false = apenas esgotados; omitido = ambos",
         example: true,
       }),
+    // Busca textual (9.9/Z6). Vazio depois do trim é **422**, e não ignorado
+    // em silêncio como o `?status=` da Y1: lá havia um segredo a proteger,
+    // aqui não há, e o erro ajuda quem está integrando. Abaixo de 3
+    // caracteres a correção de erro de digitação não é tentada (Z13), então
+    // o mínimo 2 aceita a busca sem prometer tolerância a typo nela.
+    q: z
+      .string()
+      .trim()
+      .min(2, "q must be at least 2 characters")
+      .max(100, "q must be at most 100 characters")
+      .optional()
+      .meta({
+        description:
+          "Busca textual em nome e descrição do produto e no nome da marca; erro de digitação é corrigido palavra a palavra",
+        example: "racao golden",
+      }),
+  }).refine((query) => query.sort !== "relevance" || query.q !== undefined, {
+    path: ["sort"],
+    error: "sort=relevance exige q",
   }),
 });
 

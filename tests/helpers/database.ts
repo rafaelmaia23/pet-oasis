@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { refreshSearchLexemes } from "@/modules/product/product.search.repository";
 
 // Wipes only the transactional tables (users/sessions/tokens/profiles), in
 // FK-safe order. It deliberately does NOT touch the reference tables
@@ -34,4 +35,9 @@ export async function clearDatabase() {
   await prisma.brand.deleteMany();
   await prisma.category.deleteMany();
   await prisma.tag.deleteMany();
+  // O dicionário da busca (9.9) é derivado do catálogo, mas é uma view
+  // materializada: apagar os produtos não apaga as palavras deles. Sem este
+  // refresh as palavras de um arquivo de teste sobrevivem para o seguinte e
+  // podem corrigir a busca dele para algo que não existe mais.
+  await refreshSearchLexemes();
 }

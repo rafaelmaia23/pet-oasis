@@ -355,7 +355,13 @@ completo, os contra-argumentos e os gotchas.
   para o que o ator não pode ver, e `read:product:cost` implicando a visão
   interna
 
-*Busca e upload* — ver os ADRs listados em
+- O que o kickoff (9.9) firmou na busca textual — corpus limitado ao que a
+  coluna gerada alcança (produto + marca, tag fora), erro de digitação corrigido
+  **na query** por dicionário de lexemas, SQL cru só ranqueando enquanto a
+  visibilidade continua no `buildProductWhere`, e o dicionário construído só do
+  catálogo público
+
+*Upload* — ver os ADRs listados em
 [`context/pet-domain.md`](context/pet-domain.md)
 
 ### [Schema](context/schema.md)

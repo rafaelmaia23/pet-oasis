@@ -59,6 +59,12 @@ export type ProductListFilters = {
   inStock?: boolean | undefined;
   /** Verdadeiro só para quem tem `read:product:internal` (9.8/Y1, Y8). */
   includeHidden?: boolean | undefined;
+  /**
+   * Ids que a busca textual devolveu, já ranqueados (9.9/Z4). A busca entra
+   * como **filtro**, e não como um caminho paralelo: é o que garante que ela
+   * enxergue exatamente o mesmo conjunto visível que a listagem e o detalhe.
+   */
+  ids?: string[] | undefined;
 };
 
 const activeVariant = {
@@ -84,6 +90,7 @@ export function buildProductWhere(
     status,
     inStock,
     includeHidden,
+    ids,
   } = filters;
 
   // A faixa de preço olha as **variantes**: o produto entra se alguma delas
@@ -98,6 +105,9 @@ export function buildProductWhere(
 
   return {
     deletedAt: null,
+    // A busca é o terceiro caminho a entrar por aqui, como filtro — nunca pelo
+    // `orderBy`. Lista vazia é resultado legítimo (nada casou), não "sem filtro".
+    ...(ids === undefined ? {} : { id: { in: ids } }),
     // Sem a visão interna, DRAFT e DISCONTINUED não existem — e o filtro de
     // status já foi descartado pelo service antes de chegar aqui (Y1).
     ...(includeHidden
@@ -183,6 +193,47 @@ async function findProductsByPrice(
 }
 
 /**
+ * Listagem por relevância (9.9/Z4) — o terceiro caminho.
+ *
+ * A ordem verdadeira é a dos ids que a busca devolveu, e o Postgres não a
+ * preserva num `IN`. Então o recorte visível é resolvido primeiro (só os ids,
+ * que é barato), a ordem do ranking é reimposta sobre o que sobrou, e só a
+ * página é hidratada. O `total` sai daí **exato** — dentro do teto da busca.
+ */
+async function findProductsByRelevance(
+  where: Prisma.ProductWhereInput,
+  rankedIds: string[],
+  pagination: { skip: number; take: number },
+) {
+  const visible = await prisma.product.findMany({
+    where,
+    select: { id: true },
+  });
+  const visibleIds = new Set(visible.map((product) => product.id));
+
+  const ordered = rankedIds.filter((id) => visibleIds.has(id));
+  const pageIds = ordered.slice(
+    pagination.skip,
+    pagination.skip + pagination.take,
+  );
+
+  const rows = await prisma.product.findMany({
+    where: { id: { in: pageIds } },
+    include: productInclude,
+  });
+
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  return {
+    products: pageIds.flatMap((id) => {
+      const row = byId.get(id);
+      return row ? [row] : [];
+    }),
+    total: ordered.length,
+  };
+}
+
+/**
  * `total` sai do `count` de produtos, e não do tamanho do agrupamento, porque
  * **todo produto ativo tem ≥1 variante ativa** (9.7/X3 + X6) — os dois conjuntos
  * são o mesmo, e o `count` custa menos.
@@ -193,11 +244,27 @@ export async function findAllProducts(
   // coluna do produto, e um `orderBy: [{ price }]` que chegasse ao Prisma
   // explodiria em runtime. O tipo é o que impede o par inválido de existir.
   pagination: { skip: number; take: number } & (
-    | { priceOrder: "asc" | "desc"; orderBy?: never }
-    | { orderBy: Prisma.ProductOrderByWithRelationInput[]; priceOrder?: never }
+    | { priceOrder: "asc" | "desc"; orderBy?: never; relevanceOrder?: never }
+    | {
+        relevanceOrder: string[];
+        orderBy?: never;
+        priceOrder?: never;
+      }
+    | {
+        orderBy: Prisma.ProductOrderByWithRelationInput[];
+        priceOrder?: never;
+        relevanceOrder?: never;
+      }
   ),
 ) {
   const where = buildProductWhere(filters);
+
+  if (pagination.relevanceOrder) {
+    return findProductsByRelevance(where, pagination.relevanceOrder, {
+      skip: pagination.skip,
+      take: pagination.take,
+    });
+  }
 
   if (pagination.priceOrder) {
     const [products, total] = await Promise.all([

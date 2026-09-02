@@ -154,6 +154,7 @@
 | N13 | Upload de imagem | Disco local atrás de um **adaptador de storage** (`put`/`delete`/`url`, implementação `LocalDiskStorage`); path no banco (nunca URL completa); servido como estático pelo reverse proxy, sem passar por Node. |
 | N14 | RBAC do domínio (decidido na sessão 9.1) | Granularidade pelo critério "existe cargo real que tem esta feature e não a vizinha"; 9 features novas (4 de pet, 5 de catálogo), nenhuma privilegiada; duas roles novas de funcionário (`stockist`, `catalog-manager`). Detalhe no resumo da sessão 9.1 e em `docs/context/authorization.md`. |
 | N15 | Vitrine pública (decidido na sessão 9.1, era a pendência da 9.6) | Leitura de catálogo (`/products`, `/categories`, `/brands`, `/tags`, `/breeds`) responde **sem token** — o e-commerce vive de quem chega pelo Google sem conta. Exige um middleware de **autenticação opcional** (9.6) e nenhuma feature de leitura para o cliente. Racional em `docs/context/api-contracts.md`. |
+| N16 | Busca textual — as dezessete decisões do kickoff (decidido na sessão 9.9) | Corpus é produto + marca (tag fica de fora, já é filtro); typo tolerado por **reescrita da query contra um dicionário de lexemas**, não por fallback nem por pontuação combinada; o SQL cru **só ranqueia** e a visibilidade continua sendo `buildProductWhere`. Tabela Z1–Z17 no bloco da sessão 9.9, racional no adendo de `docs/adr/text-search.md`. |
 
 ### Sessões de trabalho
 
@@ -274,17 +275,66 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ✅ Testes: 35 de integração em `product.read.test.ts`, 5 unitários de `subtreeIdsOf`, 4 de `withAvailability`, 8 do presenter (`product.presenter.test.ts`, novo), 2 do slug-uuid (produto e marca) e 1 de contrato no OpenAPI reescrito (as duas leituras como `security: []`). Suíte **1048** + `typecheck` + `lint` verdes.
 - ✅ O caso "custo sem visão interna" tem **par**: sem o teste de contraste (mesmo cargo, mesmo fixture, sem o grant) o teste de Y9 passaria mesmo que o `deny` não tivesse pego — seria verde vazio.
 
-### ⬜ [Sessão 9.9] Fase 9.9 — Busca textual
-> Ver ADR `docs/adr/text-search.md` para as armadilhas conhecidas antes de começar.
-- ⬜ **Herdado da 9.8:** `?q=` e `?sort=relevance` são acréscimo à listagem que já existe — a allowlist `PRODUCT_SORT` (`product.schema.ts`) nasceu com `price`, `name` e `createdAt`, e `relevance` entra aqui. Cuidado: `relevance` **sem `?q=`** não tem sentido e precisa de um refinamento próprio, no molde do "`order` exige `sort`" que já vive em `buildOffsetQuerySchema`.
-- ⬜ **Herdado da 9.8:** a listagem já tem **dois** caminhos no repository (o normal e o `groupBy` de preço, Y3). A busca é um terceiro, e o `where` compartilhado (`buildProductWhere`) é o que impede os três de divergirem sobre visibilidade — todo filtro novo entra lá, nunca no `orderBy`.
-- ⬜ Migration manual com `CREATE EXTENSION` (`unaccent`, `pg_trgm`) — dev, test e prod precisam das extensões.
-- ⬜ Coluna `tsvector` gerada (wrapper `IMMUTABLE` sobre `unaccent`, ou trigger — decidir na implementação e registrar a escolha no ADR) com `setweight` (nome pesa mais que descrição/marca/tag).
-- ⬜ Índices GIN (`tsvector`) e GIN `gin_trgm_ops` (trigram) — sem eles a busca funciona e é lenta.
-- ⬜ Estratégia de consulta: full-text com `websearch_to_tsquery` + `ts_rank` primeiro; fallback para similaridade `pg_trgm` se vazio/pobre (ou pontuação combinada — calibrar na implementação).
-- ⬜ SQL cru só no **repository**, via `$queryRaw` parametrizado (nunca concatenação).
-- ⬜ `pg_trgm.similarity_threshold`/`set_limit` por query (não por sessão — pool de conexões).
-- ⬜ Testes de comportamento observável, não de forma de query: "buscar `racao golden` encontra 'Ração Golden Adulto'"; "buscar `golen` (typo) encontra"; "buscar `xyzabc` não encontra"; "resultado mais relevante vem primeiro".
+### ✅ [Sessão 9.9] Fase 9.9 — Busca textual
+> Kickoff de 2026-08-31, em sessão de grelha: **dezessete decisões (Z1–Z17) fechadas antes de
+> qualquer linha de código**. É a sub-fase de maior risco técnico da fase e o único ponto do projeto
+> com SQL cru. O ADR `docs/adr/text-search.md` ganhou o adendo que fecha as armadilhas 1 e 6 que ele
+> havia deixado explicitamente em aberto.
+>
+> A decisão estruturante é a **Z5**: o erro de digitação não é tratado por fallback nem por
+> pontuação combinada, e sim **reescrevendo a query** — cada palavra que não existe no catálogo é
+> trocada pela mais parecida **antes** de virar `tsquery`. É o que faz `racao golen` funcionar
+> (uma palavra certa + uma errada), que era o buraco das duas alternativas do ADR original.
+
+#### Decisões do kickoff (Z1–Z17)
+
+| # | Decisão | Escolha |
+|---|---|---|
+| Z1 | Corpus da busca | `name` + `description` do produto (coluna `tsvector` **gerada**) e `name` da marca (segunda coluna gerada, em `brands`), unidos por join. **Tag fica de fora**: já é filtro de primeira classe (`?tag=`, interseção, Y6), e incluí-la exigiria denormalização mantida por trigger (tag é N:N, e coluna gerada não cruza linha). |
+| Z2 | SKU | Curto-circuito **exato**, case-insensitive, sobre variantes ativas: casou, o produto vem primeiro; a busca textual segue normal para o resto. SKU **não** entra no `tsvector` — o tokenizador quebraria `GOLDEN-AD-15KG` em pedaços e viraria ruído no ranking de todo mundo. |
+| Z3 | Default de ordenação | Ter `?q=` troca o default para `relevance`; sem `q`, segue `createdAt desc`. `relevance` **sem** `q` continua 422. O default dinâmico não cabe no `defineSortConfig` (lá o default é constante da config), então mora no service. |
+| Z4 | Onde mora a visibilidade | O SQL cru **só ranqueia**: devolve `(id, rank)`. O Prisma aplica `buildProductWhere()` + `id IN (...)` e a ordem é reimposta em memória — o idioma que a Y3 já usa para preço. Recusada a query crua completa: ela reescreveria em SQL o recorte que já existe em TypeScript, e "o que é visível" passaria a ter **duas** definições que precisariam concordar para sempre (o vazamento que a Y8 fechou, reaberto por outra porta). |
+| Z5 | Tolerância a erro de digitação | **Reescrita da query por dicionário de lexemas.** Ranking permanece `ts_rank` puro. Preteridos: *fallback no vazio* (não tolera typo em query de várias palavras) e *pontuação combinada* (`ts_rank` + `similarity` somados exigem calibrar dois pesos sem dado real, e misturam escalas incomparáveis). |
+| Z6 | Contrato de entrada do `q` | `trim`; vazio depois do trim → **422** nomeando `q`; mínimo 2, máximo 100 caracteres; combina em **E** com todos os filtros existentes. O 422 no vazio diverge de propósito do "ignorar em silêncio" da Y1: lá havia um segredo a proteger, aqui não há. |
+| Z7 | Escopo da sessão | Só `GET /products`. `/brands`, `/categories`, `/tags` e `/breeds` são listas curtas e ficam registradas no `docs/reference/backlog.md` — a pergunta foi feita e respondida de propósito. |
+| Z8 | Imunidade a acento | Wrapper `f_unaccent(text)` marcado `IMMUTABLE`, usado dentro das duas colunas geradas (coluna gerada exige função imutável, e `unaccent()` é `STABLE`). **Mentira consciente**, segura porque o dicionário `unaccent` não muda em produção — e perigosa se alguém editar o `unaccent.rules`, porque as colunas geradas não seriam reconstruídas. |
+| Z9 | `total` na busca | Capado no teto de **500** ids ranqueados, em silêncio, com a limitação documentada na OpenAPI. Recusado um campo `truncated` no `meta`: aquele envelope é compartilhado por **todas** as listagens do projeto e não muda por causa de um caso. |
+| Z10 | `?q=` com `?sort=` | Compõem. Com `sort=price`, os ids da busca entram como filtro do `groupBy` da Y3 — a busca vira "quem", o preço vira "em que ordem". Com `name`/`createdAt`, compõem de graça no caminho normal do Prisma. Recusar seria surpreendente: "busque ração e ordene do mais barato" é o gesto mais natural de uma vitrine. |
+| Z11 | Onde mora o SQL cru | Arquivo novo `product.search.repository.ts`, ao lado — no idioma de `user.lifecycle.repository.ts` e `category.tree.ts`. O único arquivo do projeto com SQL cru fica identificável **pelo nome**, o que torna a regra do `CLAUDE.md` auditável. |
+| Z12 | Pesos do ranking | `setweight` **A** no nome do produto, **C** na descrição — bem afastados de propósito (`ts_rank` padrão dá 1.0 e 0.2), para que uma palavra no nome sempre ganhe da mesma palavra enterrada em 2000 caracteres. Entre os dois vetores: `rank = rank_produto + 0.4 × rank_marca` — **somar**, porque casar no nome *e* na marca é mais relevante que casar em um só. |
+| Z13 | Regra da correção | Só palavras **ausentes** do dicionário (palavra que existe nunca é "corrigida" — senão `cama` viraria `cana`), com **≥3 caracteres**; limiar `0.4` (o default `0.3` do `pg_trgm` é frouxo, `0.5` já rejeita `golen`→`golden`); empate pela lexema mais frequente. Palavra incorrigível vai **como está** → a busca devolve vazio, nunca é descartada em silêncio. |
+| Z14 | Manutenção do dicionário | View materializada + script de refresh em `src/scripts/`, chamado pelo `db:seed` e pelo `demo-reset`. Recusado o trigger: manteria o dicionário sempre fresco ao custo de fazer **toda** escrita de produto escrever numa segunda tabela. A defasagem é benigna e limitada — produto novo é achado na hora por busca exata, sem acento e por radical; o que espera o refresh é só a **correção de typo** nas palavras inéditas dele. |
+| Z15 | A correção é visível | `meta.search: { q, applied }`, presente **só** quando veio `q`. Diferente da Z9 (que recusou campo novo no envelope): aquilo era mecânica de paginação em toda listagem, isto é conteúdo **desta** busca. Evita o pior desfecho possível — zero resultados por um typo que o cliente não enxerga — e torna a correção afirmável em teste sem espiar a forma da query. |
+| Z16 | Testes | Piso do ADR + ordem exata num fixture de três produtos (mesma palavra no nome × só na descrição × só na marca) + `DRAFT` invisível na busca anônima + `q` composto com `?category=`, `?tag=` e os demais filtros + `q` com `sort=price`. O teto da Z9 **não** se testa: exigiria 501 produtos no fixture para provar uma constante. |
+| Z17 | Origem do dicionário | Construído **só de conteúdo publicamente visível** (produtos `ACTIVE` não deletados e suas marcas). Sem isso, a Z15 abriria um vazamento sondável palavra a palavra: `?q=colerinha` devolveria `applied: "coleirinha"` e confirmaria, a um anônimo, uma palavra que só existe num rascunho. Custo aceito: quem tem `read:product:internal` também não ganha correção de typo em palavra inédita de rascunho. |
+
+#### O que a implementação firmou
+
+- ✅ **A correção é contra palavras, não contra lexemas.** O dicionário guarda a palavra escrita **e** o lexema dela; a presença é conferida pelos dois (a forma escrita ou o radical), e a substituição devolve uma **palavra**. Isso mata a armadilha de radicalizar duas vezes pela raiz — a query corrigida volta por `plainto_tsquery('portuguese', f_unaccent(...))`, simétrica com as colunas geradas — e é o que faz `meta.search.applied` ser legível (`racao golden`) em vez de um radical (`raca golden`).
+- ✅ **`SET LOCAL` no lugar de `set_limit`.** O limiar entra por `SET LOCAL` dentro da transação da correção: `set_limit()` é sessão-scoped e sobreviveria ao retorno da conexão ao pool. É `$executeRawUnsafe` porque `SET` não aceita bind — o valor interpolado é constante do código, nunca entrada do usuário. Usar o operador `%` (e não `similarity() >= x`) é o que faz o índice GIN trigrama ser usado de fato.
+- ✅ **O `total` da busca é exato dentro do teto**, não estimado: o recorte visível é resolvido em ids (barato), a ordem do ranking é reimposta sobre o que sobrou e `total` é o tamanho dessa interseção. Duas queries, sem `count` separado.
+- ✅ **`?order=asc` numa busca inverte o ranking** em vez de ser ignorado — aceitar o parâmetro e não honrá-lo seria a opção (C) que a Z10 recusou.
+- ✅ **O par de testes de rascunho pegou um erro de verdade.** O caso anônimo (lista vazia) passava; o caso do funcionário, não — e a falha era do teste, não do código. Sem o contraste, o verde do primeiro teria sido vazio, exatamente a lição da 9.8.
+- ✅ **A revisão de código mudou a Z5 num ponto: a busca literal roda primeiro, e a correção só entra quando ela volta vazia.** Corrigir sempre era um bug real e provado — "whisky" (produto criado depois do último refresh) virava "whiskas" e o produto certo nunca aparecia. É o que sustenta a promessa de que produto novo é encontrado na hora; sem isso, a defasagem do dicionário deixava de ser benigna e passava a **esconder** produto. Tem teste de regressão próprio.
+- ✅ Outras quatro correções vindas da revisão: `REFRESH` passou a ser `CONCURRENTLY` (sem isso ele pega ACCESS EXCLUSIVE e derruba toda busca em curso — o índice unique da migration existia justamente para isso e não estava sendo usado); a inversão de `?order=asc` passou a acontecer **antes** do curto-circuito de SKU (senão buscar por SKU com ordem invertida mandava o produto para a última página); o `clearDatabase` passou a esvaziar o dicionário (palavras vazavam de um arquivo de teste para o outro); e nasceu o script `npm run db:refresh-search`, no padrão dos `db:cleanup-*`.
+- 🔸 **Sobrou uma aresta conhecida, consequência direta da Z4:** o teto de 500 é aplicado **antes** do recorte de visibilidade, então linha soft-deletada e rascunho consomem cota do teto. Só morde num catálogo com mais de 500 casamentos para o mesmo termo, e fechá-lo significaria repetir `deleted_at IS NULL` no SQL cru — o primeiro passo da duplicação que a Z4 recusou. Registrado no `docs/reference/backlog.md`.
+- 🔸 A defasagem do dicionário continua existindo, agora sem morder: quem cria produto pela API não ganha **correção de typo** nas palavras novas até o próximo `npm run db:refresh-search`, mas a busca literal acha o produto na hora. Automatizar o refresh (timer em `infra/cron/`, no molde dos `cleanup-*`) é decisão para quando houver produção real.
+
+#### Passo-a-passo
+
+- ✅ **Migration escrita à mão** (uma só): `CREATE EXTENSION unaccent, pg_trgm` · `f_unaccent` (Z8) · `products.search_vector` e `brands.search_vector` geradas com `setweight` (Z1, Z12) · dois índices GIN · a view materializada de lexemas, recortada pelo visível (Z17), com índice GIN `gin_trgm_ops`. As duas colunas entram no `schema.prisma` como `Unsupported("tsvector")` para o `migrate` não acusar drift. Vale para dev, test e prod pelo mesmo caminho — o `tests/setup/global.ts` já roda `migrate deploy`.
+- ✅ **Script de refresh** do dicionário em `src/scripts/` (Z14), chamado pelo `db:seed`; helper `refreshSearchDictionary()` em `tests/helpers/` para os poucos testes de typo. Esquecer o helper faz o teste **falhar**, não passar em falso — é o lado seguro do erro.
+- ✅ **`product.search.repository.ts`** (Z11): reescrita da query (Z13), ranqueamento (Z12), teto de 500 (Z9). `$queryRaw` com template parametrizado, nunca concatenação. O limiar do `pg_trgm` é definido **por query**, nunca por sessão (armadilha 6 do ADR — o pool de conexões torna a sessão inútil como escopo).
+- ✅ **Service**: curto-circuito de SKU (Z2) → correção → ids ranqueados → `buildProductWhere` + `id IN` → ordem reimposta em memória (Z4); default dinâmico de `sort` (Z3); `meta.search` (Z15). `?q=` entra pelo `where` compartilhado, **nunca** pelo `orderBy`.
+- ✅ **Schema**: `q` (Z6), `relevance` na allowlist `PRODUCT_SORT`, e o refinamento "`relevance` exige `q`" no molde do "`order` exige `sort`" que já vive em `buildOffsetQuerySchema`.
+- ✅ **OpenAPI**: `?q=`, `sort=relevance`, o objeto `meta.search` e a nota de que o `total` da busca é limitado (Z9).
+- ✅ **Testes** (Z16). A armadilha desta sessão é o teste frouxo: a asserção é **comportamento observável** ("buscar `golen` acha 'Ração Golden'", "o do nome vem antes do da descrição, que vem antes do da marca"), nunca a forma da query.
+- ✅ **Não radicalizar duas vezes**: a palavra corrigida sai do dicionário **já radicalizada**, e passá-la de volta por `websearch_to_tsquery` a radicaliza outra vez. Costuma ser inócuo e não é garantido — precisa de teste provando que `golen` chega ao banco como `golden`.
+- ✅ Entrada da Z7 no `docs/reference/backlog.md` (busca nas demais listagens do catálogo).
+
+**Herdado da 9.8, e ainda válido:**
+- ✅ `?q=` e `?sort=relevance` são **acréscimo** à listagem que já existe — a allowlist `PRODUCT_SORT` (`product.schema.ts`) nasceu com `price`, `name` e `createdAt`.
+- ✅ A listagem já tem **dois** caminhos no repository (o normal e o `groupBy` de preço, Y3). A busca é o terceiro, e o `where` compartilhado (`buildProductWhere`) é o que impede os três de divergirem sobre visibilidade — todo filtro novo entra lá, nunca no `orderBy`. É exatamente o que a Z4 preserva.
 
 ### ⬜ [Sessão 9.10] Fase 9.10 — Adaptador de storage + upload de imagem
 - ⬜ Adaptador de storage (`put`/`delete`/`url`) com implementação `LocalDiskStorage`; volume Docker montado no container; path salvo no banco (nunca URL completa — base derivada de env var).
@@ -306,6 +356,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ⬜ Roster fake ganha um funcionário de cada role nova da 9.1 (`stockist`, `catalog-manager`) — sem eles as duas roles existem só no seed e ninguém consegue exercitá-las em dev/demo.
 - ⬜ `demo-reset.ts` passa a truncar/restaurar as tabelas transacionais novas (produtos, variantes). **`pet` já entrou na 9.4** (nos três pontos do script, antes de `customer` — a FK é RESTRICT), e **`Breed` já está confirmado na 9.3** como catálogo de referência tipo `Role`/`Feature`: preservado, não truncado, nem no `demo-reset` nem no `clearDatabase` dos testes.
 - ⬜ `demo-reset.ts` passa a limpar o diretório de upload (dependência da 9.10).
+- ⬜ **Herdado da 9.9 (Z14):** o dicionário de lexemas da busca é uma **view materializada**, e view materializada não se atualiza sozinha. O `db:seed` e o `demo-reset` precisam chamar o script de refresh (`src/scripts/`) **depois** de semear o catálogo — senão a demo sobe com correção de erro de digitação apagada, e o sintoma (busca com typo não acha nada) não aponta para a causa.
 - ⬜ Marcar como resolvida a entrada "Dummy data para a demo" do `docs/reference/backlog.md` ao fechar esta sessão.
 - ⬜ Testes: seed idempotente; demo-reset restaura pets/produtos fake e limpa uploads.
 

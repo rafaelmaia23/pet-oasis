@@ -371,6 +371,11 @@ model Brand {
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
+  // A marca entra no corpus da busca por uma coluna gerada **dela** (9.9/Z1):
+  // coluna gerada não cruza linha, então o nome da marca não caberia na do
+  // produto sem denormalizar e manter por trigger.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
   products Product[]
 
   @@map("brands")
@@ -456,6 +461,12 @@ model Product {
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
   deletedAt     DateTime?     @map("deleted_at")
+
+  // Coluna **gerada** (9.9/Z1): `name` com peso A, `description` com peso C,
+  // ambos por `f_unaccent` (Z8). Declarada aqui só para o `migrate` não acusar
+  // drift — o Prisma não lê nem escreve `Unsupported`, e é exatamente isso que
+  // se quer: quem a consulta é o SQL cru de `product.search.repository.ts`.
+  searchVector Unsupported("tsvector")? @map("search_vector")
 
   brand      Brand             @relation(fields: [brandId], references: [id])
   variants   ProductVariant[]

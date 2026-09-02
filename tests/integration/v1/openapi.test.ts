@@ -70,6 +70,26 @@ describe("GET /openapi.json", () => {
     expect(body.paths["/variants/{variantId}"].delete).toBeDefined();
   });
 
+  it("should document the search parameter and the search echo it adds", async () => {
+    const { body } = await request(app).get("/openapi.json");
+
+    const params = body.paths["/products"].get.parameters as {
+      name: string;
+      in: string;
+    }[];
+    expect(params.some((p) => p.in === "query" && p.name === "q")).toBe(true);
+
+    // `meta.search` só existe nesta listagem (9.9/Z15): documentar o envelope
+    // genérico aqui faria o Scalar prometer o campo em toda lista paginada.
+    const meta =
+      body.paths["/products"].get.responses["200"].content["application/json"]
+        .schema.properties.meta;
+    expect(meta.$ref).toBe("#/components/schemas/ProductListMeta");
+    expect(
+      body.components.schemas.ProductListMeta.properties.search,
+    ).toBeDefined();
+  });
+
   it("should emit the recursive category view without blowing up", async () => {
     const { body } = await request(app).get("/openapi.json");
 

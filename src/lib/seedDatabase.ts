@@ -6,6 +6,7 @@ import { seedAdminUser } from "@/lib/seed/seedAdminUser";
 import { seedBreeds } from "@/lib/seed/seedBreeds";
 import { seedFakeUsers } from "@/lib/seed/seedFakeUsers";
 import { DEFAULT_FEATURES } from "@/modules/feature/feature.constants";
+import { refreshSearchLexemes } from "@/modules/product/product.search.repository";
 import { DEFAULT_ROLES } from "@/modules/role/role.constants";
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
@@ -138,6 +139,12 @@ export async function runSeed(): Promise<SeedResult> {
     const fakeUsersResult = await seedFakeUsers();
     fakeUsersCreated = fakeUsersResult.createdCount;
   }
+
+  // Por último, e sempre: o dicionário da busca (9.9/Z14) é derivado do
+  // catálogo, então só faz sentido depois de tudo que possa ter mexido nele.
+  // É isto que faz o `db:seed` e o `demo-reset` deixarem a correção de erro de
+  // digitação funcionando — sem a chamada, a demo sobe com ela apagada.
+  await refreshSearchLexemes();
 
   return {
     featuresCount: DEFAULT_FEATURES.length,

@@ -472,9 +472,44 @@ model Product {
   variants   ProductVariant[]
   categories ProductCategory[]
   tags       ProductTag[]
+  images     ProductImage[]
 
   @@index([brandId])
   @@map("products")
+}
+
+// Nasce na 9.10, e não junto do produto na 9.7: o precedente de coluna órfã
+// esperando dono (`Pet.photoPath`, `Brand.logoPath`) valia para **coluna**, não
+// para tabela — uma tabela sem escrita nenhuma não é economia de migration, é
+// esquema morto.
+//
+// Única tabela de domínio do projeto **sem `deletedAt`** (9.10/AA16), e é
+// consciente: o soft delete existe para preservar fato de negócio (quem comprou
+// o quê), e imagem é *asset*. A linha só faz sentido enquanto o byte existe —
+// soft delete com arquivo apagado criaria a linha-apontando-para-o-nada que o
+// ADR classifica como mais grave que um órfão no disco.
+//
+// `path` é a **chave base** (`products/<id>/<uuid>`), nem caminho de arquivo
+// nem URL: os dois derivados nascem dela por sufixo (`-full.webp`,
+// `-thumb.webp`), e a URL pública sai de `UPLOAD_PUBLIC_BASE_URL`. É o que
+// permite trocar quem serve o byte sem reescrever uma linha gravada.
+//
+// `position` não tem `@@unique([productId, position])`: a reordenação reescreve
+// o bloco inteiro, e um unique tornaria a permuta impossível sem posições
+// temporárias. Quem garante a sequência é o service — e a capa é a posição 0,
+// sem flag `isCover` (AA13), para que "qual é a capa?" nunca tenha duas
+// respostas possíveis.
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  path      String
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId, position])
+  @@map("product_images")
 }
 
 // A unidade vendável: é para cá que o `OrderItem` da Fase 10 vai apontar, nunca

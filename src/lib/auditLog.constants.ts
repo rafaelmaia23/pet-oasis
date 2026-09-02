@@ -77,6 +77,20 @@ export const AUDIT_ACTIONS = [
   // poder editar o catálogo) e outra pergunta na auditoria ("quem mexeu no
   // estoque?"). Metadata leva `from`/`to` — números, não PII.
   "PRODUCT_STOCK_ADJUSTED",
+  // Imagem (9.10/AA17). O `targetType` é o **dono** (`Product`/`Pet`/`Brand`),
+  // com o `imageId` na metadata: alvo novo no enum só se paga quando alguém vai
+  // filtrar por ele em `GET /audit-logs`, e a pergunta de auditoria é "o que
+  // aconteceu com este produto?", não "com esta imagem?".
+  //
+  // A linha de imagem é hard delete (AA16), então — como na tag — o audit é o
+  // único registro de que ela existiu.
+  "PRODUCT_IMAGE_UPLOADED",
+  "PRODUCT_IMAGE_DELETED",
+  "PRODUCT_IMAGES_REORDERED",
+  "PET_PHOTO_UPDATED",
+  "PET_PHOTO_DELETED",
+  "BRAND_LOGO_UPDATED",
+  "BRAND_LOGO_DELETED",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

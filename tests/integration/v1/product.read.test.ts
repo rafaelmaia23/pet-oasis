@@ -8,7 +8,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import z from "zod";
 import app from "@/app";
 import { prisma } from "@/lib/prisma";
-import { productViews } from "@/modules/product/product.presenter";
+import {
+  productListViews,
+  productViews,
+} from "@/modules/product/product.presenter";
 
 /**
  * Leitura do catálogo (9.8) — a **vitrine**. Arquivo próprio porque
@@ -156,7 +159,7 @@ describe("GET /api/v1/products — views por capability", () => {
 
     // Sem token e sem 401: é a vitrine (N15).
     expect(response.status).toBe(200);
-    expect(response.body.data).toMatchView(z.array(productViews.public));
+    expect(response.body.data).toMatchView(z.array(productListViews.public));
   });
 
   it("should not leak costCents or stockQuantity to the public — the contract test", async () => {
@@ -194,7 +197,7 @@ describe("GET /api/v1/products — views por capability", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(200);
-    expect(response.body.data).toMatchView(z.array(productViews.public));
+    expect(response.body.data).toMatchView(z.array(productListViews.public));
   });
 
   it("should give an attendant the exact stock and no cost", async () => {
@@ -215,7 +218,7 @@ describe("GET /api/v1/products — views por capability", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(200);
-    expect(response.body.data).toMatchView(z.array(productViews.internal));
+    expect(response.body.data).toMatchView(z.array(productListViews.internal));
     expect(response.body.data[0].variants[0].stockQuantity).toBe(7);
   });
 
@@ -235,7 +238,7 @@ describe("GET /api/v1/products — views por capability", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(200);
-    expect(response.body.data).toMatchView(z.array(productViews.cost));
+    expect(response.body.data).toMatchView(z.array(productListViews.cost));
     expect(response.body.data[0].variants[0].costCents).toBe(15000);
   });
 
@@ -266,7 +269,7 @@ describe("GET /api/v1/products — views por capability", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data).toHaveLength(1);
-    expect(response.body.data).toMatchView(z.array(productViews.cost));
+    expect(response.body.data).toMatchView(z.array(productListViews.cost));
   });
 
   it("should fall back to the public view when both features are denied", async () => {

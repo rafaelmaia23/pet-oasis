@@ -31,6 +31,12 @@ export async function clearDatabase() {
   await prisma.productTag.deleteMany();
   await prisma.productCategory.deleteMany();
   await prisma.productVariant.deleteMany();
+  // 9.10: a FK é RESTRICT como as demais, então a imagem sai antes do produto.
+  // Só a LINHA — o arquivo no disco fica, e não faz mal: `UPLOAD_DIR` é um
+  // diretório único deste run em `os.tmpdir()` (vitest.config.ts), apagado
+  // inteiro no teardown. Dar responsabilidade de filesystem ao clearDatabase
+  // seria repetir a armadilha do dicionário da busca por outra porta.
+  await prisma.productImage.deleteMany();
   await prisma.product.deleteMany();
   await prisma.brand.deleteMany();
   await prisma.category.deleteMany();

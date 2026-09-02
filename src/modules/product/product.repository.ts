@@ -21,6 +21,15 @@ const productInclude = {
     where: { deletedAt: null },
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
   },
+  // Sem `where` de `deletedAt`: imagem é a única tabela de domínio sem soft
+  // delete (9.10/AA16) — a linha só existe enquanto o byte existe.
+  //
+  // O mesmo include serve à lista e ao detalhe, embora a lista só mostre a capa.
+  // Um `take: 1` para a lista exigiria um segundo include atravessando os TRÊS
+  // caminhos de leitura (normal, agregação de preço, ranking da busca) — e três
+  // includes que precisam concordar é a classe de divergência que a Y8 e a Z4
+  // fecharam. Oito linhas curtas por produto é o preço de não reabri-la.
+  images: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
 } satisfies Prisma.ProductInclude;
 
 export type ProductWithRelations = Prisma.ProductGetPayload<{

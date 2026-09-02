@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
-import type { AuthUser } from "@/lib/authorization";
 import { RateLimiterRes } from "rate-limiter-flexible";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AuthUser } from "@/lib/authorization";
 
 const { recordMock } = vi.hoisted(() => ({ recordMock: vi.fn() }));
 

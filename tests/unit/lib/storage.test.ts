@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import { env } from "@/config/env";
 import {
   deleteImage,
-  deleteOwnerImages,
   detectImageFormat,
   IMAGE_DIMENSIONS,
   imageUrls,
@@ -220,27 +219,5 @@ describe("deleteImage", () => {
     await expect(
       deleteImage(`products/${crypto.randomUUID()}/${crypto.randomUUID()}`),
     ).resolves.toBeUndefined();
-  });
-});
-
-describe("deleteOwnerImages", () => {
-  it("removes the whole directory of one owner", async () => {
-    const ownerId = crypto.randomUUID();
-    await storeImage({
-      owner: "products",
-      ownerId,
-      buffer: await pixels("jpeg"),
-    });
-    await storeImage({
-      owner: "products",
-      ownerId,
-      buffer: await pixels("jpeg"),
-    });
-
-    await deleteOwnerImages("products", ownerId);
-
-    expect(existsSync(path.join(env.UPLOAD_DIR, "products", ownerId))).toBe(
-      false,
-    );
   });
 });

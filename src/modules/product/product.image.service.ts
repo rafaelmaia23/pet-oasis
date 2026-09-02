@@ -55,18 +55,6 @@ async function resolveImage(productId: string, imageId: string) {
 export async function addImage(productId: string, buffer: Buffer) {
   await resolveProduct(productId);
 
-  const existing = await imageRepository.countImagesOfProduct(productId);
-
-  if (existing >= MAX_IMAGES_PER_PRODUCT) {
-    throw createValidationError({
-      errors: {
-        file: [
-          `Este produto já tem o máximo de ${MAX_IMAGES_PER_PRODUCT} imagens`,
-        ],
-      },
-    });
-  }
-
   const path = await storeImage({
     owner: "products",
     ownerId: productId,
@@ -74,8 +62,13 @@ export async function addImage(productId: string, buffer: Buffer) {
   });
 
   try {
-    const image = await imageRepository.createImage(
-      { productId, path, position: existing },
+    // A contagem e o insert acontecem sob o mesmo lock, dentro do repository:
+    // conferir o teto aqui fora seria correr uma corrida com os outros sete
+    // uploads que o cliente disparou em paralelo (AA4).
+    const image = await imageRepository.createImageAtEnd(
+      productId,
+      path,
+      MAX_IMAGES_PER_PRODUCT,
       {
         action: "PRODUCT_IMAGE_UPLOADED",
         targetType: "Product",
@@ -83,11 +76,21 @@ export async function addImage(productId: string, buffer: Buffer) {
       },
     );
 
+    if (!image) {
+      throw createValidationError({
+        errors: {
+          file: [
+            `Este produto já tem o máximo de ${MAX_IMAGES_PER_PRODUCT} imagens`,
+          ],
+        },
+      });
+    }
+
     return present(image);
   } catch (error) {
-    // Compensação: a linha não entrou, então o arquivo não deve ficar. É o que
-    // mantém o órfão como exceção (falha da compensação também) em vez de
-    // consequência normal de um erro de escrita.
+    // Compensação: a linha não entrou (recusada pelo teto ou por falha), então
+    // o arquivo não deve ficar. É o que mantém o órfão como exceção — inclusive
+    // a falha desta própria compensação — em vez de consequência normal.
     await deleteFile(path);
     throw error;
   }

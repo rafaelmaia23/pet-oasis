@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import { createValidationError } from "@/errors";
 import { listEnvelope } from "@/lib/pagination";
+import { uploadedFile } from "@/middlewares/upload.middleware";
 import { brandPresenter } from "./brand.presenter";
 import {
   brandParamsSchema,
@@ -42,15 +42,9 @@ export const updateBrand = async (req: Request, res: Response) => {
 export const updateBrandLogo = async (req: Request, res: Response) => {
   const { params } = brandParamsSchema.parse({ params: req.params });
 
-  if (!req.file) {
-    throw createValidationError({
-      errors: { file: ['Envie um arquivo no campo "file"'] },
-    });
-  }
-
   const brand = await brandService.setBrandLogo(
     params.brandId,
-    req.file.buffer,
+    uploadedFile(req),
   );
 
   return res.status(200).json(brandPresenter.present(brand, "default"));

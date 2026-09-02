@@ -28,6 +28,22 @@ const handler = multer({
   },
 }).single("file");
 
+/**
+ * O arquivo do request, para o controller. O middleware acima já garantiu a
+ * presença; esta função é o que reconcilia essa garantia com o
+ * `Express.Multer.File | undefined` do tipo, num lugar só em vez de uma guarda
+ * repetida em cada controller de upload.
+ */
+export function uploadedFile(req: Request): Buffer {
+  if (!req.file) {
+    throw createValidationError({
+      errors: { file: ['Envie um arquivo no campo "file"'] },
+    });
+  }
+
+  return req.file.buffer;
+}
+
 export function uploadSingleImage(
   req: Request,
   res: Response,

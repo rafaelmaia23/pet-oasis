@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import { createValidationError } from "@/errors";
 import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
+import { uploadedFile } from "@/middlewares/upload.middleware";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { petPresenter } from "./pet.presenter";
 import {
@@ -83,18 +83,10 @@ export const deletePet = async (req: Request, res: Response) => {
 export const updatePetPhoto = async (req: Request, res: Response) => {
   const { params } = petParamsSchema.parse({ params: req.params });
 
-  // O middleware de upload já garante a presença; a guarda reconcilia o
-  // `Express.Multer.File | undefined` do tipo com o invariante da rota.
-  if (!req.file) {
-    throw createValidationError({
-      errors: { file: ['Envie um arquivo no campo "file"'] },
-    });
-  }
-
   const pet = await petService.setPetPhoto(
     getAuthUser(req),
     params.petId,
-    req.file.buffer,
+    uploadedFile(req),
   );
 
   return res.status(200).json(petPresenter.present(pet, "default"));

@@ -5,4 +5,7 @@ src/generated
 .env
 .env.*
 !.env.example
-uploads/
+# Uploads: o diretório é versionado (uploads/.gitkeep explica por quê), o
+# conteúdo não.
+uploads/*
+!uploads/.gitkeep

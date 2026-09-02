@@ -151,15 +151,3 @@ export async function deleteImage(key: string): Promise<void> {
     await storage.delete(fileOf(key, size));
   }
 }
-
-/**
- * Apaga o diretório inteiro de um dono. É o que torna a exclusão em cascata um
- * gesto só em vez de N deletes correlacionados — a razão de o layout da chave
- * ser `<owner>/<ownerId>/<uuid>` e não plano (AA8).
- */
-export async function deleteOwnerImages(
-  owner: ImageOwner,
-  ownerId: string,
-): Promise<void> {
-  await storage.deleteDirectory(`${owner}/${ownerId}`);
-}

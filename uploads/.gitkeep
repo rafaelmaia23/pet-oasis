@@ -1,0 +1,9 @@
+Este diretório existe versionado de propósito (9.10).
+
+O Compose monta `./uploads` como bind mount em `/app/uploads`, e o container de
+produção roda como **não-root** (`USER node`). Se o diretório não existisse no
+host, o Docker o criaria na subida — pertencente ao **root** —, e o primeiro
+upload falharia com EACCES num ponto em que o sintoma (500 no upload) não
+aponta para a causa (dono do diretório).
+
+O conteúdo é ignorado pelo git (ver .gitignore); só o diretório é versionado.

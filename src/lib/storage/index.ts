@@ -1,6 +1,5 @@
 export {
   deleteImage,
-  deleteOwnerImages,
   detectImageFormat,
   IMAGE_DIMENSIONS,
   IMAGE_SIZES,

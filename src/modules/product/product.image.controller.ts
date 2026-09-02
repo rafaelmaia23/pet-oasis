@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { createValidationError } from "@/errors";
+import { uploadedFile } from "@/middlewares/upload.middleware";
 import {
   productImageParamsSchema,
   productImagesParamsSchema,
@@ -16,15 +16,10 @@ import { productImagePresenter } from "./product.presenter";
 export const uploadProductImage = async (req: Request, res: Response) => {
   const { params } = productImagesParamsSchema.parse({ params: req.params });
 
-  // O middleware de upload já garante a presença; esta guarda é o que reconcilia
-  // o `Express.Multer.File | undefined` do tipo com o invariante da rota.
-  if (!req.file) {
-    throw createValidationError({
-      errors: { file: ['Envie um arquivo no campo "file"'] },
-    });
-  }
-
-  const image = await imageService.addImage(params.productId, req.file.buffer);
+  const image = await imageService.addImage(
+    params.productId,
+    uploadedFile(req),
+  );
 
   return res.status(201).json(productImagePresenter.present(image, "default"));
 };

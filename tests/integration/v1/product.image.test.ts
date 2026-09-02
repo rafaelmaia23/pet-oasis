@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import {
   buildCatalogTaxonomy,
@@ -177,6 +178,63 @@ describe("POST /api/v1/products/:productId/images", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["file"]);
     expect(await prisma.productImage.count()).toBe(MAX_IMAGES_PER_PRODUCT);
+  });
+
+  it("holds the cap and the positions when the eight uploads arrive at once", async () => {
+    // É o desenho que a própria API recomenda: o front deixa escolher oito
+    // fotos num gesto e dispara oito requests. Sem serializar a atribuição de
+    // posição, os oito leem a contagem antes de qualquer insert commitar —
+    // todos gravariam `position: 0`, e o teto seria ultrapassado por quantos
+    // coubessem na janela.
+    const token = await loginAsCatalogManager();
+    const product = await seedProduct();
+    const buffer = await jpeg();
+
+    const responses = await Promise.all(
+      Array.from({ length: MAX_IMAGES_PER_PRODUCT + 4 }, () =>
+        upload(product.id, token, buffer),
+      ),
+    );
+
+    const created = responses.filter((response) => response.status === 201);
+    const refused = responses.filter((response) => response.status === 422);
+
+    expect(created).toHaveLength(MAX_IMAGES_PER_PRODUCT);
+    expect(refused).toHaveLength(4);
+    expect(await prisma.productImage.count()).toBe(MAX_IMAGES_PER_PRODUCT);
+
+    const rows = await prisma.productImage.findMany({
+      where: { productId: product.id },
+      orderBy: { position: "asc" },
+    });
+
+    expect(rows.map((row) => row.position)).toEqual([
+      ...Array(MAX_IMAGES_PER_PRODUCT).keys(),
+    ]);
+  });
+
+  it("leaves no file behind when the upload is refused by the cap", async () => {
+    const token = await loginAsCatalogManager();
+    const product = await seedProduct();
+    const buffer = await jpeg();
+
+    for (let index = 0; index < MAX_IMAGES_PER_PRODUCT; index++) {
+      await upload(product.id, token, buffer).expect(201);
+    }
+
+    await upload(product.id, token, buffer).expect(422);
+
+    // O teto só é conferido sob o lock, ou seja, DEPOIS de o arquivo estar no
+    // disco — então a recusa precisa compensar, senão cada nona tentativa
+    // deixaria um órfão.
+    const rows = await prisma.productImage.findMany({
+      where: { productId: product.id },
+    });
+    const files = await fs.readdir(
+      path.join(env.UPLOAD_DIR, "products", product.id),
+    );
+
+    expect(files).toHaveLength(rows.length * 2);
   });
 
   it("answers 404 for a product that does not exist", async () => {

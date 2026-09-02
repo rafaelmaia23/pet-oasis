@@ -387,11 +387,9 @@ describe("PATCH /api/v1/products/:productId/images/order", () => {
     const response = await reorder(product.id, token, [third, first, second]);
 
     expect(response.status).toBe(200);
-    expect(response.body.data.map((image: { id: string }) => image.id)).toEqual([
-      third,
-      first,
-      second,
-    ]);
+    expect(response.body.data.map((image: { id: string }) => image.id)).toEqual(
+      [third, first, second],
+    );
 
     const list = await request(app).get("/api/v1/products").expect(200);
     const detail = await request(app)

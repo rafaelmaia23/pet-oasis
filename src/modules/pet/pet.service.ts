@@ -6,6 +6,7 @@ import {
 import type { PetSpecies } from "@/generated/prisma/enums";
 import { type AuthUser, hasFeature } from "@/lib/authorization";
 import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
+import { deleteImage, imageUrls, storeImage } from "@/lib/storage";
 import { SPECIES_WITH_BREED } from "@/modules/breed/breed.constants";
 import { findBreedById } from "@/modules/breed/breed.repository";
 import { findActiveCustomerById } from "@/modules/user/profile/user.profile.repository";
@@ -138,6 +139,21 @@ async function assertSpeciesAndBreedAgree(
   }
 }
 
+/**
+ * Troca a chave gravada pelas duas URLs públicas antes de a ficha sair. Fica
+ * neste ponto — e não no presenter — pelo mesmo motivo de `inStock` no produto:
+ * toda resposta de pet passa por aqui, então é o único lugar onde a derivação
+ * precisa existir.
+ */
+function withPhoto<P extends { photoPath: string | null }>(pet: P) {
+  const { photoPath, ...rest } = pet;
+
+  return {
+    ...rest,
+    photo: photoPath === null ? null : imageUrls(photoPath),
+  };
+}
+
 export async function createPet(
   actor: AuthUser,
   customerId: string,
@@ -147,7 +163,7 @@ export async function createPet(
 
   await assertSpeciesAndBreedAgree(input.species, input.breedId);
 
-  return petRepository.createPet(
+  const pet = await petRepository.createPet(
     { ...input, customerId: customer.id },
 
     {
@@ -161,12 +177,16 @@ export async function createPet(
       },
     },
   );
+
+  return withPhoto(pet);
 }
 
 export async function getCustomerPets(actor: AuthUser, customerId: string) {
   const customer = await resolveCustomer(actor, customerId, "read:pet");
 
-  return petRepository.findPetsByCustomerId(customer.id);
+  const pets = await petRepository.findPetsByCustomerId(customer.id);
+
+  return pets.map(withPhoto);
 }
 
 /**
@@ -180,7 +200,7 @@ export async function getAllPets(query: ListPetsQuery) {
   // O campo de ordenação sai da allowlist do recurso, nunca cru do query param.
   const orderBy = buildOrderBy(query, PET_SORT);
 
-  return petRepository.findAllPets(
+  const { pets, total } = await petRepository.findAllPets(
     {
       species: query.species,
       sex: query.sex,
@@ -192,10 +212,12 @@ export async function getAllPets(query: ListPetsQuery) {
     },
     { skip, take, orderBy },
   );
+
+  return { pets: pets.map(withPhoto), total };
 }
 
 export async function getPetById(actor: AuthUser, petId: string) {
-  return resolvePet(actor, petId, "read:pet");
+  return withPhoto(await resolvePet(actor, petId, "read:pet"));
 }
 
 export async function updatePet(
@@ -213,7 +235,7 @@ export async function updatePet(
 
   await assertSpeciesAndBreedAgree(species, breedId);
 
-  return petRepository.updatePet(pet.id, input, {
+  const updated = await petRepository.updatePet(pet.id, input, {
     action: "PET_UPDATED",
     targetType: "Pet",
     targetId: pet.id,
@@ -222,6 +244,55 @@ export async function updatePet(
       fieldsChanged: Object.keys(input),
     },
   });
+
+  return withPhoto(updated);
+}
+
+/**
+ * Foto é valor **único** num endereço fixo, então `PUT` substitui (9.10/AA7):
+ * trocar a foto é um gesto só, e exigir `DELETE` antes seria atrito sem ganho.
+ * O arquivo anterior é apagado depois de a coluna já apontar para o novo —
+ * quebrar no meio deixa órfão no disco, nunca ficha apontando para o nada.
+ */
+export async function setPetPhoto(
+  actor: AuthUser,
+  petId: string,
+  buffer: Buffer,
+) {
+  const pet = await resolvePet(actor, petId, "manage:pet");
+
+  const photoPath = await storeImage({
+    owner: "pets",
+    ownerId: pet.id,
+    buffer,
+  });
+
+  const updated = await petRepository.setPetPhotoPath(pet.id, photoPath, {
+    action: "PET_PHOTO_UPDATED",
+    targetType: "Pet",
+    targetId: pet.id,
+    metadata: { customerId: pet.customerId },
+  });
+
+  if (pet.photoPath) await deleteImage(pet.photoPath);
+
+  return withPhoto(updated);
+}
+
+/** Idempotente: pet sem foto já está no estado desejado, então 204 e não 404. */
+export async function removePetPhoto(actor: AuthUser, petId: string) {
+  const pet = await resolvePet(actor, petId, "manage:pet");
+
+  if (!pet.photoPath) return;
+
+  await petRepository.setPetPhotoPath(pet.id, null, {
+    action: "PET_PHOTO_DELETED",
+    targetType: "Pet",
+    targetId: pet.id,
+    metadata: { customerId: pet.customerId },
+  });
+
+  await deleteImage(pet.photoPath);
 }
 
 export async function deletePet(actor: AuthUser, petId: string) {

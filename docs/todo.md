@@ -173,7 +173,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 | **9.7** | `Product` + `ProductVariant` — escrita | Núcleo do Bloco B. |
 | **9.8** | Catálogo — leitura, views por capability, filtros | Depende de 9.2, 9.6, 9.7. |
 | **9.9** | Busca textual | Depende de 9.8 existir para ter o que buscar. Maior risco técnico da fase — isolada de propósito. |
-| **9.10** | Adaptador de storage + upload de imagem | Independente do resto — mais infra, menos domínio. |
+| **9.10** ✅ | Adaptador de storage + upload de imagem | Independente do resto — mais infra, menos domínio. |
 | **9.11** | Seed fake do domínio + `demo-reset` | Depende do schema inteiro estar firme. Resolve a entrada "Dummy data para a demo" do `docs/reference/backlog.md`. |
 | **9.12** | Fechos | Docs, coleção Bruno, README, `context.md`, revisão do backlog. |
 
@@ -321,6 +321,19 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - 🔸 **Sobrou uma aresta conhecida, consequência direta da Z4:** o teto de 500 é aplicado **antes** do recorte de visibilidade, então linha soft-deletada e rascunho consomem cota do teto. Só morde num catálogo com mais de 500 casamentos para o mesmo termo, e fechá-lo significaria repetir `deleted_at IS NULL` no SQL cru — o primeiro passo da duplicação que a Z4 recusou. Registrado no `docs/reference/backlog.md`.
 - 🔸 A defasagem do dicionário continua existindo, agora sem morder: quem cria produto pela API não ganha **correção de typo** nas palavras novas até o próximo `npm run db:refresh-search`, mas a busca literal acha o produto na hora. Automatizar o refresh (timer em `infra/cron/`, no molde dos `cleanup-*`) é decisão para quando houver produção real.
 
+#### O que a implementação firmou
+
+- ✅ **A AA2 mudou por um fato do ambiente, não por preferência.** A verificação mostrou que não existe reverse proxy neste repositório (`infra/docker-compose.prod.yml` publica `app:3000` direto) — ele vive no servidor pessoal que hospeda a demo, fora do git. Quem serve `/uploads/*` passou a ser o próprio Node, com o volume em **bind mount**, e o adendo do ADR narra a troca futura como configuração (`alias` no nginx + `UPLOAD_PUBLIC_BASE_URL`).
+- ✅ **`Retry-After` já existia** para todos os limiters (`src/lib/rateLimit.ts`), então a AA18 custou só `rateLimitByUser` e o `scope: "USER"` no `enforce`. `canAccess` roda **antes** do limiter na rota: quem não pode subir imagem recebe 401/403 sem consumir cota.
+- ✅ **A migration precisou ser escrita à mão**, como a da 9.9: o `prisma migrate dev` gera, junto da tabela nova, um `DROP DEFAULT` nas colunas `search_vector` e o drop dos dois índices GIN — drift falso do `Unsupported`, que quebraria a busca inteira. O primeiro `migrate dev` chegou a falhar no banco de dev e foi revertido com `migrate resolve --rolled-back`.
+- ✅ **As views de produto viraram duas famílias** (`productViews` e `productListViews`), com as mesmas três chaves de capability. Foi o preço de honrar a AA14 (`image` na lista, `images` no detalhe) sem duplicar a escada: o service produz **os dois** campos e a whitelist do Zod derruba o que a view não declara — um caminho de código só, e a view decide. As cinco asserções de `product.read.test.ts` sobre `response.body.data` passaram a apontar para a família de lista.
+- ✅ **`Brand.logoPath` não estava tão órfã quanto o planejamento supunha:** ela já aparecia no `brand.presenter`. As duas colunas (`photoPath`, `logoPath`) foram **substituídas** nas views por `photo`/`logo` com as duas URLs — devolver a chave amarraria o cliente ao layout do disco, que é o que a AA2 quer manter livre. Como nunca houve escritor, nenhum cliente dependia do formato antigo.
+- ✅ **`flattenProduct` passou a derivar a marca aninhada** pelo mesmo `withLogo` de `GET /brands`. Sem isso a marca teria uma forma dentro do produto e outra fora — a classe de divergência que a Y8/Z4 fecharam.
+- ✅ **A carência da varredura virou env var** (`UPLOAD_ORPHAN_GRACE_HOURS`), seguindo o precedente de `SESSION_RETENTION_DAYS`/`AUDIT_LOG_RETENTION_DAYS` — é botão de operação, não regra de domínio. O teto de 8 imagens e as dimensões continuam constantes, como a AA19 mandava.
+- ✅ **`clearDatabase` ganhou `productImage`** (FK RESTRICT, antes de `product`) — só a **linha**. O arquivo fica: `UPLOAD_DIR` é um diretório único por run em `os.tmpdir()`, apagado inteiro no teardown, e dar responsabilidade de filesystem ao `clearDatabase` seria repetir a armadilha do dicionário da 9.9 por outra porta.
+- 🔸 **O `demo-reset` ainda não limpa o diretório de upload**, e isso é deliberado (AA/Q24): limpar sem repovoar deixaria a vitrine da demo sem foto para sempre. A limpeza e as imagens de exemplo são da **9.11**, anotadas lá.
+- 🔸 A varredura nasceu **sem systemd timer**. Entra no dia em que ela encontrar algo duas vezes.
+
 #### Passo-a-passo
 
 - ✅ **Migration escrita à mão** (uma só): `CREATE EXTENSION unaccent, pg_trgm` · `f_unaccent` (Z8) · `products.search_vector` e `brands.search_vector` geradas com `setweight` (Z1, Z12) · dois índices GIN · a view materializada de lexemas, recortada pelo visível (Z17), com índice GIN `gin_trgm_ops`. As duas colunas entram no `schema.prisma` como `Unsupported("tsvector")` para o `migrate` não acusar drift. Vale para dev, test e prod pelo mesmo caminho — o `tests/setup/global.ts` já roda `migrate deploy`.
@@ -337,7 +350,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 - ✅ `?q=` e `?sort=relevance` são **acréscimo** à listagem que já existe — a allowlist `PRODUCT_SORT` (`product.schema.ts`) nasceu com `price`, `name` e `createdAt`.
 - ✅ A listagem já tem **dois** caminhos no repository (o normal e o `groupBy` de preço, Y3). A busca é o terceiro, e o `where` compartilhado (`buildProductWhere`) é o que impede os três de divergirem sobre visibilidade — todo filtro novo entra lá, nunca no `orderBy`. É exatamente o que a Z4 preserva.
 
-### ⬜ [Sessão 9.10] Fase 9.10 — Adaptador de storage + upload de imagem
+### ✅ [Sessão 9.10] Fase 9.10 — Adaptador de storage + upload de imagem
 > Kickoff de 2026-09-02, em sessão de grelha: **dezenove decisões (AA1–AA19) fechadas antes de
 > qualquer linha de código**, no molde da 9.9. É a sub-fase menos de domínio e mais de infra da
 > fase — e a única em que um efeito colateral (o byte no disco) não participa da transação do
@@ -383,25 +396,25 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 
 Branch `feat/fase-9-10-uploads`, saindo de `fase-9`. Um commit por item, teste antes do código.
 
-- ⬜ **1 — Adaptador.** `sharp` + `multer` instalados; `src/lib/storage/` com a interface `Storage` (`put`/`delete`/`url`), `LocalDiskStorage` e o pipeline `sharp` parametrizado pelo dono (AA6). Validação por magic bytes (AA5), nome uuid gerado por nós. **Testes de unidade, sem HTTP**: arquivo disfarçado é recusado, nome do usuário nunca vira caminho, os dois derivados nascem.
-- ⬜ **2 — Rate limit.** `rateLimitByUser` ao lado do `rateLimitByIp` e `scope` do `enforce` (hoje `"IP" | "EMAIL"`) ganhando `"USER"`; env vars novas em `.env.example` (AA19). A ação de audit continua `AUTH_RATE_LIMIT_EXCEEDED` — o nome já não é literal desde o limiter de catálogo da 9.6, e renomear mexeria em histórico gravado.
-- ⬜ **3 — `ProductImage`.** Migration (tabela + relação `Product.images`), `POST /products/:productId/images` (AA3, AA12) e as views da AA14.
-- ⬜ **4 — Item e ordem.** `DELETE /products/:productId/images/:imageId` (AA11, AA16) e `PATCH /products/:productId/images/order` (AA13).
-- ⬜ **5 — Pet.** `PUT|DELETE /pets/:petId/photo`; `photoPath` finalmente entra no presenter do pet. O `PATCH /pets/:petId` continua recusando `photoPath` no corpo (422) — upload é o único caminho.
-- ⬜ **6 — Marca.** `PUT|DELETE /brands/:brandId/logo`, idem para `logoPath` e para a recusa no `PATCH /brands/:brandId`.
-- ⬜ **7 — Servir.** `express.static` de `/uploads`, `UPLOAD_PUBLIC_BASE_URL` e o bind mount nos três compose (AA2). Pode subir para depois do (3) se você quiser ver a imagem no navegador cedo — os testes provam a URL sem ninguém servir byte nenhum.
-- ⬜ **8 — Varredura.** `src/scripts/cleanup-uploads.ts` + `npm run db:cleanup-uploads`, no padrão dos `cleanup-*`.
-- ⬜ **9 — Docs.** OpenAPI (`multipart/form-data` com `format: binary`), Bruno (aba Multipart Form; **`docs/bruno/assets/sample.jpg` versionado**, senão a coleção quebra na máquina de quem clonar — e é ele que prova "entra JPEG, sai WebP"), adendo no `docs/adr/file-storage-and-uploads.md` (proxy adiado + a nota do ARM), `docs/context/lifecycle.md` (AA16) e `docs/reference/logging-policy.md` (as 7 ações da AA17).
+- ✅ **1 — Adaptador.** `sharp` + `multer` instalados; `src/lib/storage/` com a interface `Storage` (`put`/`delete`/`url`), `LocalDiskStorage` e o pipeline `sharp` parametrizado pelo dono (AA6). Validação por magic bytes (AA5), nome uuid gerado por nós. **Testes de unidade, sem HTTP**: arquivo disfarçado é recusado, nome do usuário nunca vira caminho, os dois derivados nascem.
+- ✅ **2 — Rate limit.** `rateLimitByUser` ao lado do `rateLimitByIp` e `scope` do `enforce` (hoje `"IP" | "EMAIL"`) ganhando `"USER"`; env vars novas em `.env.example` (AA19). A ação de audit continua `AUTH_RATE_LIMIT_EXCEEDED` — o nome já não é literal desde o limiter de catálogo da 9.6, e renomear mexeria em histórico gravado.
+- ✅ **3 — `ProductImage`.** Migration (tabela + relação `Product.images`), `POST /products/:productId/images` (AA3, AA12) e as views da AA14.
+- ✅ **4 — Item e ordem.** `DELETE /products/:productId/images/:imageId` (AA11, AA16) e `PATCH /products/:productId/images/order` (AA13).
+- ✅ **5 — Pet.** `PUT|DELETE /pets/:petId/photo`; `photoPath` finalmente entra no presenter do pet. O `PATCH /pets/:petId` continua recusando `photoPath` no corpo (422) — upload é o único caminho.
+- ✅ **6 — Marca.** `PUT|DELETE /brands/:brandId/logo`, idem para `logoPath` e para a recusa no `PATCH /brands/:brandId`.
+- ✅ **7 — Servir.** `express.static` de `/uploads`, `UPLOAD_PUBLIC_BASE_URL` e o bind mount nos três compose (AA2). Pode subir para depois do (3) se você quiser ver a imagem no navegador cedo — os testes provam a URL sem ninguém servir byte nenhum.
+- ✅ **8 — Varredura.** `src/scripts/cleanup-uploads.ts` + `npm run db:cleanup-uploads`, no padrão dos `cleanup-*`.
+- ✅ **9 — Docs.** OpenAPI (`multipart/form-data` com `format: binary`), Bruno (aba Multipart Form; **`api-collection/assets/sample.jpg` versionado**, senão a coleção quebra na máquina de quem clonar — e é ele que prova "entra JPEG, sai WebP"), adendo no `docs/adr/file-storage-and-uploads.md` (proxy adiado + a nota do ARM), `docs/context/lifecycle.md` (AA16) e `docs/reference/logging-policy.md` (as 7 ações da AA17).
 
 #### Testes (AA + o piso do ADR)
 
-- ⬜ Magic bytes recusa arquivo disfarçado (`.jpg` que é HTML/SVG/ELF); nome do usuário nunca chega ao disco; teto de 5 MB → 413; nona imagem → 422.
-- ⬜ `UPLOAD_DIR` de teste é diretório único por run (`mkdtemp` em `os.tmpdir()`), criado no `tests/setup/global.ts` e apagado no teardown com `fs.rm(..., { recursive: true, force: true })` dentro de `finally` — suíte vermelha também limpa. Runs em paralelo não se contaminam, e o `clearDatabase` **não** ganha responsabilidade sobre filesystem (foi essa a armadilha do dicionário na 9.9). `LocalDiskStorage` real, `sharp` real: teste que não exercita o caminho de produção passa em falso.
-- ⬜ Imagem de outro produto no path → 404 (AA11); array incompleto na reordenação → 422; capa da lista é a posição 0 depois de reordenar.
-- ⬜ `PUT` de foto de pet substitui e o arquivo anterior **some do disco**; `DELETE` em pet sem foto → 204.
-- ⬜ Soft delete do produto **preserva** o arquivo (AA16); hard delete da linha de imagem apaga arquivo e linha.
-- ⬜ `demo` não sobe arquivo (403 explícito, sem feature de escrita); rate limit por usuário devolve 429 **com `Retry-After`**.
-- ⬜ Órfão (arquivo sem linha, mtime > 24h) é removido pela varredura; arquivo recém-gravado **não** é; linha sem arquivo é reportada e **não** apagada.
+- ✅ Magic bytes recusa arquivo disfarçado (`.jpg` que é HTML/SVG/ELF); nome do usuário nunca chega ao disco; teto de 5 MB → 413; nona imagem → 422.
+- ✅ `UPLOAD_DIR` de teste é diretório único por run (`mkdtemp` em `os.tmpdir()`), criado no `tests/setup/global.ts` e apagado no teardown com `fs.rm(..., { recursive: true, force: true })` dentro de `finally` — suíte vermelha também limpa. Runs em paralelo não se contaminam, e o `clearDatabase` **não** ganha responsabilidade sobre filesystem (foi essa a armadilha do dicionário na 9.9). `LocalDiskStorage` real, `sharp` real: teste que não exercita o caminho de produção passa em falso.
+- ✅ Imagem de outro produto no path → 404 (AA11); array incompleto na reordenação → 422; capa da lista é a posição 0 depois de reordenar.
+- ✅ `PUT` de foto de pet substitui e o arquivo anterior **some do disco**; `DELETE` em pet sem foto → 204.
+- ✅ Soft delete do produto **preserva** o arquivo (AA16); hard delete da linha de imagem apaga arquivo e linha.
+- ✅ `demo` não sobe arquivo (403 explícito, sem feature de escrita); rate limit por usuário devolve 429 **com `Retry-After`**.
+- ✅ Órfão (arquivo sem linha, mtime > 24h) é removido pela varredura; arquivo recém-gravado **não** é; linha sem arquivo é reportada e **não** apagada.
 
 #### Riscos conhecidos
 
@@ -419,11 +432,11 @@ Branch `feat/fase-9-10-uploads`, saindo de `fase-9`. Um commit por item, teste a
 - ⬜ Testes: seed idempotente; demo-reset restaura pets/produtos fake e limpa uploads.
 
 ### ⬜ [Sessão 9.12] Fase 9.12 — Fechos
-- ⬜ `docs/reference/endpoints.md` — as rotas novas de catálogo, e a seção "Mounting" com a categoria nova de autenticação opcional (rotas públicas que enriquecem a resposta quando há token). **`breeds` (9.3) e `pets` (9.4) já entraram**; conferir, não reescrever.
+- ⬜ `docs/reference/endpoints.md` — as rotas novas de catálogo, e a seção "Mounting" com a categoria nova de autenticação opcional (rotas públicas que enriquecem a resposta quando há token). **`breeds` (9.3) e `pets` (9.4) já entraram**, e as **sete rotas de imagem da 9.10** também (mais os dois parágrafos de Mounting: o estático `/uploads/*` e o balde de upload por usuário); conferir, não reescrever.
 - ⬜ `README.md`/`docs/context/authorization.md` — conferir que as roles novas (`stockist`, `catalog-manager`) aparecem onde o projeto descreve os cargos.
 - ⬜ Coleção Bruno — environments `local`/`prod`. `breeds/` já entrou na 9.3, `pets/` na 9.4 (com `Get Me` gravando `customerId`, que é o que encadeia a coleção aninhada), `brands/`, `categories/`, `tags/` na 9.6 e `products/`, `variants/` na 9.7 (encadeadas por `brandId`/`categoryId`/`tagId` → `productId` → `variantId`) — conferir, não reescrever; falta a **leitura** — `GET /products` (com os filtros e a ordenação da 9.8) e `GET /products/:idOrSlug`, que valem uma requisição **sem** `Authorization` na coleção, porque é a única forma de a demo mostrar a view pública ao lado da de staff; mais o `?q=` da 9.9.
 - ⬜ `docs/context/pet-domain.md` promovido de "planejada" a "implementada"; parágrafo "Fase 9 (fechada)" em `docs/context/history.md`; decisões novas indexadas em `docs/context.md`.
-- ⬜ `docs/reference/logging-policy.md` — conferir a taxonomia final. As quatro ações de pet e o `targetType` `Pet` entraram na 9.4, as nove de taxonomia na 9.6, e as sete de produto/variante (com `Product`/`ProductVariant` e o `PRODUCT_STOCK_ADJUSTED` separado) na 9.7; falta o que a 9.10 acrescentar de imagem.
+- ⬜ `docs/reference/logging-policy.md` — conferir a taxonomia final. As quatro ações de pet e o `targetType` `Pet` entraram na 9.4, as nove de taxonomia na 9.6, e as sete de produto/variante (com `Product`/`ProductVariant` e o `PRODUCT_STOCK_ADJUSTED` separado) na 9.7, e as **sete de imagem na 9.10** (com o `targetType` do dono e o `PRODUCT_IMAGES_REORDERED` distinguindo reordenação pedida de compactação) — conferir, não reescrever.
 - ⬜ `docs/reference/backlog.md` revisado — nenhum item resolvido pela fase sem marcação, nenhuma entrada nova esquecida.
 - ⬜ `README.md` — roadmap promove a Fase 9 a ✅, contagem de testes atualizada.
 - ⬜ Decisão do usuário: apagar `docs/planning/fase-9-contexto.md` ou mantê-lo em `docs/planning/` como registro histórico.

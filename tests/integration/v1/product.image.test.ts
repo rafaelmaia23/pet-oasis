@@ -477,3 +477,31 @@ describe("product lifecycle and its files", () => {
     expect(onDisk(row.path, "thumb")).toBe(true);
   });
 });
+
+describe("GET /uploads/*", () => {
+  it("serves the derivative that the upload response points at", async () => {
+    const token = await loginAsCatalogManager();
+    const product = await seedProduct();
+
+    const uploaded = await upload(product.id, token, await jpeg());
+
+    // O caminho sai da própria URL devolvida: se o estático estivesse montado
+    // em outro lugar, ou a base apontasse para outro prefixo, este teste falha —
+    // que é o ponto. Cliente nenhum monta URL de imagem à mão.
+    const url = new URL(uploaded.body.fullUrl as string);
+
+    const response = await request(app).get(url.pathname);
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("image/webp");
+    expect(response.headers["cache-control"]).toContain("immutable");
+  });
+
+  it("does not invent a file that was never uploaded", async () => {
+    const response = await request(app).get(
+      "/uploads/products/nao/existe-full.webp",
+    );
+
+    expect(response.status).toBe(404);
+  });
+});

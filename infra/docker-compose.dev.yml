@@ -63,6 +63,11 @@ services:
     volumes:
       - ../src:/app/src
       - ../prisma:/app/prisma
+      # Bind mount e não volume nomeado (9.10/AA2): o arquivo fica visível no
+      # filesystem do host, que é o pré-requisito para um nginx passar a servi-lo
+      # direto. De brinde, backup vira `rsync` de um diretório em vez de
+      # arqueologia em /var/lib/docker/volumes.
+      - ../uploads:/app/uploads
       # Anonymous volume: keeps the container's generated Prisma client from being
       # masked by the host's src/ bind-mount (entrypoint runs `prisma generate`).
       - /app/src/generated

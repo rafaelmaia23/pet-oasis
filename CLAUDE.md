@@ -89,7 +89,7 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 - Junção do Prisma sempre aninha (`user.roles` = `UserRole[]` com `.role` dentro); achate no service ou espelhe na view.
 - `snake_case` no banco via `@map`; camelCase no código.
 - Valores monetários em inteiro-**centavos** (`priceCents`, nunca `Decimal`/float); peso em inteiro-**gramas** (`weightGrams`). Mesmo racional dos dois: aritmética inteira, sem bug de ponto flutuante, sem `Decimal` do Prisma contaminando serialização/Zod.
-- SQL cru (necessário só para busca textual com `tsvector`/`pg_trgm`, Fase 9) vive **exclusivamente no repository**, via `$queryRaw` com template parametrizado — nunca concatenação, nunca fora dessa camada. Ver `docs/adr/text-search.md`.
+- SQL cru vive **exclusivamente no repository**, via `$queryRaw` com template parametrizado — nunca concatenação, nunca fora dessa camada. Só é escrito quando o Prisma não expressa o que se precisa, e hoje isso acontece em **dois** pontos: a busca textual (`tsvector`/`pg_trgm`, Fase 9.9 — ver `docs/adr/text-search.md`) e o lock de linha que serializa a atribuição de posição das imagens de produto (`SELECT ... FOR UPDATE`, Fase 9.10). Ponto novo de SQL cru é decisão a justificar, não rotina.
 
 ## Comandos
 

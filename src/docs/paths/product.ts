@@ -1,7 +1,15 @@
 import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
+import { env } from "@/config/env";
 import { offsetMetaSchema } from "@/lib/pagination";
 import {
+  productImageParamsSchema,
+  productImagesParamsSchema,
+  reorderProductImagesSchema,
+} from "@/modules/product/product.image.schema";
+import {
+  productImagePresenter,
+  productListViews,
   productViews,
   variantViews,
 } from "@/modules/product/product.presenter";
@@ -18,7 +26,7 @@ import {
   variantParamsSchema,
 } from "@/modules/product/product.variant.schema";
 import { errorResponses, jsonResponse, noContentResponse } from "../components";
-import { fromEnvelope } from "../helpers";
+import { fromEnvelope, imageUploadBody } from "../helpers";
 
 const VARIANT_NOTE =
   "Todo produto tem **pelo menos uma** variante, e exatamente uma delas é a default. Quando nenhuma vem marcada, a primeira é promovida; excluir a última variante ativa devolve 409.";
@@ -67,7 +75,7 @@ export const productPaths: ZodOpenApiPathsObject = {
         200: jsonResponse(
           "Catálogo",
           z.object({
-            data: z.array(productViews.public),
+            data: z.array(productListViews.public),
             meta: productListMetaSchema,
           }),
         ),
@@ -179,6 +187,60 @@ export const productPaths: ZodOpenApiPathsObject = {
         403: errorResponses[403],
         404: errorResponses[404],
         409: errorResponses[409],
+        422: errorResponses[422],
+      },
+    },
+  },
+  "/products/{productId}/images": {
+    post: {
+      tags: ["Products"],
+      summary: "Envia uma imagem do produto — exige manage:product",
+      description:
+        "Um arquivo por request, no campo `file`. A imagem entra no fim da fila (`position`), e a **posição 0 é a capa** — é ela que a listagem devolve em `image`. Teto de 8 imagens por produto; a nona é 422. O formato é conferido pelos **bytes**, e o nome do arquivo enviado é descartado: quem nomeia é a API.",
+      ...fromEnvelope(productImagesParamsSchema),
+      ...imageUploadBody(env.UPLOAD_MAX_FILE_SIZE_BYTES),
+      responses: {
+        201: jsonResponse("Imagem criada", productImagePresenter.views.default),
+        401: errorResponses[401],
+        403: errorResponses[403],
+        404: errorResponses[404],
+        413: errorResponses[413],
+        422: errorResponses[422],
+        429: errorResponses[429],
+      },
+    },
+  },
+  "/products/{productId}/images/order": {
+    patch: {
+      tags: ["Products"],
+      summary: "Reordena as imagens do produto — exige manage:product",
+      description:
+        "O corpo é o array **completo** de ids na ordem desejada: faltar ou sobrar imagem é 422, repetir id é 422, e nomear imagem de outro produto é 404. Idempotente — reenviar a ordem atual não muda nada. A capa é a posição 0; não existe flag separada.",
+      ...fromEnvelope(reorderProductImagesSchema),
+      responses: {
+        200: jsonResponse(
+          "Imagens na nova ordem",
+          z.object({ data: z.array(productImagePresenter.views.default) }),
+        ),
+        401: errorResponses[401],
+        403: errorResponses[403],
+        404: errorResponses[404],
+        422: errorResponses[422],
+      },
+    },
+  },
+  "/products/{productId}/images/{imageId}": {
+    delete: {
+      tags: ["Products"],
+      summary: "Exclui uma imagem do produto — exige manage:product",
+      description:
+        "**Hard delete**: a linha some junto com os arquivos, porque imagem é asset e não fato de negócio. As posições restantes são compactadas, então apagar a capa promove a seguinte. Imagem de outro produto é 404 — a resposta não revela que ela existe em outro lugar.",
+      ...fromEnvelope(productImageParamsSchema),
+      responses: {
+        204: noContentResponse,
+        401: errorResponses[401],
+        403: errorResponses[403],
+        404: errorResponses[404],
         422: errorResponses[422],
       },
     },

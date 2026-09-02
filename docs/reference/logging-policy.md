@@ -157,6 +157,13 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `PRODUCT_VARIANT_UPDATED` | `ProductVariant` | `productId`, `fields` (`string[]`, só os de catálogo) | 9.7 |
 | `PRODUCT_VARIANT_DELETED` | `ProductVariant` | `productId`, `promotedVariantId` (só quando a excluída era a default) | 9.7 |
 | `PRODUCT_STOCK_ADJUSTED` | `ProductVariant` | `productId`, `from`, `to` | 9.7 |
+| `PRODUCT_IMAGE_UPLOADED` | `Product` | `imageId` | 9.10 |
+| `PRODUCT_IMAGE_DELETED` | `Product` | `imageId` | 9.10 |
+| `PRODUCT_IMAGES_REORDERED` | `Product` | `count` (reordenação pedida) ou `reason: "COMPACTION"` (posições fechadas após exclusão) | 9.10 |
+| `PET_PHOTO_UPDATED` | `Pet` | `customerId` | 9.10 |
+| `PET_PHOTO_DELETED` | `Pet` | `customerId` | 9.10 |
+| `BRAND_LOGO_UPDATED` | `Brand` | — | 9.10 |
+| `BRAND_LOGO_DELETED` | `Brand` | — | 9.10 |
 
 Nome do pet **não** entra em `metadata` de nenhuma das quatro ações acima — não
 por ser PII do pet, mas porque nome de pet é frequentemente usado como resposta
@@ -188,6 +195,25 @@ anterior.
 
 Nome comercial e descrição do produto **não** entram na `metadata`, pela mesma
 regra "só ids e enums" da taxonomia — provado por teste no `PRODUCT_CREATED`.
+
+**As sete ações de imagem (9.10) têm o `targetType` do DONO** (`Product`, `Pet`,
+`Brand`), com o `imageId` na `metadata` — e não um `targetType` `ProductImage`
+novo. Alvo novo no enum só se paga quando alguém vai **filtrar** por ele em
+`GET /audit-logs?targetType=`, e a pergunta real de auditoria é "o que aconteceu
+com este produto?", nunca "com esta imagem?". Reusar o dono mantém o histórico
+de imagem na linha do tempo do produto, que é onde se procura.
+
+Nome de arquivo enviado pelo cliente **não** entra na `metadata` — nem poderia:
+o pipeline o descarta antes de qualquer escrita (o arquivo é nomeado por uuid
+gerado por nós), então não existe ponto do código em que ele esteja disponível
+para ser logado.
+
+`PRODUCT_IMAGE_DELETED` é, como `TAG_DELETED`, registro de um **hard delete**
+(`docs/context/lifecycle.md`): a linha some junto com os arquivos, e esta é a
+única prova de que a imagem existiu. A compactação de posições que a exclusão
+dispara sai como `PRODUCT_IMAGES_REORDERED` com `reason: "COMPACTION"`, separada
+da reordenação pedida por um humano — as duas mexem no mesmo dado, mas só uma é
+uma decisão de alguém.
 
 `actorId` é nulo quando não há ator identificado (login falho de email inexistente, script automatizado). `AUTH_LOGIN_FAILED` de conta existente registra o `targetId` do dono, mesmo sem ator.
 

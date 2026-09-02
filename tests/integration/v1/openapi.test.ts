@@ -108,4 +108,24 @@ describe("GET /openapi.json", () => {
     expect(text).not.toContain("tokenHash");
     expect(text).not.toContain("refreshTokenHash");
   });
+
+  it("documents the image uploads as multipart, with the 413 they can answer", async () => {
+    const { body } = await request(app).get("/openapi.json");
+
+    const uploads = [
+      body.paths?.["/products/{productId}/images"]?.post,
+      body.paths?.["/pets/{petId}/photo"]?.put,
+      body.paths?.["/brands/{brandId}/logo"]?.put,
+    ];
+
+    for (const operation of uploads) {
+      // Sem isto o Scalar renderiza um corpo JSON num endpoint que só aceita
+      // multipart — e o "try it" nunca funcionaria.
+      expect(
+        operation?.requestBody?.content?.["multipart/form-data"],
+      ).toBeDefined();
+      expect(operation?.responses?.["413"]).toBeDefined();
+      expect(operation?.security).toBeUndefined();
+    }
+  });
 });

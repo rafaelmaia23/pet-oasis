@@ -86,6 +86,34 @@ node` — higiene básica de container.
 
 ---
 
+### O reverse proxy do upload existe, mas não neste repositório (9.10)
+
+`GET /uploads/*` é servido pelo **próprio Node** (`express.static`, em `src/app.ts`), e não pelo
+reverse proxy que o [ADR de upload](../adr/file-storage-and-uploads.md) pressupunha. O motivo é
+factual: não há proxy nenhum versionado aqui — `infra/docker-compose.prod.yml` publica `app:3000`
+direto. O nginx existe no servidor pessoal que hospeda a demo de portfólio, e a configuração dele
+vive fora do git (é também o que justifica o `trust proxy 1` do `app.ts`).
+
+Servir por Node é o que mantém **um caminho só** nos três ambientes. A alternativa — Node em dev,
+nginx em produção — fabricaria a classe de bug "funciona na minha máquina, 404 no deploy", num
+ponto em que o sintoma (imagem quebrada) não aponta para a causa.
+
+O que mantém a porta aberta é o volume ser **bind mount** e não volume nomeado: o arquivo fica
+visível no filesystem do host, e o dia em que o tráfego justificar, a mudança inteira é um
+`location /uploads/ { alias ...; }` no nginx mais um `UPLOAD_PUBLIC_BASE_URL` novo. Nada gravado
+no banco muda — ele guarda a **chave**, nunca a URL. De brinde, backup de imagem vira `rsync` de
+um diretório em vez de arqueologia em `/var/lib/docker/volumes`.
+
+### `sharp` no ARM64 exige build no próprio servidor (9.10)
+
+O `Dockerfile` é `node:22-bookworm-slim` (glibc, não Alpine), então o `npm ci` baixa o prebuild
+`@img/sharp-linux-arm64` — nada compila, nenhum pacote de sistema entra na imagem.
+
+A condição é que a imagem seja **construída no ARM**, que é o que o `prod:up` faz (o Compose tem
+`build:`, e o build roda no host). Construir num x86 e enviar a imagem pronta quebra em runtime
+com `could not load the sharp module` — erro que não se parece nada com a causa, e que só
+apareceria no primeiro upload depois do deploy.
+
 ## Documentação da API
 
 ### Gerada dos próprios schemas Zod, não escrita à mão

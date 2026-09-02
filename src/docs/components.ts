@@ -73,6 +73,12 @@ export const errorResponses = {
   403: jsonResponse("Sem permissão para executar a ação", errorResponseSchema),
   404: jsonResponse("Recurso não encontrado", errorResponseSchema),
   409: jsonResponse("Conflito — valor único já em uso", errorResponseSchema),
+  // 9.10: upload acima de UPLOAD_MAX_FILE_SIZE_BYTES. O teto é do multer — o
+  // JSON_BODY_LIMIT só age em `application/json` e não alcança multipart.
+  413: jsonResponse(
+    "Arquivo maior que o tamanho máximo permitido",
+    errorResponseSchema,
+  ),
   422: jsonResponse("Erro de validação", validationErrorSchema),
   429: jsonResponse("Muitas tentativas — limite excedido", errorResponseSchema),
 } satisfies Record<number, ZodOpenApiResponseObject>;

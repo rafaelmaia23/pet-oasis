@@ -198,6 +198,12 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(5 * 1024 * 1024),
+  // Carência da varredura de órfãos (`src/scripts/cleanup-uploads.ts`). Env
+  // como os demais valores de retenção (SESSION_RETENTION_DAYS,
+  // AUDIT_LOG_RETENTION_DAYS), e não constante: é botão de operação, e um
+  // deploy com upload lento pode legitimamente querer mais folga. Abaixar para
+  // perto de zero reintroduz o risco de apagar upload em voo.
+  UPLOAD_ORPHAN_GRACE_HOURS: z.coerce.number().int().positive().default(24),
 
   // Guarda explícita do demo-reset.ts (truncate + reseed, 7.14) — NUNCA
   // inferida de NODE_ENV, porque o deploy demo *é* production. Só true no

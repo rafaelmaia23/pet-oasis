@@ -32,6 +32,7 @@
     "db:studio": "dotenv -e .env.development -- prisma studio",
     "db:cleanup-sessions": "dotenv -e .env.development -- tsx src/scripts/cleanup-sessions.ts",
     "db:cleanup-audit-log": "dotenv -e .env.development -- tsx src/scripts/cleanup-audit-log.ts",
+    "db:cleanup-uploads": "dotenv -e .env.development -- tsx src/scripts/cleanup-uploads.ts",
     "db:refresh-search": "dotenv -e .env.development -- tsx src/scripts/refresh-search-lexemes.ts",
     "db:demo-reset": "dotenv -e .env.development -- tsx src/scripts/demo-reset.ts",
     "docs:check": "tsx tools/check-docs-links.ts"

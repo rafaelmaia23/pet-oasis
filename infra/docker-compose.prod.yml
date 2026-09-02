@@ -49,6 +49,12 @@ services:
     stop_grace_period: 15s
     ports:
       - "${APP_PORT:-3000}:3000"
+    volumes:
+      # Bind mount (9.10/AA2), com o caminho do host configurável: hoje o Node
+      # serve `/uploads` por `express.static`, e o dia em que o nginx da frente
+      # passar a servi-lo direto (`alias`) é config, não deploy novo. O
+      # diretório precisa existir e ser gravável pelo usuário do container.
+      - "${UPLOAD_HOST_DIR:-./uploads}:/app/uploads"
 
 volumes:
   prod_pgdata:

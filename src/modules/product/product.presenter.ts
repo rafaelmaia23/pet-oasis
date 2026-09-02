@@ -37,6 +37,34 @@ const categorySummaryView = z
     description: "Categoria vinculada ao produto, sem as filhas",
   });
 
+/**
+ * Imagem do produto (9.10). Nem `path` nem qualquer caminho de disco aparecem:
+ * o banco guarda a **chave**, e o que sai na API são as duas URLs públicas,
+ * montadas no service a partir de `UPLOAD_PUBLIC_BASE_URL`. Vazar a chave
+ * amarraria o cliente ao layout do disco, que é justamente o que a AA2 quer
+ * manter livre para trocar quem serve o byte.
+ */
+const productImageView = z
+  .object({
+    id: z.uuid(),
+    position: z.int().meta({ description: "0 é a capa", example: 0 }),
+    fullUrl: z.url(),
+    thumbUrl: z.url(),
+  })
+  .meta({
+    id: "ProductImage",
+    description: "Imagem do produto, nos dois tamanhos",
+  });
+
+// A capa, sem `id` e sem `position`: na lista não há o que fazer com nenhum dos
+// dois — reordenar e apagar acontecem no detalhe.
+const productCoverView = z
+  .object({ fullUrl: z.url(), thumbUrl: z.url() })
+  .meta({
+    id: "ProductCover",
+    description: "Imagem de capa (posição 0) do produto",
+  });
+
 // Degrau público da variante: preço e características, sem quantidade. Trocar a
 // quantidade exata por um booleano é decisão consciente (§3.8 do contexto da
 // fase) — estoque é informação competitiva e não muda nada para quem compra.
@@ -103,32 +131,87 @@ const productShape = {
   status: z.enum(ProductStatus).meta({ example: ProductStatus.DRAFT }),
 };
 
-const publicView = z
-  .object({ ...productPublicShape, variants: z.array(variantPublicView) })
-  .meta({
-    id: "ProductPublic",
-    description:
-      "Produto na vitrine: sem custo, sem estoque exato e sem status — a view de quem não tem read:product:internal, inclusive o visitante anônimo",
-  });
+/**
+ * Detalhe e lista divergem em **um** campo (9.10/AA14): o detalhe traz o array
+ * ordenado de imagens, a lista traz só a capa. Vinte produtos × oito imagens é
+ * payload que nenhuma vitrine usa, e a capa é tudo de que um card precisa.
+ *
+ * As duas famílias têm as mesmas três chaves (`public`/`internal`/`cost`), então
+ * `readViewFor` continua escolhendo uma vez só e serve às duas — a escada de
+ * capability e a diferença lista×detalhe são eixos independentes, e é de
+ * propósito que não se cruzem num nome composto.
+ *
+ * O service produz **os dois** campos (`images` e `image`) em toda resposta; a
+ * whitelist do Zod derruba o que a view não lista. Um caminho de código só, e a
+ * view decide o que sai.
+ */
+const detailView = <Shape extends z.ZodRawShape, Variant extends z.ZodType>(
+  shape: Shape,
+  variant: Variant,
+  meta: { id: string; description: string },
+) =>
+  z
+    .object({
+      ...shape,
+      images: z.array(productImageView),
+      variants: z.array(variant),
+    })
+    .meta(meta);
 
-const internalView = z
-  .object({ ...productShape, variants: z.array(variantInternalView) })
-  .meta({
-    id: "ProductInternal",
-    description: "Produto na visão de funcionário, sem o custo das variantes",
-  });
+const listView = <Shape extends z.ZodRawShape, Variant extends z.ZodType>(
+  shape: Shape,
+  variant: Variant,
+  meta: { id: string; description: string },
+) =>
+  z
+    .object({
+      ...shape,
+      image: productCoverView.nullable(),
+      variants: z.array(variant),
+    })
+    .meta(meta);
 
-const costView = z
-  .object({ ...productShape, variants: z.array(variantCostView) })
-  .meta({
-    id: "ProductWithCost",
-    description: "Produto com o custo das variantes — exige read:product:cost",
-  });
+const publicView = detailView(productPublicShape, variantPublicView, {
+  id: "ProductPublic",
+  description:
+    "Produto na vitrine: sem custo, sem estoque exato e sem status — a view de quem não tem read:product:internal, inclusive o visitante anônimo",
+});
+
+const internalView = detailView(productShape, variantInternalView, {
+  id: "ProductInternal",
+  description: "Produto na visão de funcionário, sem o custo das variantes",
+});
+
+const costView = detailView(productShape, variantCostView, {
+  id: "ProductWithCost",
+  description: "Produto com o custo das variantes — exige read:product:cost",
+});
+
+const publicListView = listView(productPublicShape, variantPublicView, {
+  id: "ProductListPublic",
+  description: "Produto na listagem pública: imagens reduzidas à capa",
+});
+
+const internalListView = listView(productShape, variantInternalView, {
+  id: "ProductListInternal",
+  description: "Produto na listagem de funcionário, sem o custo das variantes",
+});
+
+const costListView = listView(productShape, variantCostView, {
+  id: "ProductListWithCost",
+  description: "Produto na listagem com o custo — exige read:product:cost",
+});
 
 export const productViews = {
   public: publicView,
   internal: internalView,
   cost: costView,
+} as const;
+
+export const productListViews = {
+  public: publicListView,
+  internal: internalListView,
+  cost: costListView,
 } as const;
 
 export type ProductView = keyof typeof productViews;
@@ -142,5 +225,11 @@ export const variantViews = {
 export type VariantView = keyof typeof variantViews;
 
 export const productPresenter = createPresenter(productViews);
+
+export const productListPresenter = createPresenter(productListViews);
+
+export const productImagePresenter = createPresenter({
+  default: productImageView,
+} as const);
 
 export const variantPresenter = createPresenter(variantViews);

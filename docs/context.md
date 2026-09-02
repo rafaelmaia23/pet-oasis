@@ -102,6 +102,8 @@ completo, os contra-argumentos e os gotchas.
 - `grantRolesToUser` nasceu como primitiva
 - Pet é o primeiro filho de **domínio** do grafo (9.4) — desce como todo mundo, sobe como
   `UserRole`, e o critério é "restaurar isto concede autoridade?"
+- Imagem é o único hard delete de domínio do projeto (9.10) — asset não é fato de negócio; e o
+  soft delete do **produto** preserva os arquivos, senão restaurar devolveria o produto em branco
 
 *Perfil — os fluxos de produto*
 
@@ -286,6 +288,9 @@ completo, os contra-argumentos e os gotchas.
 - `migrate deploy`, nunca `migrate dev`
 - O seed é bundlado pelo tsup (`dist/seed.js`)
 - Imagem multi-stage e não-root
+- O reverse proxy do upload existe, mas não neste repositório (9.10) — quem serve `/uploads/*` é
+  o Node, e o bind mount é o que deixa a troca por nginx ser configuração
+- `sharp` no ARM64 exige build no próprio servidor (9.10)
 
 *Documentação da API*
 

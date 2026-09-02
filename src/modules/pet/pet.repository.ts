@@ -144,6 +144,19 @@ export async function softDeletePet(id: string, audit?: AuditDescriptor) {
 }
 
 /** `null` desfaz o registro de falecimento (marcação no pet errado). */
+/**
+ * A coluna só é escrita por aqui (9.10): o `PATCH /pets/:petId` recusa
+ * `photoPath` no corpo (`z.never` no schema), então o upload é o único caminho
+ * de entrada — e a exclusão, o único de saída.
+ */
+export async function setPetPhotoPath(
+  id: string,
+  photoPath: string | null,
+  audit?: AuditDescriptor,
+) {
+  return applyUpdate(id, { photoPath }, audit);
+}
+
 export async function setPetDeceasedAt(
   id: string,
   deceasedAt: Date | null,

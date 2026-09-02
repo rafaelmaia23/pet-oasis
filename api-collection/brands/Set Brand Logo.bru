@@ -1,0 +1,26 @@
+meta {
+  name: Set Brand Logo
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/brands/{{brandId}}/logo
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  file: @file(assets/sample.jpg)
+}
+
+docs {
+  Exige manage:catalog-structure — a mesma feature de criar e renomear a marca.
+
+  PUT substitui e apaga o logo anterior. Devolve a marca, com "logo" nas duas
+  URLs (full 512px, thumb 128px). PATCH /brands/:brandId recusa "logoPath" no
+  corpo, então o upload é o único caminho.
+
+  O logo viaja junto da marca aninhada dentro do produto: depois desta
+  requisição, GET /products/:idOrSlug mostra brand.logo preenchido.
+}

@@ -11,6 +11,16 @@ import { createPresenter } from "@/utils/presenter";
  * `breed` sai achatada: o Prisma aninha a junção, e a view espelha o formato
  * útil ao cliente (id + nome) em vez de repassar a linha inteira.
  */
+/**
+ * A foto sai como as **duas URLs**, nunca como o `photoPath` gravado (9.10):
+ * aquele valor é a chave do storage, e devolvê-lo amarraria o cliente ao layout
+ * do disco — exatamente o que a AA2 quer manter livre para o dia em que o nginx
+ * (ou um CDN) passar a servir o arquivo no lugar do Node.
+ */
+const petPhotoView = z
+  .object({ fullUrl: z.url(), thumbUrl: z.url() })
+  .meta({ id: "PetPhoto", description: "Foto do pet, nos dois tamanhos" });
+
 const defaultView = z
   .object({
     id: z.uuid(),
@@ -29,7 +39,7 @@ const defaultView = z
     microchipId: z.string().nullable(),
     color: z.string().nullable(),
     notes: z.string().nullable(),
-    photoPath: z.string().nullable(),
+    photo: petPhotoView.nullable(),
     // Separado de `deletedAt` de propósito: pet falecido continua aparecendo.
     deceasedAt: z.coerce.date().nullable(),
     createdAt: z.coerce.date(),

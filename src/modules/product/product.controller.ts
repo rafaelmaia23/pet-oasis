@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { offsetEnvelope } from "@/lib/pagination";
 import { getAuthUser } from "@/utils/getAuthUser";
-import { productPresenter } from "./product.presenter";
+import { productListPresenter, productPresenter } from "./product.presenter";
 import {
   createProductSchema,
   listProductsSchema,
@@ -25,7 +25,9 @@ export const listProducts = async (req: Request, res: Response) => {
   );
 
   const envelope = offsetEnvelope(
-    productPresenter.presentMany(
+    // Presenter da **lista** (9.10/AA14): mesmas três chaves de capability, mas
+    // a imagem sai como capa em vez de coleção.
+    productListPresenter.presentMany(
       products,
       productService.readViewFor(req.user),
     ),

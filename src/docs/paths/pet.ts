@@ -1,4 +1,5 @@
 import type { ZodOpenApiPathsObject } from "zod-openapi";
+import { env } from "@/config/env";
 import { petViews } from "@/modules/pet/pet.presenter";
 import {
   createPetSchema,
@@ -14,7 +15,7 @@ import {
   offsetList,
   staticList,
 } from "../components";
-import { fromEnvelope } from "../helpers";
+import { fromEnvelope, imageUploadBody } from "../helpers";
 
 export const petPaths: ZodOpenApiPathsObject = {
   "/customers/{customerId}/pets": {
@@ -133,6 +134,37 @@ export const petPaths: ZodOpenApiPathsObject = {
         401: errorResponses[401],
         403: errorResponses[403],
         404: errorResponses[404],
+        422: errorResponses[422],
+      },
+    },
+  },
+  "/pets/{petId}/photo": {
+    put: {
+      tags: ["Pets"],
+      summary: "Define a foto do pet — exige manage:pet",
+      description:
+        "Valor **único**: `PUT` substitui a foto anterior e apaga o arquivo antigo. Devolve a ficha do pet — não existe recurso 'foto de pet' endereçável. `PATCH /pets/{petId}` recusa `photoPath` no corpo, então o upload é o único caminho.",
+      ...fromEnvelope(petParamsSchema),
+      ...imageUploadBody(env.UPLOAD_MAX_FILE_SIZE_BYTES),
+      responses: {
+        200: jsonResponse("Pet com a foto atualizada", petViews.default),
+        401: errorResponses[401],
+        403: errorResponses[403],
+        413: errorResponses[413],
+        422: errorResponses[422],
+        429: errorResponses[429],
+      },
+    },
+    delete: {
+      tags: ["Pets"],
+      summary: "Remove a foto do pet — exige manage:pet",
+      description:
+        "Apaga o arquivo e limpa a coluna. **Idempotente**: pet sem foto responde 204, porque o estado desejado já é o atual.",
+      ...fromEnvelope(petParamsSchema),
+      responses: {
+        204: noContentResponse,
+        401: errorResponses[401],
+        403: errorResponses[403],
         422: errorResponses[422],
       },
     },

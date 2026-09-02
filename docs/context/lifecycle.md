@@ -91,6 +91,30 @@ Em `user.lifecycle.repository.ts`, porque três caminhos precisam do reuso de li
 `create` cru estoura o `@@unique([userId, roleId])` sempre que já houve aquele par:
 `addUserRole`, a criação de perfil e a reativação nomeando uma role morta fora daquela cascata.
 
+### Imagem é o único hard delete de domínio do projeto (9.10)
+
+`ProductImage` é a única tabela de domínio **sem `deletedAt`**, e as fotos de pet e os logos de
+marca são apagados do disco de verdade quando trocados ou removidos. É exceção consciente à
+regra geral, e o critério é o mesmo que justifica a regra: o soft delete existe para preservar
+**fato de negócio** (quem comprou o quê, quem tinha qual permissão quando). Imagem não é fato,
+é *asset*.
+
+As três alternativas foram avaliadas e duas recusadas. Soft delete da linha **com** o arquivo
+apagado cria a linha-apontando-para-o-nada que o [ADR de upload](../adr/file-storage-and-uploads.md)
+classifica como mais grave que um órfão no disco — o sintoma é imagem quebrada na vitrine, e o
+dado preservado não serve para nada. Soft delete da linha **preservando** o arquivo daria
+"desfazer", ao custo de disco que nunca mais é liberado por um dado que ninguém vai auditar.
+
+O rastro de que a imagem existiu fica no **audit log** (`PRODUCT_IMAGE_DELETED`,
+`PET_PHOTO_DELETED`, `BRAND_LOGO_DELETED`), exatamente como na tag (9.6/W5), que é o outro hard
+delete do projeto.
+
+**A assimetria com o dono é o ponto delicado, e é deliberada:** o soft delete do **produto**
+não apaga arquivo nenhum. Produto excluído pode ser restaurado (Fase 8), e voltar sem imagem
+seria uma promessa parcial que nada na resposta anuncia — a mesma classe de erro que o D6'
+fechou do outro lado. O disco perdido é limitado (no máximo 8 imagens por produto morto), e é
+a varredura de órfãos que ganha, mais tarde, uma política de retenção se isso um dia importar.
+
 ### Pet é o primeiro filho de **domínio** do grafo (9.4)
 
 Até a Fase 8 o grafo de ciclo de vida era só autorização: `User` → perfis → `UserRole` →

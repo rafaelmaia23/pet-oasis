@@ -23,7 +23,26 @@ const row = {
     name: "Golden",
     slug: "golden",
     description: null,
-    logoPath: null,
+    // A marca chega aqui como o `flattenProduct` a entrega: a chave do storage
+    // já resolvida nas duas URLs (9.10), nunca o `logoPath` cru.
+    logo: {
+      fullUrl: "http://localhost:3000/uploads/brands/6b6f/abc-full.webp",
+      thumbUrl: "http://localhost:3000/uploads/brands/6b6f/abc-thumb.webp",
+    },
+  },
+  // O service produz `images` (detalhe) e `image` (capa da listagem) na mesma
+  // passada; cada família de view derruba o que não declara (9.10/AA14).
+  images: [
+    {
+      id: "5c5b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+      position: 0,
+      fullUrl: "http://localhost:3000/uploads/products/3f25/xyz-full.webp",
+      thumbUrl: "http://localhost:3000/uploads/products/3f25/xyz-thumb.webp",
+    },
+  ],
+  image: {
+    fullUrl: "http://localhost:3000/uploads/products/3f25/xyz-full.webp",
+    thumbUrl: "http://localhost:3000/uploads/products/3f25/xyz-thumb.webp",
   },
   categories: [
     {

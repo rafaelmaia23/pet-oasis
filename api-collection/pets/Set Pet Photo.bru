@@ -1,0 +1,33 @@
+meta {
+  name: Set Pet Photo
+  type: http
+  seq: 9
+}
+
+put {
+  url: {{baseUrl}}/pets/{{petId}}/photo
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  file: @file(assets/sample.jpg)
+}
+
+docs {
+  Exige manage:pet no próprio pet, ou manage:pet:others no de terceiro — a
+  mesma regra do PATCH: não existe cargo que edite a ficha mas não possa trocar
+  a foto.
+
+  PUT porque foto é valor único num endereço fixo: substituir é o gesto, e o
+  arquivo anterior é apagado. Devolve a FICHA DO PET, não um objeto de imagem —
+  "foto de pet" não é recurso endereçável.
+
+  PATCH /pets/:petId recusa "photoPath" no corpo (422), então este é o único
+  caminho de entrada. A resposta traz "photo" com as duas URLs; a chave gravada
+  no banco nunca sai na API.
+
+  Saída sempre WebP: full 800px, thumb 200px (menor que a de produto — foto de
+  pet não é foto de vitrine). O EXIF é removido, o que inclui a geolocalização
+  que a câmera do celular embute.
+}

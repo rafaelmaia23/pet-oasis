@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
+import { uploadedFile } from "@/middlewares/upload.middleware";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { petPresenter } from "./pet.presenter";
 import {
@@ -75,6 +76,26 @@ export const deletePet = async (req: Request, res: Response) => {
   const { params } = petParamsSchema.parse({ params: req.params });
 
   await petService.deletePet(getAuthUser(req), params.petId);
+
+  return res.status(204).send();
+};
+
+export const updatePetPhoto = async (req: Request, res: Response) => {
+  const { params } = petParamsSchema.parse({ params: req.params });
+
+  const pet = await petService.setPetPhoto(
+    getAuthUser(req),
+    params.petId,
+    uploadedFile(req),
+  );
+
+  return res.status(200).json(petPresenter.present(pet, "default"));
+};
+
+export const deletePetPhoto = async (req: Request, res: Response) => {
+  const { params } = petParamsSchema.parse({ params: req.params });
+
+  await petService.removePetPhoto(getAuthUser(req), params.petId);
 
   return res.status(204).send();
 };

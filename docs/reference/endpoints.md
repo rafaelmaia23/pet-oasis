@@ -18,6 +18,20 @@ As rotas de **documentação** (`/openapi.json`, `/reference`) ficam no router d
 
 **Rate limit da vitrine (Fase 9.6):** as quatro leituras públicas de catálogo (`/breeds`, `/brands`, `/categories`, `/tags`) compartilham um balde **por IP** (`catalogIpLimiter`, rule `catalog-read`) — não há identidade para um balde por usuário. Balde único de propósito: separar por rota daria a um scraper N orçamentos pelo preço de um. `/breeds` subiu na 9.3 sem limiter e foi coberta aqui.
 
+**Estático das imagens (Fase 9.10 / AA2):** `GET /uploads/*` fica no router de topo, **fora** de
+`/api/v1` e de `authenticate` — as imagens são públicas como a vitrine que as exibe. Quem serve é
+o próprio Node (`express.static`), porque o reverse proxy que o ADR pressupunha existe só no
+servidor onde a demo é hospedada, fora deste repositório; servir aqui mantém **um caminho só** em
+dev, test e produção. O volume é bind mount, então passar a servir por `alias` no nginx é
+configuração — o banco guarda a **chave**, nunca a URL.
+
+**Rate limit do upload (Fase 9.10 / AA18):** os três `PUT`/`POST` de imagem compartilham um balde
+**por usuário** (`uploadUserLimiter`, rule `image-upload`) — o primeiro do projeto com chave que
+não é IP nem email. Por IP ele atropelaria o mutirão de cadastro inicial, em que vários
+funcionários saem pelo mesmo NAT; o que ele barra (script bugado, conta comprometida) é
+propriedade de uma conta. `canAccess` roda **antes** dele, para que quem não pode subir imagem
+receba 401/403 sem consumir cota.
+
 Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado; `feature` = exige a feature via `canAccess(...)`.
 
 **Envelope de listagem (Fase 7.7 / D4):** toda rota de **lista** devolve `{ data, meta }` — `meta { page, limit, total }` no offset (`GET /users`), `meta { nextCursor, hasMore }` no cursor (`GET /audit-logs`), `meta {}` nas que não paginam. Exceção: `GET /users/:userId/permissions` segue `string[]` cru.
@@ -166,6 +180,8 @@ nele, então override só volta por `PUT` explícito, que revive a linha soft-de
 | POST `/api/v1/brands` | feature `manage:catalog-structure` | Cria marca. `slug` derivado do nome se ausente; nome/slug únicos **globalmente** (linha excluída inclusive) → recriar marca apagada é 409. Nome sem slug utilizável ("!!!") → 422 nomeando `name` |
 | PATCH `/api/v1/brands/:brandId` | feature `manage:catalog-structure` | Atualiza. Renomear **não** re-deriva o slug; mandar `slug` explicitamente é a porta de saída. `logoPath` é recusado no corpo (é do upload, 9.10) |
 | DELETE `/api/v1/brands/:brandId` | feature `manage:catalog-structure` | Soft delete (204). A linha continua ocupando nome e slug |
+| PUT `/api/v1/brands/:brandId/logo` | feature `manage:catalog-structure` | Upload do logo (multipart, campo `file`). Valor **único**: substitui e apaga o arquivo anterior. Devolve a marca com `logo` nas duas URLs (512/128px). Arquivo disfarçado → 422; acima do teto → 413 |
+| DELETE `/api/v1/brands/:brandId/logo` | feature `manage:catalog-structure` | Remove o logo (204). **Idempotente**: marca sem logo também responde 204 |
 
 ## Category — `src/modules/category/category.routes.ts`
 
@@ -207,7 +223,10 @@ Isso vale também para quem acabou de escrever: um autor sem `read:product:cost`
 | GET `/api/v1/products/:idOrSlug` | **pública** (view pela capability) | Detalhe com as variantes ativas, a default primeiro. O path aceita **id ou slug**: valor com forma de UUID é id, o resto é slug — e a escrita recusa slug com forma de UUID (Y2), então não há caso ambíguo. Produto fora do conjunto visível do ator é **404**, com a mesma mensagem de inexistente (Y8): 403 confirmaria o slug do rascunho para qualquer visitante |
 | POST `/api/v1/products` | feature `manage:product` | Cria produto **com** suas variantes (`variants` min 1, X3) e vínculos, numa transação. `categories` exige min 1 (X7); `tags` é opcional; `targetSpecies` vazio = qualquer espécie. `slug` derivado do nome se ausente e único global (409 na colisão, inclusive contra produto excluído). SKU repetido dentro do corpo → 422 nomeando `variants`; SKU já usado no banco → 409. Duas variantes marcadas default → 422; nenhuma marcada → a primeira é promovida (X5) |
 | PATCH `/api/v1/products/:productId` | feature `manage:product` | Atualiza. Renomear **não** re-deriva o slug (W4). `categories`/`tags` são **substituição total**: o array enviado vira o conjunto, campo ausente preserva o atual, `categories: []` → 422. `variants` não é aceito (variante tem rotas próprias) |
-| DELETE `/api/v1/products/:productId` | feature `manage:product` | Soft delete (204) **com cascata nas variantes**, um único timestamp para as duas tabelas (X8). Nome, slug e SKUs continuam ocupados; o audit registra `cascadedVariants` |
+| DELETE `/api/v1/products/:productId` | feature `manage:product` | Soft delete (204) **com cascata nas variantes**, um único timestamp para as duas tabelas (X8). Nome, slug e SKUs continuam ocupados; o audit registra `cascadedVariants`. Os **arquivos de imagem são preservados** (AA16) — produto restaurado voltaria em branco |
+| POST `/api/v1/products/:productId/images` | feature `manage:product` | Sobe **uma** imagem (multipart, campo `file`). Entra no fim da fila; **posição 0 é a capa**. Teto de 8 por produto → a nona é 422; acima do teto de tamanho → 413. Formato conferido pelos **bytes**, nome do arquivo enviado é descartado. Devolve a imagem criada (1600/400px) |
+| PATCH `/api/v1/products/:productId/images/order` | feature `manage:product` | Reordena por **array completo** de ids (`{ images: [...] }`). Idempotente. Conjunto incompleto ou id repetido → 422; id de imagem de outro produto → 404 |
+| DELETE `/api/v1/products/:productId/images/:imageId` | feature `manage:product` | **Hard delete** (204): a linha some junto com os arquivos. As posições restantes são compactadas — apagar a capa promove a seguinte. Imagem de outro produto → **404**, indistinguível de id inventado (AA11) |
 
 ## Product variant — `src/modules/product/product.variant.routes.ts`
 
@@ -237,6 +256,8 @@ Isso vale também para quem acabou de escrever: um autor sem `read:product:cost`
 | GET `/api/v1/pets/:petId` | `read:pet` \| `read:pet:others` | Detalhe do pet, com a raça achatada (`{ id, name }` ou `null`) |
 | PATCH `/api/v1/pets/:petId` | `manage:pet` \| `manage:pet:others` | Atualiza a ficha. `customerId` (transferência é backlog), `deceasedAt` (rota própria) e `photoPath` (upload, 9.10) → 422. `species` **é** editável e revalida a raça sobre o estado resultante |
 | DELETE `/api/v1/pets/:petId` | `manage:pet` \| `manage:pet:others` | Soft delete (204) |
+| PUT `/api/v1/pets/:petId/photo` | `manage:pet` \| `manage:pet:others` | Upload da foto (multipart, campo `file`). Valor **único**: substitui e apaga o arquivo anterior. Devolve a **ficha do pet** com `photo` nas duas URLs (800/200px) — não existe recurso "foto de pet" endereçável. EXIF removido, inclusive a geolocalização |
+| DELETE `/api/v1/pets/:petId/photo` | `manage:pet` \| `manage:pet:others` | Remove a foto (204). **Idempotente**: pet sem foto também responde 204 |
 | POST `/api/v1/pets/:petId/deceased` | `manage:pet` \| `manage:pet:others` | Registra o falecimento (204). Idempotente — remarcar não reescreve a data. `deceasedAt` ≠ `deletedAt`: o pet **permanece** na lista do dono |
 | DELETE `/api/v1/pets/:petId/deceased` | `manage:pet` \| `manage:pet:others` | Desfaz o registro feito no pet errado (204) |
 

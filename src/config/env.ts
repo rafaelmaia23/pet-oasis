@@ -110,6 +110,18 @@ const envSchema = z.object({
     .positive()
     .default(15 * 60 * 1000),
 
+  // 9.10: upload de imagem, contado **por usuário** (AA18) e não por IP — o
+  // primeiro limiter do projeto com chave que não é IP nem email. Por IP
+  // atropelaria o mutirão de cadastro inicial, em que vários funcionários
+  // saem pelo mesmo NAT; e o que este balde barra (script bugado, conta
+  // comprometida) é propriedade de uma conta, não de uma saída de rede.
+  RATE_LIMIT_UPLOAD_MAX: z.coerce.number().int().positive().default(150),
+  RATE_LIMIT_UPLOAD_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
+
   // Account lockout (7.10) — janela fixa inicial, dobrando a cada ciclo até o
   // teto. Contador vive no Redis (`src/lib/lockout.ts`), sem coluna nova no User.
   LOCKOUT_THRESHOLD: z.coerce.number().int().positive().default(5),
@@ -167,6 +179,31 @@ const envSchema = z.object({
   MAX_LIVE_SESSIONS: z.coerce.number().int().positive().default(5),
   SESSION_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   AUDIT_LOG_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
+
+  // Upload de imagem (9.10) — o que varia por ambiente ou é botão de operação
+  // fica aqui; o que é regra de domínio (8 imagens por produto, as dimensões
+  // de cada dono, os formatos aceitos) é constante em `src/lib/storage/`.
+  // AA19: regra que mora em env é regra que ninguém acha ao ler o domínio.
+  //
+  // UPLOAD_DIR é montado por bind mount no Compose (AA2), e não por volume
+  // nomeado, justamente para que trocar quem serve o byte — hoje o próprio
+  // Node, amanhã um `alias` no nginx — seja configuração e não código.
+  UPLOAD_DIR: z.string().default("./uploads"),
+  // Base **pública**, não caminho de disco: o banco guarda a chave, e a URL
+  // completa nasce daqui. Trocar o domínio (ou pôr um CDN na frente) é mudar
+  // esta variável, sem tocar em nenhuma linha gravada.
+  UPLOAD_PUBLIC_BASE_URL: z.url().default("http://localhost:3000/uploads"),
+  UPLOAD_MAX_FILE_SIZE_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5 * 1024 * 1024),
+  // Carência da varredura de órfãos (`src/scripts/cleanup-uploads.ts`). Env
+  // como os demais valores de retenção (SESSION_RETENTION_DAYS,
+  // AUDIT_LOG_RETENTION_DAYS), e não constante: é botão de operação, e um
+  // deploy com upload lento pode legitimamente querer mais folga. Abaixar para
+  // perto de zero reintroduz o risco de apagar upload em voo.
+  UPLOAD_ORPHAN_GRACE_HOURS: z.coerce.number().int().positive().default(24),
 
   // Guarda explícita do demo-reset.ts (truncate + reseed, 7.14) — NUNCA
   // inferida de NODE_ENV, porque o deploy demo *é* production. Só true no

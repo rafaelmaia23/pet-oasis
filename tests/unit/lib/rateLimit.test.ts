@@ -1,13 +1,18 @@
 import type { Request, Response } from "express";
 import { RateLimiterRes } from "rate-limiter-flexible";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AuthUser } from "@/lib/authorization";
 
 const { recordMock } = vi.hoisted(() => ({ recordMock: vi.fn() }));
 
 vi.mock("@/lib/auditLog", () => ({ record: recordMock }));
 
-const { rateLimitByIp, rateLimitByEmailTarget, consumeEmailTargetLimit } =
-  await import("@/lib/rateLimit");
+const {
+  rateLimitByIp,
+  rateLimitByEmailTarget,
+  rateLimitByUser,
+  consumeEmailTargetLimit,
+} = await import("@/lib/rateLimit");
 
 function fakeReqRes(body: Record<string, unknown> = {}) {
   const req = { ip: "127.0.0.1", body } as Request;
@@ -117,6 +122,65 @@ describe("rateLimitByEmailTarget", () => {
       action: "AUTH_RATE_LIMIT_EXCEEDED",
       targetType: "Route",
       metadata: { rule: "forgot-password", scope: "EMAIL" },
+    });
+  });
+});
+
+/**
+ * O balde do upload (9.10/AA18) é o primeiro com chave que não é IP nem email.
+ * Por IP ele atropelaria o mutirão de cadastro inicial — vários funcionários
+ * saem pelo mesmo NAT —, e o que ele barra (script bugado, conta comprometida)
+ * é propriedade de uma conta.
+ */
+describe("rateLimitByUser", () => {
+  beforeEach(() => {
+    recordMock.mockReset();
+    recordMock.mockResolvedValue(undefined);
+  });
+
+  it("consumes by the actor id, not by the IP", async () => {
+    const limiter = { consume: vi.fn().mockResolvedValue({}) };
+    const middleware = rateLimitByUser(limiter, "image-upload");
+    const { req, res, next } = fakeReqRes();
+    req.user = { id: "actor-1" } as AuthUser;
+
+    await middleware(req, res, next);
+
+    expect(limiter.consume).toHaveBeenCalledWith("actor-1");
+    expect(limiter.consume).not.toHaveBeenCalledWith("127.0.0.1");
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("skips consuming when there is no actor — the 401 is the gate's job, not the bucket's", async () => {
+    const limiter = { consume: vi.fn() };
+    const middleware = rateLimitByUser(limiter, "image-upload");
+    const { req, res, next } = fakeReqRes();
+
+    await middleware(req, res, next);
+
+    expect(limiter.consume).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it("throws 429 with scope USER and a Retry-After header when the limit is exceeded", async () => {
+    const rejection = new RateLimiterRes(0, 3000);
+    const limiter = { consume: vi.fn().mockRejectedValue(rejection) };
+    const middleware = rateLimitByUser(limiter, "image-upload");
+    const { req, res, next } = fakeReqRes();
+    req.user = { id: "actor-1" } as AuthUser;
+
+    await middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 429,
+        headers: { "Retry-After": "3" },
+      }),
+    );
+    expect(recordMock).toHaveBeenCalledWith({
+      action: "AUTH_RATE_LIMIT_EXCEEDED",
+      targetType: "Route",
+      metadata: { rule: "image-upload", scope: "USER" },
     });
   });
 });

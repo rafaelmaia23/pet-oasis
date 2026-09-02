@@ -1,0 +1,17 @@
+meta {
+  name: Delete Brand Logo
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/brands/{{brandId}}/logo
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:catalog-structure. Apaga o arquivo e limpa a coluna.
+
+  Idempotente: marca sem logo responde 204.
+}

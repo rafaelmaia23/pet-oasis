@@ -48,6 +48,12 @@ Hoje há um endpoint só. O ideal são dois papéis distintos: um público e mí
 ### Métricas e tracing (OpenTelemetry) — **G**
 A Fase 7 entrega logs; falta o resto do tripé. Instrumentar com OTel deixaria o backend trocável por configuração (Axiom, Grafana, Honeycomb) em vez de acoplado a um SDK. Fase própria, e só compensa quando houver carga real para observar.
 
+### Refresh automático do dicionário de lexemas — **P**
+A correção de erro de digitação da busca (9.9) trabalha contra um dicionário materializado por `npm run db:refresh-search`. Produto criado pela API entra na busca **literal** na hora, mas suas palavras novas só passam a corrigir typo depois do próximo refresh — a defasagem existe e hoje não morde, porque quem popula o catálogo é o seed. **Correção:** um systemd timer em `infra/cron/`, no molde dos `cleanup-*`. **Gatilho:** catálogo alimentado por gente, não por seed.
+
+### Systemd timer para a varredura de arquivos órfãos — **P**
+O `db:cleanup-uploads` (9.10) nasceu sem agendamento: roda à mão, ao contrário dos outros dois `cleanup-*`, que têm timer em `infra/cron/`. **Gatilho:** o dia em que ela encontrar arquivo órfão duas vezes — antes disso, agendar é automatizar um problema que ainda não se provou existir.
+
 ### Backup e restore do Postgres — **M**
 Dump agendado do banco do deploy, com um *restore* de fato testado — backup nunca verificado não é backup. Complementa a política de retenção de logs.
 

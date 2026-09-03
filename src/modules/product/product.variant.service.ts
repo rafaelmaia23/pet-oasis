@@ -156,35 +156,20 @@ export async function updateVariant(
 export async function deleteVariant(variantId: string) {
   const variant = await resolveVariant(variantId);
 
-  const siblings = await variantRepository.countActiveSiblings(
-    variant.productId,
-    variantId,
-  );
+  // A regra (X6) é daqui; a serialização é do repository, que decide sob lock
+  // se ainda sobra alguma irmã viva e devolve `null` quando não sobra.
+  const deleted = await variantRepository.softDeleteVariantIfNotLast(variant, {
+    action: "PRODUCT_VARIANT_DELETED",
+    targetType: "ProductVariant",
+    targetId: variantId,
+    metadata: { productId: variant.productId },
+  });
 
-  if (siblings === 0) {
+  if (!deleted) {
     throw createConflictError({
       message: "O produto precisa de pelo menos uma variante ativa",
       action:
         "Para tirar o produto de circulação use o status DISCONTINUED ou exclua o produto",
     });
   }
-
-  const promoted = variant.isDefault
-    ? await variantRepository.findOldestActiveSibling(
-        variant.productId,
-        variantId,
-      )
-    : null;
-
-  await variantRepository.softDeleteVariant(variantId, promoted?.id ?? null, [
-    {
-      action: "PRODUCT_VARIANT_DELETED",
-      targetType: "ProductVariant",
-      targetId: variantId,
-      metadata: {
-        productId: variant.productId,
-        ...(promoted ? { promotedVariantId: promoted.id } : {}),
-      },
-    },
-  ]);
 }

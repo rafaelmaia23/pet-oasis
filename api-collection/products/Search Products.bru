@@ -1,0 +1,33 @@
+meta {
+  name: Search Products
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/products?q=racao golen
+  body: none
+  auth: none
+}
+
+params:query {
+  q: racao golen
+  ~limit: 5
+}
+
+docs {
+  SEM Authorization de propósito (auth: none) — é a única requisição da coleção
+  que mostra a vitrine como o visitante anônimo a vê. Compare o corpo com o de
+  "List Products" autenticado: os campos são outros, a rota é a mesma.
+
+  "golen" está errado e mesmo assim acha "Ração Golden": cada palavra fora do
+  dicionário de lexemas do catálogo é trocada pela mais parecida (pg_trgm) antes
+  da busca — só a errada, porque a query é um E e corrigir a certa a estragaria.
+  O meta ecoa o termo aplicado: { q: "racao golen", applied: "racao golden" }.
+
+  O corpus é nome (peso A), descrição (peso C) e nome da marca. SKU tem
+  curto-circuito de casamento exato — colar o código da caixa funciona.
+
+  Sem ?sort=, quem tem ?q= sai ordenado por RELEVÂNCIA. A visibilidade continua
+  sendo a mesma da listagem: rascunho e produto excluído não vazam pela busca.
+}

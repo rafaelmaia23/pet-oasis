@@ -22,6 +22,36 @@ async function loginAsCatalogManager() {
   return loginAs(user.email, user.password);
 }
 
+/** Marca com um produto ativo pendurado — o que a guarda de exclusão vê. */
+async function seedBrandWithProduct() {
+  const brand = await prisma.brand.create({
+    data: { name: "Golden", slug: "golden" },
+  });
+  const category = await prisma.category.create({
+    data: { name: "Ração seca", slug: "racao-seca" },
+  });
+
+  await prisma.product.create({
+    data: {
+      name: "Ração Golden Adulto",
+      slug: "racao-golden-adulto",
+      description: "Ração seca para cães adultos.",
+      brandId: brand.id,
+      categories: { create: { categoryId: category.id } },
+      variants: {
+        create: {
+          sku: "GOLDEN-15KG",
+          label: "15 kg",
+          priceCents: 24990,
+          isDefault: true,
+        },
+      },
+    },
+  });
+
+  return brand;
+}
+
 describe("GET /api/v1/brands", () => {
   it("should return 200 without any token — the storefront is public", async () => {
     await prisma.brand.create({ data: { name: "Golden", slug: "golden" } });
@@ -306,6 +336,39 @@ describe("DELETE /api/v1/brands/:brandId", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(404);
+  });
+
+  it("should return 409 when the brand still has an active product", async () => {
+    // Mesma regra da categoria (W3): sem a guarda, a marca some de
+    // `GET /brands` e continua embutida em todo produto que a referencia —
+    // `brandId` não é nulável, então "sumir do produto" nem é opção.
+    const token = await loginAsCatalogManager();
+    const brand = await seedBrandWithProduct();
+
+    const response = await request(app)
+      .delete(`/api/v1/brands/${brand.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(409);
+
+    const inDb = await prisma.brand.findUnique({ where: { id: brand.id } });
+    expect(inDb?.deletedAt).toBeNull();
+  });
+
+  it("should let the brand go when its only product is soft-deleted", async () => {
+    const token = await loginAsCatalogManager();
+    const brand = await seedBrandWithProduct();
+    await prisma.product.updateMany({
+      where: { brandId: brand.id },
+      data: { deletedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/brands/${brand.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    // Produto excluído não segura a marca, no espelho exato da categoria.
+    expect(response.status).toBe(204);
   });
 
   it("should return 403 for a user without manage:catalog-structure", async () => {

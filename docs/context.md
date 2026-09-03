@@ -207,7 +207,15 @@ completo, os contra-argumentos e os gotchas.
 - `record` é lib de observabilidade, não repository
 - `src/lib/` não conhece módulo nenhum
 - `src/scripts/` é código; `infra/` é agendamento
-- SQL cru vive exclusivamente no repository
+- SQL cru vive exclusivamente no repository — três pontos, e os dois locks são o
+  mesmo remédio para o mesmo padrão (9.10, 9.12)
+
+*Documentação e processo*
+
+- Rascunho (`.scratch/`, fora do git) × spec (`docs/specs/`) × permanente (ADR e
+  `context/`) — e por que documento permanente nunca cita efêmero (9.12);
+  o mapa é [`docs/README.md`](README.md), as formas de fase estão em
+  [`guides/todo-phases.md`](guides/todo-phases.md)
 
 *Ordem de construção*
 
@@ -390,6 +398,16 @@ completo, os contra-argumentos e os gotchas.
 *Upload* — ver os ADRs listados em
 [`context/pet-domain.md`](context/pet-domain.md)
 
+*O que o fecho da fase (9.12) corrigiu no catálogo*
+
+- Preço e disponibilidade caem na **mesma variante** — e `?inStock=false`
+  continua sendo do produto, porque é a negação da compra
+- Marca não sai com produto ativo pendurado (espelho da categoria, W3)
+- Id repetido em `categories`/`tags` é 422 do Zod, não 409 da chave composta
+- A recusa de slug com forma de UUID vale também para o **derivado** do nome
+- A última variante ativa é decidida sob lock — terceiro e último ponto de SQL
+  cru do projeto
+
 ### [Schema](context/schema.md)
 
 *O que cada fase mudou nas tabelas*
@@ -397,6 +415,10 @@ completo, os contra-argumentos e os gotchas.
 - Fase 4 — status de conta
 - Fase 7
 - Fase 8
+- Fase 9 — os onze modelos do domínio, e o que surpreende quem lê o
+  `schema.prisma`: `path` é **chave**, não caminho de arquivo; `search_vector` é
+  coluna gerada invisível ao Prisma; `ProductImage` é a única tabela de domínio
+  sem `deletedAt`
 
 
 ---

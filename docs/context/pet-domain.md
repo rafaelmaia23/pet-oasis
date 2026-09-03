@@ -2,9 +2,8 @@
 
 > **Este arquivo é quase todo ponteiro.** As decisões do Ciclo 2 nasceram já com ADR próprio, e o
 > ADR é o dono do texto — duplicá-las aqui só criaria duas versões que envelhecem em ritmos
-> diferentes. O passo-a-passo está no [`todo.md`](../todo.md), a sessão de brainstorming que
-> originou tudo em [`planning/fase-9-contexto.md`](../planning/fase-9-contexto.md), e o que ficou
-> de fora com o racional de exclusão em [`reference/backlog.md`](../reference/backlog.md).
+> diferentes. O passo-a-passo está no [`todo.md`](../todo.md) e o que ficou de fora, com o
+> racional de exclusão, em [`reference/backlog.md`](../reference/backlog.md).
 
 ---
 
@@ -239,3 +238,53 @@ Pet), com logo real, por decisão explícita do usuário. A ressalva registrada 
 num repositório público é **redistribuição**, não exibição por revendedor — que é a hipótese
 usualmente tolerada. Risco avaliado como baixo e aceito; se algum dia incomodar, a troca é o
 conteúdo de um arquivo de constantes e nenhuma linha de código muda.
+
+---
+
+## O que o fecho da fase (9.12) corrigiu no catálogo
+
+A revisão da fase inteira, feita **antes** da sincronização da documentação, achou cinco
+defeitos. O motivo da ordem ficou provado no primeiro deles: o `endpoints.md` descrevia os
+filtros como cumulativos, e não eram — documentar antes de revisar teria sido documentar uma
+mentira.
+
+### Preço e disponibilidade caem na mesma variante
+
+As duas cláusulas escreviam a mesma chave `variants` do `where`, e a segunda apagava a
+primeira: `?inStock=` descartava `?minPrice=`/`?maxPrice=` **em silêncio**. Ao juntá-las,
+foi preciso decidir o que a combinação significa, e a escolha é **a mesma variante satisfaz
+as duas**: "até R$ 20 e em estoque" é uma pergunta sobre o que dá para comprar, e o produto
+cuja variante barata está esgotada não a responde — mesmo tendo outra disponível por trinta
+vezes o preço. `?inStock=false` é a exceção e continua sendo do **produto** ("esgotado" = não
+ter nenhuma variante em estoque), porque é a negação da compra, não uma variante específica.
+
+### Marca não sai com produto ativo pendurado
+
+Espelho da regra da categoria (W3), que a 9.6 tinha deixado pela metade — o
+`countActiveProductsOfBrand` existia no repository e ninguém o chamava. Sem a guarda, a marca
+sumia de `GET /brands` e continuava embutida em toda resposta de produto; e "sumir do
+produto" não é alternativa, porque `Product.brandId` não é nulável. A contagem passou para o
+repositório da **marca**, onde a categoria já mantinha a sua.
+
+### Id repetido é 422 do Zod, não 409 da chave composta
+
+`categories`/`tags` com o mesmo id duas vezes furavam a PK do vínculo, e o handler de P2002
+traduzia aquilo para um 409 falando de `product_id` — erro que manda procurar o problema no
+lugar errado. A recusa foi para o schema, junto das que a lista de variantes (SKU repetido) e
+o array de reordenação de imagem já faziam.
+
+### A recusa de slug com forma de UUID vale também para o derivado
+
+A Y2 recusava slug **explícito** parecido com id, porque `GET /products/:idOrSlug` desempata
+pela forma do valor. O slug derivado do nome não passava por essa recusa: um produto batizado
+com algo que slugifica para um UUID nasceria inalcançável por slug para sempre, e a leitura
+não tem como consertar o que já está no banco.
+
+### A última variante ativa é decidida sob lock
+
+Contar irmãs vivas e excluir eram duas idas ao banco: dois `DELETE` simultâneos no mesmo
+produto contavam `1` cada um antes de qualquer commit e passavam os dois, deixando produto
+ativo com zero variantes — exatamente o que a X6 proíbe. O remédio é o mesmo da 9.10 nas
+imagens, `SELECT ... FOR UPDATE` na linha do produto, e é o **terceiro e último** ponto de
+SQL cru do projeto. A promoção da default desceu junto para dentro da transação: eleger a
+substituta fora dela seria ler o estado que o lock existe para congelar.

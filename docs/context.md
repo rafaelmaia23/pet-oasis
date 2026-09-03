@@ -415,6 +415,10 @@ completo, os contra-argumentos e os gotchas.
 - Fase 4 — status de conta
 - Fase 7
 - Fase 8
+- Fase 9 — os onze modelos do domínio, e o que surpreende quem lê o
+  `schema.prisma`: `path` é **chave**, não caminho de arquivo; `search_vector` é
+  coluna gerada invisível ao Prisma; `ProductImage` é a única tabela de domínio
+  sem `deletedAt`
 
 
 ---

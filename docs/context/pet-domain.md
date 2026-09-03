@@ -2,9 +2,8 @@
 
 > **Este arquivo é quase todo ponteiro.** As decisões do Ciclo 2 nasceram já com ADR próprio, e o
 > ADR é o dono do texto — duplicá-las aqui só criaria duas versões que envelhecem em ritmos
-> diferentes. O passo-a-passo está no [`todo.md`](../todo.md), a sessão de brainstorming que
-> originou tudo em [`planning/fase-9-contexto.md`](../planning/fase-9-contexto.md), e o que ficou
-> de fora com o racional de exclusão em [`reference/backlog.md`](../reference/backlog.md).
+> diferentes. O passo-a-passo está no [`todo.md`](../todo.md) e o que ficou de fora, com o
+> racional de exclusão, em [`reference/backlog.md`](../reference/backlog.md).
 
 ---
 

@@ -120,9 +120,8 @@
 
 ## 🔄 Fase 9 — Domínio pet shop: pets e catálogo
 
-> Planejada em 2026-08-06, sessão de brainstorming/decisão consumida de
-> `docs/planning/fase-9-contexto.md` (mantido ou apagado ao final da fase — decisão do
-> usuário). Duas agregações praticamente independentes — **Bloco A** (pets, ligados a
+> Planejada em 2026-08-06 a partir de uma sessão de brainstorming, cujo documento foi
+> diluído em ADR e contexto e apagado no fecho da fase (9.12/AC4). Duas agregações praticamente independentes — **Bloco A** (pets, ligados a
 > `Customer`) e **Bloco B** (catálogo: marca/categoria/tag/produto/variante) — que só se
 > tocam na faceta "para qual espécie este produto serve". Carrinho, pedido e pagamento
 > ficam para a **Fase 10**. Racional completo em `docs/context/pet-domain.md`, ADRs novos em

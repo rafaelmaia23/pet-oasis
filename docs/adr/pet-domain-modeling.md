@@ -159,9 +159,9 @@ linha `SRD`.
 ## O que a implementação (9.4) firmou além da decisão
 
 A sub-fase 9.4 construiu o `Pet` em si — model, CRUD e escopo — e fechou as duas
-pendências de negócio que o planejamento tinha deixado em aberto (`§9.3` e
-`§9.9` de `docs/planning/fase-9-contexto.md`), mais dois pontos de contrato que
-o corpo deste ADR não especificava.
+pendências de negócio que o planejamento tinha deixado em aberto — a unicidade
+de `microchipId` (U1) e o destino dos pets de um cliente soft-deletado (U2) —,
+mais dois pontos de contrato que o corpo deste ADR não especificava.
 
 | # | Ponto | Escolha e por quê |
 |---|---|---|

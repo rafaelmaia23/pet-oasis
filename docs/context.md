@@ -303,6 +303,10 @@ completo, os contra-argumentos e os gotchas.
 
 - Role `demo` sempre semeada, usuário demo atrás de flag
 - Reset do demo é truncate+reseed, e a guarda é flag explícita
+- A limpeza de upload é por prefixo de dono, nunca a raiz (9.11) — `deleteDirectory("")`
+  resolveria para o ponto de montagem do bind mount
+- A ordem é truncate → limpar uploads → reseed (9.11) — o filesystem não participa da transação
+- O `--dry-run` conta os arquivos que apagaria (9.11), e daí o `countFiles` na interface `Storage`
 - Gotcha do reseed compartilhado (7.14)
 - `demo-reset` esquecia a tabela `previousEmail`
 
@@ -311,7 +315,12 @@ completo, os contra-argumentos e os gotchas.
 - Duas flags independentes: `SEED_FAKE_DATA` e `SEED_ADMIN_USER`
 - O dataset inclui roles com escrita (`manager`), com o risco assumido
 - A idempotência depende só do email fixo
-- Instância própria de Faker, não o singleton dos testes
+- Os bytes das imagens do seed moram em base64 num `.ts`, não em disco (9.11) — o estágio
+  `runtime` do Dockerfile não copia `src/`
+- O seed grava imagem pelo adaptador, nunca copiando arquivo (9.11)
+- O seed não cura arquivo sumido; quem converge é o `demo-reset` (9.11)
+- Instância própria de Faker — e, desde a 9.11, semeada **por chave**, para o roster ser
+  conjunto e não sequência
 - Criado via `userRepository`, não via `user.service`
 
 *Achado de teste*
@@ -365,6 +374,18 @@ completo, os contra-argumentos e os gotchas.
   **na query** por dicionário de lexemas, SQL cru só ranqueando enquanto a
   visibilidade continua no `buildProductWhere`, e o dicionário construído só do
   catálogo público
+
+*Dataset fake do domínio (9.11)*
+
+- O dataset é cobertura de cenário, não volume — e cada cenário é afirmado por
+  teste, porque roster errado não estoura em lugar nenhum
+- `costCents` em **todas** as variantes (null não prova mascaramento nenhum), e
+  derivado do preço em vez de sorteado
+- O pet do dono soft-deletado herda o `deletedAt` do dono, não um timestamp
+  próprio — é a correlação que a restauração da Fase 8 usa
+- A árvore chega ao 3º nível porque é o limite que o `category.service` defende
+- Nome à mão, preço sorteado — o corpus da busca da 9.9 é o motivo; marcas reais
+  com a ressalva de redistribuição registrada
 
 *Upload* — ver os ADRs listados em
 [`context/pet-domain.md`](context/pet-domain.md)

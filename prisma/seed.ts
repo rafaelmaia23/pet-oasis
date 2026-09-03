@@ -27,6 +27,14 @@ async function main() {
       `${result.fakeUsersCreated} usuários fake criados (dataset de demonstração).`,
     );
   }
+  if (result.fakePetsCreated > 0) {
+    console.log(`${result.fakePetsCreated} pets fake criados.`);
+  }
+  if (result.fakeProductsCreated > 0) {
+    console.log(
+      `${result.fakeProductsCreated} produtos fake criados (com marca, categoria, tag e imagem).`,
+    );
+  }
 
   console.log("SEEDING COMPLETED!");
 }

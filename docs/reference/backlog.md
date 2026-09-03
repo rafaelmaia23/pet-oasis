@@ -55,8 +55,8 @@ Dump agendado do banco do deploy, com um *restore* de fato testado — backup nu
 
 ## Produto e domínio
 
-### Dummy data para a demo — **M**
-Hoje o seed cria o mínimo (roles, usuário demo). Um conjunto de dados fictício e coerente — clientes, pets, produtos, histórico — faz a demo mostrar a API funcionando em vez de mostrar listas vazias. Vira pré-requisito natural do `demo-reset` (Fase 7.14), que passaria a restaurar esse estado. **Agendado: a Fase 9 traz o domínio que faltava — resolvido na sessão 9.11 (`docs/todo.md`).**
+### ~~Dummy data para a demo~~ — ✅ resolvido (Fase 9.11)
+O seed fake passou a cobrir o domínio inteiro sob a mesma flag `SEED_FAKE_DATA`: 9 marcas, 20 categorias em 3 níveis, 8 tags, 35 produtos com 51 variantes e imagem, e 15 pets em 12 donos, mais um funcionário de cada role nova da 9.1. O `demo-reset` trunca e repovoa o catálogo e limpa o diretório de upload, então a demo volta ao mesmo estado todo dia — com foto. O dataset é **cobertura de cenário**, não volume (produto sem imagem, esgotado parcial e total, folha de item único, pet falecido, pet de dono excluído), e cada cenário é afirmado por teste. Racional em `docs/context/pet-domain.md` § "Dataset fake do domínio (9.11)" e `docs/context/infrastructure.md`.
 
 ### ~~Ordenação configurável nas listagens~~ — ✅ resolvido (Fase 9.2)
 `?sort=<campo>&order=asc|desc` entrou no helper de offset, com allowlist por recurso (fora dela → 422) e tiebreaker por `id` obrigatório também no offset. Primeiro consumidor: `GET /users`. Decisões de contrato no adendo de `docs/adr/pagination.md`. **A limitação do cursor permanece** — ordenar por campo ali exigiria a chave do cursor codificar o próprio campo de ordenação; se algum dia fizer falta, é entrada nova neste backlog.

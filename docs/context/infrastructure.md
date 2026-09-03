@@ -185,6 +185,39 @@ disparavam juntos — rodar `demo-reset.js` executava (e desconectava) o `main()
 lição vale para qualquer script novo: código reaproveitado entre entrypoints não pode carregar
 auto-execução.
 
+### A limpeza de upload é por prefixo de dono, nunca a raiz (9.11)
+
+O `demo-reset` passou a limpar o `UPLOAD_DIR`, e a versão óbvia quebraria só onde importa:
+`storage.deleteDirectory("")` resolve para o próprio root — o guard de `resolveInsideRoot` permite
+`resolved === this.root` — e o `fs.rm` recursivo tentaria remover o **ponto de montagem do bind
+mount** (`/app/uploads`). Em dev, sem mount, ele apaga e o `put` recria; em produção falha com
+`EBUSY`.
+
+A limpeza itera `Object.keys(IMAGE_DIMENSIONS)` em vez de listar três strings, para que um dono novo
+da Fase 10 (imagem de serviço, comprovante de pedido) entre sozinho sem ninguém lembrar de voltar
+ao script.
+
+### A ordem é truncate → limpar uploads → reseed (9.11)
+
+O filesystem não participa da transação do Postgres, então a ordem decide qual inconsistência é
+possível. Nesta, falhar no meio deixa banco e disco vazios **juntos**, e o próximo reset conserta. A
+ordem inversa (limpar antes do truncate) deixaria linha de `ProductImage` — e `Pet.photoPath`,
+`Brand.logoPath` — apontando para arquivo inexistente, que o ADR de storage classifica como mais
+grave que um órfão no disco. Recusado também reusar a varredura do `cleanup-uploads.ts`: ela tem
+carência de 24 h (`UPLOAD_ORPHAN_GRACE_HOURS`) e não removeria nada num reset, e baixar a carência
+seria mexer na proteção pelo motivo errado.
+
+### O `--dry-run` conta os arquivos que apagaria (9.11)
+
+`DemoResetCounts` ganhou `uploadFiles` junto das oito chaves de tabela do catálogo. O dry-run existe
+para se olhar antes de apertar o botão, e a partir da 9.11 a operação mais destrutiva do script
+passou a ser justamente a que ele não mostrava. Contar dirent é leitura pura, então o contrato
+read-only do dry-run continua intacto — e o número entra no `metadata` do `DEMO_RESET_EXECUTED`, que
+é onde alguém vai olhar quando a demo amanhecer sem foto. Isso motivou o quinto método da interface
+`Storage`, `countFiles(prefix)`: diferente do `exists` recusado acima, ele é chamado três vezes por
+reset diário, e a alternativa era `fs.readdir` migrar para dentro do script, que é exatamente o que
+o adaptador existe para evitar.
+
 ### `demo-reset` esquecia a tabela `previousEmail`
 
 Ele truncava 8 tabelas na mesma ordem FK-safe de `clearDatabase()`, mas a `previousEmail` nasceu na
@@ -227,12 +260,65 @@ determinístico via seed do Faker (usa `Math.random` internamente), então perse
 exigiria mais uma dependência sem comprar nada: ninguém depende do CPF exato de um usuário fake.
 Nome/telefone ainda usam seed fixo — estética, não a garantia de idempotência.
 
-### Instância própria de Faker, não o singleton dos testes
+### Instância própria de Faker — e, desde a 9.11, semeada por chave
 
 `@faker-js/faker` exporta um singleton compartilhado; chamar `.seed()` nele mudaria o stream de
 valores consumido por qualquer teste que rode no mesmo processo depois de o módulo de seed ser
 importado — flakiness sutil dependente de ordem de import. `new Faker({ locale: [en] })` isola
-completamente os dois geradores.
+completamente os dois geradores, e isso continua valendo.
+
+O que **mudou na 9.11** é como a instância é semeada. Até então ela recebia um `seed()` fixo uma
+vez e era consumida em laço, o que a tornava uma **sequência**: inserir uma entrada no meio do
+`FAKE_USER_ROSTER` deslocava o stream e mudava nome e telefone de toda entrada posterior. A
+idempotência nunca dependeu disso (a chave é o email), mas os valores divergiam entre um banco
+antigo e um recriado, e o roster tinha uma ordem que importava por acidente do gerador — numa
+sessão que justamente apende ao roster, com a Fase 10 vindo atrás.
+
+`src/lib/seed/seedFaker.ts` passa a resemear a instância a partir de uma **chave estável** (os 4
+primeiros bytes do SHA-256 do email, ou do SKU nas variantes do catálogo). O roster volta a ser um
+conjunto: reordenável e extensível sem efeito colateral. Custo pago uma vez: os nomes de todos os
+fakes mudaram numa execução em banco novo — bancos existentes não mudam, porque o rerun pula quem
+já existe.
+
+### Os bytes das imagens do seed moram em base64 num `.ts`, não em disco (9.11)
+
+O plano herdado da 9.10 previa "um punhado de `.webp` pequenos versionados em
+`src/lib/seed/assets/`". Não funcionaria: o estágio `runtime` do `Dockerfile` copia
+`node_modules`, `dist`, `prisma`, o `package.json` e o entrypoint — **nunca `src/`** —, e o tsup
+empacota TS/JS ignorando `.webp`. Como o entrypoint de produção roda `migrate deploy → seed →
+start` a cada boot, o seed simplesmente não encontraria arquivo nenhum, e o sintoma (demo sem foto)
+não apontaria para a causa.
+
+`src/lib/seed/fakeImages.constants.ts` guarda os 51 assets em base64 (~2 MB), gerado por
+`tools/generate-fake-images.ts` a partir de um diretório `assets-inbox/` que **não é versionado**.
+Recusadas as duas alternativas: um `COPY` novo no estágio runtime criaria a primeira dependência de
+"arquivo ao lado do bundle" do projeto — classe de erro que só aparece em produção —, e gerar
+placeholder em runtime com `sharp` sairia em branco, porque o `node:22-bookworm-slim` não traz fonte
+nenhuma para renderizar `<text>` em SVG.
+
+O arquivo fica fora do Biome (`files.includes` em `biome.json`): 2 MB excedem o limite de 1 MB por
+arquivo, e formatar código gerado que ninguém lê não paga o ajuste.
+
+### O seed grava imagem pelo adaptador, nunca copiando arquivo (9.11)
+
+Tanto o catálogo quanto os pets fake passam por `storeImage` (`src/lib/storage/image.ts`), o mesmo
+caminho que a API usa: magic bytes, `sharp`, dois derivados WebP, EXIF descartado. Copiar o arquivo
+para dentro do `UPLOAD_DIR` seria mais rápido e produziria arquivo com **forma diferente** da que o
+endpoint produz — e o descasamento só apareceria na demo.
+
+### O seed não cura arquivo sumido; quem converge é o `demo-reset` (9.11)
+
+Cenário real: o entrypoint de produção roda o seed a cada boot, e ele é idempotente por chave
+estável, então pula o produto que já existe — e pula a imagem junto. Se o `UPLOAD_DIR` do host for
+recriado vazio (host novo, disco trocado, faxina) enquanto o banco sobrevive, a demo passa a servir
+404 em toda foto e nada no log diz por quê.
+
+Aceito conscientemente. A correção "óbvia" seria um `exists(key)` na interface `Storage`, e ela foi
+recusada: a interface é a costura para S3/MinIO, e um `exists` por imagem a cada boot vira uma
+chamada de rede por imagem no dia em que o backend for remoto. O `demo-reset` roda diariamente por
+systemd, trunca e repovoa — a janela é de no máximo um dia num ambiente de portfólio. O
+`cleanup-uploads.ts` já reporta "linha sem arquivo" sem apagar, que é o sinal para quem for
+investigar.
 
 ### Criado via `userRepository`, não via `user.service`
 

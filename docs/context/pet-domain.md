@@ -173,3 +173,69 @@ como estático pelo reverse proxy. Inclui o cuidado com o ambiente demo (role `d
 
 Adendo da Fase 9: ordenação configurável (`?sort=`) sai do backlog e entra **só no offset**; a
 limitação do cursor permanece documentada.
+
+---
+
+## Dataset fake do domínio (9.11)
+
+O seed fake deixou de ser só usuários. A partir da 9.11, `SEED_FAKE_DATA` popula também **pets** e
+**catálogo** — 9 marcas, 20 categorias em 3 níveis, 8 tags, 35 produtos com 51 variantes e 15 pets
+em 12 donos —, para a demo mostrar a API funcionando em vez de listas vazias. O detalhe operacional
+(base64, storage, `demo-reset`) vive em
+[`context/infrastructure.md`](infrastructure.md); o que interessa ao domínio é **por que o dataset
+tem a forma que tem**.
+
+### O dataset é cobertura de cenário, não volume
+
+O `FAKE_USER_ROSTER` já era assim — `PENDING`, `BANNED`, `DELETED_USER` não existem para encher
+lista, existem para a demo mostrar comportamento. O catálogo e os pets seguem a mesma regra, e cada
+cenário é afirmado por teste em vez de descrito em comentário, porque um roster errado não estoura
+em lugar nenhum: o seed continua rodando e a demo silenciosamente para de demonstrar o que a fase
+construiu.
+
+No catálogo: 29 produtos `ACTIVE` (28 visíveis, um soft-deletado), 4 `DRAFT` e 2 `DISCONTINUED`,
+para a view pública da 9.8 ter o que esconder e a de staff ter o que mostrar a mais; um produto
+**sem imagem nenhuma**; um com **galeria de três**; dois esgotados de formas diferentes — um produto
+inteiro em zero e um cuja **variante default** está em zero com as outras em estoque; uma folha de
+3º nível com item único; quatro variantes com `compareAtPriceCents`.
+
+Nos pets: um cliente **sem pet nenhum** (lista vazia é estado que a API responde), um com três, um
+falecido, um soft-deletado por si, dois em espécie que **proíbe** raça (coelho e hamster), dois sem
+microchip, e pets em donos de cenário — inclusive o do dono soft-deletado.
+
+### `costCents` em **todas** as variantes
+
+Uma variante com `costCents: null` produz o mesmo JSON para quem tem `read:product:cost` e para quem
+não tem — é exatamente o caso que não prova nada, e a conta `demo` existe para exibir o
+mascaramento (mesmo desenho de `read:audit-log:full`). O custo é **derivado** do preço, não
+sorteado: sortear os dois independentemente produziria custo acima do preço em parte do roster, e a
+view de custo ficaria demonstrando margem negativa por acidente.
+
+### O pet do dono soft-deletado herda o `deletedAt` do dono
+
+Não um `new Date()` próprio. É a correlação de timestamp que a restauração da Fase 8 usa para
+decidir o que ressuscita junto com o perfil — um timestamp inventado no seed deixaria o pet órfão da
+própria cascata. O invariante que o dataset respeita é o mesmo do runtime: nunca existe filho ativo
+de pai morto.
+
+### A árvore chega ao 3º nível porque o service defende esse limite
+
+A 9.6 validou profundidade máxima 3 no `category.service`. Uma árvore de dois níveis nunca
+exercitaria o limite que o código defende, então dois ramos vão fundo de propósito
+(`Alimentação > Ração > Ração seca` e `Higiene e Beleza > Banho > Shampoo`). Espécie continua
+**faceta** (`Product.targetSpecies`), nunca nível da árvore — a categoria modela função.
+
+### Nome à mão, preço sorteado — e o corpus da busca é o motivo
+
+Marca, categoria, tag e nome de produto são escritos à mão em pt-BR porque são o **corpus da busca**
+da 9.9: a correção de erro de digitação só se demonstra sobre palavras reais em português. Preço,
+custo e estoque saem de um `faker` semeado pelo SKU. `description` e `sku` acabaram à mão também,
+pela decisão de usar **marcas reais**: uma descrição em inglês do `faker.commerce` embaixo de "Ração
+Golden Fórmula Cães Adultos" seria absurda numa demo de portfólio, e `GLD-AD-15KG` é o que um SKU
+real parece.
+
+As marcas são reais (Golden, Whiskas, Pedigree, Sanol, Bravecto, Vetnil, Chalesco, Jambo, Furacão
+Pet), com logo real, por decisão explícita do usuário. A ressalva registrada é que versionar o asset
+num repositório público é **redistribuição**, não exibição por revendedor — que é a hipótese
+usualmente tolerada. Risco avaliado como baixo e aceito; se algum dia incomodar, a troca é o
+conteúdo de um arquivo de constantes e nenhuma linha de código muda.

@@ -48,9 +48,11 @@ model Breed {
 
 O caminho de aquisição do dado é: puxar **uma vez** de uma API pública de raças
 (TheDogAPI/TheCatAPI e equivalentes), curar o resultado à mão (nomes em pt-BR,
-remover duplicata e ruído), commitar como constante versionada em
-`src/lib/seed/`, e **nunca mais consultar a API**. Manutenção dali em diante é
-edição da constante — raça de animal não muda com frequência.
+remover duplicata e ruído), commitar como constante versionada, e **nunca mais
+consultar a API**. Manutenção dali em diante é edição da constante — raça de
+animal não muda com frequência. (O arquivo é
+`src/modules/breed/breed.constants.ts` — ver a seção da 9.3 no fim deste
+documento.)
 
 Consultar a API em runtime foi recusado por três razões: colocaria a
 disponibilidade da própria API refém de um terceiro (se ele cai ou faz rate
@@ -137,3 +139,73 @@ um único campo.
 - Se uma espécie sem raça cadastrada hoje (peixe, réptil) ganhar uma lista
   curada: adicionar ao `SPECIES_WITH_BREED` é uma decisão explícita, nunca
   automática.
+
+## O que a implementação (9.3) firmou além da decisão
+
+A sub-fase 9.3 executou a parte de espécie/raça deste ADR (o `Pet` em si é a
+9.4) e fechou cinco pontos que o texto acima não especificava.
+
+| # | Ponto | Escolha e por quê |
+|---|---|---|
+| T1 | Quem entra em `SPECIES_WITH_BREED` | **Só `DOG` e `CAT`.** O corpo do ADR dizia "cão e gato têm listas curadas; peixe e réptil, não" e deixava coelho, ave e roedor em aberto. Ficaram de fora: em ave e roedor o que existe não é raça, é espécie ou variedade (calopsita, periquito; hamster sírio × anão russo), e enfiar isso em `Breed` misturaria dois conceitos — além de obrigar todo dono de ave a escolher um valor que não é raça. Coelho tem raças de fato, mas entrar exigiria curar mais uma lista sem demanda que a justifique. As outras cinco espécies exigem `breedId` **ausente** (422 na 9.4). |
+| T2 | Contrato do `GET /breeds` | `?species=` **opcional** (sem ele sai o catálogo inteiro — ~140 linhas fixas, que é o que o seed fake e a coleção Bruno consomem), **sem paginação**, envelope `{ data, meta: {} }` via `listEnvelope`. Mesma classe de `GET /roles` e `GET /features` na tabela do [`pagination.md`](pagination.md). Espécie fora do enum → **422** nomeando `species`. Rota **pública**, sem `authenticate` nem feature (9.1/N15); como não tem view por capability, não depende da autenticação opcional que `/products` vai exigir na 9.6. |
+| T3 | `Breed` é dado de referência | `clearDatabase()` **não** o trunca (como `Feature`/`Role`/`RoleFeature`), e `demo-reset` também não. Consequência prática: os testes de pet da 9.4 encontram as raças já semeadas pelo `globalSetup`, sem setup próprio. Provado por `tests/integration/clearDatabase.guard.test.ts`. |
+| T4 | Onde a constante mora | **`src/modules/breed/breed.constants.ts`**, e não `src/lib/seed/` como dizia a redação original deste ADR. O que decide é `SPECIES_WITH_BREED`: ela é lida em **runtime** pelo `pet.service` (9.4), e um service de domínio importando do diretório de seed seria arquivo no lugar errado. Também é o que o `CLAUDE.md` já manda ("constantes de domínio em `*.constants.ts`, lidas pelo seed") e o que os próprios `DEFAULT_ROLES`/`DEFAULT_FEATURES` — nomeados aqui como o padrão a seguir — fazem. `src/lib/seed/` guarda dado fake/demo e rotinas, não o catálogo canônico. |
+| T5 | Forma do seed | `createMany({ skipDuplicates: true })`, **não** `upsert` em laço. `upsert` existe para `Role`/`Feature` porque elas têm campo mutável (`description`, `appliesTo`, vínculos); `Breed` não tem **nenhum** — `species` e `name` *são* a chave, então não há o que atualizar numa linha existente. Uma ida ao banco em vez de ~140, e ainda assim exatamente "idempotente por `@@unique([species, name])`". E, deliberadamente, **sem o delete reconciliador** que `runSeed` aplica às features: a partir da 9.4 `Pet.breedId` referencia estas linhas, e apagar uma raça que ainda tem pet quebraria o seed no boot do container (que roda `migrate deploy → seed → start` a cada restart). Remover raça do catálogo é migration deliberada. |
+
+Números da entrega: 142 raças (96 de cão, 46 de gato), cada espécie com a sua
+linha `SRD`.
+
+## O que a implementação (9.4) firmou além da decisão
+
+A sub-fase 9.4 construiu o `Pet` em si — model, CRUD e escopo — e fechou as duas
+pendências de negócio que o planejamento tinha deixado em aberto — a unicidade
+de `microchipId` (U1) e o destino dos pets de um cliente soft-deletado (U2) —,
+mais dois pontos de contrato que o corpo deste ADR não especificava.
+
+| # | Ponto | Escolha e por quê |
+|---|---|---|
+| U1 | Unicidade de `microchipId` | **`@unique` global**, valendo também para a linha soft-deletada — o precedente já firmado em `User.email`, `User.cpf` e `Customer.phone`. Descartados o índice parcial (`WHERE deleted_at IS NULL`, migration à mão, primeira exceção ao padrão) e a validação no service (que devolveria a unicidade ao código, contra o "unicidade é do banco" do `CLAUDE.md`, e ainda abriria corrida entre o check e a escrita). O efeito colateral — um pet excluído prende o número para sempre — é, num identificador do **mundo real**, o comportamento certo: é o sinal "este pet já foi cadastrado aqui". Duplicata sai como **409** pelo handler de P2002, sem código novo. `NULL` não colide, então pet sem chip não é afetado. |
+| U2 | Pets de um cliente soft-deletado | **Descem na cascata e voltam por correlação de data**, como `UserRole`. `Pet` é o primeiro filho de **domínio** do grafo de `user.lifecycle.repository.ts` — entra porque D1 não admite filho ativo de pai morto, não porque seja privilégio. É essa distinção que decide a volta: a assimetria da restauração (D6' — desce quatro níveis, sobe dois) existe contra **vazamento de privilégio**, e devolver a ficha do bichano ao dono não concede autoridade nenhuma; *não* devolvê-la seria perda de dado, sem endpoint de restauração de pet que a compensasse. Pet que o dono excluiu **antes**, de propósito, não volta: o `deletedAt` dele não bate com o do perfil, e a regra recursiva já existente basta. As contagens entram no audit (`cascadedPets`, `restoredPets`) pelo mesmo critério de `cascadedOverrides` — a cascata derruba coisa que não aparece na resposta 204. |
+| U3 | Como se marca o falecimento | **Rota própria** `POST`/`DELETE /pets/:petId/deceased`, no idioma de `POST`/`DELETE /users/:id/ban`: transição de estado com significado e ação de audit (`PET_DECEASED`) próprios não é campo de update. `deceasedAt` fica **fora** do `PATCH` (422 se vier no corpo). O `POST` é idempotente — remarcar não reescreve a data já registrada, senão um clique repetido apagaria a informação verdadeira —, e o `DELETE` existe porque marcar o pet errado é erro real e sem ele viraria dado permanente. A feature continua sendo `manage:pet` comum (9.1). |
+| U4 | O que o `PATCH` aceita | Tudo menos `customerId` (transferência de pet é backlog: exige trilha própria e decisão sobre o histórico clínico), `deceasedAt` (U3) e `photoPath` (upload, 9.10). **`species` é editável**, porque erro de cadastro é caso real e a alternativa — excluir e recriar — perderia o `createdAt` e, no futuro, o prontuário. A consequência é que a validação de raça corre sobre o **estado resultante** (`body.species ?? pet.species`), não sobre o corpo isolado: trocar a espécie sem ajustar a raça no mesmo `PATCH` é 422. |
+| U5 | Onde o escopo é decidido, e o que responde o alvo inexistente | O dono de um pet **não está na URL** — `/customers/:customerId` traz o id do *perfil*, e `/pets/:petId` não traz dono nenhum —, então "autorizar antes de buscar" não se aplica ao pé da letra. O que preserva o princípio é o alvo inexistente **falhar fechado**: sem `:others`, um `customerId`/`petId` que não existe responde **403**, igual ao alheio. Distinguir 403 de 404 ali transformaria a rota em oráculo de existência para qualquer cliente logado. Com `:others`, o 404 volta a ser 404. |
+
+Dois achados corrigidos junto, ambos anteriores à sessão:
+
+- **`GET /me` não devolvia `customer.id`.** A decisão de recusar `/me/pets`
+  (`docs/reference/backlog.md`) se apoiava explicitamente em "o `GET /me` já
+  devolve `customer.id`, que é tudo que o cliente precisa" — e não devolvia. Sem
+  o campo, a coleção aninhada era **inalcançável pelo próprio dono**. O id de
+  perfil entrou nas views de `me` e na `owner` de `user` (cliente e funcionário,
+  por simetria).
+- **A taxonomia de alvo do audit existia em duplicata:** a union
+  `AuditTargetType` e um `z.enum([...])` escrito à mão no schema do filtro de
+  `GET /audit-logs`. Acrescentar um alvo e esquecer o segundo não quebrava o
+  build — só fazia `?targetType=` recusar em silêncio um valor legítimo. As duas
+  passaram a derivar de `AUDIT_TARGET_TYPES`, com teste de regressão.
+
+## O que a implementação (9.5) firmou além da decisão
+
+A sub-fase 9.5 acrescentou a **listagem geral de balcão** (`GET /pets`) — a
+primeira leitura de pet que não parte de um dono conhecido. Três pontos de
+contrato foram decididos com o usuário; nenhum deles altera o modelo.
+
+| # | Ponto | Escolha e por quê |
+|---|---|---|
+| V1 | Pet falecido na listagem geral | Filtro `?deceased=true\|false`, e **sem o parâmetro a lista traz os dois**. O caminho alternativo — excluir falecidos por default, deixando a lista de balcão limpa — foi recusado porque um default que esconde linha faz `meta.total` mentir sobre o tamanho da base e obriga quem audita a saber de um filtro implícito. Aqui o default é "tudo que existe", e quem quer o recorte operacional manda `?deceased=false`. Fica coerente com a listagem do dono (9.4), que também traz o falecido — lá porque o critério é afetivo, aqui porque o default é honesto. |
+| V2 | Allowlist de filtros | `species`, `sex`, `customerId`, `breedId`, `microchipId`, `neutered`, `deceased`. Valor fora do enum é **422** nomeando o campo (o filtro estrito da 7.7); chave desconhecida é ignorada, como em `GET /users` — a estrita ali é a *allowlist de valores*, não a de chaves. `customerId` e `breedId` são **filtro, não resolução de recurso**: um uuid bem-formado que não existe devolve lista vazia com `total: 0`, nunca 404 — mesmo comportamento de `?role=` em `GET /users`, e o que evita que a listagem vire oráculo de existência de perfil. `microchipId` é busca exata: como o campo é unique global (U1), o filtro devolve no máximo uma linha, que é o caso de balcão "achei o bicho, quero o dono". |
+| V3 | Allowlist de ordenação | `createdAt` (natural `desc`, é o default), `name` (`asc`), `species` (`asc`). `birthDate` ficou de fora porque é anulável e convive com `birthDateIsEstimated` — ordenar por ele empilharia os nulos numa ponta e misturaria data real com estimada. `species` é enum do Postgres e ordena pela **ordem de declaração** do `PetSpecies`, não alfabeticamente: quem quer agrupar previsivelmente usa o filtro. |
+
+Duas assimetrias deliberadas ficaram registradas no
+`docs/reference/endpoints.md` junto com as rotas:
+
+- **Só uma das duas coleções pagina.** `GET /customers/:customerId/pets`
+  continua sem paginação (`meta {}`), porque a coleção já é limitada pelo dono;
+  `GET /pets` pagina por offset porque varre a base inteira. Quem quer os pets de
+  um cliente paginados usa `GET /pets?customerId=`.
+- **Só uma das rotas do módulo exige a forma `:others` direto.** As demais
+  declaram a forma base e deixam o `pet.service` separar dono de staff (U5). Em
+  `GET /pets` não há o que separar — listar pet de terceiro *é* a rota —, então a
+  feature vai na rota, como `read:user:others` em `GET /users`, e o service não
+  recebe ator.

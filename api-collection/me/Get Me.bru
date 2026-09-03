@@ -13,5 +13,10 @@ get {
 script:post-response {
   if (res.getStatus() === 200) {
     bru.setVar("userId", res.getBody().id);
+    // A coleção de pets é aninhada em /customers/:customerId, e é daqui que
+    // sai o id do perfil de cliente — não existe /me/pets nesta fase.
+    if (res.getBody().customer) {
+      bru.setVar("customerId", res.getBody().customer.id);
+    }
   }
 }

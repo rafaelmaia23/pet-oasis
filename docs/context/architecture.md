@@ -21,6 +21,26 @@ A correção aplica `authenticate` só nos grupos protegidos (`/me`, `/users`, `
 `/auth` público, então cada uma aplica `authenticate` + `canAccess` diretamente na própria
 definição de rota (`auth.routes.ts`), não no grupo inteiro.
 
+### `optionalAuthenticate` — o terceiro modo, para a vitrine pública (9.6)
+
+`authenticate` é tudo-ou-nada: ele já tolerava a **ausência** de header (segue sem `req.user`, e quem
+dá o 401 é o `canAccess` depois), mas token malformado ou expirado ainda virava 401. A vitrine
+pública decidida na 9.1/N15 não pode fazer isso — `GET /brands` atende o visitante que chegou pelo
+Google e o funcionário logado, e um token velho no header do navegador não pode transformar a
+listagem de marcas em erro.
+
+`optionalAuthenticate` (mesmo arquivo, `authenticate.middleware.ts`) resolve o ator quando dá e
+**segue anônimo quando não dá**, nunca lançando. Os dois modos dividem uma única função de resolução
+token→ator: o que muda entre eles é exclusivamente o que se faz com a falha. Duplicar seria duplicar
+`jwt.verify` + `computeEffectiveFeatures` + `setActorId`, e é justamente `setActorId` que faz o
+visitante identificado aparecer no access log e no audit.
+
+Consequência para quem escreve rota: **rota montada com `optionalAuthenticate` lê `req.user` direto,
+nunca via `getAuthUser`** — o helper lança 401 quando ele falta, que é o oposto do contrato aqui. A
+escrita no mesmo router continua protegida de graça, porque `canAccess` já responde 401 sozinho sem
+`req.user`. Montado em `/brands`, `/categories` e `/tags` (9.6); `/products` (9.8) usa o mesmo
+middleware, ali para escolher a view pela capability do viewer.
+
 ---
 
 ## Onde cada coisa vive
@@ -55,9 +75,18 @@ uma linha sairia mais caro que a duplicação restante.
 
 ### SQL cru vive exclusivamente no repository
 
-Necessário só para busca textual (`tsvector`/`pg_trgm`, Fase 9), via `$queryRaw` com template
-parametrizado — nunca concatenação, nunca fora dessa camada. O corte de camadas se mantém mesmo
-quando a ferramenta é SQL puro. Ver [`text-search.md`](../adr/text-search.md).
+Via `$queryRaw` com template parametrizado — nunca concatenação, nunca fora dessa camada. O corte
+de camadas se mantém mesmo quando a ferramenta é SQL puro. São **três** pontos, e cada um existe
+porque o Prisma não expressa o que se precisa:
+
+1. a busca textual (`tsvector`/`pg_trgm`, 9.9 — ver [`text-search.md`](../adr/text-search.md));
+2. o lock que serializa a atribuição de posição das imagens de produto (9.10);
+3. o lock que serializa a exclusão da última variante ativa (9.12).
+
+Os dois últimos são o mesmo remédio — `SELECT id FROM products WHERE id = $1 FOR UPDATE` — para o
+mesmo padrão: uma leitura que decide um invariante, seguida da escrita que o preserva. Não existe
+como pedir lock de linha pela API do Prisma sem inventar uma coluna só para isso. Ponto novo é
+decisão a justificar, não rotina.
 
 ---
 

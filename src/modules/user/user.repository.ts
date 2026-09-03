@@ -67,7 +67,11 @@ export type UserListFilters = {
 
 export async function findAllUsers(
   filters: UserListFilters,
-  pagination: { skip: number; take: number },
+  pagination: {
+    skip: number;
+    take: number;
+    orderBy: Prisma.UserOrderByWithRelationInput[];
+  },
 ) {
   const where: Prisma.UserWhereInput = {
     deletedAt: null,
@@ -84,7 +88,7 @@ export async function findAllUsers(
     prisma.user.findMany({
       where,
       include: userInclude,
-      orderBy: { createdAt: "desc" },
+      orderBy: pagination.orderBy,
       skip: pagination.skip,
       take: pagination.take,
     }),

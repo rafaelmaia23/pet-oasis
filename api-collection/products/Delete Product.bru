@@ -1,0 +1,23 @@
+meta {
+  name: Delete Product
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/products/{{productId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:product. Soft delete (204), com CASCATA nas variantes: produto e
+  variantes recebem o mesmo timestamp, então nunca existe variante ativa de um
+  produto morto.
+
+  A linha continua ocupando nome, slug e os SKUs das variantes. O audit log
+  registra cascadedVariants.
+
+  Para tirar o produto da vitrine sem excluí-lo, use "status": "DISCONTINUED" —
+  são perguntas diferentes ("está à venda?" x "existe?").
+}

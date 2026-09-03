@@ -80,6 +80,40 @@ as linhas pré-existentes.
 - **8.6** — o `@unique` de `PreviousEmail.email` **saiu** (migration de uma linha); o
   `@@index([userId])` ficou. A tabela continua existindo como histórico.
 
+### Fase 9 — o domínio pet shop
+
+Onze modelos novos, em duas agregações que só se tocam pela faceta de espécie: **pets**
+(`PetSpecies`, `PetSex`, `Breed`, `Pet`) e **catálogo** (`Brand`, `Category`, `Tag`,
+`ProductStatus`, `Product`, `ProductVariant`, `ProductImage`, mais os vínculos
+`ProductCategory` e `ProductTag`). O racional de modelagem está nos ADRs
+[`pet-domain-modeling.md`](../adr/pet-domain-modeling.md) e
+[`product-catalog-modeling.md`](../adr/product-catalog-modeling.md); aqui ficam só os pontos
+que surpreendem quem lê o `schema.prisma`.
+
+- **`path` não é caminho de arquivo, é chave.** `ProductImage.path`, `Pet.photoPath` e
+  `Brand.logoPath` guardam a **chave base** (`products/<id>/<uuid>`), sem sufixo nem extensão:
+  quem resolve `full` × `thumb` é o adaptador de storage, acrescentando os dois. Uma coluna, e
+  não duas, porque duas permitiriam representar o estado impossível "tem full, não tem thumb";
+  e tamanho novo vira entrada num union de código, nunca migration (9.10/AA9).
+- **A chave é `<owner>/<ownerId>/<uuid>`** — hierárquica de propósito (9.10/AA8): produto morto
+  é um diretório a apagar, e a varredura de órfãos consegue perguntar "existe dono com este
+  id?" só olhando o caminho. O layout plano (`<owner>/<uuid>`) obrigaria uma consulta por
+  arquivo; sharding por prefixo é irrelevante nesta escala.
+- **`search_vector` é coluna gerada (`GENERATED ALWAYS AS ... STORED`), em `products` e em
+  `brands`** — escrita pelo Postgres, nunca pelo Prisma, com índice GIN. São duas porque
+  coluna gerada não cruza linha: a marca precisa do vetor dela para entrar no corpus sem
+  denormalização mantida por trigger (9.9). O Prisma não modela coluna gerada, então ela vive
+  na migration e é invisível no `schema.prisma`.
+- **Unicidade global, valendo para a linha soft-deletada**, em `Pet.microchipId`,
+  `ProductVariant.sku` e nos `slug` da taxonomia — o precedente de `User.email`. Recriar uma
+  marca apagada é 409, e o número de chip de um pet excluído fica preso: num identificador do
+  mundo real, é o comportamento certo.
+- **`ProductVariant` não tem `deletedAt` correlacionado com o do produto por acaso**: a
+  exclusão do produto cascateia nas variantes com **um único timestamp**, o mesmo idioma da
+  cascata da Fase 8.
+- **`ProductImage` é a única tabela de domínio sem `deletedAt`** — imagem é *asset*, não fato
+  de negócio, e a linha morre junto com o arquivo (9.10/AA16).
+
 ---
 
 ## Invariantes que o schema não expressa sozinho

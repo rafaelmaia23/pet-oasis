@@ -1,0 +1,18 @@
+meta {
+  name: Delete Pet
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/pets/{{petId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Soft delete (204): a linha fica com deletedAt e some das listagens.
+
+  Para "o pet morreu" use POST /pets/:petId/deceased — são coisas diferentes,
+  e excluir destruiria informação clinicamente relevante.
+}

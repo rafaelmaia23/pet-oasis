@@ -21,3 +21,38 @@
 
 **Fase 7 (fechada):** hardening + observabilidade, em 9 sessões de trabalho (A–I). **Segurança:** Redis para rate limit (por IP + por email destinatário) e account lockout (janela fixa → backoff exponencial), fail-open explícito em ambos quando o Redis cai, helmet com CSP estrita (Scalar auto-hospedado + nonce por request), CORS explícito, os 3 guards de escalação consolidados em `assertActorIsAdmin`, corpo grande demais virando 413 (não mais 500). **Observabilidade:** três categorias de log (access/application/audit) sobre `pino` + `AsyncLocalStorage`, taxonomia fechada de audit (18 ações à época, 24 hoje) com regra de PII (só ids/enums), endpoints de leitura (`GET /audit-logs` com IP mascarado sem `read:audit-log:full`, `GET /logs/recent` sobre o ring buffer), Axiom (worker thread) e Sentry (só falha ≥500) opcionais por env var, timeouts em toda dependência externa (HTTP server, Prisma, Redis, SMTP). **Higiene:** paginação reutilizável (offset + cursor) com envelope `{ data, meta }` em todas as listagens, teto de sessões vivas + scripts de faxina (`cleanup-sessions`/`cleanup-audit-log`) agendados via systemd timer, reset diário do ambiente demo (truncate+reseed sob `DEMO_MODE`). **Polimento de conta** (Sessão H, desenho confirmado com o usuário em 2026-08-03): troca de email em 2 passos com `PreviousEmail` reservado para sempre (🔸 revertido na 8.6 — ver `context/identity-and-sessions.md`), reset de senha forçado pelo admin (bloqueia login até o reset), `GET /auth/sessions` com `device` parseado do user-agent e `current`. **Fecho (7.19, sem regra de negócio nova):** teste de regressão do refresh token hasheado (D1 — já implementado desde a Fase 3) e sincronização de toda a documentação da fase (`docs/reference/endpoints.md`, `docs/reference/logging-policy.md`, ADRs, `docs/reference/backlog.md`, `README.md`) com o que as sub-fases de fato entregaram. Racional completo em `context/security.md` e `context/observability.md`, `docs/reference/logging-policy.md` e nos ADRs `rate-limiting-and-lockout.md`/`pagination.md`.
 **Fase 8 (fechada):** autorização com escopo, cascata de deleção e reativação de conta, em 7 sessões (A–G). **É a única fase implementada, revertida e refeita** — o desenho original construiu a reativação em cima de dois bugs pré-existentes (deleção que não cascateava; override sem escopo) e foi revertido para `d1b8478` em 2026-08-07, com o escopo ampliado para consertar o modelo antes de construir sobre ele. **Modelo (8.0):** o override passou a pendurar na `UserRole` (D2), `UserRole` ganhou `@@unique([userId, roleId])` com reuso de linha (D3) e o contrato virou `PUT|DELETE /users/:userId/roles/:roleId/features/:featureId` (D9). **Ciclo de vida (8.1/8.2):** deleção cascateia quatro níveis com **um único timestamp por transação** (D1/D4) e restauração correlaciona por `deletedAt`; a restauração **para na role** (D6', Sessão C — matou o D16 junto) e o perfil volta por ser **nomeado**, não por correlação (K20, Sessão D). **Fluxos (8.3/8.4/8.5):** uma rota que cria **ou** reativa perfil, com catálogo de features nomeando o recurso (`create:customer-profile`); conta deletada volta por signup (202, self-service só traz cliente — D11) ou por `POST /users/:id/reactivate` (admin escolhe perfis e roles), sempre confirmada pelo dono via token com senha nova. **Transversais (8.6/8.7/8.8):** `PreviousEmail` parou de bloquear e perdeu o `@unique` (D13/K25), rate limit cobriu as superfícies novas e as três rotas públicas de token (K26/K27), e a conta demo ficou isenta do account lockout (bug de produção). **Fecho (8.9, sem regra de negócio nova):** consolidação do racional (hoje em `context/authorization.md` e `context/lifecycle.md`) e no ADR novo `authorization-scope-and-lifecycle.md`, sincronização de `CLAUDE.md`/`endpoints.md`/`logging-policy.md`/`README.md` com o que a fase entregou, e dissolução do documento de trabalho `docs/fase-8-redesign.md`. Racional completo em `context/authorization.md` e `context/lifecycle.md` e no ADR.
+
+---
+
+## Ciclo 2 — o domínio pet shop
+
+**Fase 9 (fechada):** pets e catálogo, em 12 sessões (9.1–9.12), cada uma 1:1 com sua sub-fase e em
+feat-branch própria. **RBAC do domínio (9.1):** 9 features novas e duas roles de funcionário
+(`stockist`, `catalog-manager`), nenhuma privilegiada, e a decisão que moldou o resto da fase — a
+**vitrine do catálogo responde sem token**, o que exigiu um terceiro modo de autenticação
+(`optionalAuthenticate`). **Bloco A — pets (9.3–9.5):** espécie como enum fechado sem `OUTRO`,
+`Breed` semeada por constante curada (142 raças, só cão e gato exigem raça), CRUD com escopo
+próprio × escopo de balcão, `deceasedAt` separado de `deletedAt` (pet falecido continua na lista do
+dono), e `Pet` como o primeiro filho de **domínio** da cascata de deleção da Fase 8. **Bloco B —
+catálogo (9.6–9.8):** taxonomia (marca, categoria em árvore de 3 níveis, tag), `Product` +
+`ProductVariant` com preço em centavos e nunca produto plano, espécie como **faceta** e não nível da
+árvore, status ortogonal ao soft delete, e a leitura com **três views em escada** escolhidas pela
+capability do ator — a primeira vez no projeto em que a *forma* da resposta, e não só o acesso, muda
+com quem pergunta. **Busca textual (9.9):** Postgres nativo (`tsvector` + `unaccent` + `pg_trgm`)
+por escolha didática explícita do usuário contra a recomendação inicial de `ILIKE`; erro de
+digitação corrigido por **reescrita da query** contra um dicionário de lexemas, com o SQL cru só
+ranqueando. **Upload (9.10):** adaptador de storage com o path no banco e nunca a URL, servido pelo
+próprio Node com bind mount (o reverse proxy do ADR mora no servidor, não neste repositório), dois
+derivados WebP por imagem, e a linha de imagem como o **único hard delete de domínio** do projeto.
+**Seed fake (9.11):** 9 marcas, 20 categorias, 35 produtos e 15 pets sob `SEED_FAKE_DATA`, com os
+bytes das imagens em base64 num `.ts` — o estágio `runtime` do Dockerfile não copia `src/`, e o
+plano herdado de versionar `.webp` teria falhado silenciosamente no boot. **Fecho (9.12):** a
+revisão da fase inteira **antes** da documentação achou cinco defeitos (o mais grave: `?inStock=`
+apagando a faixa de preço em silêncio), e o fecho também consertou uma regra de processo — um ADR
+citava um documento de planejamento escrito para ser descartável, o que separou `.scratch/`
+(rascunho fora do git) de `docs/specs/` (spec em negociação) e virou verificação no
+`npm run docs:check`. Racional em [`pet-domain.md`](pet-domain.md) e nos ADRs
+[`pet-domain-modeling.md`](../adr/pet-domain-modeling.md),
+[`product-catalog-modeling.md`](../adr/product-catalog-modeling.md),
+[`product-vs-service.md`](../adr/product-vs-service.md), [`text-search.md`](../adr/text-search.md) e
+[`file-storage-and-uploads.md`](../adr/file-storage-and-uploads.md).

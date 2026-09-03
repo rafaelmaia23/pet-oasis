@@ -75,6 +75,15 @@ completo, os contra-argumentos e os gotchas.
 - `reactivate:*` é feature separada de `create:*` (K12)
 - `create:`/`reactivate:customer-profile` moram em `SELF_MANAGEMENT_FEATURES`
 - `read:audit-log:full` entrou em `PRIVILEGED_FEATURES`
+- O critério de granularidade, escrito na 9.1
+- Pet — leitura × escrita, e não um verbo por operação
+- Catálogo — quatro cortes, nenhum deles por recurso
+- Custo/margem **não** entrou em `PRIVILEGED_FEATURES`
+
+*Roles de funcionário*
+
+- `stockist` e `catalog-manager` nasceram na 9.1
+- O `demo` enxerga o domínio novo, menos o custo
 
 ### [Ciclo de vida](context/lifecycle.md)
 
@@ -91,6 +100,10 @@ completo, os contra-argumentos e os gotchas.
 - O nível `User` → perfil deixou de correlacionar (K20)
 - Os três níveis nasceram como primitivas de repositório (K7)
 - `grantRolesToUser` nasceu como primitiva
+- Pet é o primeiro filho de **domínio** do grafo (9.4) — desce como todo mundo, sobe como
+  `UserRole`, e o critério é "restaurar isto concede autoridade?"
+- Imagem é o único hard delete de domínio do projeto (9.10) — asset não é fato de negócio; e o
+  soft delete do **produto** preserva os arquivos, senão restaurar devolveria o produto em branco
 
 *Perfil — os fluxos de produto*
 
@@ -160,7 +173,12 @@ completo, os contra-argumentos e os gotchas.
 - Por capability, não por role
 - User — progressão por capability
 - Demais recursos
-- `GET /me`
+- `GET /me` — e o id de perfil que entrou nele na 9.4
+
+*Superfície pública*
+
+- A vitrine do catálogo responde sem token (9.1)
+- Rate limit por IP da vitrine, balde único para as quatro leituras (9.6)
 
 *Erros*
 
@@ -170,6 +188,7 @@ completo, os contra-argumentos e os gotchas.
 *Paginação*
 
 - Duas estratégias, um envelope só
+- Ordenação configurável só no offset
 
 *Tipos*
 
@@ -180,6 +199,7 @@ completo, os contra-argumentos e os gotchas.
 *Roteamento*
 
 - `authenticate` saiu do `app.ts` (global) e foi para o grupo de rota
+- `optionalAuthenticate` — o terceiro modo, para a vitrine pública (9.6)
 
 *Onde cada coisa vive*
 
@@ -187,7 +207,15 @@ completo, os contra-argumentos e os gotchas.
 - `record` é lib de observabilidade, não repository
 - `src/lib/` não conhece módulo nenhum
 - `src/scripts/` é código; `infra/` é agendamento
-- SQL cru vive exclusivamente no repository
+- SQL cru vive exclusivamente no repository — três pontos, e os dois locks são o
+  mesmo remédio para o mesmo padrão (9.10, 9.12)
+
+*Documentação e processo*
+
+- Rascunho (`.scratch/`, fora do git) × spec (`docs/specs/`) × permanente (ADR e
+  `context/`) — e por que documento permanente nunca cita efêmero (9.12);
+  o mapa é [`docs/README.md`](README.md), as formas de fase estão em
+  [`guides/todo-phases.md`](guides/todo-phases.md)
 
 *Ordem de construção*
 
@@ -268,6 +296,9 @@ completo, os contra-argumentos e os gotchas.
 - `migrate deploy`, nunca `migrate dev`
 - O seed é bundlado pelo tsup (`dist/seed.js`)
 - Imagem multi-stage e não-root
+- O reverse proxy do upload existe, mas não neste repositório (9.10) — quem serve `/uploads/*` é
+  o Node, e o bind mount é o que deixa a troca por nginx ser configuração
+- `sharp` no ARM64 exige build no próprio servidor (9.10)
 
 *Documentação da API*
 
@@ -280,6 +311,10 @@ completo, os contra-argumentos e os gotchas.
 
 - Role `demo` sempre semeada, usuário demo atrás de flag
 - Reset do demo é truncate+reseed, e a guarda é flag explícita
+- A limpeza de upload é por prefixo de dono, nunca a raiz (9.11) — `deleteDirectory("")`
+  resolveria para o ponto de montagem do bind mount
+- A ordem é truncate → limpar uploads → reseed (9.11) — o filesystem não participa da transação
+- O `--dry-run` conta os arquivos que apagaria (9.11), e daí o `countFiles` na interface `Storage`
 - Gotcha do reseed compartilhado (7.14)
 - `demo-reset` esquecia a tabela `previousEmail`
 
@@ -288,12 +323,90 @@ completo, os contra-argumentos e os gotchas.
 - Duas flags independentes: `SEED_FAKE_DATA` e `SEED_ADMIN_USER`
 - O dataset inclui roles com escrita (`manager`), com o risco assumido
 - A idempotência depende só do email fixo
-- Instância própria de Faker, não o singleton dos testes
+- Os bytes das imagens do seed moram em base64 num `.ts`, não em disco (9.11) — o estágio
+  `runtime` do Dockerfile não copia `src/`
+- O seed grava imagem pelo adaptador, nunca copiando arquivo (9.11)
+- O seed não cura arquivo sumido; quem converge é o `demo-reset` (9.11)
+- Instância própria de Faker — e, desde a 9.11, semeada **por chave**, para o roster ser
+  conjunto e não sequência
 - Criado via `userRepository`, não via `user.service`
 
 *Achado de teste*
 
 - `clearDatabase` não era bug
+
+### [Domínio pet shop](context/pet-domain.md)
+
+*O recorte* — a única decisão do Ciclo 2 sem ADR próprio; o resto é ponteiro
+
+- Bloco A (pets) + Bloco B (catálogo), sem checkout
+
+*Pets e raças* — [`adr/pet-domain-modeling.md`](adr/pet-domain-modeling.md)
+
+- Espécie como enum fechado sem `OUTRO`
+- Raça como tabela semeada por constante, nunca API em runtime
+- `SPECIES_WITH_BREED` é constante explícita, não derivada do dado
+- Dono único · falecimento é estado, não exclusão · peso é instantâneo
+- O que a implementação (9.3) firmou — só cão e gato exigem raça, contrato do
+  `GET /breeds`, `Breed` como dado de referência, onde a constante mora, e por
+  que o seed usa `createMany` sem delete reconciliador
+- O que a implementação (9.4) firmou — `microchipId` unique global, pets na
+  cascata e na restauração, falecimento em rota própria, `species` editável, e o
+  alvo inexistente falhando fechado em 403
+- O que a implementação (9.5) firmou — `GET /pets` traz falecido por default
+  (filtro `?deceased=`), filtro não resolve recurso (uuid inexistente é lista
+  vazia), e só esta rota do módulo exige `:others` direto
+
+*Catálogo* — [`adr/product-catalog-modeling.md`](adr/product-catalog-modeling.md)
+
+- `Product` + `ProductVariant`, nunca produto plano · categoria é função, espécie
+  é faceta · preço em centavos · status coexiste com soft delete
+- O que a implementação (9.6) firmou na taxonomia — árvore de 3 níveis, produto
+  em qualquer nó, 409 na exclusão com filha ou produto, slug derivado e
+  congelado, `Tag` em hard delete, unique global e nenhuma das leituras
+  paginando
+- O que a implementação (9.7) firmou em produto e variante — `sku` unique
+  global, estoque não-negativo, produto nasce com suas variantes numa
+  transação, feature exigida por campo no `PATCH` da variante, exatamente uma
+  default, 409 na última variante, vínculos por substituição total e cascata do
+  produto nas variantes
+- O que a implementação (9.8) firmou na leitura — `?status=` ignorado em
+  silêncio, id-ou-slug numa rota só (com slug proibido de parecer UUID), preço
+  do produto = menor variante ativa, `inStock` derivado em todas as views,
+  espécie vazia casando com tudo, tag repetida como interseção, 404 (não 403)
+  para o que o ator não pode ver, e `read:product:cost` implicando a visão
+  interna
+
+- O que o kickoff (9.9) firmou na busca textual — corpus limitado ao que a
+  coluna gerada alcança (produto + marca, tag fora), erro de digitação corrigido
+  **na query** por dicionário de lexemas, SQL cru só ranqueando enquanto a
+  visibilidade continua no `buildProductWhere`, e o dicionário construído só do
+  catálogo público
+
+*Dataset fake do domínio (9.11)*
+
+- O dataset é cobertura de cenário, não volume — e cada cenário é afirmado por
+  teste, porque roster errado não estoura em lugar nenhum
+- `costCents` em **todas** as variantes (null não prova mascaramento nenhum), e
+  derivado do preço em vez de sorteado
+- O pet do dono soft-deletado herda o `deletedAt` do dono, não um timestamp
+  próprio — é a correlação que a restauração da Fase 8 usa
+- A árvore chega ao 3º nível porque é o limite que o `category.service` defende
+- Nome à mão, preço sorteado — o corpus da busca da 9.9 é o motivo; marcas reais
+  com a ressalva de redistribuição registrada
+
+*Upload* — ver os ADRs listados em
+[`context/pet-domain.md`](context/pet-domain.md)
+
+*O que o fecho da fase (9.12) corrigiu no catálogo*
+
+- Preço e disponibilidade caem na **mesma variante** — e `?inStock=false`
+  continua sendo do produto, porque é a negação da compra
+- Marca não sai com produto ativo pendurado (espelho da categoria, W3)
+- Id repetido em `categories`/`tags` é 422 do Zod, não 409 da chave composta
+- A recusa de slug com forma de UUID vale também para o **derivado** do nome
+- A última variante ativa é decidida sob lock — terceiro e último ponto de SQL
+  cru do projeto
 
 ### [Schema](context/schema.md)
 
@@ -302,6 +415,10 @@ completo, os contra-argumentos e os gotchas.
 - Fase 4 — status de conta
 - Fase 7
 - Fase 8
+- Fase 9 — os onze modelos do domínio, e o que surpreende quem lê o
+  `schema.prisma`: `path` é **chave**, não caminho de arquivo; `search_vector` é
+  coluna gerada invisível ao Prisma; `ProductImage` é a única tabela de domínio
+  sem `deletedAt`
 
 
 ---

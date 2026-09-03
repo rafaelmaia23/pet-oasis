@@ -1,0 +1,26 @@
+meta {
+  name: Get Product By Id Or Slug
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/products/{{productSlug}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  O path aceita ID OU SLUG: valor com forma de uuid é lido como id, o resto como
+  slug. Não há caso ambíguo porque a escrita recusa slug parecido com uuid — nas
+  duas portas, o informado e o derivado do nome.
+
+  Troque {{productSlug}} por {{productId}} para exercitar o outro ramo.
+
+  Traz as variantes ATIVAS, a default primeiro. A view segue a capability do
+  ator, igual à listagem.
+
+  Produto fora do conjunto visível (rascunho, para quem não tem
+  read:product:internal) responde 404 com a mesma mensagem de inexistente: um
+  403 confirmaria o slug do rascunho para qualquer visitante.
+}

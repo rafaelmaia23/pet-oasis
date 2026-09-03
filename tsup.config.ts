@@ -7,6 +7,7 @@ export default defineConfig({
     "cleanup-sessions": "src/scripts/cleanup-sessions.ts",
     "cleanup-audit-log": "src/scripts/cleanup-audit-log.ts",
     "demo-reset": "src/scripts/demo-reset.ts",
+    "refresh-search-lexemes": "src/scripts/refresh-search-lexemes.ts",
   },
   format: ["esm"],
   outDir: "dist",

@@ -1,0 +1,42 @@
+meta {
+  name: Create Variant
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/products/{{productId}}/variants
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "sku": "GOLDEN-AD-3KG",
+    "label": "3 kg",
+    "priceCents": 8990,
+    "stockQuantity": 20,
+    "weightGrams": 3000
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("variantId", res.getBody().id);
+  }
+}
+
+docs {
+  Exige manage:product — acrescentar um SKU é autoria de catálogo, não contagem
+  de prateleira: o stockist recebe 403 aqui.
+
+  Coleção aninhada porque criar precisa do produto na URL; o item é plano
+  (/variants/:variantId), mesmo racional dos pets.
+
+  SKU é único globalmente, inclusive contra variantes excluídas — repetir é 409.
+  "isDefault": true rebaixa a variante default anterior na mesma transação.
+}

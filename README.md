@@ -10,7 +10,7 @@
 [![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Zod](https://img.shields.io/badge/Zod-4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/)
-[![Vitest](https://img.shields.io/badge/Vitest-719%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-1193%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](https://spec.openapis.org/oas/v3.1.0)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#licença)
@@ -48,7 +48,7 @@ A API está no ar em **[pet-oasis.maiahub.com.br](https://pet-oasis.maiahub.com.
 | 📄 Spec OpenAPI 3.1 (gerada dos próprios schemas Zod) | [/openapi.json](https://pet-oasis.maiahub.com.br/openapi.json) |
 | ❤️ Health check | [/api/v1/status](https://pet-oasis.maiahub.com.br/api/v1/status) |
 
-Ambas as rotas de documentação são públicas. Abaixo, dois roteiros para ver o sistema funcionando de verdade — não só a lista de endpoints.
+Ambas as rotas de documentação são públicas. Abaixo, três roteiros para ver o sistema funcionando de verdade — não só a lista de endpoints.
 
 <br>
 
@@ -113,6 +113,35 @@ Dali em diante dá para explorar o resto: `GET /auth/sessions` lista suas sessõ
 
 > Tentar `GET /users` com essa conta responde **403** — um cliente não tem `read:user:others`. É o RBAC de novo, agora do outro lado do balcão.
 
+<br>
+
+### 🅲 Roteiro C — a vitrine pública, sem conta nenhuma
+
+O catálogo responde **sem token**: um e-commerce vive de quem chega pelo Google antes de ter cadastro. Cole no terminal — não precisa de login:
+
+```bash
+BASE=https://pet-oasis.maiahub.com.br/api/v1
+
+# 1. A vitrine, anônima
+curl -s "$BASE/products?limit=3" | head -c 600
+
+# 2. Busca com erro de digitação — "golen" acha "Ração Golden"
+curl -s "$BASE/products?q=racao%20golen" | grep -o '"search":{[^}]*}'
+
+# 3. O detalhe, pelo slug (o path aceita id OU slug)
+curl -s "$BASE/products/racao-golden-formula-caes-adultos-frango-e-arroz" | head -c 400
+```
+
+O passo 2 devolve `{"q":"racao golen","applied":"racao golden"}`: a palavra que não existe no dicionário do catálogo é trocada pela mais parecida antes da busca rodar — e **só** ela, porque a query é um "E" e corrigir a palavra certa estragaria o resultado. É Postgres puro (`tsvector` + `unaccent` + `pg_trgm`), sem motor de busca externo.
+
+Agora repita o passo 1 **com** o token da conta demo do Roteiro A:
+
+```bash
+curl -s "$BASE/products?limit=3" -H "Authorization: Bearer $TOKEN" | head -c 600
+```
+
+A rota é a mesma e o corpo é outro: aparecem `status`, `stockQuantity` exato e `costCents`. Não é um endpoint diferente para staff — é a **mesma** rota escolhendo a view pela capability de quem pergunta, com a whitelist do presenter derrubando o que o ator não pode ver. O visitante anônimo recebe preço e um booleano `inStock`; ele nunca vê a margem.
+
 ---
 
 ## O que a API faz hoje
@@ -130,7 +159,7 @@ Dali em diante dá para explorar o resto: `GET /auth/sessions` lista suas sessõ
 </td><td width="50%" valign="top">
 
 ### 🛡️ Autorização (RBAC + overrides)
-- **Roles agregam features**; são definidas em código e semeadas (`customer`, `attendant`, `manager`, `admin`, `demo`).
+- **Roles agregam features**; são definidas em código e semeadas (`customer`, `attendant`, `stockist`, `catalog-manager`, `manager`, `admin`, `demo`).
 - **`UserFeature` guarda só exceções** — grant ou deny, nunca cópias do conjunto da role. O override pendura na **atribuição de role** (`(user, role, feature)`), não no usuário: perder a role mata o ajuste fino dela, e um ex-estoquista não sai carregando a permissão de estoquista.
 - Features efetivas computadas em runtime por uma função pura: `(⋃ roles ∪ grants) − denies`, com `*` = admin.
 - **Não-escalação**: mexer nas features de permissão exige ser admin de fato, não só ter a feature.
@@ -155,6 +184,24 @@ Dali em diante dá para explorar o resto: `GET /auth/sessions` lista suas sessõ
 - **Banimento** ortogonal ao status (`bannedAt`/`bannedBy`/`banReason`), derrubando as sessões do alvo.
 - **Conta excluída pode voltar** — pelo próprio dono (o signup detecta e dispara o fluxo) ou por um admin; nos dois casos quem conclui é o dono, provando posse do email e definindo senha nova.
 - Endpoints públicos sensíveis respondem sempre igual, existindo o email ou não (sem enumeração de contas).
+
+</td></tr>
+<tr><td width="50%" valign="top">
+
+### 🐾 Pets
+- Pet pertence ao **cliente**, não ao usuário: a coleção é `/customers/:customerId/pets`, e o item é plano (`/pets/:petId`), porque o id é global.
+- **Escopo próprio × escopo de balcão**: as mesmas rotas servem o dono (`manage:pet`) e o atendimento (`manage:pet:others`), e quem separa é o service. Sem `:others`, alvo inexistente responde **403** — distinguir 403 de 404 ali transformaria a rota em oráculo de existência.
+- **Falecimento não é exclusão**: `deceasedAt` é rota própria e idempotente; o pet falecido continua na lista do dono, porque o histórico clínico segue válido.
+- Espécie é enum fechado **sem "outro"**; só cão e gato exigem raça, e as demais espécies a proíbem — as 142 raças são catálogo curado, nunca consulta a API externa em runtime.
+
+</td><td width="50%" valign="top">
+
+### 🛒 Catálogo
+- **`Product` é identidade comercial, `ProductVariant` é o que se vende** (SKU, preço, estoque). Nunca produto plano: produto "sem variação" ganha uma variante default, e não existe o caminho duplo "produto com preço próprio × produto com variantes".
+- **Categoria é função, espécie é faceta.** Uma cama serve cão e gato, então espécie é `targetSpecies[]` no produto, não um nível da árvore que duplicaria toda folha.
+- **A vitrine é pública** e a *forma* da resposta muda com a capability: preço e `inStock` para o visitante; `status` e estoque exato com `read:product:internal`; `costCents` com `read:product:cost`.
+- **Busca com tolerância a erro de digitação** em Postgres puro (`tsvector` + `unaccent` + `pg_trgm`): a palavra fora do dicionário é reescrita antes da consulta, e o SQL cru só ranqueia — a visibilidade continua saindo do mesmo filtro da listagem.
+- **Upload atrás de um adaptador de storage**: o banco guarda a chave, nunca a URL; dois derivados WebP por imagem; EXIF (e geolocalização) removidos.
 
 </td></tr>
 </table>
@@ -184,13 +231,15 @@ Cada camada só conversa com a adjacente. O **repository** é a única que toca 
 | Features efetivas computadas, nunca materializadas | Mudar a role de alguém reflete no próximo request; não existe estado duplicado para sair de sincronia. |
 | Soft delete em usuários, perfis e vínculos | Vendas e pedidos (Ciclo 2) precisam do histórico íntegro — quem atendeu, com qual permissão, quando. |
 | Erros por *factory*, `throw` explícito no call site | Sem controle de fluxo escondido: dá para ler o service e saber exatamente onde a requisição termina. |
+| Dinheiro em **inteiro-centavos**, nunca `Decimal` ou float | Aritmética inteira não tem erro de arredondamento, e o `Decimal` do Prisma não vaza para a serialização nem para os schemas Zod. Peso segue o mesmo racional, em gramas. |
+| Busca textual no **Postgres**, não em Meilisearch/Typesense | Tolerância a erro de digitação sem somar um serviço com estado próprio para manter sincronizado. O custo assumido é conhecido e está escrito: o dicionário de lexemas é materializado, então palavra nova só corrige typo depois do refresh. |
 | OpenAPI gerado dos schemas Zod | Fonte única de verdade. A doc não tem como divergir da validação, porque é a validação. |
 
 O raciocínio longo de cada uma está em [`docs/context/`](docs/context/), indexado por [`docs/context.md`](docs/context.md); as decisões estruturais viraram [ADRs](docs/adr/).
 
 ### Testes antes do código
 
-Toda feature nasce de um teste que falha. A suíte tem **719 testes** (Vitest + Supertest + Faker) rodando contra um Postgres e um Redis reais e isolados, subidos e derrubados pelo próprio `npm test` — integração de verdade, não mocks de banco ou de infra. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
+Toda feature nasce de um teste que falha. A suíte tem **1193 testes** (Vitest + Supertest + Faker) rodando contra um Postgres e um Redis reais e isolados, subidos e derrubados pelo próprio `npm test` — integração de verdade, não mocks de banco ou de infra. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
 
 ### Disciplina de processo
 
@@ -221,6 +270,7 @@ Além do catálogo de referência (roles/features, sempre semeado), o seed pode 
 
 - **`SEED_FAKE_DATA=true`** — 20 usuários fake (customers, employees, híbridos customer+employee, e cenários de banido/pendente-de-verificação/soft-deletado), todos com a mesma senha conhecida (`SEED_FAKE_USER_PASSWORD`, default `FakeOasis2026!`) — dá para logar como qualquer um pra explorar RBAC e soft delete na prática. Ligado por padrão em dev **e** no demo público.
 - **`SEED_ADMIN_USER=true`** — um usuário de teste com acesso total (role `admin`, diferente do usuário demo read-only), credenciais em `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`. **Só em dev** — nunca ligado no demo público, para não expor uma conta de escrita irrestrita na internet.
+- **`SEED_FAKE_DATA=true`** — o domínio inteiro povoado: 9 marcas, 20 categorias em 3 níveis, 8 tags, 35 produtos (51 variantes, com imagem) e 15 pets em 12 donos, mais um funcionário por role nova. O dataset é escolhido por **cobertura de cenário**, não por volume: existe produto em rascunho, produto descontinuado, variante esgotada e categoria no terceiro nível porque cada um deles é o que faz um filtro, uma view ou um limite serem demonstráveis. Nomes e marcas são reais e em português — a busca com tolerância a erro só se demonstra sobre palavras que existem.
 
 Ambos são idempotentes (`npm run db:seed` não duplica nada) e restaurados todo dia pelo reset do ambiente demo.
 
@@ -240,11 +290,12 @@ Ambos são idempotentes (`npm run db:seed` não duplica nada) e restaurados todo
 | ✅ | 7 | Hardening: rate limiting, account lockout, observabilidade (access/application/audit log), paginação e filtros, teto de sessões, troca de email, timeouts |
 | ✅ | 8 | Escopo de override, cascata de deleção e reativação de conta (por signup ou por admin, sempre confirmada pelo dono) |
 
-**Ciclo 2 — Domínio pet shop** 🔜 *a seguir* (a numeração das fases continua global)
+**Ciclo 2 — Domínio pet shop** 🔄 *em andamento* (a numeração das fases continua global)
 
 | | Fase | Entrega |
 |---|---|---|
-| 🔜 | 9 — Domínio pet shop | Pets ligados a Customers (CRUD, escopos *own*/*others*) e catálogo (produto/variante, marca, categoria, tag, busca textual, upload de imagem) — sem checkout ainda; carrinho e pedido ficam para a Fase 10 |
+| ✅ | 9 | Pets ligados a Customers (CRUD, escopos *own*/*others*, falecimento ≠ exclusão) e catálogo completo: produto/variante, marca, categoria em árvore, tag, vitrine pública com view por capability, busca textual com tolerância a erro de digitação e upload de imagem — sem checkout |
+| 🔜 | 10 | Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) |
 
 Detalhe atômico de cada item em [`docs/todo.md`](docs/todo.md).
 
@@ -254,6 +305,7 @@ Detalhe atômico de cada item em [`docs/todo.md`](docs/todo.md).
 
 | Arquivo | Conteúdo |
 |---|---|
+| [`docs/README.md`](docs/README.md) | **O mapa**: o que é cada pasta de documentação e o caminho de uma ideia até o código |
 | [`docs/context.md`](docs/context.md) | Índice do *porquê* de cada decisão — uma linha por decisão, apontando o arquivo |
 | [`docs/context/`](docs/context/) | O raciocínio longo, por tema: autorização, ciclo de vida, identidade, segurança, observabilidade… |
 | [`docs/adr/`](docs/adr/) | Architecture Decision Records das escolhas estruturais |

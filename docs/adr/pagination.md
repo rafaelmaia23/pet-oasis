@@ -123,7 +123,7 @@ desde a 7.7/7.8 — o único consumidor de cursor continua sendo `GET /audit-log
 e o único de offset é `GET /users`. A hipótese de "servir sem fork" só será
 testada de fato quando a Fase 9 chegar; até lá, nada a revisar aqui.
 
-## Adendo (Fase 9.2) — ordenação configurável
+## Adendo (Fase 9.2) — ordenação configurável ✅ implementado
 
 `?sort=` saiu do `docs/reference/backlog.md` na Fase 9: as listagens novas de domínio
 (pets, produtos) tornam ordenação por campo (preço, nome, data de criação)
@@ -153,4 +153,24 @@ limitação já registrada permanece: cursor não ganha `?sort=` nesta fase.
 exige uma decisão de contrato adicional (menor preço entre variantes ativas?
 preço da variante default?) — tratada como pendência de negócio da sub-fase
 9.8, não uma extensão deste ADR.
+
+### O que a implementação (9.2) firmou além do adendo
+
+O adendo definiu sintaxe, allowlist, tiebreaker e escopo, mas deixou quatro
+pontos de contrato em aberto. Decididos com o usuário na sessão e implementados:
+
+| # | Ponto | Escolha |
+|---|---|---|
+| S1 | Primeiro consumidor | `GET /users`, ordenável por `createdAt`, `name` e `email`. Escolhido para a sessão fechar com prova de integração real, e porque a listagem já rodava sem tiebreaker — o `?sort=` fechou um furo que existia desde a Fase 2. |
+| S2 | `?sort=` sem `?order=` | A allowlist não é uma lista de nomes: é um mapa **campo → direção natural** (data `desc`, texto `asc`). Assim `?sort=createdAt` não inverte a lista em relação a não mandar parâmetro nenhum, e `?sort=name` sai A→Z. As alternativas (`asc` fixo, `desc` fixo) sempre deixam metade dos campos com a direção errada. |
+| S3 | `?order=` sem `?sort=` | **422** nomeando `order`. Mesmo idioma de `limit > 100` (422, não clamp silencioso). Aplicar ao campo default foi preterido: amarraria o significado da URL a um default implícito, que mudaria em silêncio se o campo default do recurso mudasse. |
+| S4 | Direção do tiebreaker | Segue o `order` pedido (`?sort=name&order=asc` → `[{name:"asc"},{id:"asc"}]`). Qualquer direção fixa serviria para não pular/repetir registro; seguir o `order` mantém a leitura coerente dentro do grupo empatado. |
+
+**Forma no código** (`src/lib/pagination.ts`): o recurso declara a allowlist com
+`defineSortConfig({ fields, default })`; `buildOffsetQuerySchema(config, filters)`
+devolve a query inteira (page/limit + sort/order + filtros do recurso) com o
+`sort` como `z.enum` da allowlist e a regra S3 embutida — o refinamento mora no
+helper, não em cada recurso, para ser impossível esquecer dele. O service traduz
+com `buildOrderBy(query, config)` e entrega o `orderBy` pronto ao repository.
+Nenhum nome de campo vindo do request alcança o Prisma sem passar pela allowlist.
 

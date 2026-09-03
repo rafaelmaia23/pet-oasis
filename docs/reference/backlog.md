@@ -48,6 +48,12 @@ Hoje há um endpoint só. O ideal são dois papéis distintos: um público e mí
 ### Métricas e tracing (OpenTelemetry) — **G**
 A Fase 7 entrega logs; falta o resto do tripé. Instrumentar com OTel deixaria o backend trocável por configuração (Axiom, Grafana, Honeycomb) em vez de acoplado a um SDK. Fase própria, e só compensa quando houver carga real para observar.
 
+### Refresh automático do dicionário de lexemas — **P**
+A correção de erro de digitação da busca (9.9) trabalha contra um dicionário materializado por `npm run db:refresh-search`. Produto criado pela API entra na busca **literal** na hora, mas suas palavras novas só passam a corrigir typo depois do próximo refresh — a defasagem existe e hoje não morde, porque quem popula o catálogo é o seed. **Correção:** um systemd timer em `infra/cron/`, no molde dos `cleanup-*`. **Gatilho:** catálogo alimentado por gente, não por seed.
+
+### Systemd timer para a varredura de arquivos órfãos — **P**
+O `db:cleanup-uploads` (9.10) nasceu sem agendamento: roda à mão, ao contrário dos outros dois `cleanup-*`, que têm timer em `infra/cron/`. **Gatilho:** o dia em que ela encontrar arquivo órfão duas vezes — antes disso, agendar é automatizar um problema que ainda não se provou existir.
+
 ### Backup e restore do Postgres — **M**
 Dump agendado do banco do deploy, com um *restore* de fato testado — backup nunca verificado não é backup. Complementa a política de retenção de logs.
 
@@ -55,11 +61,11 @@ Dump agendado do banco do deploy, com um *restore* de fato testado — backup nu
 
 ## Produto e domínio
 
-### Dummy data para a demo — **M**
-Hoje o seed cria o mínimo (roles, usuário demo). Um conjunto de dados fictício e coerente — clientes, pets, produtos, histórico — faz a demo mostrar a API funcionando em vez de mostrar listas vazias. Vira pré-requisito natural do `demo-reset` (Fase 7.14), que passaria a restaurar esse estado. **Agendado: a Fase 9 traz o domínio que faltava — resolvido na sessão 9.11 (`docs/todo.md`).**
+### ~~Dummy data para a demo~~ — ✅ resolvido (Fase 9.11)
+O seed fake passou a cobrir o domínio inteiro sob a mesma flag `SEED_FAKE_DATA`: 9 marcas, 20 categorias em 3 níveis, 8 tags, 35 produtos com 51 variantes e imagem, e 15 pets em 12 donos, mais um funcionário de cada role nova da 9.1. O `demo-reset` trunca e repovoa o catálogo e limpa o diretório de upload, então a demo volta ao mesmo estado todo dia — com foto. O dataset é **cobertura de cenário**, não volume (produto sem imagem, esgotado parcial e total, folha de item único, pet falecido, pet de dono excluído), e cada cenário é afirmado por teste. Racional em `docs/context/pet-domain.md` § "Dataset fake do domínio (9.11)" e `docs/context/infrastructure.md`.
 
-### Ordenação configurável nas listagens — **P**
-`?sort=` nas listas paginadas por offset. Simples com o helper da Fase 7.7; complexo no cursor (a chave do cursor teria que codificar o campo de ordenação). Fazer só para offset, e documentar a limitação. **Agendado: resolvido na sessão 9.2 da Fase 9 (`docs/todo.md`), com adendo já registrado em `docs/adr/pagination.md`.**
+### ~~Ordenação configurável nas listagens~~ — ✅ resolvido (Fase 9.2)
+`?sort=<campo>&order=asc|desc` entrou no helper de offset, com allowlist por recurso (fora dela → 422) e tiebreaker por `id` obrigatório também no offset. Primeiro consumidor: `GET /users`. Decisões de contrato no adendo de `docs/adr/pagination.md`. **A limitação do cursor permanece** — ordenar por campo ali exigiria a chave do cursor codificar o próprio campo de ordenação; se algum dia fizer falta, é entrada nova neste backlog.
 
 ### Transferência de pet entre clientes — **M**
 Caso real (venda, doação, mudança de tutor de um pet já cadastrado). Deixado fora da Fase 9 por escopo — precisa de trilha de auditoria própria e de decisão sobre o que acontece com o histórico clínico do pet (que só existe quando a veterinária chegar). Levantado no planejamento da Fase 9.
@@ -68,13 +74,19 @@ Caso real (venda, doação, mudança de tutor de um pet já cadastrado). Deixado
 Família compartilhando o mesmo pet é caso real, mas a Fase 9 modela dono único (`Pet.customerId` obrigatório, sem N:N) — ver `docs/adr/pet-domain-modeling.md`. Gatilho de revisão: migrar `customerId` de FK direta para uma tabela de junção `PetOwner` (N:N), o que também reabre a pergunta acima (transferência de pet).
 
 ### `/me/pets` — **P**
-Atalho de conveniência sobre `GET /customers/:customerId/pets`, evitando o cliente precisar primeiro resolver o próprio `customerId`. Fora da Fase 9 por duplicar rota/teste/documentação sem necessidade — `GET /me` já devolve `customer.id`, que é tudo que o cliente precisa para chamar a rota aninhada.
+Atalho de conveniência sobre `GET /customers/:customerId/pets`, evitando o cliente precisar primeiro resolver o próprio `customerId`. Fora da Fase 9 por duplicar rota/teste/documentação sem necessidade — `GET /me` devolve `customer.id`, que é tudo que o cliente precisa para chamar a rota aninhada. **Ressalva registrada na 9.4:** essa justificativa era falsa quando foi escrita — a view de `/me` **não** expunha `customer.id`, e a coleção aninhada era inalcançável pelo próprio dono. O campo foi acrescentado na 9.4 e a premissa agora é verdadeira; a lição é que um item de backlog justificado por uma capacidade existente precisa citar onde ela está no código.
 
 ### `StockMovement` (movimentação de estoque append-only) — **M**
 A Fase 9 modela só `ProductVariant.stockQuantity` como número, sem movimentação, reserva ou histórico. Uma entidade `StockMovement` auditável é natural e desejável, mas só faz sentido na fase do pedido (Fase 10), que é onde a movimentação passa a ter causa (venda, devolução, ajuste manual).
 
 ### Imagem por variante (hoje é por produto) — **P**
 `ProductImage` pertence ao `Product`, não ao `ProductVariant` (Fase 9, `docs/adr/product-catalog-modeling.md`). Imagem por variante é caso real ("cores diferentes" precisa; "mesmo saco, tamanhos diferentes" quase nunca precisa) mas adiciona complexidade que o domínio de pet shop raramente cobra.
+
+### Teto da busca aplicado antes do recorte de visibilidade — **P**
+A busca ranqueia no máximo 500 ids (9.9/Z9) e o SQL cru **não** filtra `deleted_at`/`status`, porque quem decide visibilidade é o `buildProductWhere` (Z4). Consequência: produto soft-deletado ou em rascunho consome cota do teto, e num catálogo com mais de 500 casamentos para o mesmo termo isso pode empurrar resultado visível para fora. Não morde no volume atual. **Correção quando morder:** paginação por keyset no próprio SQL, ou aceitar repetir `deleted_at IS NULL` lá — que é o primeiro passo da duplicação de "produto visível" que a Z4 recusou, e por isso não se faz sem motivo medido.
+
+### `?q=` nas demais listagens do catálogo — **P**
+A 9.9 põe busca textual **só** em `GET /products` (Z7). `/brands`, `/categories`, `/tags` e `/breeds` continuam sem `?q=`. Não é esquecimento: são listas curtas (dezenas de linhas), onde um `ILIKE` sobre o nome resolveria sem `tsvector`, coluna gerada, índice nem dicionário de lexemas — e replicar a infraestrutura da 9.9 por recurso multiplicaria o custo de manutenção pelo número de tabelas. **Gatilho:** alguém precisar filtrar essas listas por texto na interface; a correção é `ILIKE` com `f_unaccent` (a função já existirá desde a 9.9), não um segundo `tsvector`.
 
 ### Meilisearch/Typesense como motor de busca — **G**
 A Fase 9 decide busca textual no Postgres nativo (`tsvector`+`unaccent`+`pg_trgm`, `docs/adr/text-search.md`), por escolha didática do usuário. Meilisearch/Typesense (typo tolerance por padrão, self-hosted) é a alternativa de mercado quando o volume justificar — custam um container a mais, um pipeline de sincronização produto→índice e uma segunda fonte de verdade que pode divergir do Postgres.

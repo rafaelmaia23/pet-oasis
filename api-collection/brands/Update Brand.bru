@@ -1,0 +1,30 @@
+meta {
+  name: Update Brand
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/brands/{{brandId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Golden Premium"
+  }
+}
+
+docs {
+  Exige manage:catalog-structure. Pelo menos um campo é obrigatório.
+
+  Renomear NÃO mexe no slug (é o ponto da decisão). Para trocá-lo, mande
+  "slug": "golden-premium" no mesmo corpo.
+
+  Marca excluída responde 404 — o PATCH só enxerga linha ativa.
+}

@@ -40,6 +40,11 @@ a cpf).
   8), features `[{id,name,description}]` — junção achatada no service
   (`role.features.map(rf => rf.feature)`).
 - **Feature**: id, name, description.
+- **Breed**: id, name, species — view única (catálogo público, sem campo sensível).
+- **Pet** (9.4): view **única** também, e por um motivo diferente do `Breed` — não há campo da
+  ficha que o funcionário veja e o dono não. O que separa os dois é a autorização de **escopo**
+  (`own` × `:others`), que decide *se* a ficha sai, não *quanto* dela. A raça sai achatada
+  (`breed: {id,name} | null`) em vez de repassar a linha inteira da junção.
 - **Permission**: `/features` = overrides crus `[{granted, grantedAt, updatedAt, role, feature}]`;
   `/permissions` = efetivas `string[]`.
 - **Session** (`GET /auth/sessions`): id, createdAt, expiresAt, ipAddress, `device` e `current`. A
@@ -55,6 +60,44 @@ Exige a feature `read:user` (mesmo padrão de `GET /users/:id`); perfil soft-del
 `null` (não sobe perfil morto); roles aninhadas dentro de `customer`/`employee` em shape enxuto
 (`{id,name,description,appliesTo}`, sem features aninhadas — as capacidades já estão cobertas pelo
 `features` efetivo do topo).
+
+**O id de perfil entrou na 9.4** (`customer.id`/`employee.id`, aqui e na view `owner` de user).
+Não é cosmético: a coleção de pets é aninhada em `/customers/:customerId/pets`, e a decisão de
+**não** ter `/me/pets` (`docs/reference/backlog.md`) se apoiava explicitamente em "o `GET /me` já
+devolve `customer.id`" — que era falso. Sem o campo, o dono não tinha como chegar aos próprios
+pets. Vale a pena registrar o padrão do erro: uma decisão de recorte foi tomada com base numa
+capacidade que se supunha existir e nunca foi conferida no código.
+
+---
+
+## Superfície pública
+
+### A vitrine do catálogo responde sem token (9.1)
+
+`GET /products`, `GET /products/:idOrSlug`, `/categories`, `/brands`, `/tags` e `/breeds` são
+**públicas**. O motivo é o produto, não a técnica: o e-commerce vive de alguém buscar "ração" no
+Google, cair na página do produto sem conta nenhuma e decidir se compra. Login entra só no
+carrinho, na Fase 10. Toda a escrita e todas as rotas de pet continuam autenticadas.
+
+Três consequências, todas herdadas pelas sessões 9.6/9.8:
+
+1. **Nasceu uma autenticação opcional** (implementada na 9.6). `authenticate` era tudo-ou-nada:
+   tolerava header ausente, mas token malformado ou expirado ainda virava 401. A vitrine precisa de
+   um terceiro comportamento — se vier `Bearer`, identifica o ator; se não vier **ou se o token for
+   ruim**, segue anônimo e nunca responde 401. É isso que faz o mesmo `GET /products` devolver a
+   view pública ao visitante e a interna a quem tem `read:product:internal`. Detalhe do desenho em
+   [architecture.md](architecture.md#optionalauthenticate--o-terceiro-modo-para-a-vitrine-pública-96).
+2. **Não existe feature de leitura pública de catálogo.** Não há o que conceder ao cliente para
+   ele ver produto — a role `customer` sai da Fase 9 só com as features de pet. O sufixo
+   `:internal` já significa "acima do baseline", e o baseline aqui é o anônimo.
+3. **Rate limit e cache são por IP, sem identidade.** (O limite entrou na 9.6: balde único
+   `catalog-read` para as quatro leituras públicas — separar por rota daria N orçamentos a um
+   scraper pelo preço de um.) É a primeira leitura em volume do projeto
+   sem ator; o Redis já está disponível para as duas coisas.
+
+A view pública é à prova de vazamento **por definição** (whitelist do presenter), não por
+permissão: sem `costCents`, sem `stockQuantity` exato — disponibilidade como booleano derivado — e
+sem produto `DRAFT`/`DISCONTINUED`.
 
 ---
 
@@ -92,6 +135,20 @@ computado, não uma coleção de recursos).
 
 O **tiebreaker por `id`** na chave do cursor é obrigatório: sem ele, dois registros com o mesmo
 timestamp fazem a borda da página pular ou repetir. Limites e alternativas no ADR
+[`pagination.md`](../adr/pagination.md).
+
+### Ordenação configurável só no offset
+
+`?sort=<campo>&order=asc|desc` (Fase 9.2) existe **só na paginação por offset**: no cursor a chave
+teria que codificar o próprio campo de ordenação, e a limitação segue registrada no backlog.
+
+Cada recurso declara uma **allowlist** que é um mapa *campo → direção natural* — campo fora dela
+morre em **422**, e nome nenhum vindo do request alcança o `orderBy` do Prisma. A direção natural é
+o que responde `?sort=` sem `?order=` (data desce, texto sobe), de modo que `?sort=createdAt` não
+inverte a listagem em relação a não mandar parâmetro. `?order=` sem `?sort=` é **422** nomeando
+`order`: o default do recurso não é um alvo implícito. O **tiebreaker por `id`** passou a ser
+obrigatório também no offset, seguindo a direção pedida — a mesma lição do cursor, que o `GET /users`
+ainda não tinha. Decisões e forma no código no adendo do ADR
 [`pagination.md`](../adr/pagination.md).
 
 ---

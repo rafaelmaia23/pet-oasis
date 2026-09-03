@@ -7,15 +7,36 @@
 
 As rotas de negócio ficam sob **`/api/v1`** (`src/routes/index.ts`). `authenticate` é aplicado **por grupo de rota**, não global:
 
-- **Públicas** (sem `authenticate`): `/status`, `/auth`.
-- **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/features`, `/roles`, `/audit-logs`, `/logs`.
+- **Públicas** (sem `authenticate`): `/status`, `/auth`, `/breeds`.
+- **Públicas com autenticação opcional** (`optionalAuthenticate` no mount, Fase 9.6): `/brands`, `/categories`, `/tags` e `/products` (montado assim já na 9.7, com a leitura chegando na 9.8). Leem sem token e escrevem com feature — `optionalAuthenticate` identifica o ator quando o `Bearer` vem e segue anônimo quando não vem **ou quando o token é ruim**, sem nunca responder 401; quem exige identidade é o `canAccess` das rotas de escrita, dentro do router.
+- **Protegidas** (`authenticate` no mount): `/me`, `/users`, `/users/:userId` (profile + permission), `/customers/:customerId` (pets), `/pets`, `/variants`, `/features`, `/roles`, `/audit-logs`, `/logs`.
 - Exceção: 3 rotas dentro de `/auth` (público) aplicam `authenticate` **inline** na própria definição (`logout`, `GET /sessions`, `DELETE /sessions/:id`).
 
 As rotas de **documentação** (`/openapi.json`, `/reference`) ficam no router de topo, **fora** de `/api/v1` e de `authenticate` — são públicas.
 
+**Vitrine do catálogo (Fase 9.1 / N15):** a leitura de catálogo responde **sem token** — o e-commerce vive de quem chega pelo Google sem conta. `/breeds` (9.3) é pública "seca": não tem escrita nem view por capability, então basta não montar `authenticate`. A taxonomia (9.6) trouxe o middleware de **autenticação opcional**, porque ali leitura pública e escrita sob feature convivem no mesmo router; `/products` entrou nesse grupo já na **9.7**, quando só tinha escrita, e por isso a vitrine da **9.8** foi acréscimo ao router e não remontagem — é também a primeira rota do projeto em que a *forma* da resposta, e não só o acesso, muda com a capability do ator. `/variants` fica do lado protegido — variante não tem leitura pública própria, ela aparece dentro do produto.
+
+**Rate limit da vitrine (Fase 9.6):** as quatro leituras públicas de catálogo (`/breeds`, `/brands`, `/categories`, `/tags`) compartilham um balde **por IP** (`catalogIpLimiter`, rule `catalog-read`) — não há identidade para um balde por usuário. Balde único de propósito: separar por rota daria a um scraper N orçamentos pelo preço de um. `/breeds` subiu na 9.3 sem limiter e foi coberta aqui.
+
+**Estático das imagens (Fase 9.10 / AA2):** `GET /uploads/*` fica no router de topo, **fora** de
+`/api/v1` e de `authenticate` — as imagens são públicas como a vitrine que as exibe. Quem serve é
+o próprio Node (`express.static`), porque o reverse proxy que o ADR pressupunha existe só no
+servidor onde a demo é hospedada, fora deste repositório; servir aqui mantém **um caminho só** em
+dev, test e produção. O volume é bind mount, então passar a servir por `alias` no nginx é
+configuração — o banco guarda a **chave**, nunca a URL.
+
+**Rate limit do upload (Fase 9.10 / AA18):** os três `PUT`/`POST` de imagem compartilham um balde
+**por usuário** (`uploadUserLimiter`, rule `image-upload`) — o primeiro do projeto com chave que
+não é IP nem email. Por IP ele atropelaria o mutirão de cadastro inicial, em que vários
+funcionários saem pelo mesmo NAT; o que ele barra (script bugado, conta comprometida) é
+propriedade de uma conta. `canAccess` roda **antes** dele, para que quem não pode subir imagem
+receba 401/403 sem consumir cota.
+
 Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado; `feature` = exige a feature via `canAccess(...)`.
 
 **Envelope de listagem (Fase 7.7 / D4):** toda rota de **lista** devolve `{ data, meta }` — `meta { page, limit, total }` no offset (`GET /users`), `meta { nextCursor, hasMore }` no cursor (`GET /audit-logs`), `meta {}` nas que não paginam. Exceção: `GET /users/:userId/permissions` segue `string[]` cru.
+
+**Ordenação (Fase 9.2):** listagens por **offset** aceitam `?sort=<campo>&order=asc|desc`, com allowlist própria de cada recurso (campo fora dela → 422; `order` sem `sort` → 422). Omitir `order` usa a direção natural do campo. O cursor não tem ordenação configurável.
 
 ---
 
@@ -57,14 +78,14 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
-| GET `/api/v1/me` | `read:user` | Perfil do usuário autenticado + features efetivas |
+| GET `/api/v1/me` | `read:user` | Perfil do usuário autenticado + features efetivas. `customer.id`/`employee.id` são os ids de **perfil** — é `customer.id` que endereça `/customers/:customerId/pets` (9.4) |
 
 ## User — `src/modules/user/user.routes.ts`
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
 | POST `/api/v1/users` | `create:user` | Cria um usuário employee |
-| GET `/api/v1/users` | `read:user:others` | Lista usuários (offset `?page=&limit=` + filtros `status`/`banned`/`role`) |
+| GET `/api/v1/users` | `read:user:others` | Lista usuários (offset `?page=&limit=` + filtros `status`/`banned`/`role` + ordenação `?sort=createdAt\|name\|email&order=asc\|desc`) |
 | GET `/api/v1/users/:id` | `read:user` | Busca um usuário por id |
 | PATCH `/api/v1/users/:id` | `update:user` | Atualiza um usuário |
 | DELETE `/api/v1/users/:id` | `delete:user` | Soft delete do usuário + invalida sessões |
@@ -144,6 +165,103 @@ nele, então override só volta por `PUT` explícito, que revive a linha soft-de
 |---|---|---|
 | GET `/api/v1/roles` | `read:role` | Lista todas as roles |
 | GET `/api/v1/roles/:id` | `read:role` | Busca uma role por id |
+
+## Breed — `src/modules/breed/breed.routes.ts`
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/breeds` | público | Catálogo de raças. Filtro opcional `?species=DOG\|CAT\|RABBIT\|BIRD\|RODENT\|REPTILE\|FISH` (valor fora do enum → 422); sem paginação (`meta {}`). Só cão e gato têm raça cadastrada — espécie válida sem raça devolve lista vazia, não erro |
+
+## Brand — `src/modules/brand/brand.routes.ts`
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/brands` | público | Marcas ativas, ordenadas por nome; sem paginação (`meta {}`) |
+| POST `/api/v1/brands` | feature `manage:catalog-structure` | Cria marca. `slug` derivado do nome se ausente; nome/slug únicos **globalmente** (linha excluída inclusive) → recriar marca apagada é 409. Nome sem slug utilizável ("!!!") → 422 nomeando `name` |
+| PATCH `/api/v1/brands/:brandId` | feature `manage:catalog-structure` | Atualiza. Renomear **não** re-deriva o slug; mandar `slug` explicitamente é a porta de saída. `logoPath` é recusado no corpo (é do upload, 9.10) |
+| DELETE `/api/v1/brands/:brandId` | feature `manage:catalog-structure` | Soft delete (204). A linha continua ocupando nome e slug. Com **produto ativo vinculado** → **409**, no espelho da categoria: `Product.brandId` não é nulável, então deixar a marca sair a manteria embutida em toda resposta de produto. Produto excluído não segura nada |
+| PUT `/api/v1/brands/:brandId/logo` | feature `manage:catalog-structure` | Upload do logo (multipart, campo `file`). Valor **único**: substitui e apaga o arquivo anterior. Devolve a marca com `logo` nas duas URLs (512/128px). Arquivo disfarçado → 422; acima do teto → 413 |
+| DELETE `/api/v1/brands/:brandId/logo` | feature `manage:catalog-structure` | Remove o logo (204). **Idempotente**: marca sem logo também responde 204 |
+
+## Category — `src/modules/category/category.routes.ts`
+
+**Árvore de no máximo 3 níveis (Fase 9.6 / W1)**, modelando a **função** do produto (`Alimentação > Ração > Ração seca`) — espécie é faceta do produto, nunca nível da árvore. Produto pode vincular a **qualquer nó**, folha ou não (W2).
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/categories` | público | **Árvore aninhada**: `data` traz as raízes, filhas em `children`, ordenadas por `position` e depois nome. Não pagina (`meta {}`) — cortar uma árvore no meio devolveria filho sem pai. Categoria viva com pai excluído sobe para a raiz em vez de sumir |
+| POST `/api/v1/categories` | feature `manage:catalog-structure` | Cria. `parentId` inexistente/excluído ou que criaria um 4º nível → 422. Slug único global + derivado do nome ⇒ homônimas em ramos diferentes colidem em 409; a saída é mandar `slug` |
+| PATCH `/api/v1/categories/:categoryId` | feature `manage:catalog-structure` | Atualiza e/ou move. `parentId: null` promove o nó (e a subárvore) à raiz. Três 422 de `parentId`: si mesma, descendente (ciclo) e estouro de profundidade — este último medindo a **altura da subárvore**, porque o nó movido carrega filhos junto. Responde o nó, com `children` vazio |
+| DELETE `/api/v1/categories/:categoryId` | feature `manage:catalog-structure` | Soft delete de **folha** (204). Com subcategoria ativa **ou com produto ativo vinculado** → **409**: sem cascata e sem reparenting (W3). Desvincular o produto violaria o mínimo de uma categoria por produto (9.7/X7), então a saída é movê-lo; vínculo de produto excluído não segura nada |
+
+## Tag — `src/modules/tag/tag.routes.ts`
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/tags` | público | Tags ordenadas por nome; sem paginação (`meta {}`) |
+| POST `/api/v1/tags` | feature `manage:catalog-structure` | Cria. Só `name` e `slug` — **sem `description`** (rótulo que precisa de explicação é categoria); mandá-la é 422 |
+| PATCH `/api/v1/tags/:tagId` | feature `manage:catalog-structure` | Atualiza; renomear não mexe no slug |
+| DELETE `/api/v1/tags/:tagId` | feature `manage:catalog-structure` | **Hard delete** (204, W5) — a linha some e o nome fica livre. Única assimetria do trio; o audit log é o único registro de que a tag existiu |
+
+## Product — `src/modules/product/product.routes.ts`
+
+`Product` é a identidade comercial e `ProductVariant` a unidade vendável: **todo produto tem ≥1 variante**, e exatamente uma delas é a default. Leitura pública (9.8) e escrita sob feature (9.7) no mesmo router.
+
+A view da resposta é escolhida pelo **ator**, não pela rota, e são **três** em escada (9.8/Y9):
+
+| view | destravada por | acrescenta |
+|---|---|---|
+| `public` | ninguém — inclusive o visitante anônimo | preço, marca, taxonomia e `inStock` (booleano derivado) |
+| `internal` | `read:product:internal` | `stockQuantity` exato, o campo `status` e os produtos DRAFT/DISCONTINUED |
+| `cost` | `read:product:cost` | `costCents` — e **implica** a visão interna |
+
+Isso vale também para quem acabou de escrever: um autor sem `read:product:cost` não vê a margem do produto que criou.
+
+**Busca textual (Fase 9.9):** `?q=` é o único filtro que não é igualdade. O corpus é **nome (peso A), descrição (peso C) e nome da marca** — tag fica de fora porque já é filtro próprio, e SKU tem **curto-circuito de casamento exato** (código impresso na caixa, digitado inteiro) em vez de entrar no vetor. Erro de digitação é tolerado por **reescrita da query**: cada palavra que não existe no dicionário de lexemas do catálogo é trocada pela mais parecida (`pg_trgm`) antes de a busca rodar, e o termo efetivamente usado volta ecoado no `meta`. O SQL cru **só ranqueia**: a visibilidade continua saindo do mesmo `where` da listagem, então rascunho e produto excluído não vazam pela busca. Palavra criada depois do último `npm run db:refresh-search` é achada literalmente, mas ainda não corrige typo. O termo é `trim`ado; vazio depois do trim, com menos de 2 ou mais de 100 caracteres → **422** nomeando `q`. Ter `?q=` troca o default da ordenação para **relevância**; com `?sort=` explícito, os dois compõem. Racional em [`../adr/text-search.md`](../adr/text-search.md).
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| GET `/api/v1/products` | **pública** (view pela capability) | Listagem paginada por offset, ordenável (`?sort=price\|name\|createdAt&order=`, default `createdAt` desc) e filtrável: `?species=` (casa também com quem não tem espécie marcada, Y5), `?category=` (slug — **inclui as descendentes**, W2), `?tag=` (slug, repetível, **interseção**, Y6), `?brand=` (slug), `?minPrice=`/`?maxPrice=` (centavos — filtra **pelas variantes**: o produto entra se alguma couber), `?inStock=`, `?q=` (busca textual, ver acima), `?status=` (**ignorado em silêncio** para quem não tem `read:product:internal`, Y1). `?sort=price` ordena pelo **menor preço entre as variantes ativas** (Y3). Cada item traz **só a capa** (`image: { thumbUrl, fullUrl } | null`) — o array ordenado de imagens é do detalhe, porque uma lista de 20 produtos com 8 imagens cada seria 160 pares de URL para mostrar 20 miniaturas. Faixa de preço **com** `?inStock=true` exige a **mesma** variante nas duas condições — "até R$ 20 e disponível" pergunta o que dá para comprar, e o produto cuja variante barata está esgotada não responde a isso; `?inStock=false` continua sendo do produto ("esgotado" = nenhuma variante em estoque). Slug de taxonomia inexistente é filtro, não erro: `total: 0`, nunca 404 |
+| GET `/api/v1/products/:idOrSlug` | **pública** (view pela capability) | Detalhe com as variantes ativas, a default primeiro. O path aceita **id ou slug**: valor com forma de UUID é id, o resto é slug — e a escrita recusa slug com forma de UUID (Y2), então não há caso ambíguo. Produto fora do conjunto visível do ator é **404**, com a mesma mensagem de inexistente (Y8): 403 confirmaria o slug do rascunho para qualquer visitante |
+| POST `/api/v1/products` | feature `manage:product` | Cria produto **com** suas variantes (`variants` min 1, X3) e vínculos, numa transação. `categories` exige min 1 (X7); `tags` é opcional; `targetSpecies` vazio = qualquer espécie. `slug` derivado do nome se ausente e único global (409 na colisão, inclusive contra produto excluído); nome cujo slug derivado sai com **forma de UUID** → 422 nomeando `name`, pelo mesmo motivo que o slug explícito é recusado (Y2). Id repetido em `categories` ou `tags` → **422** nomeando o campo, nunca o 409 da chave composta. SKU repetido dentro do corpo → 422 nomeando `variants`; SKU já usado no banco → 409. Duas variantes marcadas default → 422; nenhuma marcada → a primeira é promovida (X5) |
+| PATCH `/api/v1/products/:productId` | feature `manage:product` | Atualiza. Renomear **não** re-deriva o slug (W4). `categories`/`tags` são **substituição total**: o array enviado vira o conjunto, campo ausente preserva o atual, `categories: []` → 422. `variants` não é aceito (variante tem rotas próprias) |
+| DELETE `/api/v1/products/:productId` | feature `manage:product` | Soft delete (204) **com cascata nas variantes**, um único timestamp para as duas tabelas (X8). Nome, slug e SKUs continuam ocupados; o audit registra `cascadedVariants`. Os **arquivos de imagem são preservados** (AA16) — produto restaurado voltaria em branco |
+| POST `/api/v1/products/:productId/images` | feature `manage:product` | Sobe **uma** imagem (multipart, campo `file`). Entra no fim da fila; **posição 0 é a capa**. Teto de 8 por produto → a nona é 422; acima do teto de tamanho → 413. Formato conferido pelos **bytes**, nome do arquivo enviado é descartado. Devolve a imagem criada (1600/400px) |
+| PATCH `/api/v1/products/:productId/images/order` | feature `manage:product` | Reordena por **array completo** de ids (`{ images: [...] }`). Idempotente. Conjunto incompleto ou id repetido → 422; id de imagem de outro produto → 404 |
+| DELETE `/api/v1/products/:productId/images/:imageId` | feature `manage:product` | **Hard delete** (204): a linha some junto com os arquivos. As posições restantes são compactadas — apagar a capa promove a seguinte. Imagem de outro produto → **404**, indistinguível de id inventado (AA11) |
+
+## Product variant — `src/modules/product/product.variant.routes.ts`
+
+**Coleção aninhada, recurso plano** — mesmo racional dos pets: criar precisa do produto na URL, o item é global por UUID.
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| POST `/api/v1/products/:productId/variants` | feature `manage:product` | Cria variante. `sku` é unique **global**, valendo para a variante excluída (X1) → duplicata é 409. `isDefault: true` rebaixa a default anterior na mesma transação |
+| PATCH `/api/v1/variants/:variantId` | feature `manage:product` **e/ou** `manage:stock` | A feature é exigida **por campo presente** (X4): `stockQuantity` pede `manage:stock`, qualquer outro campo pede `manage:product`, corpo misto pede as duas — é o que deixa o repositor contar prateleira sem editar o catálogo. `stockQuantity` negativo → 422 (X2). `isDefault` só aceita `true`: rebaixar sem eleger outra é 422. Ajuste de estoque vira ação própria no audit (`PRODUCT_STOCK_ADJUSTED`, com `from`/`to`) |
+| DELETE `/api/v1/variants/:variantId` | feature `manage:product` | Soft delete (204). **409** quando é a última variante ativa do produto (X6) — decidido sob lock da linha do produto, então dois `DELETE` simultâneos não conseguem zerar as variantes — para tirar o produto de circulação use `status: DISCONTINUED` ou exclua o produto. Se a excluída era a default, a mais antiga entre as restantes é promovida |
+
+## Pet — `src/modules/pet/pet.routes.ts` e `pet.customer.routes.ts`
+
+**Coleção aninhada, recurso plano (Fase 9.4 / N4):** o `POST`/`GET` moram sob o cliente porque ali o pai é parte da identificação — é *onde* o pet nasce. O item é plano porque `petId` é UUID global: repetir o `customerId` no caminho seria redundante, e redundante pode **discordar** do dono real, obrigando a inventar uma regra para um caso que só a rota criou.
+
+**`:customerId` é o id do perfil** (`Customer.id`), não o do usuário — `GET /me` o devolve em `customer.id`. Não há `/me/pets` nesta fase (backlog).
+
+**Escopo em duas etapas:** `canAccess` admite dono e staff indistintamente (forma frouxa de `can`); quem separa é o service. Como o dono só é conhecido depois do banco, o alvo **inexistente falha fechado** — sem `:others`, responde **403**, não 404, senão a rota vira oráculo de existência de `customerId`/`petId`. A exceção é `GET /pets` (9.5), que exige `read:pet:others` **direto na rota** — listar pet de terceiro é a definição dela, e por isso o service nem recebe ator.
+
+**Duas coleções, um paginado só:** `GET /customers/:customerId/pets` **não pagina** (`meta {}`, classe de `GET /users/:userId/roles`) porque a coleção já é limitada pelo dono e o critério ali é afetivo — pet falecido continua na lista. `GET /pets` pagina por offset porque é lista operacional sobre a base inteira. Quem quer os pets de um cliente **paginados** usa `GET /pets?customerId=`.
+
+| Método + Path | Auth | Descrição |
+|---|---|---|
+| POST `/api/v1/customers/:customerId/pets` | `manage:pet` \| `manage:pet:others` | Cadastra um pet para o cliente. Espécie em `SPECIES_WITH_BREED` (cão, gato) **exige** `breedId`; as demais o **proíbem**; raça de outra espécie → 422 — os três nomeiam `breedId`. `microchipId` duplicado → 409 (unique global) |
+| GET `/api/v1/customers/:customerId/pets` | `read:pet` \| `read:pet:others` | Pets do cliente, sem paginação (`meta {}`), `createdAt desc` com desempate por `id`. Pet **falecido continua na lista**; excluído, não |
+| GET `/api/v1/pets` | `read:pet:others` | Listagem geral (balcão), **paginada por offset** e ordenável (`?sort=createdAt\|name\|species&order=asc\|desc`). Filtros: `species`, `sex`, `customerId`, `breedId`, `microchipId`, `neutered`, `deceased`. `customerId`/`breedId` são **filtro**, não resolução de recurso — id bem-formado inexistente devolve lista vazia, nunca 404 |
+| GET `/api/v1/pets/:petId` | `read:pet` \| `read:pet:others` | Detalhe do pet, com a raça achatada (`{ id, name }` ou `null`) |
+| PATCH `/api/v1/pets/:petId` | `manage:pet` \| `manage:pet:others` | Atualiza a ficha. `customerId` (transferência é backlog), `deceasedAt` (rota própria) e `photoPath` (upload, 9.10) → 422. `species` **é** editável e revalida a raça sobre o estado resultante |
+| DELETE `/api/v1/pets/:petId` | `manage:pet` \| `manage:pet:others` | Soft delete (204) |
+| PUT `/api/v1/pets/:petId/photo` | `manage:pet` \| `manage:pet:others` | Upload da foto (multipart, campo `file`). Valor **único**: substitui e apaga o arquivo anterior. Devolve a **ficha do pet** com `photo` nas duas URLs (800/200px) — não existe recurso "foto de pet" endereçável. EXIF removido, inclusive a geolocalização |
+| DELETE `/api/v1/pets/:petId/photo` | `manage:pet` \| `manage:pet:others` | Remove a foto (204). **Idempotente**: pet sem foto também responde 204 |
+| POST `/api/v1/pets/:petId/deceased` | `manage:pet` \| `manage:pet:others` | Registra o falecimento (204). Idempotente — remarcar não reescreve a data. `deceasedAt` ≠ `deletedAt`: o pet **permanece** na lista do dono |
+| DELETE `/api/v1/pets/:petId/deceased` | `manage:pet` \| `manage:pet:others` | Desfaz o registro feito no pet errado (204) |
 
 ## Audit log — `src/modules/audit-log/audit-log.routes.ts`
 

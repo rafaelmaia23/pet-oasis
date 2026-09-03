@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { buildPet } from "@tests/factories/pet.factory";
 import {
   attachOverrides,
   buildCustomer,
@@ -515,6 +516,125 @@ describe("GET /api/v1/users", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expectValidationError(response, ["status"]);
+  });
+
+  // ── Ordenação configurável (Fase 9.2) ────────────────────────────────────
+  it("should sort by an allowlisted field ascending", async () => {
+    const admin = await buildEmployee({
+      roleNames: ["manager"],
+      data: { name: "Bruno Sorter" },
+    });
+    const first = await buildCustomer({ data: { name: "Ana Sorter" } });
+    const last = await buildCustomer({ data: { name: "Carla Sorter" } });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?sort=name&order=asc")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    const ids = response.body.data.map((u: { id: string }) => u.id);
+    expect(ids.indexOf(first.id)).toBeLessThan(ids.indexOf(admin.id));
+    expect(ids.indexOf(admin.id)).toBeLessThan(ids.indexOf(last.id));
+  });
+
+  it("should sort by an allowlisted field descending", async () => {
+    const admin = await buildEmployee({
+      roleNames: ["manager"],
+      data: { name: "Bruno Sorter" },
+    });
+    const first = await buildCustomer({ data: { name: "Ana Sorter" } });
+    const last = await buildCustomer({ data: { name: "Carla Sorter" } });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?sort=name&order=desc")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    const ids = response.body.data.map((u: { id: string }) => u.id);
+    expect(ids.indexOf(last.id)).toBeLessThan(ids.indexOf(admin.id));
+    expect(ids.indexOf(admin.id)).toBeLessThan(ids.indexOf(first.id));
+  });
+
+  it("should keep createdAt desc as the default order when no sort is given", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+    const older = await buildCustomer();
+    const newer = await buildCustomer();
+
+    await prisma.user.update({
+      where: { id: older.id },
+      data: { createdAt: new Date("2020-01-01T00:00:00.000Z") },
+    });
+    await prisma.user.update({
+      where: { id: newer.id },
+      data: { createdAt: new Date("2030-01-01T00:00:00.000Z") },
+    });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    const ids = response.body.data.map((u: { id: string }) => u.id);
+    expect(ids.indexOf(newer.id)).toBeLessThan(ids.indexOf(older.id));
+  });
+
+  it("should reject a sort field outside the allowlist with 422", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?sort=passwordHash")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["sort"]);
+  });
+
+  it("should reject order without sort with 422", async () => {
+    const admin = await buildEmployee({ roleNames: ["manager"] });
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const response = await request(app)
+      .get("/api/v1/users?order=asc")
+      .set("Authorization", `Bearer ${token}`);
+
+    expectValidationError(response, ["order"]);
+  });
+
+  it("should not skip nor repeat rows that share the sort value (id tiebreaker)", async () => {
+    // Todos com o MESMO nome: sem tiebreaker por id o Postgres pode devolver
+    // ordens diferentes a cada página, repetindo e omitindo linhas.
+    const sameName = "Homônimo Sorter";
+    const admin = await buildEmployee({
+      roleNames: ["manager"],
+      data: { name: sameName },
+    });
+    for (let i = 0; i < 4; i++) {
+      await buildCustomer({ data: { name: sameName } });
+    }
+
+    const token = await loginAs(admin.email, admin.password);
+
+    const seen: string[] = [];
+    for (const page of [1, 2, 3]) {
+      const response = await request(app)
+        .get(`/api/v1/users?sort=name&order=asc&page=${page}&limit=2`)
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.meta.total).toBe(5);
+      seen.push(...response.body.data.map((u: { id: string }) => u.id));
+    }
+
+    expect(seen).toHaveLength(5);
+    expect(new Set(seen).size).toBe(5);
   });
 });
 
@@ -1446,6 +1566,38 @@ describe("DELETE /api/v1/users/:id", () => {
     });
 
     expect(untouched.deletedAt?.getTime()).toBe(earlier.getTime());
+  });
+
+  it("should cascade down to the pets of the customer profile (9.4)", async () => {
+    const admin = await buildEmployee({ roleNames: ["admin"] });
+    const target = await buildHybrid({ employeeRoles: ["attendant"] });
+
+    assert(target.customer !== null, "o perfil de cliente deveria existir");
+
+    const pet = await buildPet(target.customer.id);
+
+    const token = await loginAs(admin.email, admin.password);
+
+    await request(app)
+      .delete(`/api/v1/users/${target.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const deletedUser = await prisma.user.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    const petInDb = await prisma.pet.findUniqueOrThrow({
+      where: { id: pet.id },
+    });
+
+    // D1 não admite filho ativo de pai morto — e o timestamp é um só por
+    // transação (D4), que é a chave de correlação da restauração.
+    assert(deletedUser.deletedAt !== null, "a conta deveria estar deletada");
+    expect(petInDb.deletedAt?.getTime()).toBe(deletedUser.deletedAt.getTime());
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "USER_DELETED", targetId: target.id },
+    });
+    expect(audit?.metadata).toMatchObject({ cascadedPets: 1 });
   });
 });
 

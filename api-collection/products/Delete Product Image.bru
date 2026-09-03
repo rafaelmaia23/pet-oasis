@@ -1,0 +1,25 @@
+meta {
+  name: Delete Product Image
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/products/{{productId}}/images/{{imageId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:product. Responde 204.
+
+  HARD delete — a linha some junto com os dois arquivos do disco. É a única
+  tabela de domínio do projeto sem soft delete: imagem é asset, não fato de
+  negócio, e uma linha soft-deletada apontando para arquivo apagado seria pior
+  que um órfão.
+
+  As posições restantes são compactadas: apagar a capa promove a próxima.
+
+  Imagem de OUTRO produto responde 404 e não 422 — o path nomeia um recurso que
+  de fato não existe, e explicar o descasamento confirmaria a existência dela.
+}

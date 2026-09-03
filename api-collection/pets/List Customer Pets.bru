@@ -1,0 +1,18 @@
+meta {
+  name: List Customer Pets
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/customers/{{customerId}}/pets
+  body: none
+  auth: inherit
+}
+
+docs {
+  Sem paginação: o envelope sai com meta vazio, como em /roles e /features —
+  a coleção já é limitada pelo dono. Quem pagina é o GET /pets da fase 9.5.
+
+  Pet falecido CONTINUA na lista (deceasedAt preenchido); pet excluído, não.
+}

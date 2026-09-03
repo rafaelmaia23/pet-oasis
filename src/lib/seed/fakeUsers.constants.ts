@@ -1,13 +1,16 @@
-import { en, Faker } from "@faker-js/faker";
 import type { RoleName } from "@/modules/role/role.constants";
-
-// Instância própria (não o `faker` singleton compartilhado com os testes) —
-// evita que semear com seed fixo mude o stream de valores que os testes
-// consomem do `faker` global em outros arquivos.
-const fakerSeed = new Faker({ locale: [en] });
-fakerSeed.seed(20260803);
+import { seededFaker } from "./seedFaker";
 
 const FAKE_EMAIL_DOMAIN = "fake.petoasis.dev";
+
+/**
+ * O email de um fake, a partir do seu slug. Único lugar que conhece o domínio —
+ * `fakePets.constants.ts` amarra os pets aos donos por esta função, e não
+ * repetindo a string.
+ */
+export function fakeEmail(slug: string): string {
+  return `${slug}@${FAKE_EMAIL_DOMAIN}`;
+}
 
 export type FakeUserTrait =
   | "NONE"
@@ -50,11 +53,14 @@ function fakeCustomer(
   slug: string,
   trait: FakeUserTrait = "NONE",
 ): FakeCustomerDefinition {
+  const email = fakeEmail(slug);
+  const faker = seededFaker(email);
+
   return {
     kind: "CUSTOMER",
-    email: `${slug}@${FAKE_EMAIL_DOMAIN}`,
-    name: fakerSeed.person.fullName(),
-    phone: fakerSeed.phone.number({ style: "international" }),
+    email,
+    name: faker.person.fullName(),
+    phone: faker.phone.number({ style: "international" }),
     trait,
   };
 }
@@ -64,10 +70,12 @@ function fakeEmployee(
   roleNames: RoleName[],
   trait: FakeUserTrait = "NONE",
 ): FakeEmployeeDefinition {
+  const email = fakeEmail(slug);
+
   return {
     kind: "EMPLOYEE",
-    email: `${slug}@${FAKE_EMAIL_DOMAIN}`,
-    name: fakerSeed.person.fullName(),
+    email,
+    name: seededFaker(email).person.fullName(),
     roleNames,
     trait,
   };
@@ -78,26 +86,32 @@ function fakeHybrid(
   employeeRoleNames: RoleName[],
   trait: FakeUserTrait = "NONE",
 ): FakeHybridDefinition {
+  const email = fakeEmail(slug);
+  const faker = seededFaker(email);
+
   return {
     kind: "HYBRID",
-    email: `${slug}@${FAKE_EMAIL_DOMAIN}`,
-    name: fakerSeed.person.fullName(),
-    phone: fakerSeed.phone.number({ style: "international" }),
+    email,
+    name: faker.person.fullName(),
+    phone: faker.phone.number({ style: "international" }),
     employeeRoleNames,
     trait,
   };
 }
 
 /**
- * Roster declarativo do dataset fake (flag `SEED_FAKE_DATA`) — identidade
- * fixa por email (chave de idempotência em `seedFakeUsers.ts`); nome/telefone
- * vêm de uma instância de faker com seed fixo (mais consistente entre
- * execuções, mas não é o que garante a idempotência — só o email fixo é).
- * CPF é gerado à parte, em `seedFakeUsers.ts`, só na criação (não precisa ser
- * estável: uma vez criado, reruns não tocam mais o registro).
+ * Roster declarativo do dataset fake (flag `SEED_FAKE_DATA`) — identidade fixa
+ * por email (chave de idempotência em `seedFakeUsers.ts`). CPF é gerado à
+ * parte, em `seedFakeUsers.ts`, só na criação (não precisa ser estável: uma vez
+ * criado, reruns não tocam mais o registro).
  *
- * Quando a Fase 9 chegar, um `fakePets.constants.ts` no mesmo diretório segue
- * o mesmo padrão, amarrado a estes customers pelo email fixo.
+ * Nome e telefone vêm de um `faker` semeado pelo **email** de cada entrada, não
+ * de uma instância sequencial (9.11/AB13): a ordem do array deixou de importar,
+ * então acrescentar ou reordenar entrada não muda mais o nome de todas as
+ * seguintes. Isso não é o que garante a idempotência — só o email fixo é.
+ *
+ * Os pets ficam em `fakePets.constants.ts`, amarrados a estes customers pelo
+ * mesmo email fixo.
  */
 export const FAKE_USER_ROSTER: FakeUserDefinition[] = [
   // Volume simples para popular listas paginadas.
@@ -109,6 +123,11 @@ export const FAKE_USER_ROSTER: FakeUserDefinition[] = [
   fakeEmployee("employee03", ["attendant"]),
   fakeEmployee("employee04", ["manager"]),
   fakeEmployee("employee05", ["manager"]),
+  // Um funcionário de cada role nova da 9.1: sem eles `stockist` e
+  // `catalog-manager` existem só no seed de roles e ninguém consegue
+  // exercitá-las em dev nem na demo.
+  fakeEmployee("employee06", ["stockist"]),
+  fakeEmployee("employee07", ["catalog-manager"]),
 
   // Híbridos — customer e employee no mesmo user (Fase 2: "adicionar perfil").
   fakeHybrid("hybrid01", ["attendant"]),

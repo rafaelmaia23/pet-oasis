@@ -1,3 +1,4 @@
+import { buildPet } from "@tests/factories/pet.factory";
 import {
   attachOverrides,
   buildCustomer,
@@ -448,6 +449,36 @@ describe("POST /api/v1/auth/confirm-account-reactivation", () => {
     const serialized = JSON.stringify([requested, completed]);
     expect(serialized).not.toContain(target.email);
     expect(serialized).not.toContain(target.cpf);
+  });
+
+  it("should bring the pets back with the reactivated customer profile (9.4)", async () => {
+    // Pet acompanha `UserRole`, não `UserFeature`: a restauração para no que é
+    // privilégio, e a ficha do pet não é.
+    const target = await buildCustomer();
+
+    assert(target.customer !== null, "o perfil de cliente deveria existir");
+    const pet = await buildPet(target.customer.id);
+
+    await softDeleteUserAndInvalidateSessions(target.id);
+
+    expect(
+      (await prisma.pet.findUniqueOrThrow({ where: { id: pet.id } })).deletedAt,
+    ).not.toBeNull();
+
+    await signupReclaiming(target);
+    await confirm({
+      token: tokenFromLastEmail(),
+      newPassword: makePassword(),
+    });
+
+    expect(
+      (await prisma.pet.findUniqueOrThrow({ where: { id: pet.id } })).deletedAt,
+    ).toBeNull();
+
+    const completed = await prisma.auditLog.findFirstOrThrow({
+      where: { action: "ACCOUNT_REACTIVATION_COMPLETED", targetId: target.id },
+    });
+    expect(completed.metadata).toMatchObject({ restoredPets: 1 });
   });
 
   it("should never bring an override back, whatever killed it (D6')", async () => {

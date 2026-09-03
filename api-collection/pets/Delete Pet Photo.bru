@@ -1,0 +1,18 @@
+meta {
+  name: Delete Pet Photo
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{baseUrl}}/pets/{{petId}}/photo
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:pet. Apaga o arquivo e limpa a coluna.
+
+  IDEMPOTENTE: pet sem foto responde 204, não 404 — o estado desejado já é o
+  atual, e um 404 aqui só obrigaria o cliente a tratar um caso que não é erro.
+}

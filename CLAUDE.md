@@ -89,7 +89,7 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 - Junção do Prisma sempre aninha (`user.roles` = `UserRole[]` com `.role` dentro); achate no service ou espelhe na view.
 - `snake_case` no banco via `@map`; camelCase no código.
 - Valores monetários em inteiro-**centavos** (`priceCents`, nunca `Decimal`/float); peso em inteiro-**gramas** (`weightGrams`). Mesmo racional dos dois: aritmética inteira, sem bug de ponto flutuante, sem `Decimal` do Prisma contaminando serialização/Zod.
-- SQL cru (necessário só para busca textual com `tsvector`/`pg_trgm`, Fase 9) vive **exclusivamente no repository**, via `$queryRaw` com template parametrizado — nunca concatenação, nunca fora dessa camada. Ver `docs/adr/text-search.md`.
+- SQL cru vive **exclusivamente no repository**, via `$queryRaw` com template parametrizado — nunca concatenação, nunca fora dessa camada. Só é escrito quando o Prisma não expressa o que se precisa, e hoje isso acontece em **três** pontos: a busca textual (`tsvector`/`pg_trgm`, Fase 9.9 — ver `docs/adr/text-search.md`) e dois locks de linha `SELECT ... FOR UPDATE` sobre o produto — o que serializa a atribuição de posição das imagens (Fase 9.10) e o que serializa a exclusão da última variante ativa (Fase 9.12). Ponto novo de SQL cru é decisão a justificar, não rotina.
 
 ## Comandos
 
@@ -115,7 +115,9 @@ Se perceber a necessidade de um script que não existe — algo que você (ou o 
 
 O estado atual, a ordem das tarefas e o que vem a seguir vivem em **`docs/todo.md`**. Consulte-o antes de começar qualquer tarefa para saber o próximo item e o que já está feito. Mantenha-o atualizado conforme concluir tarefas.
 
-**Forma de registro no `docs/todo.md`:** a fase **em execução** fica expandida (passo-a-passo, decisões de kickoff, pendências `🔸`); a fase **fechada** é destilada num resumo de poucos bullets. Ao fechar uma fase, essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas migram para o arquivo temático de `docs/context/` (ou o ADR correspondente) **antes** de o expandido ser removido — nunca apague detalhe que só existe ali. O detalhe de execução permanece recuperável no histórico do git.
+**Forma de registro no `docs/todo.md`:** a fase **em execução** fica expandida (passo-a-passo, decisões de kickoff, pendências `🔸`); a fase **fechada** é destilada num resumo de poucos bullets, no fecho da **própria** fase — não se espera a seguinte. Essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas migram para o arquivo temático de `docs/context/` (ou o ADR correspondente) **antes** de o expandido ser removido — nunca apague detalhe que só existe ali. O molde das duas formas está em `docs/guides/todo-phases.md`; o detalhe de execução permanece recuperável no histórico do git.
+
+**Onde mora cada tipo de documento:** `.scratch/` (fora do git) é rascunho — ideia crua, brainstorming, material de grilling; `docs/specs/` é a spec em negociação de uma fase ou esforço, **apagada no fecho** com o *porquê* promovido a ADR ou a `docs/context/`. **Documento permanente nunca cita documento efêmero**: ADR, `docs/context/`, `README.md`, este arquivo e comentário de `src/` não referenciam `.scratch/` nem `docs/specs/` — só o `docs/todo.md` aponta para a spec da fase aberta, e o `npm run docs:check` reprova quem esquecer. O mapa completo, da ideia ao código, está em `docs/README.md`.
 
 ## ⚠️ REGRA — Como ler o contexto: pelo índice, nunca inteiro
 
@@ -145,7 +147,7 @@ Quando terminar um trabalho e sobrar algo pendente para uma etapa/sessão **futu
 
 O **Ciclo 1 (fundação) está fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de conta, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação.
 
-O **Ciclo 2 abre o domínio do pet shop**: a Fase 9 traz pets (ligados a `Customer`) e catálogo (produto/variante, marca, categoria, tag, busca textual, upload de imagem), ainda **sem checkout**; a Fase 10 traz carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro).
+O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por capability), ainda **sem checkout**. A **Fase 10** traz carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro).
 
 ---
 

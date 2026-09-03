@@ -1,0 +1,71 @@
+meta {
+  name: Create Product
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/products
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Ração Golden Adulto",
+    "description": "Ração seca para cães adultos de porte médio, sabor frango.",
+    "brandId": "{{brandId}}",
+    "categories": ["{{categoryId}}"],
+    "tags": ["{{tagId}}"],
+    "targetSpecies": ["DOG"],
+    "status": "ACTIVE",
+    "variants": [
+      {
+        "sku": "GOLDEN-AD-15KG",
+        "label": "15 kg",
+        "priceCents": 24990,
+        "costCents": 18000,
+        "stockQuantity": 12,
+        "weightGrams": 15000
+      },
+      {
+        "sku": "GOLDEN-AD-1KG",
+        "label": "1 kg",
+        "priceCents": 2990,
+        "stockQuantity": 30,
+        "weightGrams": 1000
+      }
+    ]
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("productId", res.getBody().id);
+    bru.setVar("variantId", res.getBody().variants[0].id);
+  }
+}
+
+docs {
+  Exige manage:product — as roles catalog-manager e manager a têm; stockist NÃO.
+
+  Rode "Create Brand", "Create Category" e "Create Tag" antes: eles gravam
+  brandId, categoryId e tagId, que esta requisição consome. A marca é
+  OBRIGATÓRIA e o produto precisa de pelo menos UMA categoria.
+
+  O produto nasce com suas variantes na mesma transação: "variants" tem mínimo
+  de 1, porque produto sem variante não é vendável. Quando nenhuma variante vem
+  com "isDefault": true, a primeira é promovida; duas marcadas respondem 422.
+
+  targetSpecies vazio significa "serve a qualquer espécie", não "nenhuma".
+
+  O slug é derivado do nome e congelado (mande "slug" para controlá-lo). Slug e
+  SKU são únicos GLOBALMENTE, inclusive contra linhas já excluídas — repetir
+  responde 409. SKU repetido dentro do próprio corpo responde 422.
+
+  costCents só volta na resposta para quem tem read:product:cost.
+}

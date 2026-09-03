@@ -32,6 +32,37 @@ const SCANNED_EXTENSIONS = [".md", ".ts", ".json", ".yml", ".yaml", ".bru"];
  */
 const DISSOLVED_DOCS = new Set(["docs/fase-8-redesign.md"]);
 
+/**
+ * Documento **efêmero** — rascunho em `.scratch/` (fora do git) ou spec em
+ * `docs/specs/` — não pode ser citado por documento permanente (9.12/AC5).
+ *
+ * A regra existe porque ela já falhou por disciplina: um ADR citava um `§` de
+ * um documento de planejamento escrito para ser descartável, e o link
+ * sobreviveu a uma revisão. Pior: um caminho de `.scratch/` **existe** na
+ * máquina de quem escreveu e em nenhuma outra, então a checagem de existência
+ * não o pegaria nunca.
+ *
+ * Casa só a citação de um **arquivo**; nomear o diretório é legítimo (é o que
+ * o mapa e os guias fazem ao descrever o layout).
+ */
+const EPHEMERAL_DOC = /(?:\.scratch\/[\w.-]+\.[\w]+|docs\/specs\/[\w.-]+\.md)/g;
+
+/**
+ * Quem pode citar documento efêmero. Cada entrada tem um motivo, e um motivo
+ * que deixa de valer é entrada que sai:
+ *
+ * - `docs/todo.md` — é o tracker, e efêmero também: enquanto a fase está
+ *   aberta, ele aponta para a spec dela em vez de repeti-la.
+ * - `docs/README.md` — o mapa da documentação; os caminhos ali são o desenho
+ *   do fluxo, não referência a um documento que exista.
+ * - este próprio arquivo — os padrões acima são dados, não citação.
+ */
+const MAY_CITE_EPHEMERAL = new Set([
+  "docs/todo.md",
+  "docs/README.md",
+  "tools/check-docs-links.ts",
+]);
+
 type Problem = { file: string; line: number; message: string };
 
 /**
@@ -107,6 +138,7 @@ function report(file: string, line: number, message: string): void {
 for (const file of collectFiles(ROOT)) {
   const lines = readFileSync(file, "utf8").split("\n");
   const isMarkdown = file.endsWith(".md");
+  const mayCiteEphemeral = MAY_CITE_EPHEMERAL.has(relative(ROOT, file));
 
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
@@ -137,6 +169,16 @@ for (const file of collectFiles(ROOT)) {
       if (!exists(join(ROOT, target))) {
         report(file, lineNumber, `caminho inexistente: ${target}`);
       }
+    }
+
+    if (mayCiteEphemeral) return;
+
+    for (const match of line.matchAll(EPHEMERAL_DOC)) {
+      report(
+        file,
+        lineNumber,
+        `documento permanente citando efêmero: ${match[0]} — promova o conteúdo a ADR ou a docs/context/ e cite o destino`,
+      );
     }
   });
 }

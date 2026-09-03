@@ -1,0 +1,44 @@
+meta {
+  name: Create Category
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/categories
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Alimentação",
+    "description": "Tudo que o pet come.",
+    "position": 0
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("categoryId", res.getBody().id);
+  }
+}
+
+docs {
+  Exige manage:catalog-structure.
+
+  Categoria modela a FUNÇÃO do produto (Alimentação > Ração > Ração seca),
+  nunca a espécie — espécie é faceta do produto (targetSpecies), fora da árvore.
+
+  Para criar uma subcategoria, mande "parentId": "{{categoryId}}". A árvore tem
+  no máximo TRÊS níveis: um quarto nível responde 422 nomeando parentId. Pai
+  inexistente ou excluído também é 422.
+
+  O slug é derivado do nome e congelado. Como ele é único globalmente, duas
+  categorias com o mesmo nome em ramos diferentes colidem em 409 — mande
+  "slug" explicitamente para contornar.
+}

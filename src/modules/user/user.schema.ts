@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ProfileKind, UserStatus } from "@/generated/prisma/enums";
-import { offsetQuerySchema } from "@/lib/pagination";
+import { buildOffsetQuerySchema, defineSortConfig } from "@/lib/pagination";
 import { ROLE_NAMES } from "@/modules/role/role.constants";
 
 export const passwordSchema = z
@@ -120,8 +120,17 @@ export const reactivateAccountSchema = z.object({
   }),
 });
 
+/**
+ * Allowlist de ordenação de `GET /users`. A direção declarada é a natural de
+ * cada campo (usada quando vem `?sort=` sem `?order=`): data desce, texto sobe.
+ */
+export const USER_SORT = defineSortConfig({
+  fields: { createdAt: "desc", name: "asc", email: "asc" },
+  default: "createdAt",
+});
+
 export const listUsersSchema = z.object({
-  query: offsetQuerySchema.extend({
+  query: buildOffsetQuerySchema(USER_SORT, {
     status: z
       .enum(UserStatus)
       .optional()

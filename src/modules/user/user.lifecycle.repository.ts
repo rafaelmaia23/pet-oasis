@@ -29,7 +29,33 @@ export type CascadeCounts = {
   profiles: number;
   roles: number;
   overrides: number;
+  pets: number;
 };
+
+/**
+ * Pets do perfil de cliente (9.4) — o primeiro filho de **domínio** do grafo,
+ * ao lado do ramo de autorização.
+ *
+ * Entra na cascata porque D1 não admite filho ativo de pai morto, e não porque
+ * pet seja privilégio: a diferença aparece na volta, onde ele acompanha
+ * `UserRole` (restaura por correlação de data) em vez de `UserFeature` (nunca
+ * volta sozinho). Devolver um pet ao dono não concede autoridade nenhuma.
+ *
+ * Filtrado por `customer: { userId }` e não por `customerId`: os call sites já
+ * têm o usuário em mãos, e o perfil pode ainda nem ter sido lido.
+ */
+export async function cascadeDeletePetsOfCustomer(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  deletedAt: Date,
+): Promise<number> {
+  const { count } = await tx.pet.updateMany({
+    where: { customer: { userId }, deletedAt: null },
+    data: { deletedAt },
+  });
+
+  return count;
+}
 
 /** Último elo da cadeia: os overrides pendurados nas `UserRole` informadas. */
 export async function cascadeDeleteOverrides(
@@ -109,7 +135,13 @@ export async function cascadeDeleteProfile(
     deletedAt,
   );
 
-  return { profiles, roles, overrides };
+  // Só o cliente tem pet — o perfil de funcionário não é dono de nada aqui.
+  const pets =
+    kind === "CUSTOMER"
+      ? await cascadeDeletePetsOfCustomer(tx, userId, deletedAt)
+      : 0;
+
+  return { profiles, roles, overrides, pets };
 }
 
 /**
@@ -138,7 +170,9 @@ export async function cascadeDeleteUserGraph(
     deletedAt,
   );
 
-  return { profiles: customers + employees, roles, overrides };
+  const pets = await cascadeDeletePetsOfCustomer(tx, userId, deletedAt);
+
+  return { profiles: customers + employees, roles, overrides, pets };
 }
 
 // ─── Restauração (D5 + D6') ──────────────────────────────────────────────────
@@ -162,7 +196,30 @@ export async function cascadeDeleteUserGraph(
 
 type RestoreCounts = {
   roles: number;
+  pets: number;
 };
+
+/**
+ * Pets que morreram **junto com** o perfil voltam com ele (a mesma regra
+ * recursiva das roles). O pet excluído noutro instante — pelo dono, de
+ * propósito — não bate com a data e continua excluído, sem nenhuma regra extra.
+ *
+ * Ao contrário de `UserFeature`, pet **volta**: a assimetria da restauração
+ * existe contra vazamento de privilégio, e devolver a ficha do bichano ao dono
+ * não concede autoridade nenhuma. Não devolvê-la é que seria perda de dado.
+ */
+export async function restorePetsOfCustomer(
+  tx: Prisma.TransactionClient,
+  customerId: string,
+  parentDeletedAt: Date,
+): Promise<number> {
+  const { count } = await tx.pet.updateMany({
+    where: { customerId, deletedAt: parentDeletedAt },
+    data: { deletedAt: null },
+  });
+
+  return count;
+}
 
 /**
  * Concede as roles ao usuário **reusando a linha do par** `(userId, roleId)`
@@ -220,7 +277,7 @@ export async function restoreRolesOfProfile(
   appliesTo: ProfileKind,
   parentDeletedAt: Date,
   options: { roleIds?: string[] },
-): Promise<RestoreCounts> {
+): Promise<{ roles: number }> {
   const { count } = await tx.userRole.updateMany({
     where: {
       userId,
@@ -269,13 +326,22 @@ export async function restoreProfile(
 
   if (!profile?.deletedAt) return null;
 
-  const counts = await restoreRolesOfProfile(
+  const { roles } = await restoreRolesOfProfile(
     tx,
     userId,
     kind,
     profile.deletedAt,
     options,
   );
+
+  // Os pets acompanham o perfil que os possui, pela mesma correlação de data —
+  // e antes de o `deletedAt` do pai ser zerado, senão a chave se perde.
+  const pets =
+    kind === "CUSTOMER"
+      ? await restorePetsOfCustomer(tx, profile.id, profile.deletedAt)
+      : 0;
+
+  const counts: RestoreCounts = { roles, pets };
 
   if (kind === "CUSTOMER") {
     await tx.customer.update({
@@ -311,6 +377,7 @@ export async function restoreProfilesOfUser(
   const result: RestoreCounts & { profiles: ProfileKind[] } = {
     profiles: [],
     roles: 0,
+    pets: 0,
   };
 
   for (const kind of options.kinds) {
@@ -322,6 +389,7 @@ export async function restoreProfilesOfUser(
 
     result.profiles.push(restored.kind);
     result.roles += restored.roles;
+    result.pets += restored.pets;
   }
 
   return result;

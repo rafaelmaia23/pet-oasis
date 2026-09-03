@@ -1,0 +1,56 @@
+meta {
+  name: List Products
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/products
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~page: 1
+  ~limit: 20
+  ~sort: price
+  ~order: asc
+  ~species: DOG
+  ~category: racao-seca
+  ~tag: promocao
+  ~brand: golden
+  ~minPrice: 1000
+  ~maxPrice: 50000
+  ~inStock: true
+  ~status: DRAFT
+}
+
+script:post-response {
+  if (res.getStatus() === 200 && res.getBody().data.length > 0) {
+    bru.setVar("productId", res.getBody().data[0].id);
+    bru.setVar("productSlug", res.getBody().data[0].slug);
+  }
+}
+
+docs {
+  A VITRINE. Responde sem token — veja "Search Products", que roda sem
+  Authorization de propósito. Com token, a resposta muda de FORMA, não só de
+  conteúdo: quem tem read:product:internal vê status e estoque exato; quem tem
+  read:product:cost vê costCents. O cliente vê preço e um booleano inStock.
+
+  ?status= é IGNORADO EM SILÊNCIO para quem não tem read:product:internal — não
+  é 403, porque a existência de rascunho não é assunto do visitante.
+
+  Armadilhas dos filtros:
+  - ?category= inclui as categorias DESCENDENTES (a árvore desce).
+  - ?tag= repetido é INTERSEÇÃO: o produto precisa ter todas.
+  - ?species= casa também com quem não marcou espécie (serve a qualquer uma).
+  - ?minPrice/?maxPrice olham as VARIANTES; junto de ?inStock=true, as duas
+    condições têm que cair na MESMA variante ("o que dá para comprar").
+  - ?sort=price ordena pelo MENOR preço entre as variantes ativas.
+
+  Slug de marca, categoria ou tag que não existe é filtro, não erro: total 0.
+
+  Grava productId e productSlug do primeiro item — é o que encadeia
+  "Get Product By Id Or Slug" sem precisar criar nada antes.
+}

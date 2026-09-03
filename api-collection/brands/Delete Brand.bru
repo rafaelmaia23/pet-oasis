@@ -1,0 +1,19 @@
+meta {
+  name: Delete Brand
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/brands/{{brandId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Exige manage:catalog-structure. Soft delete: a linha permanece no banco e
+  CONTINUA ocupando o nome e o slug — por isso recriar a mesma marca responde
+  409, não 201.
+
+  204 sem corpo. Excluir de novo responde 404.
+}

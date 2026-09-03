@@ -27,6 +27,7 @@ model Product {
   id            String         @id @default(uuid())
   name          String
   slug          String         @unique
+  description   String
   brandId       String
   status        ProductStatus  @default(DRAFT)
   targetSpecies PetSpecies[]
@@ -34,26 +35,33 @@ model Product {
   categories    ProductCategory[]
   tags          ProductTag[]
   variants      ProductVariant[]
-  images        ProductImage[]
 }
 
 model ProductVariant {
   id            String   @id @default(uuid())
   productId     String
   sku           String   @unique
+  label         String
   priceCents    Int
+  compareAtPriceCents Int?
   costCents     Int?
   stockQuantity Int      @default(0)
   isDefault     Boolean  @default(false)
   weightGrams   Int?
   volumeMl      Int?
   sizeLabel     String?
+  barcode       String?
 }
 ```
 
 `Product` é a identidade comercial (nome, descrição, marca, categorias, tags,
 espécies-alvo, status, imagens). `ProductVariant` é a unidade vendável (SKU,
 preço, custo, estoque, e o que varia — peso do pacote, volume, tamanho).
+
+Os dois models e as duas junções nasceram na **9.7**, com soft delete e
+timestamps em ambos. `ProductImage` não está acima porque é da **9.10**, junto do
+adaptador de storage: nada na escrita do catálogo a referencia, e uma tabela com
+FK é tão barata de criar depois quanto agora (X9).
 
 Produto plano (cada peso como produto independente) foi recusado: a vitrine
 mostraria três cards do mesmo produto, "escolher o tamanho" deixaria de existir
@@ -70,13 +78,15 @@ catálogo — só existe um lugar onde preço/estoque moram.
 
 ```prisma
 model Category {
-  id       String     @id @default(uuid())
-  name     String
-  slug     String     @unique
-  parentId String?
-  position Int        @default(0)
-  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryTree")
+  id          String     @id @default(uuid())
+  name        String
+  slug        String     @unique
+  parentId    String?
+  description String?
+  position    Int        @default(0)
+  deletedAt   DateTime?
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryTree")
 }
 ```
 
@@ -162,6 +172,11 @@ O presenter por whitelist Zod, já usado no módulo de usuário, resolve
 | disponibilidade (booleano derivado do estoque) | ✅ | ✅ |
 | produtos `DRAFT` e `DISCONTINUED` | ❌ | ✅ |
 
+> A implementação (9.8) transformou essas duas colunas numa **escada de três
+> views** — `public` → `internal` → `cost` —, porque `read:product:cost` implica
+> a visão interna (Y9). O campo `status` acabou do lado interno junto com o
+> estoque, e a disponibilidade virou `inStock`, presente nas três (Y10).
+
 Expor **disponibilidade** em vez de quantidade exata para o público é decisão
 consciente: quantidade exata é informação competitiva e não muda nada para
 quem compra. Um teste de contrato afirma que a view pública não contém
@@ -171,6 +186,223 @@ Imagem pertence ao **produto**, não à variante — imagem por variante é caso
 real ("cores diferentes" precisa; "mesmo saco, tamanhos diferentes" quase
 nunca precisa) mas adiciona complexidade que o domínio raramente cobra
 (`docs/reference/backlog.md`).
+
+## O que a implementação (9.6) firmou além da decisão
+
+A decisão original modelou a taxonomia mas não disse como ela se comporta. Sete
+pontos foram fechados com o usuário na abertura da sub-fase 9.6 e valem daqui
+para frente — inclusive para `Product` na 9.7, que reaplica W4 e W6.
+
+**W1 — a árvore tem no máximo três níveis.** `Alimentação > Ração > Ração seca`
+é o caso real mais fundo que o catálogo precisa; um teto conhecido é o que deixa
+a navegação previsível e a consulta de subárvore com custo limitado. Sem limite,
+a única regra seria "não faça ciclo", e a UI não teria como se preparar. O teto
+não cabe no banco — nenhuma constraint expressa profundidade —, então vive no
+service (`category.service.ts`), medido pelas funções puras de
+`category.tree.ts` sobre a lista de todas as categorias ativas: **uma** leitura
+por escrita, em vez de uma query por nível.
+
+**W2 — produto vincula a qualquer nó, folha ou não.** Exigir folha criaria dois
+problemas: todo produto genérico precisaria de uma folha "Outros" artificial, e
+criar um filho numa categoria que já tem produtos tornaria o estado inválido de
+repente. O preço é herdado pela **9.8**: "produtos de X" passa a ser a união dos
+vinculados a X **mais** os dos descendentes, e a query de listagem precisa
+cobrir os dois.
+
+**W3 — excluir categoria com filha ativa ou produto vinculado é 409.** Sem
+cascata (apagar um pai não pode sumir com uma subárvore inteira sem o staff
+perceber) e sem reparenting silencioso (mudaria o significado de categorias que
+ninguém tocou, e poderia estourar a profundidade em outro ramo). Desvincular
+produtos em massa está fora de questão por um motivo mais forte: violaria o
+mínimo de uma categoria por produto. A metade das filhas está implementada na
+9.6; a dos produtos entrou na **9.7**, com `ProductCategory` (o vínculo de
+produto **excluído** não segura nada — a contagem é só de ativos).
+
+**W4 — slug derivado do nome na criação e congelado depois.** Renomear é a
+mudança mais banal do catálogo, e deixá-la mexer na URL quebraria todo link
+externo e a indexação. O `slug` explícito é aceito no corpo — no `POST` também,
+não só no `PATCH` — e vence o derivado. `slugify` (`src/utils/slugify.ts`)
+separa a letra do acento com `normalize("NFD")` e apaga só os diacríticos
+combinantes, que é o que faz "Ração" virar `racao` e não `ra-c-ao`.
+
+**W5 — `Tag` é hard delete.** Rótulo transversal e volátil não participa de
+venda, então não há histórico a preservar, e o nome volta a ficar livre. É a
+única tabela de domínio do projeto sem `deletedAt` (e sem `updatedAt`), no
+idioma do `Breed`; o audit log passa a ser o único registro de que a tag
+existiu, e por isso o descritor não é opcional no `deleteTag` do repositório.
+
+**W6 — `name`/`slug` são unique global, o índice ignora `deletedAt`.**
+Precedente de `User.email`, `Customer.phone` e `Pet.microchipId`: recriar uma
+marca excluída sai 409 pelo handler de P2002, sem código novo, e o 409 é o sinal
+correto ("isto já existiu aqui"), não um convite a duplicar. Índice parcial foi
+recusado pelo mesmo motivo da 9.4. Consequência combinada com W4: duas
+categorias homônimas em ramos diferentes colidem no slug — a saída é o `slug`
+explícito, e é por isso que ele é aceito no `POST`.
+
+**W7 — nenhuma das três leituras pagina.** `GET /categories` devolve a árvore
+aninhada (cortá-la no meio devolveria filho sem pai); `GET /brands` e
+`GET /tags` devolvem a lista completa ordenada por nome. As três com `meta {}`,
+mesma classe de `/roles`, `/features` e `/breeds` — taxonomia é conjunto pequeno
+e estável, e a vitrine monta o menu inteiro com uma chamada. O envelope existe
+mesmo assim para que paginar amanhã seja aditivo, não breaking.
+
+Duas consequências transversais nasceram junto e estão registradas fora daqui: o
+middleware de **autenticação opcional** (`docs/context/architecture.md`
+§ "Roteamento") e o **rate limit por IP** da vitrine
+(`docs/reference/endpoints.md` § "Mounting").
+
+## O que a implementação (9.7) firmou além da decisão
+
+`Product` e `ProductVariant` estavam modelados, mas o comportamento da escrita
+não. Dez pontos foram fechados com o usuário na abertura da sub-fase 9.7.
+
+**X1 — `sku` é unique global**, valendo também para a variante soft-deletada.
+Mesmo precedente de `Pet.microchipId` (U1) e de W6: duplicata sai 409 pelo
+handler de P2002, sem código novo. O SKU de uma variante excluída fica preso, e
+esse é o sinal correto ("este código já foi usado aqui"); reemitir é escolher
+outro. Índice parcial (`WHERE deleted_at IS NULL`) foi recusado pela terceira
+vez, pelo mesmo motivo: exigiria editar a migration à mão e daria ao projeto
+duas gramáticas de unicidade.
+
+**X2 — `stockQuantity` não pode ficar negativo** (422). Sem carrinho, o único
+caminho de mudança é a edição manual do staff, e não existe caminho legítimo
+para negativo — o que existe é erro de digitação do repositor, barrado na
+entrada. A pergunta volta na Fase 10, onde reserva e venda dão a ela peso real.
+
+**X3 — `POST /products` exige `variants[]` com mínimo 1**, criados na mesma
+transação do produto e dos vínculos. O invariante "todo produto tem ≥1 variante"
+nunca é observável violado, nem por um instante — diferente do caminho "cria o
+produto, depois adiciona a variante", que deixaria produto invendável no banco e
+obrigaria toda leitura a tolerar `variants: []`.
+
+**X4 — a feature é exigida por campo presente no `PATCH /variants/:variantId`.**
+`stockQuantity` pede `manage:stock`; qualquer outro campo pede `manage:product`;
+corpo misto pede as duas. A rota admite as duas (`canAccess([...])`) e quem
+separa é o service, no idioma do `pet.service`. É o que permite ao repositor
+contar prateleira sem poder mexer no preço, com uma rota só. A lista de campos
+de estoque é explícita (`STOCK_FIELDS`) porque a Fase 10 acrescenta reserva, e o
+próximo campo não pode cair no lado errado em silêncio.
+
+**X5 — exatamente uma variante default por produto**, garantida pelo service: a
+primeira nasce default quando nenhuma vem marcada, promover outra rebaixa a
+anterior na mesma transação, e excluir a default promove a mais antiga entre as
+restantes. Duas marcadas no mesmo corpo é 422 (regra do schema — decide-se
+olhando só o corpo), e `isDefault: false` não é aceito no `PATCH`: rebaixar sem
+eleger outra deixaria a vitrine sem o que mostrar. Assim a 9.8 não precisa de
+critério de desempate.
+
+**X6 — excluir a última variante ativa é 409**, no idioma do W3. Tirar o produto
+de circulação é `status: DISCONTINUED` (some da vitrine, preserva histórico) ou
+`DELETE /products/:id`; nenhum dos dois é "apagar o último SKU". Cascatear o
+produto a partir da variante foi recusado: seria uma exclusão que ninguém pediu.
+
+**X7 — `categories[]`/`tags[]` são substituição total no corpo do produto.** O
+array enviado passa a ser o conjunto; o campo ausente preserva os vínculos
+atuais. Categoria exige mínimo 1 (vazio → 422), tag aceita vazio. Id inexistente
+ou excluído → 422 nomeando o campo e listando os ids que sobraram. Sub-rotas de
+vínculo (`POST /products/:id/categories/:id`) foram recusadas: quatro rotas a
+mais e um cadastro de produto virando N chamadas.
+
+**X8 — `DELETE /products/:id` cascateia nas variantes** com um único `new Date()`
+na transação, como o grafo do usuário (D4): nunca existe filho ativo de pai
+morto, e a igualdade do timestamp é a chave de correlação que um `restore` de
+produto usaria. Os vínculos de categoria e tag **ficam**: são aresta, não filho
+com ciclo de vida próprio, e quem filtra é o `deletedAt` do produto.
+
+**X9 — `ProductImage` fica para a 9.10.** O precedente de nascer órfão
+(`Pet.photoPath`, `Brand.logoPath`) existia para evitar uma migration de **uma
+coluna**; uma tabela com FK é igualmente barata de criar depois, e nada na 9.7 a
+referencia.
+
+**X10 — `description` do produto é obrigatória, com teto próprio de 2000
+caracteres** (os 500 do `catalogDescriptionSchema` servem ao rótulo de
+categoria, não à página de produto), e **`label` da variante é obrigatório**,
+informado pelo staff: derivar "15 kg" de `weightGrams: 15000` esconderia regra
+de formatação (unidade, arredondamento, idioma) num lugar onde ninguém a
+procuraria.
+
+Três premissas seguiram decisão já firmada e não foram reabertas: `brandId` é
+**obrigatório** (marca como entidade é o que dá filtro confiável — produto sem
+marca reabriria a string livre por outra porta); o slug do produto reaplica W4 e
+W6 literalmente, reusando `resolveSlug`/`slugSchema`; e a view da resposta de
+escrita é escolhida pelo **ator** (`read:product:cost`), não pela rota — a view
+pública, com disponibilidade derivada em vez de estoque exato, é da 9.8.
+
+## O que a implementação (9.8) firmou além da decisão
+
+A leitura era o lado que nunca tinha sido especificado: a decisão original tinha
+a tabela de views, mas não *quem* resolve a view, nem o que acontece quando o
+recorte e o filtro discordam. Dez pontos foram fechados com o usuário na abertura
+da 9.8 — três deles eram pendências registradas desde o planejamento da fase.
+
+**Y1 — `?status=` é ignorado em silêncio** para quem não tem
+`read:product:internal` (era a pendência aberta na 9.1). As alternativas eram 422
+(coerente com o filtro estrito de V2) e 403. As duas **confirmam** que existe um
+estado escondido: a mensagem de erro é a resposta. A vitrine não pode contar isso
+— e a incoerência com V2 é aparente, porque lá o valor é inválido e aqui o
+parâmetro é *invisível*, que é caso diferente.
+
+**Y2 — `GET /products/:idOrSlug` é uma rota só**, com a forma do valor
+desempatando: UUID → id, resto → slug (era a pendência §9.5). A ambiguidade que a
+pendência apontava é real, e não teórica — o regex de slug (hex minúsculo e
+hífens simples) **casa** com um UUID. Ela foi fechada na **escrita**, não na
+leitura: `slugSchema` passou a recusar slug com forma de UUID, e como o schema é
+compartilhado, a garantia vale para marca, categoria e tag também. Fechar na
+leitura seria impossível — um slug já gravado não teria como ser desempatado.
+
+**Y3 — `?sort=price` é o menor preço entre as variantes ativas** (era a pendência
+§9.6). É o "a partir de R$ X" que toda vitrine mostra, e é o único dos três
+candidatos que casa com a faixa de preço já decidida (produto entra se **alguma**
+variante couber): ordenar pela default deixaria um produto entrar na faixa e
+ordenar fora dela. Consequência técnica: o Prisma só ordena relação por `_count`,
+então a listagem por preço virou um segundo caminho no repository — `groupBy` de
+variante para a página de **ids** já ordenada, `findMany` para hidratar, ordem
+reimposta em memória (o `IN` do Postgres não a preserva). SQL cru foi recusado:
+o projeto o reserva para a busca textual.
+
+**Y4 — `inStock` aparece na variante e no produto.** Na variante é
+`stockQuantity > 0`; no produto, "alguma variante ativa tem estoque". Os dois
+níveis existem porque respondem a perguntas diferentes: o card da listagem quer
+saber se vale mostrar o produto, e o seletor da página de detalhe quer saber qual
+tamanho esgotou.
+
+**Y5 — `?species=X` casa também com `targetSpecies: []`.** Vazio significa
+"qualquer espécie" (N7), então o comedouro universal aparece na seção de cães sem
+estar marcado. A alternativa (filtro literal) obrigaria o staff a marcar todas as
+espécies em todo produto universal — e deixaria todos eles desatualizados no dia
+em que uma espécie nova nascesse.
+
+**Y6 — `?tag=` repetível é interseção**, não união: cada faceta marcada estreita
+a lista, como em qualquer e-commerce. No `where` isso é um `some` por tag dentro
+de um `AND`, e não um `in` — que daria união.
+
+**Y7 — ordenação default `createdAt` desc**, o mesmo de `PET_SORT`. Allowlist:
+`price`, `name`, `createdAt`; `relevance` entra na 9.9 com `?q=`.
+
+**Y8 — produto fora do conjunto visível é 404**, com a mesma mensagem de
+inexistente. A regra "403 vence 404" do projeto vale para rota **autenticada**,
+onde negar já pressupõe identidade; aqui a rota é pública e não tem gate, então
+403 apenas confirmaria o slug do rascunho para qualquer visitante. É a mesma
+lógica de Y1, aplicada ao detalhe.
+
+**Y9 — `read:product:cost` implica a visão interna.** As duas features podiam ser
+tratadas como independentes, e isso exigiria uma quarta view (custo sem estoque)
+para sustentar um cargo que não existe: na prática quem vê margem é gerente, e
+gerente vê rascunho. A escada de três views (`public` → `internal` → `cost`)
+mantém `internal` e `cost` exatamente como a 9.7 as deixou — só `public` nasceu.
+O predicado é uma disjunção (`internal ∨ cost`) escrita **uma vez**
+(`canSeeInternal`), usada tanto no `where` quanto na escolha da view: se os dois
+divergissem, a resposta mostraria um campo do conjunto que a lista diz não ter.
+
+**Y10 — `inStock` entra em todas as views**, inclusive nas respostas de escrita
+da 9.7. É derivado e não é sensível, e tê-lo só na pública obrigaria o cliente a
+ramificar por view para responder a pergunta mais banal do catálogo.
+
+Dois pontos de contrato seguiram padrão já firmado e não foram reabertos: os três
+filtros de taxonomia (`category`, `tag`, `brand`) são por **slug**, porque é a
+chave que a URL da vitrine carrega e `?category=` já tinha sido decidido assim; e
+slug de taxonomia inexistente é **filtro, não resolução** (V2) — devolve lista
+vazia, nunca 404, para a listagem não virar oráculo de existência.
 
 ## Alternativas consideradas
 

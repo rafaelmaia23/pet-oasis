@@ -1,0 +1,40 @@
+meta {
+  name: Create Brand
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/brands
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Ração Golden",
+    "description": "Marca premium de alimentos para cães e gatos."
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("brandId", res.getBody().id);
+  }
+}
+
+docs {
+  Exige manage:catalog-structure — só as roles catalog-manager e manager a têm.
+
+  O slug é derivado do nome ("Ração Golden" -> "racao-golden") e CONGELADO:
+  renomear a marca depois não muda a URL pública. Para controlar o slug, mande
+  o campo "slug" explicitamente (ele vence o derivado).
+
+  Nome e slug são únicos GLOBALMENTE, inclusive contra marcas já excluídas —
+  recriar uma marca apagada responde 409. Um nome só de símbolos ("!!!") não
+  produz slug utilizável e responde 422 nomeando "name".
+}

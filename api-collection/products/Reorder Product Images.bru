@@ -1,0 +1,36 @@
+meta {
+  name: Reorder Product Images
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/products/{{productId}}/images/order
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "images": ["{{imageId}}"]
+  }
+}
+
+docs {
+  Exige manage:product.
+
+  O corpo é o array COMPLETO de ids na ordem desejada — não um diff. Faltar ou
+  sobrar imagem é 422; repetir o mesmo id é 422; nomear imagem de outro produto
+  é 404 (a resposta não confirma que ela existe em outro lugar).
+
+  É idempotente: reenviar a ordem atual não muda nada. A capa é a posição 0, e
+  não existe flag "isCover" — reordenar é o único jeito de trocar a capa.
+
+  Com uma imagem só, o array tem um elemento. Suba outra com "Upload Product
+  Image" e ponha os dois ids aqui para ver a troca de capa refletida em
+  GET /products.
+}

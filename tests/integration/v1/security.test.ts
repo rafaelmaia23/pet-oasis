@@ -125,4 +125,22 @@ describe("Bordas HTTP — limite de corpo", () => {
 
     expect(response.status).not.toBe(413);
   });
+
+  it("should not apply JSON_BODY_LIMIT to a multipart body", async () => {
+    // Os dois tetos são independentes, e é a primeira coisa que alguém vai
+    // suspeitar quando um upload de 3 MB falhar por outro motivo: `express.json`
+    // só age em `application/json`, então o teto de 100 kb não alcança
+    // multipart. Quem limita upload é o multer — o 413 dele está provado em
+    // `product.image.test.ts`, junto do resto do contrato da rota de imagem.
+    //
+    // Mesma rota e mesmo tamanho do primeiro caso deste bloco: só o
+    // `Content-Type` muda, e com ele o resultado.
+    const response = await request(app)
+      .post("/api/v1/auth/login")
+      .field("email", "a".repeat(200 * 1024));
+
+    // 422 e não 413: o corpo atravessou o body-parser intacto e morreu na
+    // validação do schema, que é o que se queria provar.
+    expect(response.status).toBe(422);
+  });
 });

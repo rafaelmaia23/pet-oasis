@@ -118,10 +118,10 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `AUTH_LOCKOUT_CLEARED` | `User` | `clearedBy` (enum: `ADMIN`, `SUCCESSFUL_LOGIN`) | 7.10 |
 | `AUTH_RATE_LIMIT_EXCEEDED` | `Route` | `rule`, `scope` (enum: `IP`, `EMAIL`) | 7.9 |
 | `USER_CREATED` | `User` | `source` (enum: `SIGNUP`, `ADMIN`, `SEED`) | 7.6 |
-| `USER_DELETED` | `User` | `cascadedProfiles`, `cascadedRoles`, `cascadedOverrides` (nº de filhos derrubados junto) | 7.6 · 8.1 |
+| `USER_DELETED` | `User` | `cascadedProfiles`, `cascadedRoles`, `cascadedOverrides`, `cascadedPets` (nº de filhos derrubados junto) | 7.6 · 8.1 · 9.4 |
 | `USER_PROFILE_CREATED` | `User` | `profileKind`, `roles` (nº de roles concedidas) | 8.3 |
-| `USER_PROFILE_RESTORED` | `User` | `profileKind`, `restoredRoles` (voltaram por correlação de data), `grantedRoles` (nomeadas pelo ator) | 8.3 |
-| `USER_PROFILE_DELETED` | `User` | `profileKind` (enum: `CUSTOMER`, `EMPLOYEE`), `cascadedRoles`, `cascadedOverrides` | 8.1 |
+| `USER_PROFILE_RESTORED` | `User` | `profileKind`, `restoredRoles` (voltaram por correlação de data), `grantedRoles` (nomeadas pelo ator), `restoredPets` | 8.3 · 9.4 |
+| `USER_PROFILE_DELETED` | `User` | `profileKind` (enum: `CUSTOMER`, `EMPLOYEE`), `cascadedRoles`, `cascadedOverrides`, `cascadedPets` (sempre 0 no perfil de funcionário) | 8.1 · 9.4 |
 | `USER_BANNED` | `User` | `reasonProvided` (bool — o texto **não** entra) | 7.6 |
 | `USER_UNBANNED` | `User` | — | 7.6 |
 | `USER_ROLE_GRANTED` | `User` | `roleId`, `roleName` | 7.6 |
@@ -129,7 +129,7 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `USER_PERMISSION_GRANTED` | `User` | `featureName`, `roleId`, `roleName`, `effect` | 7.6 · 8.0 |
 | `USER_PERMISSION_REVOKED` | `User` | `featureName`, `roleId` | 7.6 · 8.0 |
 | `ACCOUNT_REACTIVATION_REQUESTED` | `User` | `source` (enum: `SELF`, `ADMIN`), `profiles` (`ProfileKind[]`), `roles` (nº de roles nomeadas) | 8.4 · 8.5 |
-| `ACCOUNT_REACTIVATION_COMPLETED` | `User` | `profilesRestored`, `profilesCreated` (`ProfileKind[]`), `restoredRoles`, `grantedRoles` (nº — restaurada por correlação de data ≠ concedida pelo ator, só a segunda é autoridade nova) | 8.4 |
+| `ACCOUNT_REACTIVATION_COMPLETED` | `User` | `profilesRestored`, `profilesCreated` (`ProfileKind[]`), `restoredRoles`, `grantedRoles` (nº — restaurada por correlação de data ≠ concedida pelo ator, só a segunda é autoridade nova), `restoredPets` | 8.4 · 9.4 |
 | `PASSWORD_RESET_REQUESTED` | `User` | — | 7.6 |
 | `PASSWORD_RESET_COMPLETED` | `User` | — | 7.6 |
 | `PASSWORD_CHANGED` | `User` | — | 7.6 |
@@ -141,15 +141,79 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `PET_UPDATED` | `Pet` | `customerId`, `fieldsChanged` (`string[]`) | 9.4 |
 | `PET_DELETED` | `Pet` | `customerId` | 9.4 |
 | `PET_DECEASED` | `Pet` | `customerId` | 9.4 |
+| `BRAND_CREATED` | `Brand` | — | 9.6 |
+| `BRAND_UPDATED` | `Brand` | `fields` (`string[]` — nomes dos campos enviados) | 9.6 |
+| `BRAND_DELETED` | `Brand` | — | 9.6 |
+| `CATEGORY_CREATED` | `Category` | `parentId` (só quando não é raiz) | 9.6 |
+| `CATEGORY_UPDATED` | `Category` | `fields` (`string[]`) | 9.6 |
+| `CATEGORY_DELETED` | `Category` | — | 9.6 |
+| `TAG_CREATED` | `Tag` | — | 9.6 |
+| `TAG_UPDATED` | `Tag` | `fields` (`string[]`) | 9.6 |
+| `TAG_DELETED` | `Tag` | — | 9.6 |
+| `PRODUCT_CREATED` | `Product` | — | 9.7 |
+| `PRODUCT_UPDATED` | `Product` | `fields` (`string[]` — nomes dos campos enviados) | 9.7 |
+| `PRODUCT_DELETED` | `Product` | `cascadedVariants` (nº de variantes soft-deletadas junto) | 9.7 |
+| `PRODUCT_VARIANT_CREATED` | `ProductVariant` | `productId` | 9.7 |
+| `PRODUCT_VARIANT_UPDATED` | `ProductVariant` | `productId`, `fields` (`string[]`, só os de catálogo) | 9.7 |
+| `PRODUCT_VARIANT_DELETED` | `ProductVariant` | `productId`, `promotedVariantId` (só quando a excluída era a default) | 9.7 |
+| `PRODUCT_STOCK_ADJUSTED` | `ProductVariant` | `productId`, `from`, `to` | 9.7 |
+| `PRODUCT_IMAGE_UPLOADED` | `Product` | `imageId` | 9.10 |
+| `PRODUCT_IMAGE_DELETED` | `Product` | `imageId` | 9.10 |
+| `PRODUCT_IMAGES_REORDERED` | `Product` | `count` (reordenação pedida) ou `reason: "COMPACTION"` (posições fechadas após exclusão) | 9.10 |
+| `PET_PHOTO_UPDATED` | `Pet` | `customerId` | 9.10 |
+| `PET_PHOTO_DELETED` | `Pet` | `customerId` | 9.10 |
+| `BRAND_LOGO_UPDATED` | `Brand` | — | 9.10 |
+| `BRAND_LOGO_DELETED` | `Brand` | — | 9.10 |
 
 Nome do pet **não** entra em `metadata` de nenhuma das quatro ações acima — não
 por ser PII do pet, mas porque nome de pet é frequentemente usado como resposta
 de pergunta de segurança e como componente de senha; e porque a política
 vigente é "ids e enums", que só vale se não for flexibilizada caso a caso
-(planejamento da Fase 9, `docs/context/pet-domain.md`). Ações de catálogo (produto,
-variante, categoria etc.) entram na tabela quando a sub-fase 9.1/9.7 fechar a
-granularidade de features do domínio — ainda não estão aqui de propósito, não
-por esquecimento.
+(planejamento da Fase 9, `docs/context/pet-domain.md`). Provado por teste: o
+`metadata` de `PET_CREATED` não contém o nome enviado no cadastro.
+
+As nove ações de taxonomia (9.6) seguem a mesma regra do pet: **o nome não entra
+na `metadata`**. Aqui não é questão de PII — nome de marca é público — mas de não
+flexibilizar "só ids e enums" caso a caso; quem quiser o nome resolve o
+`targetId` pela própria rota do recurso. A exceção deliberada é `TAG_DELETED`:
+como a exclusão de tag é **hard** (9.6/W5), essa linha do audit é o único
+registro de que a tag existiu, e mesmo assim ela guarda só o id — recuperar o
+nome exige o `TAG_CREATED` correspondente, que tem o mesmo `targetId`.
+
+`PET_DECEASED` só é gravada na transição — remarcar um pet já falecido é no-op e
+não gera linha nova. **Desfazer** a marcação (`DELETE /pets/:petId/deceased`) sai
+como `PET_UPDATED` com `fieldsChanged: ["deceasedAt"]`, e não como uma ação
+própria: corrigir um dado errado é update, não um evento de negócio.
+
+**Ajuste de estoque tem ação própria** (`PRODUCT_STOCK_ADJUSTED`, 9.7): é outro
+ato que um `PRODUCT_VARIANT_UPDATED` genérico esconderia — outra feature
+(`manage:stock`), outro cargo (o repositor, que não edita catálogo) e outra
+pergunta na auditoria. Um `PATCH` que mistura estoque e catálogo grava **as
+duas** linhas, porque as duas perguntas seguem válidas. `from`/`to` são
+quantidades, não PII, e é o par que torna a linha útil sem consultar o estado
+anterior.
+
+Nome comercial e descrição do produto **não** entram na `metadata`, pela mesma
+regra "só ids e enums" da taxonomia — provado por teste no `PRODUCT_CREATED`.
+
+**As sete ações de imagem (9.10) têm o `targetType` do DONO** (`Product`, `Pet`,
+`Brand`), com o `imageId` na `metadata` — e não um `targetType` `ProductImage`
+novo. Alvo novo no enum só se paga quando alguém vai **filtrar** por ele em
+`GET /audit-logs?targetType=`, e a pergunta real de auditoria é "o que aconteceu
+com este produto?", nunca "com esta imagem?". Reusar o dono mantém o histórico
+de imagem na linha do tempo do produto, que é onde se procura.
+
+Nome de arquivo enviado pelo cliente **não** entra na `metadata` — nem poderia:
+o pipeline o descarta antes de qualquer escrita (o arquivo é nomeado por uuid
+gerado por nós), então não existe ponto do código em que ele esteja disponível
+para ser logado.
+
+`PRODUCT_IMAGE_DELETED` é, como `TAG_DELETED`, registro de um **hard delete**
+(`docs/context/lifecycle.md`): a linha some junto com os arquivos, e esta é a
+única prova de que a imagem existiu. A compactação de posições que a exclusão
+dispara sai como `PRODUCT_IMAGES_REORDERED` com `reason: "COMPACTION"`, separada
+da reordenação pedida por um humano — as duas mexem no mesmo dado, mas só uma é
+uma decisão de alguém.
 
 `actorId` é nulo quando não há ator identificado (login falho de email inexistente, script automatizado). `AUTH_LOGIN_FAILED` de conta existente registra o `targetId` do dono, mesmo sem ator.
 

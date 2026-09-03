@@ -18,6 +18,10 @@ const ownerView = defaultView
     cpf: z.string().meta({ example: "12345678901" }),
     customer: z
       .object({
+        // Id do perfil — endereça `/customers/:customerId/pets` (9.4). Mesmo
+        // campo que `GET /me` expõe; aqui serve ao staff que abre a ficha do
+        // cliente para cadastrar um pet em nome dele.
+        id: z.uuid(),
         phone: z.string().meta({ example: "11987654321" }),
         address: z.string().nullable(),
         birthDate: z.coerce.date().nullable(),
@@ -25,6 +29,7 @@ const ownerView = defaultView
       .nullable(),
     employee: z
       .object({
+        id: z.uuid(),
         hiringDate: z.coerce.date(),
       })
       .nullable(),

@@ -9,6 +9,11 @@ async function main() {
 
   console.log(`${result.featuresCount} features sincronizadas com sucesso.`);
   console.log(`${result.rolesCount} roles sincronizadas com sucesso.`);
+  // Só quando cria: numa re-execução (o entrypoint roda o seed a cada boot) o
+  // catálogo já está lá e o silêncio é a confirmação da idempotência.
+  if (result.breedsCreated > 0) {
+    console.log(`${result.breedsCreated} raças semeadas com sucesso.`);
+  }
   if (result.demoUserSeeded) {
     console.log(`Usuário demo (${env.DEMO_EMAIL}) sincronizado com sucesso.`);
   }
@@ -20,6 +25,14 @@ async function main() {
   if (result.fakeUsersCreated > 0) {
     console.log(
       `${result.fakeUsersCreated} usuários fake criados (dataset de demonstração).`,
+    );
+  }
+  if (result.fakePetsCreated > 0) {
+    console.log(`${result.fakePetsCreated} pets fake criados.`);
+  }
+  if (result.fakeProductsCreated > 0) {
+    console.log(
+      `${result.fakeProductsCreated} produtos fake criados (com marca, categoria, tag e imagem).`,
     );
   }
 

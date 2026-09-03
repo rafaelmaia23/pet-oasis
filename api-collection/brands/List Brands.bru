@@ -1,0 +1,26 @@
+meta {
+  name: List Brands
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/brands
+  body: none
+  auth: none
+}
+
+script:post-response {
+  if (res.getStatus() === 200 && res.getBody().data.length > 0) {
+    bru.setVar("brandId", res.getBody().data[0].id);
+  }
+}
+
+docs {
+  Rota pública — responde sem token, como /breeds. A diferença é que este router
+  também tem escrita: a montagem usa autenticação OPCIONAL, então mandar um
+  token ruim aqui não dá 401, só é ignorado.
+
+  Sem paginação: o envelope sai com meta vazio, como em /roles e /features.
+  Marca excluída não aparece.
+}

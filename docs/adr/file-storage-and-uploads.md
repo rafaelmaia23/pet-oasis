@@ -87,3 +87,83 @@ alimente — aceitável, mas o adaptador vem primeiro sempre que possível.
 - Se o volume de upload no ambiente demo se mostrar um vetor de abuso mesmo
   com os limites acima: considerar throttle adicional ou desativar upload
   público por completo, mantendo só leitura.
+
+---
+
+## Adendo — o que a implementação (9.10) firmou
+
+> Escrito ao fim da sessão 9.10. Três pontos deste ADR foram cumpridos como
+> escritos; dois foram **alterados pelo que a verificação encontrou**, e é isso
+> que este adendo registra.
+
+### O reverse proxy não está neste repositório — quem serve é o Node, por ora
+
+O ADR dizia "o reverse proxy serve `/uploads/*` como estático, sem passar por
+Node". A verificação mostrou que **não existe reverse proxy no repositório**:
+`infra/docker-compose.prod.yml` publica `app:3000` direto. O proxy existe — é o
+nginx do servidor pessoal onde a demo de portfólio é hospedada —, mas ele vive
+fora do git, e nenhuma configuração dele é versionada aqui.
+
+Servir por `express.static` foi a escolha, e o motivo não é preguiça: é ter
+**um caminho só**. A alternativa (Node em dev, nginx em produção) criaria a
+classe de bug "funciona na minha máquina, 404 no deploy" num ponto onde o
+sintoma — imagem quebrada — não aponta para a causa.
+
+O que preserva a promessa original é o volume ser **bind mount**, e não volume
+nomeado: o arquivo fica visível no filesystem do host, que é o pré-requisito
+para o nginx passar a servi-lo direto. No dia em que o tráfego justificar, a
+mudança inteira é
+
+```nginx
+location /uploads/ { alias /srv/pet-oasis/uploads/; expires 30d; }
+```
+
+mais um `UPLOAD_PUBLIC_BASE_URL` novo. **Nada gravado no banco muda**, porque o
+banco guarda a chave e nunca a URL — que era o ponto do ADR original e continua
+valendo.
+
+### `sharp` no ARM64: a condição que precisa ficar escrita
+
+`sharp` roda bem em ARM64, como o ADR dizia, e o `Dockerfile`
+(`node:22-bookworm-slim`, glibc) baixa o prebuild `@img/sharp-linux-arm64` sem
+compilar libvips — nenhum passo novo de build.
+
+A condição é que a imagem seja **construída no próprio servidor ARM**, que é o
+que o `prod:up` faz hoje (o Compose tem `build:`). Construir num x86 e enviar a
+imagem pronta quebra em runtime com `could not load the sharp module` — erro
+que não se parece nada com a causa.
+
+### Um request por imagem, e não um lote
+
+Decidido na 9.10: o endpoint aceita **um arquivo por request**. O cliente que
+deixa o usuário escolher oito fotos num gesto só dispara oito requests — e
+ganha barra de progresso e retry **por imagem**. Um request com N arquivos
+forçaria ou tudo-ou-nada (o usuário perde as sete que já tinham subido) ou uma
+resposta de status misto que só este endpoint usaria; e, com `memoryStorage`,
+seguraria 40 MB em RAM de uma vez.
+
+### A varredura de órfãos não nasceu com timer
+
+O ADR mandava seguir o padrão `src/scripts/` + systemd timer. O script existe
+(`src/scripts/cleanup-uploads.ts`, `npm run db:cleanup-uploads`), o timer não —
+e de propósito. Os `cleanup-*` que têm timer limpam crescimento **esperado e
+contínuo** (todo login cria sessão). Órfão de upload só nasce de falha, e
+agendar um evento que não deveria acontecer é ruído no `infra/cron/`. O timer
+entra no dia em que a varredura encontrar algo duas vezes.
+
+Duas decisões dentro dela merecem registro: a **carência** (arquivo mais novo
+que `UPLOAD_ORPHAN_GRACE_HOURS` nunca é candidato, porque um arquivo gravado há
+200ms cuja linha está sendo inserida agora é indistinguível de um órfão) e a
+**direção inversa só reportar** (linha apontando para arquivo inexistente é
+sintoma de bug nosso; apagar a linha faria o sintoma sumir levando a evidência
+junto).
+
+### O que o `demo-reset` ainda não faz
+
+O ADR previa que o `demo-reset` limpasse o diretório de upload. Isso **não**
+entrou na 9.10: limpar sem repovoar deixaria a vitrine da demo sem foto para
+sempre, que é exatamente o que o seed fake existe para evitar. Os dois — a
+limpeza e as imagens de exemplo — são da **9.11**, na sessão que os exercita.
+
+A role `demo` já não sobe arquivo (não tem `manage:product` nem
+`manage:catalog-structure`), e isso tem teste explícito, como o ADR pedia.

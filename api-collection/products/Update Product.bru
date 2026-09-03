@@ -1,0 +1,35 @@
+meta {
+  name: Update Product
+  type: http
+  seq: 2
+}
+
+patch {
+  url: {{baseUrl}}/products/{{productId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "status": "ACTIVE",
+    "categories": ["{{categoryId}}"]
+  }
+}
+
+docs {
+  Exige manage:product.
+
+  Renomear NÃO re-deriva o slug: a URL pública sobrevive a uma correção de
+  digitação. Para mudá-lo, mande "slug".
+
+  "categories" e "tags" são SUBSTITUIÇÃO TOTAL: o array enviado passa a ser o
+  conjunto. Não mandar o campo preserva os vínculos atuais; mandar
+  "categories": [] responde 422 (todo produto precisa de pelo menos uma).
+
+  "variants" não é aceito aqui — variante tem rotas próprias.
+}

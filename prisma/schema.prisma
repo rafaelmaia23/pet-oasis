@@ -65,6 +65,7 @@ model Customer {
   deletedAt DateTime? @map("deleted_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pets Pet[]
 
   @@map("customers")
 }
@@ -252,4 +253,336 @@ model AuditLog {
   @@index([actorId])
   @@index([targetId])
   @@map("audit_logs")
+}
+
+// ─── Pet shop ────────────────────────────────────────────────────────────────
+
+// Espécie do pet: enum fechado, deliberadamente mais largo que o mínimo e
+// **sem `OUTRO`** — `OUTRO` seria buraco permanente de qualidade de dado (pet
+// sem raça válida, fora de todo filtro), e a pressão seguinte seria um
+// `speciesOther` de texto livre. Espécie nova é `ALTER TYPE ... ADD VALUE`,
+// migration barata. Racional em docs/adr/pet-domain-modeling.md.
+enum PetSpecies {
+  DOG
+  CAT
+  RABBIT
+  BIRD
+  RODENT
+  REPTILE
+  FISH
+}
+
+// Catálogo de raças — dado de **referência**, no mesmo idioma de Feature/Role:
+// semeado por constante versionada (src/modules/breed/breed.constants.ts),
+// nunca consultado em API de terceiro em runtime, e por isso sem `deletedAt`
+// nem `updatedAt` (não há campo mutável — `species` e `name` SÃO a chave).
+// Nem toda espécie tem raça: quem exige é a constante SPECIES_WITH_BREED, não
+// a presença de linha aqui (derivar faria pet já cadastrado violar a regra
+// retroativamente).
+model Breed {
+  id        String     @id @default(uuid())
+  name      String
+  species   PetSpecies
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  pets Pet[]
+
+  @@unique([species, name])
+  @@map("breeds")
+}
+
+enum PetSex {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+// Pet — primeiro recurso de domínio do projeto (9.4). Dono único: `customerId`
+// é obrigatório e não há tabela de junção; família compartilhando pet e
+// transferência entre clientes ficaram no backlog, juntas, porque uma reabre a
+// outra.
+//
+// Três colunas de tempo com significados distintos, e é de propósito:
+// `deceasedAt` (o pet morreu) NÃO é `deletedAt` (o registro não deve mais
+// aparecer). Pet falecido continua na lista do dono e mantém legível todo o
+// histórico clínico futuro; tratar falecimento como exclusão destruiria
+// informação clinicamente relevante. Ver docs/adr/pet-domain-modeling.md.
+//
+// `breedId` é nullable no banco porque a obrigatoriedade é **semântica**: quem
+// exige raça é SPECIES_WITH_BREED, lida em runtime pelo pet.service (as três
+// 422 de espécie/raça). `weightGrams` é inteiro pelo mesmo racional do preço em
+// centavos, e é um **instantâneo** — quando a veterinária chegar, o peso vira
+// medição datada no prontuário.
+model Pet {
+  id                   String     @id @default(uuid())
+  customerId           String     @map("customer_id")
+  name                 String
+  species              PetSpecies
+  breedId              String?    @map("breed_id")
+  sex                  PetSex     @default(UNKNOWN)
+  birthDate            DateTime?  @map("birth_date")
+  birthDateIsEstimated Boolean    @default(false) @map("birth_date_is_estimated")
+  weightGrams          Int?       @map("weight_grams")
+  neutered             Boolean    @default(false)
+  // Unique **global**, valendo também para a linha soft-deletada — mesmo
+  // idioma de User.email/User.cpf/Customer.phone (U1, 9.4). Num identificador
+  // do mundo real isso é o comportamento certo: o chip preso por um pet
+  // excluído é o sinal "este pet já foi cadastrado aqui". Duplicata vira 409
+  // pelo handler de P2002. NULL não colide (Postgres permite N nulos).
+  microchipId          String?    @unique @map("microchip_id")
+  color                String?
+  notes                String?
+  // Preenchida só a partir da 9.10 (upload); nasce aqui para não exigir uma
+  // migration de uma coluna só depois.
+  photoPath            String?    @map("photo_path")
+  deceasedAt           DateTime?  @map("deceased_at")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+  deletedAt            DateTime?  @map("deleted_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  breed    Breed?   @relation(fields: [breedId], references: [id])
+
+  @@index([customerId])
+  @@map("pets")
+}
+
+// ---------------------------------------------------------------------------
+// Catálogo — taxonomia (9.6) e produto (9.7).
+// ---------------------------------------------------------------------------
+
+// Marca é entidade própria, não string livre no produto (ADR
+// product-catalog-modeling): filtro confiável, grafia única e página de marca
+// no futuro. `name` e `slug` são unique **global** — o índice ignora
+// `deletedAt`, como User.email e Pet.microchipId (9.6/W6): recriar uma marca
+// excluída sai 409 pelo handler de P2002, que é o sinal correto ("isto já
+// existiu aqui"), não um convite a duplicar.
+model Brand {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  // Gerado do nome na criação e congelado depois (9.6/W4) — renomear não muda
+  // a URL pública, senão uma correção de digitação quebraria link externo.
+  slug        String    @unique
+  description String?
+  // Preenchida só a partir da 9.10 (upload); nasce aqui pelo mesmo motivo da
+  // `Pet.photoPath`: evitar uma migration de uma coluna só depois.
+  logoPath    String?   @map("logo_path")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // A marca entra no corpus da busca por uma coluna gerada **dela** (9.9/Z1):
+  // coluna gerada não cruza linha, então o nome da marca não caberia na do
+  // produto sem denormalizar e manter por trigger.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
+  products Product[]
+
+  @@map("brands")
+}
+
+// Categoria modela **função** do produto (Alimentação > Ração > Ração seca),
+// nunca espécie — espécie é faceta (`Product.targetSpecies`), fora da árvore.
+// Profundidade máxima de 3 níveis (9.6/W1), validada no service: o banco não
+// tem como expressar isso, e subir a cadeia em SQL a cada escrita seria caro.
+// `name` NÃO é unique — o mesmo rótulo pode existir em ramos diferentes; quem
+// arbitra a colisão é o `slug`, e quem quiser dois "Camas" manda o slug
+// explícito no corpo.
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  parentId    String?   @map("parent_id")
+  description String?
+  // Ordem entre irmãos, definida pelo staff; o desempate é o nome.
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+
+  products ProductCategory[]
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+// Tag é rótulo transversal e volátil ("promoção", "filhote", "lançamento") —
+// não participa de venda, então não há histórico a preservar e o DELETE é
+// **hard** (9.6/W5). Por isso nasce sem `deletedAt` e sem `updatedAt`, no mesmo
+// idioma do Breed: o que existe aqui é nome e slug, e os dois são a identidade.
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  products ProductTag[]
+
+  @@map("tags")
+}
+
+// "Isto está à venda?" e "isto existe?" são perguntas diferentes, e por isso o
+// status convive com o `deletedAt` (ADR product-catalog-modeling § "Status do
+// produto coexiste com soft delete"): descontinuado some da vitrine mas
+// preserva o histórico de venda, enquanto excluído é erro de cadastro.
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  DISCONTINUED
+}
+
+// Product é a **identidade comercial** ("Ração Golden Adulto"); quem é vendável
+// é a ProductVariant (SKU/preço/estoque). Nunca produto plano — ver o ADR. O
+// invariante "todo produto tem ≥1 variante" não cabe no banco (nenhuma
+// constraint expressa "a coleção não pode estar vazia"), então mora no service:
+// criar exige `variants[]` com min 1 (9.7/X3) e excluir a última variante ativa
+// é 409 (X6).
+//
+// `targetSpecies` é **faceta**, não nível da árvore de categoria (N7, "problema
+// da cama"): uma cama serve cão e gato sem virar duas categorias. Array vazio
+// significa "qualquer espécie", não "nenhuma".
+//
+// `brandId` é obrigatório: marca como entidade é o que dá filtro confiável e
+// grafia única, e produto sem marca reabriria a string livre por outra porta.
+model Product {
+  id            String        @id @default(uuid())
+  name          String
+  // Mesma regra da taxonomia (9.6/W4 e W6, reaplicadas em 9.7): derivado do
+  // nome na criação, congelado depois, explícito vence, unique **global** —
+  // recriar um produto excluído sai 409 pelo handler de P2002.
+  slug          String        @unique
+  description   String
+  brandId       String        @map("brand_id")
+  status        ProductStatus @default(DRAFT)
+  targetSpecies PetSpecies[]  @map("target_species")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  deletedAt     DateTime?     @map("deleted_at")
+
+  // Coluna **gerada** (9.9/Z1): `name` com peso A, `description` com peso C,
+  // ambos por `f_unaccent` (Z8). Declarada aqui só para o `migrate` não acusar
+  // drift — o Prisma não lê nem escreve `Unsupported`, e é exatamente isso que
+  // se quer: quem a consulta é o SQL cru de `product.search.repository.ts`.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
+  brand      Brand             @relation(fields: [brandId], references: [id])
+  variants   ProductVariant[]
+  categories ProductCategory[]
+  tags       ProductTag[]
+  images     ProductImage[]
+
+  @@index([brandId])
+  @@map("products")
+}
+
+// Nasce na 9.10, e não junto do produto na 9.7: o precedente de coluna órfã
+// esperando dono (`Pet.photoPath`, `Brand.logoPath`) valia para **coluna**, não
+// para tabela — uma tabela sem escrita nenhuma não é economia de migration, é
+// esquema morto.
+//
+// Única tabela de domínio do projeto **sem `deletedAt`** (9.10/AA16), e é
+// consciente: o soft delete existe para preservar fato de negócio (quem comprou
+// o quê), e imagem é *asset*. A linha só faz sentido enquanto o byte existe —
+// soft delete com arquivo apagado criaria a linha-apontando-para-o-nada que o
+// ADR classifica como mais grave que um órfão no disco.
+//
+// `path` é a **chave base** (`products/<id>/<uuid>`), nem caminho de arquivo
+// nem URL: os dois derivados nascem dela por sufixo (`-full.webp`,
+// `-thumb.webp`), e a URL pública sai de `UPLOAD_PUBLIC_BASE_URL`. É o que
+// permite trocar quem serve o byte sem reescrever uma linha gravada.
+//
+// `position` não tem `@@unique([productId, position])`: a reordenação reescreve
+// o bloco inteiro, e um unique tornaria a permuta impossível sem posições
+// temporárias. Quem garante a sequência é o service — e a capa é a posição 0,
+// sem flag `isCover` (AA13), para que "qual é a capa?" nunca tenha duas
+// respostas possíveis.
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  path      String
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId, position])
+  @@map("product_images")
+}
+
+// A unidade vendável: é para cá que o `OrderItem` da Fase 10 vai apontar, nunca
+// para o Product. Características em colunas fixas (N8) — EAV e JSON foram
+// recusados porque tipagem estrita é valor central do projeto; atributo novo é
+// migration, barata e explícita.
+//
+// Preço, custo e comparação em **centavos** inteiros (N9): sem ponto flutuante
+// e sem o `Decimal` do Prisma contaminando Zod e serialização. `costCents` é
+// dado interno — quem o vê é quem tem `read:product:cost`, e o corte é da view.
+//
+// `sku` é unique **global**, valendo para a linha soft-deletada (9.7/X1):
+// mesmo idioma de `Pet.microchipId`. O SKU de uma variante excluída fica preso,
+// e isso é o sinal "este código já foi usado aqui" — reemitir é escolher outro.
+//
+// `isDefault`: exatamente uma por produto, garantida pelo service (X5) — a
+// vitrine sempre tem o que mostrar sem precisar de critério de desempate.
+model ProductVariant {
+  id                  String    @id @default(uuid())
+  productId           String    @map("product_id")
+  sku                 String    @unique
+  // Rótulo que o cliente lê no seletor ("15 kg", "Tamanho M"), informado pelo
+  // staff (X10): derivar de `weightGrams` produziria "15000 g" e esconderia
+  // regra de formatação no código.
+  label               String
+  priceCents          Int       @map("price_cents")
+  compareAtPriceCents Int?      @map("compare_at_price_cents")
+  costCents           Int?      @map("cost_cents")
+  // Sem movimentação nem reserva nesta fase (StockMovement é da Fase 10, quando
+  // a mudança passa a ter causa). Não pode ficar negativo (X2).
+  stockQuantity       Int       @default(0) @map("stock_quantity")
+  weightGrams         Int?      @map("weight_grams")
+  volumeMl            Int?      @map("volume_ml")
+  sizeLabel           String?   @map("size_label")
+  barcode             String?
+  isDefault           Boolean   @default(false) @map("is_default")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  deletedAt           DateTime? @map("deleted_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+// As duas junções nascem aqui, não na 9.6: não existe join sem a ponta
+// `Product`. São **aresta**, não filho com ciclo de vida próprio — por isso sem
+// `deletedAt`: substituir os vínculos apaga a linha, e excluir o produto deixa
+// as arestas onde estão (o filtro de quem lê é o `deletedAt` do produto).
+//
+// O mínimo de uma categoria por produto (X7) é do service, como todo mínimo de
+// coleção. Tag não tem mínimo: rótulo transversal é opcional por natureza.
+model ProductCategory {
+  productId  String @map("product_id")
+  categoryId String @map("category_id")
+
+  product  Product  @relation(fields: [productId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
+  @@map("product_categories")
+}
+
+model ProductTag {
+  productId String @map("product_id")
+  tagId     String @map("tag_id")
+
+  product Product @relation(fields: [productId], references: [id])
+  tag     Tag     @relation(fields: [tagId], references: [id])
+
+  @@id([productId, tagId])
+  @@index([tagId])
+  @@map("product_tags")
 }

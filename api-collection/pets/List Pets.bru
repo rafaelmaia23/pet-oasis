@@ -1,0 +1,40 @@
+meta {
+  name: List Pets
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/pets
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~page: 1
+  ~limit: 20
+  ~sort: name
+  ~order: asc
+  ~species: DOG
+  ~sex: MALE
+  ~customerId: {{customerId}}
+  ~breedId:
+  ~microchipId:
+  ~neutered: true
+  ~deceased: false
+}
+
+docs {
+  Listagem geral de balcão — exige read:pet:others (attendant, manager, demo).
+  Um cliente comum recebe 403 aqui, mesmo tendo read:pet.
+
+  Diferente de List Customer Pets, esta pagina por offset (meta com page/limit/
+  total) e aceita ordenação: sort=createdAt|name|species, order=asc|desc.
+  Mandar order sem sort é 422; campo fora da allowlist também.
+
+  Sem ?deceased= a lista traz vivos E falecidos. Use deceased=false para a lista
+  operacional limpa. Pet excluído (soft delete) nunca aparece.
+
+  customerId e breedId são FILTROS: um uuid válido que não existe devolve lista
+  vazia, não 404. microchipId é busca exata (o campo é unique global).
+}

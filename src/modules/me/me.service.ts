@@ -42,6 +42,9 @@ export async function getMe(authUser: AuthUser) {
     customer:
       user.customer && !user.customer.deletedAt
         ? {
+            // O id do **perfil**: é ele que endereça
+            // `/customers/:customerId/pets` (9.4), e não existe `/me/pets`.
+            id: user.customer.id,
             phone: user.customer.phone,
             address: user.customer.address,
             birthDate: user.customer.birthDate,
@@ -50,7 +53,11 @@ export async function getMe(authUser: AuthUser) {
         : null,
     employee:
       user.employee && !user.employee.deletedAt
-        ? { hiringDate: user.employee.hiringDate, roles: employeeRoles }
+        ? {
+            id: user.employee.id,
+            hiringDate: user.employee.hiringDate,
+            roles: employeeRoles,
+          }
         : null,
     features: Array.from(authUser.features).sort(),
   };

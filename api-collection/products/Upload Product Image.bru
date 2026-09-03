@@ -1,0 +1,43 @@
+meta {
+  name: Upload Product Image
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/products/{{productId}}/images
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  file: @file(assets/sample.jpg)
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("imageId", res.getBody().id);
+  }
+}
+
+docs {
+  Exige manage:product. Rode "Create Product" antes — ele grava productId.
+
+  UM arquivo por request, no campo "file". Para subir oito fotos, dispare oito
+  requisições: a falha de uma não derruba as outras, e cada uma tem progresso e
+  retry próprios.
+
+  O arquivo é validado pelos BYTES (magic bytes), não pela extensão nem pelo
+  Content-Type — renomear um .html para .jpg responde 422. Aceita JPEG, PNG e
+  WebP; a saída é sempre WebP, em dois tamanhos (full 1600px, thumb 400px).
+
+  O nome do arquivo enviado é descartado: quem nomeia é a API (uuid). É por isso
+  que "../../../etc/passwd.jpg" não é um problema aqui.
+
+  A imagem entra no fim da fila. A posição 0 é a CAPA — é ela que GET /products
+  devolve no campo "image". Teto de 8 por produto; a nona responde 422. Acima do
+  tamanho máximo, 413.
+
+  A resposta é a imagem criada (não o produto), porque é o id dela que as duas
+  requisições seguintes consomem — este script grava imageId.
+}

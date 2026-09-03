@@ -175,7 +175,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 | **9.9** | Busca textual | Depende de 9.8 existir para ter o que buscar. Maior risco técnico da fase — isolada de propósito. |
 | **9.10** ✅ | Adaptador de storage + upload de imagem | Independente do resto — mais infra, menos domínio. |
 | **9.11** ✅ | Seed fake do domínio + `demo-reset` | Depende do schema inteiro estar firme. Resolve a entrada "Dummy data para a demo" do `docs/reference/backlog.md`. |
-| **9.12** | Fechos | Docs, coleção Bruno, README, `context.md`, revisão do backlog. |
+| **9.12** 🔄 | Fechos | Docs, coleção Bruno, README, `context.md`, revisão do backlog. |
 
 ### ✅ [Sessão 9.1] Fase 9.1 — RBAC do domínio: decisão + seed
 > Sessão de decisão com o usuário (2026-08-13). Racional em `docs/context/authorization.md` (§ "Catálogo de features" e § "Roles de funcionário") e, para a vitrine pública, em `docs/context/api-contracts.md` § "Superfície pública".
@@ -465,18 +465,35 @@ Branch `feat/fase-9-10-uploads`, saindo de `fase-9`. Um commit por item, teste a
   chamadas por reset diário. A alternativa era `fs.readdir` dentro do script, que é exatamente o
   que o adaptador existe para evitar.
 
-### ⬜ [Sessão 9.12] Fase 9.12 — Fechos
-- ⬜ `docs/reference/endpoints.md` — as rotas novas de catálogo, e a seção "Mounting" com a categoria nova de autenticação opcional (rotas públicas que enriquecem a resposta quando há token). **`breeds` (9.3) e `pets` (9.4) já entraram**, e as **sete rotas de imagem da 9.10** também (mais os dois parágrafos de Mounting: o estático `/uploads/*` e o balde de upload por usuário); conferir, não reescrever.
-- ⬜ `README.md`/`docs/context/authorization.md` — conferir que as roles novas (`stockist`, `catalog-manager`) aparecem onde o projeto descreve os cargos.
-- ⬜ Coleção Bruno — environments `local`/`prod`. `breeds/` já entrou na 9.3, `pets/` na 9.4 (com `Get Me` gravando `customerId`, que é o que encadeia a coleção aninhada), `brands/`, `categories/`, `tags/` na 9.6 e `products/`, `variants/` na 9.7 (encadeadas por `brandId`/`categoryId`/`tagId` → `productId` → `variantId`) — conferir, não reescrever; falta a **leitura** — `GET /products` (com os filtros e a ordenação da 9.8) e `GET /products/:idOrSlug`, que valem uma requisição **sem** `Authorization` na coleção, porque é a única forma de a demo mostrar a view pública ao lado da de staff; mais o `?q=` da 9.9.
-- ⬜ `docs/context/pet-domain.md` promovido de "planejada" a "implementada"; parágrafo "Fase 9 (fechada)" em `docs/context/history.md`; decisões novas indexadas em `docs/context.md`.
-- ⬜ `docs/reference/logging-policy.md` — conferir a taxonomia final. As quatro ações de pet e o `targetType` `Pet` entraram na 9.4, as nove de taxonomia na 9.6, e as sete de produto/variante (com `Product`/`ProductVariant` e o `PRODUCT_STOCK_ADJUSTED` separado) na 9.7, e as **sete de imagem na 9.10** (com o `targetType` do dono e o `PRODUCT_IMAGES_REORDERED` distinguindo reordenação pedida de compactação) — conferir, não reescrever.
-- ⬜ `docs/reference/backlog.md` revisado — nenhum item resolvido pela fase sem marcação, nenhuma entrada nova esquecida.
-- ⬜ `README.md` — roadmap promove a Fase 9 a ✅, contagem de testes atualizada.
-- ⬜ Decisão do usuário: apagar `docs/planning/fase-9-contexto.md` ou mantê-lo em `docs/planning/` como registro histórico.
-- ⬜ Apagar `docs/planning/fase-9.11-assets.md` — documento de trabalho da 9.11, criado só para
-  o usuário juntar as imagens; o que sobra no repositório é o `fakeImages.constants.ts` gerado
-  a partir dele (9.11/AB1).
-- ⬜ Conferir que `assets-inbox/` não sobrou na árvore de trabalho e continua fora do git — os
-  originais das imagens não são versionados, só o base64 derivado (9.11/AB12).
-- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes; Fase 9 marcada ✅.
+### 🔄 [Sessão 9.12] Fase 9.12 — Fechos
+> Kickoff em grelha (2026-09-03): treze decisões **AC1–AC13** fechadas antes de qualquer linha.
+> A grelha mudou o tamanho da sessão — o item herdado dizia "conferir, não reescrever", e a
+> verificação achou três lacunas de conteúdo (o `?q=` inteiro fora do `endpoints.md`, o README
+> parado na Fase 7, a leitura de produto fora da coleção Bruno) mais uma **regra de processo
+> quebrada**: um ADR citando um documento de `docs/planning/` escrito para ser descartável.
+
+| # | Decisão | Escolha |
+|---|---|---|
+| AC1 | Alcance do README | Reforma, não remendo: dois blocos novos na tabela de capacidades (Pets · Catálogo), duas linhas novas em "Decisões que valem o olhar" (centavos inteiros; busca no Postgres), o parágrafo do seed citando o dataset fake, roadmap com a Fase 9 ✅ e a Fase 10 🔜, contagem real de testes e as roles novas. Mais o **Roteiro C**: quatro `curl` — três anônimos (vitrine, busca com typo, detalhe por slug) e o mesmo da vitrine **com** o token demo, que é o único lugar do README onde a view por capability fica demonstrada em vez de afirmada. |
+| AC2 | `?q=` no `endpoints.md` | Lacuna, não conferência: a 9.9 nunca entrou ali. Entra na célula do `GET /products` **e** como parágrafo próprio no cabeçalho do bloco (corpus = produto + marca, typo corrigido por reescrita da query contra o dicionário, eco do termo no `meta`) — no molde dos parágrafos "Vitrine do catálogo" e "Rate limit da vitrine". |
+| AC3 | Coleção Bruno | Três requests: `List Products` (filtros da 9.8 desabilitados, grava `productId`), `Get Product By Id Or Slug`, e `Search Products` com `auth: none` e termo digitado errado. O anônimo mora no `Search` em vez de virar um quarto request: a mesma chamada prova a view pública **e** a tolerância a typo. |
+| AC4 | `fase-9-contexto.md` | Diluído e **apagado**, junto do `fase-9.11-assets.md`. O `§9.9` (contrato de pet) migra para dentro do ADR `pet-domain-modeling.md`, que hoje o cita; as **alternativas recusadas** (loja completa com carrinho, `OUTRO` na espécie, roles `veterinarian`/`groomer`) viram seção em `context/pet-domain.md`, ao lado da única decisão da fase que não tem ADR. |
+| AC5 | Onde mora spec, onde mora rascunho | `docs/planning/` some. Nascem **`docs/specs/`** (versionado: spec longa e os mapas/filhos do `/wayfinder`, apagado no fecho do trabalho) e **`.scratch/`** (gitignorado, com `README.md` versionado por exceção, no padrão do `uploads/.gitkeep`). Separar por **local** e não por disciplina é o que impede o erro de se repetir: o que não é versionado não pode ser citado. |
+| AC6 | Cadeia canônica de uma fase | `.scratch/` → `/grill-with-docs` → `docs/specs/fase-<n>.md` → itens no `docs/todo.md` → `/implement` → no fecho o *porquê* migra para ADR/`context/` e a spec é apagada. Fronteira que evita a duplicação que gerou a AC4: **a spec responde "o quê e por quê", o `todo.md` responde "em que ordem, e o que de fato ficou pronto"**. |
+| AC7 | Verificação mecânica | O `docs:check` passa a **falhar** com `.scratch/` citado em markdown versionado e com `docs/specs/` citado por documento permanente (ADR, `context/`, `README`, `CLAUDE.md`, comentário de `src/`). Allowlist comentada: `docs/todo.md`, `docs/agents/`, `docs/README.md`. A regra falhou por disciplina uma vez; disciplina não é o mecanismo. |
+| AC8 | Onde a convenção é escrita | **`docs/README.md`** (humano, sucinto): o que é cada pasta e a cadeia da AC6 — renderiza quando alguém entra em `docs/`. **`docs/guides/todo-phases.md`**: as duas formas de fase (expandida × encolhida, no molde já praticado nas Fases 7 e 8) e as três regras de transição. **Sem `AGENTS.md`** — dois arquivos de instrução divergem em uma fase. |
+| AC9 | Destilação da Fase 9 | No molde das Fases 7/8, **por último** na sessão (o expandido é a matéria-prima de quase todo o resto), e precedida de uma **tabela de rastreio** decisão → destino, conferida pelo usuário **antes** de qualquer remoção. Decisão sem destino não é apagada: escrever o destino é o trabalho. A tabela é andaime — nasce no `.scratch/` e não é versionada. |
+| AC10 | Pendências vivas da fase | Os dois timers (refresh de lexemas; varredura de órfãos) vão para o `backlog.md` — dependem de gatilho externo, que é o que aquele arquivo guarda. O **teste de multipart × `JSON_BODY_LIMIT`** é dívida datada e morre aqui. |
+| AC11 | Revisão antes da `main` | `/code-review high` em `dev..fase-9` **antes** das docs — documentar primeiro e revisar depois é documentar o errado. Escopo correção; refactor vira backlog. |
+| AC12 | Checklist de deploy | Integrado à estrutura que o `deploy.md` já tem (`UPLOAD_*` na lista do `.env.production`, o bind mount como passo do "No servidor", o `sharp`/ARM64 como nota junto do `prod:up`). **Sem seção por fase** — guia de deploy é lido por quem sobe o sistema hoje, não por quem quer saber o que a Fase 9 mudou. |
+| AC13 | Fecho | Uma branch só (`feat/fase-9-12-fechos`), e ao fim a cadeia inteira: `fase-9` → `dev` → `main`, com `dev` nova a partir da `main`. O merge na `dev` é o primeiro da fase que pode conflitar (a `dev` tem 2 commits de configuração das agent skills). |
+
+**Ordem de execução** (a numeração é a ordem, não sub-fases):
+
+- ⬜ **1. Revisão** — `/code-review high` em `dev..fase-9`. Achado de correção entra aqui; refactor vira backlog; qualquer coisa com cheiro de regra de negócio **para e pergunta** (AC11).
+- ⬜ **2. Processo** — `docs/specs/` e `.scratch/` criados (AC5); `§9.9` migrado para o ADR e alternativas recusadas para `context/pet-domain.md`, os dois arquivos de planning apagados (AC4); `docs:check` com as duas verificações novas (AC7); `docs/README.md` e `docs/guides/todo-phases.md` escritos (AC8); `docs/agents/issue-tracker.md` reescrito para o layout novo — hoje ele cita `fase-9-contexto.md` como molde; `CLAUDE.md` sincronizado (Ciclo 2 no passado, regra do `.scratch/`/`docs/specs/`, ponteiro para o guia novo).
+- ⬜ **3. Referência** — `endpoints.md` (AC2 + conferência das rotas de catálogo e dos parágrafos de Mounting); `logging-policy.md` (conferência da taxonomia final); `backlog.md` (os dois timers da AC10, e nenhum item resolvido sem marcação); `context.md` indexando o que nasceu aqui; `context/pet-domain.md` de "planejada" a "implementada"; parágrafo "Fase 9 (fechada)" em `context/history.md`; `deploy.md` (AC12); coleção Bruno (AC3); `README.md` (AC1).
+- ⬜ **4. Teste** — o caso que falta em `security.test.ts`: multipart acima do `JSON_BODY_LIMIT` e abaixo do teto do multer **não** vira 413 (prova a não-interferência entre os dois tetos). O simétrico já existe em `product.image.test.ts:155` e fica lá, com referência cruzada.
+- ⬜ **5. Verde** — `npm run typecheck`, `npm run lint`, `npm run docs:check` e a suíte completa; contagem real levada ao README.
+- ⬜ **6. Destilação** — tabela de rastreio → conferência do usuário → Fase 9 encolhida no molde (AC9); conferir que `assets-inbox/` continua fora do git (9.11/AB12); Fase 9 marcada ✅.
+- ⬜ **7. Merge** — `feat/fase-9-12-fechos` → `fase-9` → `dev` → `main`, e `dev` nova a partir da `main` (AC13).

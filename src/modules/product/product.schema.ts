@@ -45,10 +45,19 @@ const variantsArraySchema = z
     { message: "Only one variant can be marked as default" },
   );
 
+/**
+ * Duplicata é recusada aqui, e não no banco: o vínculo tem PK composta, então
+ * o id repetido furaria a constraint e sairia como um 409 falando de
+ * `product_id` — erro que manda procurar bug no lugar errado. Mesma regra que
+ * a lista de variantes (SKU repetido) e o array de reordenação de imagem.
+ */
+const uniqueIds = (ids: string[]) => new Set(ids).size === ids.length;
+
 const categoriesSchema = z
   .array(z.uuid("Invalid category ID"))
   .min(1, "At least one category is required")
-  .max(20, "A product can have at most 20 categories");
+  .max(20, "A product can have at most 20 categories")
+  .refine(uniqueIds, { message: "Categories must not repeat" });
 
 const productFieldsSchema = z.object({
   name: catalogNameSchema,
@@ -69,6 +78,7 @@ const productFieldsSchema = z.object({
   tags: z
     .array(z.uuid("Invalid tag ID"))
     .max(20, "A product can have at most 20 tags")
+    .refine(uniqueIds, { message: "Tags must not repeat" })
     .optional(),
 });
 

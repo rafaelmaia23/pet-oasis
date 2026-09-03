@@ -585,6 +585,39 @@ describe("GET /api/v1/products — filtros", () => {
     ]);
   });
 
+  it("should require the same variant to satisfy price and availability", async () => {
+    const { brand, racaoSeca } = await seedTaxonomy();
+    // A barata está esgotada; a que tem estoque custa trinta vezes mais.
+    await seedProduct({
+      name: "Barata esgotada",
+      slug: "barata-esgotada",
+      brandId: brand.id,
+      categoryIds: [racaoSeca.id],
+      variants: [
+        { sku: "BARATA", priceCents: 1000, stockQuantity: 0, isDefault: true },
+        { sku: "CARA", priceCents: 30000, stockQuantity: 5 },
+      ],
+    });
+    await seedProduct({
+      name: "Barata disponível",
+      slug: "barata-disponivel",
+      brandId: brand.id,
+      categoryIds: [racaoSeca.id],
+      variants: [{ sku: "OK", priceCents: 1500, stockQuantity: 2 }],
+    });
+
+    const response = await request(app).get(
+      "/api/v1/products?minPrice=500&maxPrice=2000&inStock=true",
+    );
+
+    // "Até R$ 20 e em estoque" é uma pergunta sobre o que dá para comprar: a
+    // faixa e a disponibilidade têm que cair na **mesma** variante. Com uma
+    // cláusula por filtro, a "barata esgotada" entraria pela variante cara.
+    expect(response.body.data.map((i: { slug: string }) => i.slug)).toEqual([
+      "barata-disponivel",
+    ]);
+  });
+
   it("should return an empty list for a taxonomy slug that does not exist", async () => {
     const { brand, racaoSeca } = await seedTaxonomy();
     await seedProduct({

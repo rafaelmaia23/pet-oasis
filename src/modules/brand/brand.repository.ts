@@ -13,6 +13,16 @@ export async function findBrandById(id: string) {
   return prisma.brand.findFirst({ where: { id, deletedAt: null } });
 }
 
+/**
+ * Produtos ativos que ainda apontam para a marca — o que a guarda de exclusão
+ * consulta. Mora aqui, e não no repositório de produto, pelo mesmo motivo que
+ * `countActiveProducts` da categoria mora no dela: a pergunta é da marca, e o
+ * service só conversa com a camada adjacente do próprio módulo.
+ */
+export async function countActiveProducts(brandId: string) {
+  return prisma.product.count({ where: { brandId, deletedAt: null } });
+}
+
 export async function findAllBrands() {
   return prisma.brand.findMany({
     where: { deletedAt: null },

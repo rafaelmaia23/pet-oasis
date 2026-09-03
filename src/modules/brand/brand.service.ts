@@ -1,4 +1,4 @@
-import { createNotFoundError } from "@/errors";
+import { createConflictError, createNotFoundError } from "@/errors";
 import { deleteImage, imageUrls, storeImage } from "@/lib/storage";
 import { resolveSlug } from "@/modules/catalog/catalog.schema";
 import * as brandRepository from "./brand.repository";
@@ -119,6 +119,18 @@ export async function removeBrandLogo(brandId: string) {
 
 export async function deleteBrand(brandId: string) {
   await resolveBrand(brandId);
+
+  // Espelho da categoria (9.6/W3). Sem isto a marca some de `GET /brands` e
+  // continua embutida em todo produto que a referencia — e "sumir do produto"
+  // não é alternativa: `brandId` não é nulável, marca é obrigatória.
+  const activeProducts = await brandRepository.countActiveProducts(brandId);
+
+  if (activeProducts > 0) {
+    throw createConflictError({
+      message: "A marca ainda tem produtos vinculados",
+      action: "Mova os produtos para outra marca antes de excluir esta",
+    });
+  }
 
   await brandRepository.softDeleteBrand(brandId, {
     action: "BRAND_DELETED",

@@ -81,6 +81,41 @@ const activeVariant = {
 } satisfies Prisma.ProductVariantWhereInput;
 
 /**
+ * Preço e disponibilidade numa cláusula `variants` só — as duas moram na mesma
+ * chave, e emitidas em separado a segunda apagaria a primeira.
+ *
+ * Compostas, exigem a **mesma** variante: "até R$ 20 e em estoque" pergunta o
+ * que dá para comprar, e o produto cuja variante barata está esgotada não
+ * responde a isso, mesmo tendo outra disponível por trinta vezes o preço.
+ *
+ * `inStock=false` é a exceção e continua sendo do **produto**, não da variante:
+ * significa "esgotado", e esgotado é não ter nenhuma variante em estoque. Com
+ * faixa de preço junto, lê-se "tem algo nesta faixa e está todo esgotado".
+ */
+function buildVariantFilter(
+  active: Prisma.ProductVariantWhereInput,
+  priceRange: Prisma.IntFilter | undefined,
+  inStock: boolean | undefined,
+): Prisma.ProductWhereInput {
+  const price = priceRange === undefined ? {} : { priceCents: priceRange };
+
+  if (inStock === false) {
+    return {
+      variants: {
+        ...(priceRange === undefined ? {} : { some: { ...active, ...price } }),
+        none: { ...active, stockQuantity: { gt: 0 } },
+      },
+    };
+  }
+
+  const stock = inStock === undefined ? {} : { stockQuantity: { gt: 0 } };
+
+  if (priceRange === undefined && inStock === undefined) return {};
+
+  return { variants: { some: { ...active, ...price, ...stock } } };
+}
+
+/**
  * O recorte do que é visível, num lugar só. Listagem e detalhe compartilham
  * este `where` de propósito: se eles divergissem, um produto poderia sumir da
  * lista e continuar acessível pela URL — que é exatamente o vazamento que Y8
@@ -145,16 +180,12 @@ export function buildProductWhere(
           AND: tagSlugs.map((slug) => ({ tags: { some: { tag: { slug } } } })),
         }),
     ...(brandSlug === undefined ? {} : { brand: { slug: brandSlug } }),
-    ...(priceRange === undefined
-      ? {}
-      : { variants: { some: { ...activeVariant, priceCents: priceRange } } }),
-    ...(inStock === undefined
-      ? {}
-      : inStock
-        ? { variants: { some: { ...activeVariant, stockQuantity: { gt: 0 } } } }
-        : {
-            variants: { none: { ...activeVariant, stockQuantity: { gt: 0 } } },
-          }),
+    // Preço e disponibilidade saem numa cláusula só, e não em duas: as duas
+    // escreveriam a mesma chave `variants` no mesmo objeto, e a segunda
+    // apagaria a primeira em silêncio. Compostas, exigem a **mesma** variante —
+    // "até R$ 20 e em estoque" é pergunta sobre o que dá para comprar, e o
+    // produto cuja variante barata está esgotada não responde a ela.
+    ...buildVariantFilter(activeVariant, priceRange, inStock),
   };
 }
 
@@ -300,10 +331,6 @@ export async function findAllProducts(
   ]);
 
   return { products, total };
-}
-
-export async function countActiveProductsOfBrand(brandId: string) {
-  return prisma.product.count({ where: { brandId, deletedAt: null } });
 }
 
 /**

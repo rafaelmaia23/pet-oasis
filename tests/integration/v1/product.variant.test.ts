@@ -360,6 +360,34 @@ describe("DELETE /api/v1/variants/:variantId", () => {
     expect(response.status).toBe(403);
   });
 
+  it("keeps one active variant when the two deletes arrive at once (X6)", async () => {
+    // Checar irmãs vivas e depois excluir são duas idas ao banco: sem lock, os
+    // dois requests contam `1` antes de qualquer commit e ambos passam — o
+    // produto ativo fica com zero variantes, que é exatamente o que a X6
+    // proíbe. É a mesma classe de corrida que a 9.10 serializou nas imagens.
+    const product = await seedProduct();
+    const token = await loginAsCatalogManager();
+
+    const responses = await Promise.all(
+      product.variants.map((variant) =>
+        request(app)
+          .delete(`/api/v1/variants/${variant.id}`)
+          .set("Authorization", `Bearer ${token}`),
+      ),
+    );
+
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      204, 409,
+    ]);
+
+    const remaining = await prisma.productVariant.findMany({
+      where: { productId: product.id, deletedAt: null },
+    });
+
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.isDefault).toBe(true);
+  });
+
   it("should return 401 without a token", async () => {
     const product = await seedProduct();
 

@@ -281,6 +281,60 @@ describe("POST /api/v1/products", () => {
     expectValidationError(response, ["name"]);
   });
 
+  it("should reject a name whose derived slug is shaped like a UUID", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    // O corte da Y2 valia só para o slug **explícito**: um nome que slugifica
+    // para algo com cara de uuid entrava, e o produto nascia inalcançável por
+    // slug — `GET /products/:idOrSlug` leria aquele valor como id para sempre.
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          name: "3f2504e0 4f89 41d3 9a0c 0305e82c3301",
+        }),
+      );
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["name"]);
+  });
+
+  it("should reject a category repeated inside the same body", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    // Sem a recusa no Zod, a duplicata fura a PK composta do vínculo e o
+    // handler traduz o P2002 para um 409 que fala de `product_id` — erro que
+    // manda procurar bug no lugar errado. O array de imagens e a lista de
+    // variantes já recusam duplicata aqui, no mesmo lugar.
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          categories: [category.id, category.id],
+        }),
+      );
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["categories"]);
+  });
+
+  it("should reject a tag repeated inside the same body", async () => {
+    const { brand, category, tag } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { tags: [tag.id, tag.id] }));
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["tags"]);
+  });
+
   it("should return 409 for a slug that already exists", async () => {
     const { brand, category } = await seedTaxonomy();
     const token = await loginAsCatalogManager();

@@ -9,6 +9,7 @@ import {
   detectImageFormat,
   IMAGE_DIMENSIONS,
   imageUrls,
+  storage,
   storeImage,
 } from "@/lib/storage";
 
@@ -219,5 +220,52 @@ describe("deleteImage", () => {
     await expect(
       deleteImage(`products/${crypto.randomUUID()}/${crypto.randomUUID()}`),
     ).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * Nasce na 9.11 (AB14) para o `--dry-run` do `demo-reset` dizer quantos
+ * arquivos ele apagaria. Fica no adaptador, e não em `fs.readdir` dentro do
+ * script, porque o motivo de o adaptador existir é não haver `fs` espalhado
+ * pelo projeto (N13) — e porque um backend remoto teria que responder isso de
+ * outro jeito.
+ */
+describe("countFiles", () => {
+  it("returns zero for a prefix that was never written to", async () => {
+    expect(await storage.countFiles("products/never-existed")).toBe(0);
+  });
+
+  it("counts both derivatives of every stored image, recursively", async () => {
+    const owner = `count-${Date.now()}`;
+
+    await storeImage({
+      owner: "products",
+      ownerId: owner,
+      buffer: await pixels("jpeg"),
+    });
+    await storeImage({
+      owner: "products",
+      ownerId: owner,
+      buffer: await pixels("png"),
+    });
+
+    // Duas imagens × dois derivados, contados através do diretório do dono.
+    expect(await storage.countFiles(`products/${owner}`)).toBe(4);
+  });
+
+  it("goes back to zero after the directory is deleted", async () => {
+    const owner = `wipe-${Date.now()}`;
+
+    await storeImage({
+      owner: "pets",
+      ownerId: owner,
+      buffer: await pixels("webp"),
+    });
+
+    expect(await storage.countFiles(`pets/${owner}`)).toBe(2);
+
+    await storage.deleteDirectory(`pets/${owner}`);
+
+    expect(await storage.countFiles(`pets/${owner}`)).toBe(0);
   });
 });

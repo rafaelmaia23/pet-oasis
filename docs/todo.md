@@ -174,7 +174,7 @@ agrupamento de várias sub-fases numa mesma feat-branch.
 | **9.8** | Catálogo — leitura, views por capability, filtros | Depende de 9.2, 9.6, 9.7. |
 | **9.9** | Busca textual | Depende de 9.8 existir para ter o que buscar. Maior risco técnico da fase — isolada de propósito. |
 | **9.10** ✅ | Adaptador de storage + upload de imagem | Independente do resto — mais infra, menos domínio. |
-| **9.11** | Seed fake do domínio + `demo-reset` | Depende do schema inteiro estar firme. Resolve a entrada "Dummy data para a demo" do `docs/reference/backlog.md`. |
+| **9.11** ✅ | Seed fake do domínio + `demo-reset` | Depende do schema inteiro estar firme. Resolve a entrada "Dummy data para a demo" do `docs/reference/backlog.md`. |
 | **9.12** | Fechos | Docs, coleção Bruno, README, `context.md`, revisão do backlog. |
 
 ### ✅ [Sessão 9.1] Fase 9.1 — RBAC do domínio: decisão + seed
@@ -421,63 +421,49 @@ Branch `feat/fase-9-10-uploads`, saindo de `fase-9`. Um commit por item, teste a
 - 🔸 **`sharp` no ARM64 só funciona se a imagem for construída no próprio servidor ARM** — é o que o `prod:up` faz hoje (o compose tem `build:`). Construir num x86 e enviar a imagem pronta quebra em runtime com "could not load the sharp module", erro que não se parece nada com a causa. Vai como nota no `docs/context/infrastructure.md`.
 - 🔸 O `JSON_BODY_LIMIT=100kb` **não** afeta multipart (`express.json` só age em `application/json`) — o teto do upload é o do `multer` (AA7). Vale um teste, porque é a primeira coisa que alguém vai suspeitar quando um upload de 3 MB falhar por outro motivo.
 
-### ⬜ [Sessão 9.11] Fase 9.11 — Seed fake do domínio + `demo-reset`
-> Kickoff de 2026-09-03, em sessão de grelha: **dezessete decisões (AB1–AB17)** fechadas antes de
-> qualquer linha de código, no molde da 9.9 e da 9.10. É a sessão que transforma o schema inteiro
-> da Fase 9 em algo que se pode *ver* — e por isso a única em que o produto é **conteúdo**, não
-> código: metade das decisões abaixo é sobre o que o dataset precisa demonstrar.
->
-> A decisão estruturante é a **AB1**, e ela nasceu de uma verificação que derrubou o plano
-> original. O item herdado da 9.10 dizia "um punhado de `.webp` pequenos versionados em
-> `src/lib/seed/assets/`", e o estágio `runtime` do `Dockerfile` **não copia `src/`** (só
-> `node_modules`, `dist`, `prisma` e o entrypoint), enquanto o tsup empacota TS/JS e ignora
-> `.webp`. O seed do container de produção — que roda a cada boot, via `migrate deploy → seed →
-> start` — não encontraria arquivo nenhum. Os bytes passam a viver em **base64 num `.ts`**, que é
-> o único caminho que sobrevive ao bundle sem inventar um segundo mecanismo de deploy.
+### ✅ [Sessão 9.11] Fase 9.11 — Seed fake do domínio + `demo-reset`
+> Sessão de 2026-09-03, com kickoff em grelha (dezessete decisões AB1–AB17 fechadas antes de
+> qualquer linha de código; o detalhe está no histórico do git). O *porquê* migrou para
+> `docs/context/pet-domain.md` § "Dataset fake do domínio (9.11)" e para
+> `docs/context/infrastructure.md` (§ "Dataset fake" e § "Seeds e ambiente demo").
+- **A decisão estruturante nasceu de uma verificação que derrubou o plano herdado.** A 9.10 previa
+  `.webp` versionados em `src/lib/seed/assets/`, e o estágio `runtime` do `Dockerfile` não copia
+  `src/` — o tsup tampouco empacota `.webp`. O seed de produção, que roda a cada boot, não acharia
+  arquivo nenhum. Os 51 assets viraram base64 em `fakeImages.constants.ts` (~2 MB), gerado por
+  `tools/generate-fake-images.ts` a partir de `assets-inbox/` (fora do git, e do Biome).
+- **O item do refresh de lexemas já estava feito** desde a 9.9: `runSeed()` termina com
+  `refreshSearchLexemes()`. A sessão só conferiu a ordem — o catálogo fake é semeado antes.
+- ✅ Dataset: 9 marcas, **20** categorias em 3 níveis, 8 tags, 35 produtos (51 variantes) e 15 pets
+  em 12 donos, mais `employee06`/`employee07` para as roles `stockist` e `catalog-manager` da 9.1.
+  Tudo sob a mesma `SEED_FAKE_DATA`, na ordem usuários → pets → catálogo → refresh.
+- ✅ `demo-reset` trunca as oito tabelas novas do catálogo, limpa o upload **por prefixo de dono**
+  (nunca a raiz — `deleteDirectory("")` atingiria o ponto de montagem do bind mount) e conta
+  `uploadFiles` também no `--dry-run`. Ordem: truncate → limpar → reseed.
+- ✅ `seedFaker.ts`: o `faker` do seed passa a ser semeado **por chave** (email, ou SKU nas
+  variantes). O roster deixou de ser sequência e virou conjunto — apender não desloca mais nada.
+- ✅ Testes: 52 novos (invariantes do roster sem banco, idempotência dos dois seeds, cenários da
+  AB9/AB10, `countFiles`, e o `demo-reset` limpando e contando arquivo). Suíte **1185** +
+  `typecheck` + `lint` verdes.
+- ✅ Entrada "Dummy data para a demo" marcada como resolvida em `docs/reference/backlog.md`.
 
-#### Decisões do kickoff (AB1–AB17)
+#### O que a implementação corrigiu do próprio kickoff
 
-| # | Decisão | Escolha |
-|---|---|---|
-| AB1 | Onde os bytes das imagens vivem | **Base64 em `src/lib/seed/fakeImages.constants.ts`**, empacotado pelo tsup. Recusado (a) `.webp` versionados — não existem no container de produção (ver acima); (b) `.webp` + `COPY` novo no estágio runtime — criaria a primeira dependência de "arquivo ao lado do bundle" do projeto, classe de erro que só aparece em produção; (c) gerar placeholder em runtime com `sharp` — o `node:22-bookworm-slim` não traz fonte nenhuma, então `<text>` em SVG sairia em branco **só** em produção. |
-| AB2 | Como o conteúdo é escrito | **Híbrido.** O que precisa ser legível e buscável (marca, categoria, tag, nome de produto) é escrito à mão em pt-BR; o que só precisa existir e variar (descrição, preço, SKU, estoque) vem do faker com seed fixo. O motivo é a busca da 9.9: a correção de erro de digitação só se demonstra sobre palavras reais em português — `faker.commerce.productName()` em inglês não serve de corpus. |
-| AB3 | Ambição do dataset | **Cobertura de cenários**, não vitrine mínima. O `FAKE_USER_ROSTER` já é assim (`PENDING`/`BANNED`/`DELETED_USER` não existem para encher lista), e um catálogo só de produtos ativos e felizes não exercita nada do que a 9.8 construiu de views por capability. |
-| AB4 | Gate de env | A mesma **`SEED_FAKE_DATA`** que já liga os usuários fake. Recusada uma `SEED_FAKE_CATALOG` própria: a separação só paga quando existir catálogo real semeado por outra via, o que não está no roadmap (a Fase 10 é checkout, não importação), e duas flags hoje é configuração que ninguém sabe combinar. |
-| AB5 | O que o `demo-reset` apaga no `UPLOAD_DIR` | **Por prefixo de dono**, iterando `Object.keys(IMAGE_DIMENSIONS)` — nunca a raiz. `storage.deleteDirectory("")` resolve para o próprio `root` (o guard de `resolveInsideRoot` permite `resolved === this.root`) e o `fs.rm` recursivo tentaria remover o **ponto de montagem do bind mount**: em dev apaga e o `put` recria, em produção falha com `EBUSY`. Iterar a constante em vez de escrever três strings faz um dono novo da Fase 10 entrar sozinho na limpeza. |
-| AB6 | Linha existe, arquivo sumiu | O seed **não** se auto-cura. Recusado acrescentar um `exists(key)` à interface `Storage` — ela é a costura para S3, e um `exists` por imagem a cada boot vira uma chamada de rede por imagem no dia em que o backend for remoto. O `demo-reset` diário é o mecanismo de convergência (janela de no máximo um dia num ambiente de portfólio), e o `cleanup-uploads.ts` já reporta "linha sem arquivo" sem apagar. O modo de falha vai documentado. |
-| AB7 | Tamanho do catálogo | **35 produtos no total**: 28 `ACTIVE` (vitrine com duas páginas no `limit` default de 20), 4 `DRAFT`, 2 `DISCONTINUED`, 1 soft-deletado. Recusado (a) ~12 produtos — uma página só esconde exatamente o furo que a 9.2 fechou, que só aparece com ≥2 páginas; (b) 35 `ACTIVE` mais os de cenário por fora — 42 nomes escritos à mão é mais do que se revisa de uma sentada. |
-| AB8 | Taxonomia | **9 marcas** (uma ou duas por ramo), **16 categorias em 3 níveis**, **8 tags**. Os 3 níveis são obrigatórios e não estéticos: a 9.6 validou profundidade máxima 3 no service, e uma árvore de 2 níveis nunca exercita o limite que o código defende. Recusado manter 6 marcas: com marca real (AB11) uma delas teria que aparecer num ramo onde não existe no mundo real. |
-| AB9 | Pets | **~14**, ligados aos customers fake por email fixo, **incluindo** pets dos usuários de cenário — o pet do dono soft-deletado é o caso mais interessante que a fase tem para mostrar, porque encosta na cascata da Fase 8, e custa uma linha no roster. Cobertos: 1 cliente sem pet, 1 com 3, 1 falecido, 1 soft-deletado, 1 de espécie sem raça (`RABBIT`/`RODENT`), 1 sem microchip, 1 sem foto. |
-| AB10 | Cenários carregados no catálogo | `costCents` em **todas** as variantes; ~8 produtos multi-variante; 2 casos de esgotado (variante default zerada, e produto inteiro zerado); ~5 com `targetSpecies` de 2+ espécies; 1 folha de 3º nível com item único; ~4 com `compareAtPriceCents`; 1 produto **sem imagem nenhuma**. O `costCents` em todas é o ponto que importa: uma variante com `costCents: null` produz o mesmo JSON para quem tem `read:product:cost` e para quem não tem — é o caso que não prova nada, e é o que a conta `demo` existe para exibir (mesmo desenho de `read:audit-log:full`). |
-| AB11 | Marcas reais ou fictícias | **Reais**, com logo real: Golden, Whiskas, Pedigree, Sanol, Bravecto, Vetnil, Chalesco, Jambo, Furacão Pet. Decisão do usuário, contra a minha recomendação — o argumento a favor (uso nominativo por loja é prática comum, demo sem fins lucrativos) é defensável; a ressalva que fica registrada é que versionar o asset num repositório público é **redistribuição**, não exibição por revendedor, que é a hipótese usualmente tolerada. Risco baixo, não nulo. |
-| AB12 | Quantas imagens e a que qualidade | Foto **única por produto** (não uma por folha repetida), selecionada por resolução dentro de cada folha; galeria de 3 com fotos genuinamente distintas; 6 pets com foto; 9 logos. Congeladas em WebP a **q75**, lado maior **≤800 px** (≤512 nos logos) — cerca de **2 MB** de base64. O acervo recebido tem 76 arquivos (59 de produto), então a seleção é por qualidade e as duplicatas de 400–447 px ficam fora. `IMAGE_DIMENSIONS.products.full` continua 1600: reduzi-lo para caber nas fontes seria mudar regra de domínio da 9.10 por causa de um dataset de seed. |
-| AB13 | Ordem do roster deixa de importar | O `fakerSeed` passa a ser **derivado do email por entrada**, não uma instância sequencial. Hoje inserir uma entrada no meio do `FAKE_USER_ROSTER` muda nome e telefone de toda entrada posterior; a idempotência (por email) não quebra, mas os nomes divergem entre um banco antigo e um recriado. Com o seed por email o roster vira conjunto declarativo, reordenável para sempre — e a 9.11 não é a última sessão que vai apender a ele. Os nomes de todos os fakes mudam **uma vez**; bancos existentes não mudam, porque o rerun pula quem já existe. |
-| AB14 | `DemoResetCounts` | Ganha as 8 chaves de tabela nova (`productTag`, `productCategory`, `productImage`, `productVariant`, `product`, `brand`, `category`, `tag`) **e `uploadFiles`**, contado também no `--dry-run`. O dry-run existe para se olhar antes de apertar o botão, e a partir desta sessão a operação mais destrutiva do script passa a ser justamente a que ele não mostrava. Contar dirent é leitura pura, não viola o contrato read-only. |
-| AB15 | Ordem das três operações no `demo-reset` | **truncate (tx) → limpar uploads → reseed.** A falha no meio deixa banco e disco vazios juntos, e o próximo reset conserta. Recusado (a) limpar antes do truncate — se o truncate falhar, sobram linhas apontando para arquivo inexistente, o estado que o ADR de storage classifica como mais grave que um órfão no disco; (b) reusar a varredura do `cleanup-uploads.ts` — ela tem carência de 24 h (`UPLOAD_ORPHAN_GRACE_HOURS`) e não removeria nada num reset, e baixar a carência é mexer na proteção pelo motivo errado. |
-| AB16 | O seed compartilha código com as factories de teste? | **Não.** As duas coisas parecem iguais e querem o oposto: a factory de teste quer sufixo aleatório (`Marca ${suffix}`) para dois testes não colidirem, o seed quer chave estável para ser idempotente. Unificar criaria um parâmetro `determinístico?`, que é o cheiro clássico de abstração errada. O seed repete o molde (parse pelo schema → repository → `withResolvedDefault`), em arquivo por assunto, espelhando o par `fakeUsers.constants.ts`/`seedFakeUsers.ts` que já existe. |
-| AB17 | Como testar sem tornar a suíte lenta | `seedFakeCatalog({ withImages })`: `false` nos testes de dataset e idempotência, `true` em **um** teste dedicado que verifica os dois derivados no disco. Uma chamada completa são ~80 encodes de `sharp`, e o teste de idempotência chama duas vezes. Recusado mockar o `storage`: é o que a 9.10 recusou explicitamente ("teste que não exercita o caminho de produção passa em falso"), e o mock esconderia justamente o único risco novo — o seed produzir arquivo com forma diferente do que a API produz. |
-
-#### Passo-a-passo
-
-- ⬜ `.gitignore` ganha `assets-inbox/` — a pasta onde os originais foram entregues não é versionada; só o base64 derivado é (AB1). Fazer **antes** de qualquer `git add`.
-- ⬜ `src/lib/seed/fakeImages.constants.ts` — gerado a partir de `assets-inbox/` (AB12): normaliza para WebP a q75 com lado maior ≤800 px (≤512 nos logos) e exporta `Buffer.from(..., "base64")` por asset, nomeado pelo destino. A lista de arquivos recebidos e o mapeamento estão em `docs/planning/fase-9.11-assets.md`.
-- ⬜ `src/lib/seed/fakeCatalog.constants.ts` — roster declarativo do catálogo (AB2, AB7, AB8, AB10). **Herdado da 9.6:** marca/categoria/tag são **transacionais** (entram no truncate do `demo-reset` e já entraram no `clearDatabase`), diferente de `Breed`; a categoria precisa ser semeada **de cima para baixo** por causa da self-FK, e nome/slug são unique global, então a idempotência é por slug estável.
-- ⬜ `src/lib/seed/seedFakeCatalog.ts` (AB16, AB17). **Herdado da 9.7:** o molde é `tests/factories/product.factory.ts` (parse pelo schema → `productRepository.createProduct` sem audit, com `withResolvedDefault` para a variante default); `slug` e `sku` são unique global, então a idempotência é por chave estável, e o produto precisa de marca **e** de ao menos uma categoria já semeadas. A checagem de existência **ignora `deletedAt`** — mesmo motivo do `findAnyUserByEmail` do seed de usuários: um produto soft-deletado colidiria no unique de `slug`.
-- ⬜ `src/lib/seed/fakePets.constants.ts` (já anunciado em comentário de `fakeUsers.constants.ts`), amarrado aos customers fake existentes por email fixo (AB9). **Herdado da 9.4:** o molde é `tests/factories/pet.factory.ts` (parse pelo schema → `petRepository.createPet` sem audit); a raça se resolve por **nome** (`SRD_BREED_NAME`) sobre o catálogo já semeado, nunca por id fixo; e `microchipId` é unique global, então o roster precisa de números distintos e idempotência por chave estável.
-- ⬜ `src/lib/seed/seedFakePets.ts` — atenção à ordem: `applyTrait` roda **na criação do usuário**, então o pet do dono soft-deletado precisa nascer antes do delete do dono ou já com `deletedAt` próprio. A ordem "usuários → pets" atual não dá isso de graça.
-- ⬜ `fakeUsers.constants.ts` — seed do faker derivado do email por entrada (AB13) e **um funcionário de cada role nova da 9.1** (`stockist`, `catalog-manager`): sem eles as duas roles existem só no seed e ninguém consegue exercitá-las em dev/demo.
-- ⬜ `runSeed()` — chamar os dois seeds novos dentro do gate `SEED_FAKE_DATA` (AB4), na ordem **usuários → pets → catálogo**, e **antes** do `refreshSearchLexemes()` que já fecha a função. **Herdado da 9.9 (Z14):** o dicionário de lexemas é uma view materializada e não se atualiza sozinha — a chamada já existe desde a 9.9, então aqui o trabalho é *conferir a ordem*, não implementar. Sem isso a demo sobe com a correção de erro de digitação apagada, e o sintoma (busca com typo não acha nada) não aponta para a causa.
-- ⬜ `demo-reset.ts` — truncar/restaurar as tabelas transacionais novas na ordem FK-safe do `clearDatabase` (junções → variantes → imagens → produto → taxonomia), `DemoResetCounts` com as chaves novas e `uploadFiles` (AB14), limpeza por prefixo de dono (AB5) e a ordem truncate → limpar → reseed (AB15). **`pet` já entrou na 9.4** (nos três pontos do script, antes de `customer` — a FK é RESTRICT), e **`Breed` já está confirmado na 9.3** como catálogo de referência tipo `Role`/`Feature`: preservado, não truncado, nem no `demo-reset` nem no `clearDatabase` dos testes.
-- ⬜ Testes, no molde de `tests/integration/lib/seed/seedFakeUsers.test.ts`: seed idempotente (segunda execução não cria nada), o dataset carrega os cenários da AB10 e da AB9, `demo-reset` restaura pets/produtos fake, limpa os prefixos de upload e reporta `uploadFiles` no dry-run sem tocar no disco. Um teste dedicado com `withImages: true`, `sharp` e `LocalDiskStorage` reais, verificando os dois derivados (AB17).
-- ⬜ Registrar as decisões: o modo de falha da AB6 em `docs/context/infrastructure.md`, o desenho do dataset em `docs/context/pet-domain.md`, e as linhas correspondentes em `docs/context.md` — os dois juntos, senão a decisão fica inalcançável.
-- ⬜ Marcar como resolvida a entrada "Dummy data para a demo" do `docs/reference/backlog.md` ao fechar esta sessão.
-- ⬜ `npm run typecheck` + `npm run lint` + suíte completa verdes.
-
-#### Riscos conhecidos
-
-- 🔸 **O arquivo de base64 vai para ~2 MB** (AB12), o maior do repositório. É lido por máquina e muda uma vez na vida, mas vale saber que um `git diff` nele é inútil e que regenerá-lo reescreve o arquivo inteiro.
-- 🔸 **O tempo de `sharp` no `demo-reset`** depende da quantidade de chaves gravadas, não do peso da fonte: ~40 chaves × 2 derivados ≈ 80 encodes por reset. Na casa de 1–2 s, mas é o número a olhar se o reset diário começar a demorar.
-- 🔸 **AB11 é a única decisão desta sessão com risco não técnico.** Logos de marca registrada versionadas num repositório público; avaliado como risco baixo e aceito pelo usuário. Se algum dia incomodar, a troca é o conteúdo de um arquivo de constantes — nenhuma linha de código muda.
+- **A árvore tem 20 categorias, não 16 (AB8).** 13 folhas mais 7 nós intermediários; o 16 foi
+  contagem errada minha no planejamento, e cortar nós para caber no número teria mutilado a
+  taxonomia — inclusive o 3º nível, que existe para exercitar o limite de profundidade do
+  `category.service`.
+- **A distribuição de status é 29 `ACTIVE`, não 28 (AB7).** `status` e `deletedAt` são
+  **ortogonais** (ADR `product-catalog-modeling`), então o produto soft-deletado continua `ACTIVE`:
+  são 29 com esse status, 28 de fato visíveis. O roster estava certo; a asserção do teste é que
+  nasceu errada, e virou a documentação do próprio invariante.
+- **`description` e `sku` ficaram à mão, contra a letra da AB2**, e pelo motivo que a AB11 criou ao
+  escolher marcas reais: `faker.commerce` em inglês embaixo de "Ração Golden Fórmula Cães Adultos"
+  seria absurdo, e `A1B2C3D4E5` não se parece com SKU. Preço, custo e estoque continuam sorteados.
+- **A interface `Storage` ganhou um quinto método, `countFiles(prefix)`** — a AB6 tinha recusado um
+  `exists(key)`, mas a AB14 exige o número no dry-run. São casos diferentes: `exists` seria por
+  imagem a cada boot (uma chamada de rede por imagem num backend remoto), `countFiles` é três
+  chamadas por reset diário. A alternativa era `fs.readdir` dentro do script, que é exatamente o
+  que o adaptador existe para evitar.
 
 ### ⬜ [Sessão 9.12] Fase 9.12 — Fechos
 - ⬜ `docs/reference/endpoints.md` — as rotas novas de catálogo, e a seção "Mounting" com a categoria nova de autenticação opcional (rotas públicas que enriquecem a resposta quando há token). **`breeds` (9.3) e `pets` (9.4) já entraram**, e as **sete rotas de imagem da 9.10** também (mais os dois parágrafos de Mounting: o estático `/uploads/*` e o balde de upload por usuário); conferir, não reescrever.

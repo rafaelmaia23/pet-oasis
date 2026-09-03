@@ -25,6 +25,19 @@ export interface Storage {
   delete(key: string): Promise<void>;
   /** Apaga o diretório `prefix` inteiro. Idempotente. */
   deleteDirectory(prefix: string): Promise<void>;
+  /**
+   * Quantos arquivos existem sob `prefix`, recursivamente. `0` quando o prefixo
+   * não existe.
+   *
+   * Nasce na 9.11 para o `--dry-run` do `demo-reset` conseguir dizer quantos
+   * arquivos ele apagaria (AB14). É deliberadamente diferente do `exists(key)`
+   * que a AB6 **recusou**: aquele seria chamado por imagem a cada boot do
+   * container, virando uma chamada de rede por imagem no dia em que o backend
+   * for remoto; este é chamado três vezes por reset diário. O que não podia
+   * acontecer era `fs.readdir` migrar para dentro do script — o adaptador existe
+   * justamente para não haver `fs` espalhado pelo projeto (N13).
+   */
+  countFiles(prefix: string): Promise<number>;
   /** URL pública de `key`, derivada de `UPLOAD_PUBLIC_BASE_URL`. */
   url(key: string): string;
 }
@@ -74,6 +87,33 @@ export class LocalDiskStorage implements Storage {
       recursive: true,
       force: true,
     });
+  }
+
+  async countFiles(prefix: string): Promise<number> {
+    const target = this.resolveInsideRoot(prefix);
+
+    let entries: string[];
+
+    try {
+      entries = await fs.readdir(target);
+    } catch (error) {
+      // Prefixo inexistente conta zero, não estoura: é o estado normal antes do
+      // primeiro upload, e o dry-run precisa responder nele.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+
+      throw error;
+    }
+
+    let total = 0;
+
+    for (const entry of entries) {
+      const child = path.join(prefix, entry);
+      const stats = await fs.stat(path.resolve(this.root, child));
+
+      total += stats.isDirectory() ? await this.countFiles(child) : 1;
+    }
+
+    return total;
   }
 
   url(key: string): string {

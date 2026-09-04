@@ -33,19 +33,20 @@ const SCANNED_EXTENSIONS = [".md", ".ts", ".json", ".yml", ".yaml", ".bru"];
 const DISSOLVED_DOCS = new Set(["docs/fase-8-redesign.md"]);
 
 /**
- * Documento **efêmero** — rascunho em `.scratch/` (fora do git) ou spec em
- * `docs/specs/` — não pode ser citado por documento permanente (9.12/AC5).
+ * Documento **efêmero** — spec ou issue em `.scratch/`, o tracker — não pode
+ * ser citado por documento permanente (9.12/AC5, retargetado na Fase 10).
  *
  * A regra existe porque ela já falhou por disciplina: um ADR citava um `§` de
  * um documento de planejamento escrito para ser descartável, e o link
- * sobreviveu a uma revisão. Pior: um caminho de `.scratch/` **existe** na
- * máquina de quem escreveu e em nenhuma outra, então a checagem de existência
- * não o pegaria nunca.
+ * sobreviveu a uma revisão. Versionar o `.scratch/` (Fase 10) mudou a
+ * durabilidade do arquivo, **não** a autoridade do conteúdo: uma spec é o
+ * retrato de uma negociação num instante, e envelhece assim que a
+ * implementação diverge dela.
  *
  * Casa só a citação de um **arquivo**; nomear o diretório é legítimo (é o que
  * o mapa e os guias fazem ao descrever o layout).
  */
-const EPHEMERAL_DOC = /(?:\.scratch\/[\w.-]+\.[\w]+|docs\/specs\/[\w.-]+\.md)/g;
+const EPHEMERAL_DOC = /\.scratch\/[\w./-]+\.[\w]+/g;
 
 /**
  * Quem pode citar documento efêmero. Cada entrada tem um motivo, e um motivo
@@ -55,13 +56,37 @@ const EPHEMERAL_DOC = /(?:\.scratch\/[\w.-]+\.[\w]+|docs\/specs\/[\w.-]+\.md)/g;
  *   aberta, ele aponta para a spec dela em vez de repeti-la.
  * - `docs/README.md` — o mapa da documentação; os caminhos ali são o desenho
  *   do fluxo, não referência a um documento que exista.
+ * - `docs/agents/issue-tracker.md` e `docs/guides/todo-phases.md` — descrevem o
+ *   layout do tracker, então precisam nomeá-lo.
  * - este próprio arquivo — os padrões acima são dados, não citação.
+ *
+ * Além destes, **todo arquivo dentro de `.scratch/`**: o tracker citando o
+ * tracker é o caso normal (uma issue aponta para a spec, a spec para outra
+ * issue), e nada ali é permanente.
  */
 const MAY_CITE_EPHEMERAL = new Set([
   "docs/todo.md",
   "docs/README.md",
+  "docs/agents/issue-tracker.md",
+  "docs/guides/todo-phases.md",
   "tools/check-docs-links.ts",
 ]);
+
+/** Prefixos cujo conteúdo inteiro pode citar efêmero. */
+const EPHEMERAL_CITERS = [".scratch/"];
+
+/**
+ * Spec de esforço fechado. O fecho não apaga a pasta — marca a spec, e o
+ * marcador nomeia para onde o *porquê* foi promovido:
+ *
+ *   Status: fechada em 2026-09-30 — porquê promovido a docs/adr/<nome>.md
+ *
+ * Verificar isto aqui é o que repõe a força que o antigo "apagar a spec no
+ * fecho" dava à regra de migrar-antes-de-fechar: sem a remoção, a promoção
+ * viraria boa intenção. Spec sem a linha `Status:` é lida como aberta, que é o
+ * default certo — quem está no meio do trabalho não deve nada.
+ */
+const CLOSED_SPEC = /^Status:\s*fechada\b/;
 
 type Problem = { file: string; line: number; message: string };
 
@@ -138,7 +163,24 @@ function report(file: string, line: number, message: string): void {
 for (const file of collectFiles(ROOT)) {
   const lines = readFileSync(file, "utf8").split("\n");
   const isMarkdown = file.endsWith(".md");
-  const mayCiteEphemeral = MAY_CITE_EPHEMERAL.has(relative(ROOT, file));
+  const relativePath = relative(ROOT, file);
+  const mayCiteEphemeral =
+    MAY_CITE_EPHEMERAL.has(relativePath) ||
+    EPHEMERAL_CITERS.some((prefix) => relativePath.startsWith(prefix));
+
+  // Spec fechada: os destinos que ela nomeia precisam existir de fato. A
+  // checagem de caminho `docs/**.md` acima já cobre a maioria; esta acrescenta
+  // que a linha `Status: fechada` tem que nomear ao menos um destino.
+  if (/^\.scratch\/[^/]+\/spec\.md$/.test(relativePath)) {
+    const statusLine = lines.find((line) => CLOSED_SPEC.test(line));
+    if (statusLine && !/\b(docs\/[\w./-]+\.md|CLAUDE\.md)/.test(statusLine)) {
+      report(
+        file,
+        lines.indexOf(statusLine) + 1,
+        "spec marcada como fechada sem nomear o destino do porquê — acrescente os caminhos de docs/adr/ ou docs/context/ que passaram a guardá-lo",
+      );
+    }
+  }
 
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
@@ -162,8 +204,13 @@ for (const file of collectFiles(ROOT)) {
       }
     }
 
-    // Menções em prosa ou comentário: `docs/reference/endpoints.md`
-    for (const match of line.matchAll(/\bdocs\/[\w./-]+\.md\b/g)) {
+    // Menções em prosa ou comentário: `docs/reference/endpoints.md`.
+    //
+    // O lookbehind é o que impede o caminho de OUTRO repositório de ser lido
+    // como nosso: em `../pet-oasis-web/docs/adr/<nome>.md`, o trecho a partir
+    // de `docs/` casaria sozinho, e checar a existência dele aqui reprovaria um
+    // documento correto. Um caminho precedido de barra não é nosso.
+    for (const match of line.matchAll(/(?<![\w/.-])docs\/[\w./-]+\.md\b/g)) {
       const target = match[0];
       if (DISSOLVED_DOCS.has(target)) continue;
       if (!exists(join(ROOT, target))) {

@@ -100,8 +100,8 @@ A Fase 9 guarda só o preço corrente (`ProductVariant.priceCents`). O congelame
 ### Peso do pet como medição datada — **G**
 `Pet.weightGrams` (Fase 9) é um instantâneo, não um histórico — o dono atualiza manualmente. Quando a veterinária chegar ao domínio, o peso vira uma medição datada no prontuário, e este campo passa a ser cache do último valor (ou é removido). Registrado para não reabrir a discussão de "por que o peso está no lugar errado" nessa hora.
 
-### Migração de token para cookie httpOnly — **G**
-Trade-off já documentado e deferido no ADR de auth. Reabrir só se houver frontend próprio e o gatilho documentado ocorrer. Traria CSRF de volta ao escopo (hoje inexistente, por usar Bearer), então é decisão de arquitetura, não polimento.
+### ~~Migração de token para cookie httpOnly~~ — ✅ resolvido fora deste repo (Fase 10)
+O gatilho documentado ocorreu — o frontend próprio nasceu (`pet-oasis-web`) — e a resposta veio do lado dele, não daqui: o front adotou **BFF**, guardando a sessão num cookie `httpOnly` cifrado do **domínio dele**, de modo que o token nunca chega ao JavaScript do navegador. A API continua Bearer e continua sem CSRF no escopo, que era a contrapartida temida deste item. O ganho pretendido (armazenamento seguro, não depender do cliente fazer certo) foi obtido sem que a API trocasse de mecanismo — e é isso que a mantém universal para o app mobile planejado, que não usaria cookie. Item encerrado: se um segundo cliente de navegador aparecer sem BFF, ele reabre, mas como decisão daquele cliente.
 
 ---
 
@@ -109,3 +109,121 @@ Trade-off já documentado e deferido no ADR de auth. Reabrir só se houver front
 
 ### LGPD: base legal, anonimização e direitos do titular — **G**
 Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real de titular. Quando entrar, os pontos são: base legal para reter log de segurança (legítimo interesse / obrigação legal); o que acontece com `actorId` e `targetId` no `AuditLog` quando um usuário exerce direito de eliminação — hoje o soft delete **preserva** os dois; e o mecanismo de resposta a requisição de titular (exportação e eliminação). A tensão central é real: apagar destrói a trilha de segurança, manter conflita com o direito de eliminação, e a saída usual é **anonimizar** o ator preservando ação e timestamp.
+
+## Bugs
+
+### Seed fatal derruba a aplicação no boot
+
+**Problema:** o entrypoint trata falha de seed como fatal. Um `EACCES` ao gravar imagem de catálogo em `uploads/` colocou o container em crash loop e a API inteira fora do ar (502 no proxy), por causa de dado de demonstração. Contraria o padrão de degradação fail-open já adotado para Axiom/Sentry.
+
+**Proposta:** separar o seed do boot — passo one-shot (`docker compose run --rm app npm run db:seed`) ou serviço dedicado com `restart: no`. Se mantido no entrypoint, tornar fail-open: logar em `error` e seguir para o start do servidor. Deploy da fase 9 (2026-09-03).
+
+---
+
+### `uploads/` dentro do working tree do repositório
+
+**Problema:** o diretório de dados fica dentro do repo clonado em `/srv/pet-oasis`. O git escreve como o usuário do host (uid 1001) e o container como `node` (uid 1000) — não há dono que satisfaça os dois. Já causou dois incidentes: `git pull` abortado por `Permission denied` em `uploads/.gitkeep` (deixando checkout pela metade) e `EACCES` no seed. Arquivos enviados também ficam expostos a um `git clean -fd`.
+
+**Proposta:** mover para fora do working tree (`/srv/pet-oasis-data/uploads`) e declarar bind mount no compose. Documentar o uid esperado no guia de deploy, ou fixar `user:` no serviço para não depender do `USER` da imagem base.
+
+---
+
+### Prisma não detecta libssl no runtime
+
+**Problema:** `node:22-bookworm-slim` não traz OpenSSL; o Prisma emite warning a cada boot e cai no default `openssl-1.1.x`. Funciona hoje, mas é escolha implícita de engine — frágil em ARM64 e em bump de imagem base.
+
+**Proposta:** instalar `openssl` no estágio runtime do Dockerfile. Baixo custo, remove ruído do log de inicialização.
+
+## Necessidades do front web
+
+### Janela de graça na rotação do refresh token — **M**
+
+**Problema:** a detecção de reuso invalida *todas* as sessões do usuário quando um
+refresh já consumido reaparece (ADR `auth-token-revocation.md`). Contra um cliente que
+renova de forma concorrente isso vira falso positivo: duas requisições que cheguem ao
+`/auth/refresh` com o mesmo token — o que um front com prefetch produz sem o usuário
+clicar em nada — fazem a segunda ser lida como roubo, e o dono é deslogado de todos os
+dispositivos.
+
+**Motivo de existir agora:** o front web (repo `pet-oasis-web`) adotou BFF com rotação
+proativa em middleware. Ele se defende do lado dele — single-flight por sessão e nenhuma
+renovação em requisição de prefetch —, e isso basta **enquanto for um processo Node só**.
+Deixa de bastar no dia em que houver segunda réplica do front ou um segundo cliente
+(mobile): a trava em memória não é compartilhada entre processos, e o modo de falha é o
+pior possível — deslogar o usuário legítimo de tudo, sem erro visível de ninguém.
+
+**Proposta:** aceitar o refresh **imediatamente anterior** por uma janela curta (ex.: 10s
+a partir do `usedAt`), devolvendo o *mesmo* par já emitido naquela rotação em vez de
+emitir outro — a `Session` passaria a guardar, além do hash corrente, o hash anterior e o
+que foi emitido na troca. Reuso fora da janela continua sendo roubo e continua matando
+tudo. É o padrão recomendado pelo OAuth 2.1 para clientes públicos, e preserva a
+detecção: replay de token velho cai fora da janela.
+
+**Alternativa mais barata, rejeitada:** invalidar só a sessão envolvida em vez de todas.
+A cascata é justamente o que dá valor à detecção — enfraquecê-la para resolver
+concorrência troca segurança por conveniência, enquanto a janela resolve a concorrência
+sem tocar na segurança.
+
+### IP do visitante atrás do front renderizado no servidor — **M**
+
+**Problema:** `GET /products` e `GET /products/:idOrSlug` estão no balde `catalog-read`
+(300 req / 15min), chaveado por `req.ip` (`src/lib/rateLimit.ts:147`,
+`src/modules/product/product.routes.ts:31,40`). Com o front em Next renderizando a
+vitrine no servidor, quem chama a API é o **container do front**, não o visitante: todos
+os visitantes colapsam num IP só e o site inteiro passa a dividir 300 requisições a cada
+15 minutos. ISR esconde a maior parte, mas **não a busca** — `?q=` e combinação de filtro
+têm cardinalidade alta, cada combinação nova é cache miss, e é exatamente o caminho por
+onde chega quem veio do Google.
+
+**Motivo:** não é bug de nenhum dos dois lados. Limitar por IP está certo para um cliente
+que fala direto com a API; SSR é o que quebra a premissa "um IP ≈ um visitante". E como o
+mesmo `req.ip` alimenta lockout e audit log, a correção não pode ser local ao rate limit.
+
+**Proposta:** o container do front repassa o IP do visitante em `X-Forwarded-For` e a API
+passa a confiar em **dois** saltos (`app.set("trust proxy", 2)`; hoje é `1`, em
+`src/app.ts:20`), porque a cadeia vira nginx → front → api. Duas condições fazem parte do
+item, não são detalhe de implementação:
+
+1. **O salto extra só pode ser confiado quando a requisição vem da rede interna.**
+   Confiar em dois saltos vindos da internet deixa qualquer um forjar o próprio IP e
+   furar rate limit, lockout e audit log de uma vez — trocaria um problema de capacidade
+   por um buraco de segurança.
+2. **Teste cobrindo os três caminhos** (direto, via nginx, via front): erro aqui é
+   silencioso e envenena o audit log sem ninguém perceber.
+
+**Ordem:** o front assume que isto estará pronto antes dele. Enquanto não estiver, a
+mitigação possível do lado do front é ISR agressivo, que não cobre a busca — então a
+vitrine com `?q=` fica atrás deste item.
+
+### Apex passa a ser o front; API migra para `api.pet-oasis.maiahub.com.br` — **M**
+
+**Motivo:** o front web (repo `pet-oasis-web`) tem mais valor de portfólio no apex do que a
+referência Scalar — peça visual chama mais atenção que UI de documentação. A API não perde
+nada indo para um subdomínio, desde que link já publicado não quebre.
+
+**O que muda:**
+
+- **nginx**: server block novo para `api.pet-oasis.maiahub.com.br` e certificado com o SAN
+  novo. O apex passa a servir o container do front.
+- **`.env.production`**: `APP_URL` → `https://pet-oasis.maiahub.com.br` (que agora é o front,
+  que é o que essa variável sempre quis dizer) e `UPLOAD_PUBLIC_BASE_URL` →
+  `https://api.pet-oasis.maiahub.com.br/uploads`.
+- **Sem migration**: o banco guarda a chave do arquivo, nunca a URL (ADR
+  `file-storage-and-uploads.md`), então trocar a env var basta. A decisão daquele ADR paga
+  dividendo aqui.
+- **Sem mudança na spec**: `servers: [{ url: "/api/v1" }]` (`src/docs/openapi.ts:85`) é
+  relativo e segue o host que serve o documento.
+- **301 no apex** para `/reference` e `/openapi.json` apontando ao subdomínio: o README, os
+  badges e o GIF da demo divulgam o apex, e link publicado não deve morrer.
+- **Documentação**: README, badges e `docs/guides/deploy.md`.
+
+**Contrato de rotas com o front (a parte que não é infraestrutura):** quatro caminhos são
+montados a partir de `APP_URL` e passam a ser obrigação do front, com estes nomes exatos —
+`/verify-email`, `/reset-password`, `/confirm-email-change` e
+`/confirm-account-reactivation`, todos com `?token=`. Renomear qualquer um deles no front
+quebra o email correspondente sem erro visível em lugar nenhum.
+
+**Ordem de execução (importa):** subir o subdomínio e os redirects **antes**, mas só virar
+`APP_URL` para o apex quando o front tiver as quatro rotas no ar. Virar antes transforma
+todo email de verificação e de reset em 404 — e são justamente os fluxos que travam conta
+nova.

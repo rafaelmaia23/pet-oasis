@@ -36,7 +36,7 @@ a classe que o `next-themes` escreve no `<html>`, e é o que permite forçar um 
 subárvore.
 
 **A medição é um comando, não uma tabela escrita à mão.** `npm run contrast` lê os tokens do
-próprio `globals.css`, mede 81 pares e **sai com erro** se algum cair abaixo do alvo — 4,5:1
+próprio `globals.css`, mede 101 pares e **sai com erro** se algum cair abaixo do alvo — 4,5:1
 para texto de corpo, 3:1 para elemento de interface. O mesmo comando também falha se algum
 token existir num tema e não no outro. A saída está registrada no fim de
 `docs/design-system.md`.
@@ -108,16 +108,26 @@ medição como qualquer outra, e `only` marca o par que só existe num tema porq
 o desenha é `dark:`. Daí saíram `--destructive-hover` e `--highlight-hover`: se toda cor de
 ação tem hover próprio e sólido, nenhum hover volta a escapar da medição por transparência.
 
-**Duas coisas que precisam de decisão sua, e que eu não tomei.**
+**A sequência de cor de gráfico, decidida.** Ficou por conta desta fatia, a pedido — é cor, e
+cor se troca depois. Cinco séries categóricas: eucalipto (172°), coral (40°), ocre (85°),
+ardósia (255°) e ameixa (340°), com a **série 1 sendo exatamente a `--primary`**.
 
-1. **A sequência de cor de gráfico.** `--chart-3/4/5` são três matizes que ninguém escolheu.
-   Entraram porque os componentes do shadcn referenciam esses tokens e a alternativa era
-   deixá-los no cinza padrão dele, fora da direção. Estão marcados como **provisórios** no
-   documento e na amostra; quem desenhar o primeiro gráfico decide de verdade.
-2. **`/design` é rota pública de produção**, linkada da home. Ninguém pediu que fosse nem que
-   não fosse. Se a amostra não deve ficar no ar junto da loja, é uma linha no `middleware` da
-   fatia seguinte.
+O que fez a sequência sair diferente do óbvio foi medir a dicromacia. Com luminosidade
+constante — que é o que fica bonito num quadrado de amostra — a menor distância entre duas
+séries sob deuteranopia era **0,013**: coral e ocre viram a mesma cor e o gráfico perde duas
+séries. Escalonando o L, ela sobe para **0,061** no claro e **0,055** no escuro. O
+escalonamento não é gosto: sob dicromacia a matiz colapsa num eixo só e a luminosidade é o
+que sobra.
+
+O `contrast-check` passou a medir as duas coisas — 3:1 de cada série contra fundo e card, e a
+menor distância entre duas séries sob visão normal, deuteranopia, protanopia e tritanopia,
+com piso de 0,05 — então a sequência não pode regredir em silêncio. A amostra em `/design`
+ganhou uma faixa com as cinco séries encostadas, que é onde duas cores parecidas se denunciam.
+
+**Uma coisa ainda em aberto.** **`/design` é rota pública de produção**, linkada da home.
+Ninguém pediu que fosse nem que não fosse. Se a amostra não deve ficar no ar junto da loja, é
+uma linha no `middleware` da fatia seguinte.
 
 **O que ficou de fora de propósito.** Os compostos `Money`, `DataTable`, `FormField` e
-`EmptyState` — a spec é explícita em que eles nascem na fatia que os usa. Motion 13, View
-Transitions e os tokens de gráfico têm lugar reservado mas nenhum uso ainda.
+`EmptyState` — a spec é explícita em que eles nascem na fatia que os usa. Motion 13 e View
+Transitions têm lugar reservado mas nenhum uso ainda.

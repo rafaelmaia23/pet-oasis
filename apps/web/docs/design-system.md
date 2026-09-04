@@ -56,11 +56,11 @@ escuro.
 | `--border` | `#E3DDD1` | `#2F3532` | Divisória e borda de card |
 | `--input` | `#958E80` | `#656D68` | Borda de campo de formulário |
 | `--ring` | `#2E6B5A` | `#4FA88B` | Anel de foco |
-| `--chart-1` | `#2E6B5A` | `#4FA88B` | Série 1 de gráfico |
-| `--chart-2` | `#DF6F46` | `#D08256` | Série 2 de gráfico |
-| `--chart-3` | `#6B9E8C` | `#8CC7B2` | Série 3 de gráfico |
-| `--chart-4` | `#C8A15B` | `#D9B978` | Série 4 de gráfico |
-| `--chart-5` | `#4A6F82` | `#7CA3B8` | Série 5 de gráfico |
+| `--chart-1` | `#2E6B5A` | `#4FA88B` | Série 1 de gráfico — é a própria primária |
+| `--chart-2` | `#BD5B38` | `#FC9F7F` | Série 2 de gráfico |
+| `--chart-3` | `#B18A30` | `#F5CF7D` | Série 3 de gráfico |
+| `--chart-4` | `#4073B3` | `#7BACEB` | Série 4 de gráfico |
+| `--chart-5` | `#6B2758` | `#A85990` | Série 5 de gráfico |
 | `--sidebar` | `#F4F0E9` | `#181C1A` | Fundo da navegação do back-office |
 | `--sidebar-foreground` | `#1C1F1D` | `#EDEAE3` | Texto na navegação |
 | `--sidebar-primary` | `#2E6B5A` | `#4FA88B` | Item ativo da navegação |
@@ -97,11 +97,29 @@ pedindo a coisa errada.
 shadcn — `hover:bg-primary/80` — é transparência, e transparência muda de cor conforme o que
 está atrás; foi assim que dois estados de hover entraram abaixo de AA sem ninguém ver.
 
-**A sequência de gráfico é provisória.** `--chart-1` e `--chart-2` são a primária e o coral;
-`--chart-3`, `--chart-4` e `--chart-5` são três matizes que ninguém decidiu ainda. Estão aqui
-porque os componentes do shadcn referenciam esses tokens e a alternativa era deixá-los no
-cinza padrão dele, fora da direção. **Quem desenhar o primeiro gráfico decide a sequência de
-verdade** — até lá, isto é um lugar reservado, não direção estabelecida.
+### A sequência de gráfico
+
+Cinco séries categóricas: eucalipto (172°), coral (40°), ocre (85°), ardósia (255°) e ameixa
+(340°). A **série 1 é exatamente a `--primary`**, para que um gráfico continue parecendo desta
+loja; as outras quatro espaçam a roda a partir dela.
+
+**A luminosidade varia de propósito, e é a parte que importa.** A tentação é montar a
+sequência com luminosidade constante, que é o que fica bonito num quadrado de amostra. Sob
+dicromacia isso desaba: a matiz colapsa num eixo só, coral e ocre viram a mesma cor, e o
+gráfico perde duas séries. Medido — com a sequência plana em L, a menor distância entre duas
+séries sob deuteranopia era **0,013**; escalonando a luminosidade ela sobe para **0,061**.
+
+Por isso a sequência escalona L dentro do que cada tema permite: no claro entre 0,39 e 0,655,
+teto imposto pelo piso de 3:1 contra o card branco; no escuro entre 0,575 e 0,87, piso imposto
+pelo mesmo 3:1 contra o fundo. As matizes que colapsam juntas sob a mesma dicromacia são as
+que recebem os L mais afastados.
+
+`npm run contrast` mede as duas coisas: 3:1 de cada série contra fundo e card, e a menor
+distância entre duas séries sob visão normal, deuteranopia, protanopia e tritanopia, com piso
+de 0,05. A tabela está no fim deste documento.
+
+Nenhum gráfico existe ainda — mas os componentes do shadcn referenciam estes tokens, e a
+alternativa era deixá-los no cinza padrão dele, fora da direção.
 
 ---
 
@@ -237,7 +255,7 @@ pegou o `variant="destructive"` do shadcn (`text-destructive` sobre `bg-destruct
 cai a 4,02:1 sobre a superfície apagada) e o hover do `Badge` padrão — os dois foram
 apontados para tokens sólidos.
 
-Refaça a medição depois de mexer em qualquer cor. A tabela abaixo é a saída do comando.
+Refaça a medição depois de mexer em qualquer cor. As tabelas abaixo são a saída do comando.
 
 ### Claro
 
@@ -281,6 +299,16 @@ Refaça a medição depois de mexer em qualquer cor. A tabela abaixo é a saída
 | `--ring` #2E6B5A | `--card` #FFFFFF | 6.24:1 | 3.0:1 | AA |
 | `--highlight` #DF6F46 | `--background` #FAF8F4 | 3.05:1 | 3.0:1 | AA |
 | `--highlight` #DF6F46 | `--card` #FFFFFF | 3.23:1 | 3.0:1 | AA |
+| `--chart-1` #2E6B5A | `--background` #FAF8F4 | 5.88:1 | 3.0:1 | AA |
+| `--chart-1` #2E6B5A | `--card` #FFFFFF | 6.24:1 | 3.0:1 | AA |
+| `--chart-2` #BD5B38 | `--background` #FAF8F4 | 4.19:1 | 3.0:1 | AA |
+| `--chart-2` #BD5B38 | `--card` #FFFFFF | 4.44:1 | 3.0:1 | AA |
+| `--chart-3` #B18A30 | `--background` #FAF8F4 | 3.01:1 | 3.0:1 | AA |
+| `--chart-3` #B18A30 | `--card` #FFFFFF | 3.20:1 | 3.0:1 | AA |
+| `--chart-4` #4073B3 | `--background` #FAF8F4 | 4.59:1 | 3.0:1 | AA |
+| `--chart-4` #4073B3 | `--card` #FFFFFF | 4.86:1 | 3.0:1 | AA |
+| `--chart-5` #6B2758 | `--background` #FAF8F4 | 9.64:1 | 3.0:1 | AA |
+| `--chart-5` #6B2758 | `--card` #FFFFFF | 10.22:1 | 3.0:1 | AA |
 
 ### Escuro
 
@@ -329,3 +357,31 @@ Refaça a medição depois de mexer em qualquer cor. A tabela abaixo é a saída
 | `--ring` #4FA88B | `--card` #1C201E | 5.73:1 | 3.0:1 | AA |
 | `--highlight` #D08256 | `--background` #141715 | 6.03:1 | 3.0:1 | AA |
 | `--highlight` #D08256 | `--card` #1C201E | 5.50:1 | 3.0:1 | AA |
+| `--chart-1` #4FA88B | `--background` #141715 | 6.28:1 | 3.0:1 | AA |
+| `--chart-1` #4FA88B | `--card` #1C201E | 5.73:1 | 3.0:1 | AA |
+| `--chart-2` #FC9F7F | `--background` #141715 | 8.96:1 | 3.0:1 | AA |
+| `--chart-2` #FC9F7F | `--card` #1C201E | 8.18:1 | 3.0:1 | AA |
+| `--chart-3` #F5CF7D | `--background` #141715 | 12.13:1 | 3.0:1 | AA |
+| `--chart-3` #F5CF7D | `--card` #1C201E | 11.07:1 | 3.0:1 | AA |
+| `--chart-4` #7BACEB | `--background` #141715 | 7.70:1 | 3.0:1 | AA |
+| `--chart-4` #7BACEB | `--card` #1C201E | 7.02:1 | 3.0:1 | AA |
+| `--chart-5` #A85990 | `--background` #141715 | 3.86:1 | 3.0:1 | AA |
+| `--chart-5` #A85990 | `--card` #1C201E | 3.52:1 | 3.0:1 | AA |
+
+### Séries de gráfico — Claro
+
+| Visão | Menor distância | Par | Piso | |
+|---|---|---|---|---|
+| normal | 0.120 | `--chart-2` / `--chart-3` | 0.05 | ok |
+| deuteranopia | 0.061 | `--chart-2` / `--chart-3` | 0.05 | ok |
+| protanopia | 0.082 | `--chart-1` / `--chart-2` | 0.05 | ok |
+| tritanopia | 0.061 | `--chart-1` / `--chart-4` | 0.05 | ok |
+
+### Séries de gráfico — Escuro
+
+| Visão | Menor distância | Par | Piso | |
+|---|---|---|---|---|
+| normal | 0.119 | `--chart-2` / `--chart-3` | 0.05 | ok |
+| deuteranopia | 0.075 | `--chart-2` / `--chart-3` | 0.05 | ok |
+| protanopia | 0.079 | `--chart-1` / `--chart-2` | 0.05 | ok |
+| tritanopia | 0.055 | `--chart-1` / `--chart-4` | 0.05 | ok |

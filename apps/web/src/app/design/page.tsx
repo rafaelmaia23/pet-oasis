@@ -92,7 +92,7 @@ const PALETTE: { group: string; note: string; swatches: Swatch[] }[] = [
   },
   {
     group: "Gráficos",
-    note: "Provisória: nenhum gráfico existe ainda, e a sequência definitiva é decisão de quem desenhar o primeiro. Está aqui porque o shadcn referencia estes tokens, e a alternativa era deixá-los no cinza padrão dele.",
+    note: "Cinco matizes espaçadas, com luminosidade escalonada de propósito: sob dicromacia a matiz colapsa e a luminosidade é o que sobra para separar duas séries. A série 1 é a própria primária.",
     swatches: [
       { token: "chart-1", role: "Série 1" },
       { token: "chart-2", role: "Série 2" },
@@ -150,6 +150,33 @@ function SwatchTile({ token, role, showsForegroundSample }: Swatch) {
         <p className="font-mono text-xs">--{token}</p>
         <p className="text-xs text-muted-foreground">{role}</p>
       </div>
+    </div>
+  );
+}
+
+/** A sequência vista como conjunto: série encostada em série é a única forma de
+ *  julgar se duas continuam distinguíveis. */
+function SeriesStrip() {
+  const shares = [
+    { token: "chart-1", share: 34 },
+    { token: "chart-2", share: 26 },
+    { token: "chart-3", share: 18 },
+    { token: "chart-4", share: 13 },
+    { token: "chart-5", share: 9 },
+  ];
+  return (
+    <div className="space-y-2 rounded-lg border bg-card p-4">
+      <div className="flex h-8 overflow-hidden rounded-md">
+        {shares.map(({ token, share }) => (
+          <div
+            key={token}
+            style={{ backgroundColor: `var(--${token})`, width: `${share}%` }}
+          />
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Série encostada em série, que é onde duas cores parecidas se denunciam.
+      </p>
     </div>
   );
 }
@@ -272,6 +299,7 @@ export default function DesignSystemPage() {
                   <SwatchTile key={swatch.token} {...swatch} />
                 ))}
               </div>
+              {group === "Gráficos" ? <SeriesStrip /> : null}
             </div>
           ))}
         </div>

@@ -1,1 +1,185 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── Ponte para as utilitárias do Tailwind ───────────────────────────────────
+   Aqui só existe mapeamento: `--color-x` aponta para o token `--x`. Os valores
+   moram nos blocos `:root` e `.dark` abaixo — nenhuma cor é definida aqui. */
+@theme inline {
+  --font-sans:
+    var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-heading:
+    var(--font-outfit), var(--font-instrument-sans), ui-sans-serif, system-ui,
+    sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-highlight-hover: var(--highlight-hover);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ── Tokens — tema claro, e base de todo token ───────────────────────────────
+   Toda cor do projeto nasce aqui. `.dark` só sobrescreve: nenhuma cor tem sua
+   única definição dentro de um bloco de tema. O hex ao lado é o valor canônico
+   do documento de design; o oklch é a conversão. Os contrastes estão medidos e
+   registrados em docs/design-system.md — `npm run contrast` refaz a medição.
+
+   `.light` acompanha `:root` na mesma regra, sem repetir um único valor: é o
+   que o next-themes escreve no <html> e é o que permite forçar o tema claro num
+   pedaço da página escura (a amostra lado a lado em /design). */
+:root,
+.light {
+  --radius: 0.75rem;
+
+  --background: oklch(0.9796 0.0057 84.57); /* #FAF8F4 */
+  --foreground: oklch(0.2354 0.0059 156.75); /* #1C1F1D */
+  --card: oklch(1 0 0); /* #FFFFFF */
+  --card-foreground: oklch(0.2354 0.0059 156.75); /* #1C1F1D */
+  --popover: oklch(1 0 0); /* #FFFFFF */
+  --popover-foreground: oklch(0.2354 0.0059 156.75); /* #1C1F1D */
+  --primary: oklch(0.4822 0.0694 172.45); /* #2E6B5A */
+  --primary-foreground: oklch(1 0 0); /* #FFFFFF */
+  --primary-hover: oklch(0.5566 0.0876 170.46); /* #33846C */
+  --secondary: oklch(0.9324 0.0132 82.4); /* #EDE8DF */
+  --secondary-foreground: oklch(0.2354 0.0059 156.75); /* #1C1F1D */
+  --muted: oklch(0.9445 0.0132 82.4); /* #F1ECE3 */
+  --muted-foreground: oklch(0.5065 0.0075 174.35); /* #616665 */
+  --accent: oklch(0.9397 0.0092 161.34); /* #E6EDE9 */
+  --accent-foreground: oklch(0.2354 0.0059 156.75); /* #1C1F1D */
+  --highlight: oklch(0.6654 0.1513 40.14); /* #DF6F46 */
+  --highlight-foreground: oklch(0.2354 0.0059 156.75); /* #1C1F1D */
+  --highlight-hover: oklch(0.7206 0.1507 40.23); /* #F28057 */
+  --destructive: oklch(0.5433 0.174 29.7); /* #C0392B */
+  --destructive-foreground: oklch(1 0 0); /* #FFFFFF */
+  --destructive-hover: oklch(0.4883 0.174 29.7); /* #AD2519 */
+  --border: oklch(0.899 0.0174 84.59); /* #E3DDD1 */
+  --input: oklch(0.6483 0.0217 84.59); /* #958E80 */
+  --ring: oklch(0.4822 0.0694 172.45); /* #2E6B5A */
+  --chart-1: oklch(0.4822 0.0694 172.45); /* #2E6B5A */
+  --chart-2: oklch(0.585 0.135 40); /* #BD5B38 */
+  --chart-3: oklch(0.655 0.115 85); /* #B18A30 */
+  --chart-4: oklch(0.55 0.115 255); /* #4073B3 */
+  --chart-5: oklch(0.39 0.115 340); /* #6B2758 */
+  --sidebar: oklch(0.9563 0.0103 81.8); /* #F4F0E9 */
+  --sidebar-foreground: oklch(0.2354 0.0059 156.75); /* #1C1F1D */
+  --sidebar-primary: oklch(0.4822 0.0694 172.45); /* #2E6B5A */
+  --sidebar-primary-foreground: oklch(1 0 0); /* #FFFFFF */
+  --sidebar-accent: oklch(0.9397 0.0092 161.34); /* #E6EDE9 */
+  --sidebar-accent-foreground: oklch(0.2354 0.0059 156.75); /* #1C1F1D */
+  --sidebar-border: oklch(0.899 0.0174 84.59); /* #E3DDD1 */
+  --sidebar-ring: oklch(0.4822 0.0694 172.45); /* #2E6B5A */
+}
+
+/* ── Tokens — tema escuro ────────────────────────────────────────────────────
+   Não é o claro invertido: o fundo é quente pelo mesmo motivo que o claro é
+   creme, e a primária clareia porque o #2E6B5A some sobre fundo escuro. */
+.dark {
+  --background: oklch(0.2006 0.0061 156.63); /* #141715 */
+  --foreground: oklch(0.9374 0.0099 87.47); /* #EDEAE3 */
+  --card: oklch(0.2386 0.007 164.35); /* #1C201E */
+  --card-foreground: oklch(0.9374 0.0099 87.47); /* #EDEAE3 */
+  --popover: oklch(0.2386 0.007 164.35); /* #1C201E */
+  --popover-foreground: oklch(0.9374 0.0099 87.47); /* #EDEAE3 */
+  --primary: oklch(0.6685 0.0969 169.45); /* #4FA88B */
+  --primary-foreground: oklch(0.1774 0.0066 178.76); /* #0E1211 */
+  --primary-hover: oklch(0.733 0.094 170.37); /* #66BCA0 */
+  --secondary: oklch(0.283 0.0089 159.49); /* #262B28 */
+  --secondary-foreground: oklch(0.9374 0.0099 87.47); /* #EDEAE3 */
+  --muted: oklch(0.2666 0.009 159.43); /* #222724 */
+  --muted-foreground: oklch(0.6787 0.0126 161.88); /* #919A95 */
+  --accent: oklch(0.3019 0.011 156.51); /* #2A302C */
+  --accent-foreground: oklch(0.9374 0.0099 87.47); /* #EDEAE3 */
+  --highlight: oklch(0.6794 0.1133 49.44); /* #D08256 */
+  --highlight-foreground: oklch(0.2354 0.0059 156.75); /* #1C1F1D */
+  --highlight-hover: oklch(0.7344 0.1133 49.44); /* #E39367 */
+  --destructive: oklch(0.6613 0.1627 26.86); /* #E5645A */
+  --destructive-foreground: oklch(0.2006 0.0061 156.63); /* #141715 */
+  --destructive-hover: oklch(0.7163 0.1627 26.86); /* #F9756A */
+  --border: oklch(0.3221 0.0098 164.32); /* #2F3532 */
+  --input: oklch(0.5252 0.0122 158.55); /* #656D68 */
+  --ring: oklch(0.6685 0.0969 169.45); /* #4FA88B */
+  --chart-1: oklch(0.6685 0.0969 169.45); /* #4FA88B */
+  --chart-2: oklch(0.79 0.12 40); /* #FC9F7F */
+  --chart-3: oklch(0.87 0.11 85); /* #F5CF7D */
+  --chart-4: oklch(0.735 0.105 255); /* #7BACEB */
+  --chart-5: oklch(0.575 0.125 340); /* #A85990 */
+  --sidebar: oklch(0.2215 0.0071 164.27); /* #181C1A */
+  --sidebar-foreground: oklch(0.9374 0.0099 87.47); /* #EDEAE3 */
+  --sidebar-primary: oklch(0.6685 0.0969 169.45); /* #4FA88B */
+  --sidebar-primary-foreground: oklch(0.1774 0.0066 178.76); /* #0E1211 */
+  --sidebar-accent: oklch(0.3019 0.011 156.51); /* #2A302C */
+  --sidebar-accent-foreground: oklch(0.9374 0.0099 87.47); /* #EDEAE3 */
+  --sidebar-border: oklch(0.3221 0.0098 164.32); /* #2F3532 */
+  --sidebar-ring: oklch(0.6685 0.0969 169.45); /* #4FA88B */
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-heading;
+  }
+
+  /* Algarismos tabulares onde a largura variável atrapalha a leitura em coluna.
+     Instrument Sans e Outfit trazem `tnum` — verificado nos arquivos servidos
+     pelo build, ver docs/design-system.md. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+}

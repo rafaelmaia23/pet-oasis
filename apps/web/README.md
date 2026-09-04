@@ -15,7 +15,8 @@ npm run dev
 ```
 
 A aplicação sobe **no host, na porta 3001** — a 3000 é da API. Abra
-<http://localhost:3001>.
+<http://localhost:3001>. A amostra do design system fica em
+<http://localhost:3001/design>.
 
 O desenvolvimento roda contra a API dockerizada do repositório irmão, que precisa estar de
 pé (`npm run dev` lá). Como é a API que monta os links dos emails, o `APP_URL` do ambiente de
@@ -31,6 +32,7 @@ desenvolvimento dela precisa apontar para `http://localhost:3001`.
 | `npm run typecheck` | Gera os tipos de rota do Next e roda `tsc --noEmit` |
 | `npm run lint` | Biome — lint **e** formatação, numa ferramenta só |
 | `npm run lint:fix` | Biome aplicando as correções |
+| `npm run contrast` | Mede o contraste de cada par de cor e falha se algum cair abaixo de AA |
 | `npm run prod:up` | Sobe o container de produção |
 | `npm run prod:down` | Derruba o container de produção |
 | `npm run prod:logs` | Acompanha os logs do container de produção |
@@ -56,5 +58,5 @@ npm run prod:up
 - [`CLAUDE.md`](CLAUDE.md) — guia de trabalho no repositório
 - [`CONTEXT.md`](CONTEXT.md) — glossário do domínio
 - [`docs/adr/`](docs/adr/) — decisões estruturais
-- [`docs/design-system.md`](docs/design-system.md) — direção visual
+- [`docs/design-system.md`](docs/design-system.md) — direção visual, tokens e contrastes medidos
 - [`.scratch/`](.scratch/) — specs e tickets

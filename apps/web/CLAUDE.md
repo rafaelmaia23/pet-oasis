@@ -131,6 +131,11 @@ injeção; uma terceira forma de falsificar a mesma coisa seria uma a mais.
 - **Branches**: `main` + `feat/<NN>-<slug>`, onde `<NN>` é o número do ticket em
   `.scratch/`. Merge `--no-ff`. Nada direto na `main`. Não existe `dev` — ela nasce no dia
   em que houver deploy automático.
+- **Mergeou, apaga a branch.** `git branch -d <branch>` faz parte do merge, não é uma
+  faxina para depois: o histórico do merge já guarda tudo que a branch guardava, e branch
+  mergeada que fica só acumula ruído na listagem. O `-d` minúsculo é de propósito — ele
+  recusa apagar o que não foi mergeado, então serve de conferência. Vale também para a
+  branch que já estava mergeada quando você chegou.
 - **Dinheiro em centavos inteiros**, peso em gramas: como vêm da API. Formatação só pelo
   componente `Money`.
 - Antes de commitar: `npm run typecheck` e `npm run lint` limpos.

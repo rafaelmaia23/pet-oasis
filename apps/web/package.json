@@ -1,0 +1,35 @@
+{
+  "name": "pet-oasis-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frontend web do Pet Oasis — vitrine, área do cliente e back-office sobre a API REST do pet shop.",
+  "license": "MIT",
+  "author": "Rafael Maia da Fonseca",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001",
+    "typecheck": "next typegen && tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check . --write",
+    "format": "biome format . --write",
+    "prod:up": "docker compose -p pet-oasis-web-prod --env-file .env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up --build --wait -d",
+    "prod:down": "docker compose -p pet-oasis-web-prod --env-file .env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml down",
+    "prod:logs": "docker compose -p pet-oasis-web-prod --env-file .env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml logs -f"
+  },
+  "dependencies": {
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
+    "@tailwindcss/postcss": "^4.2.5",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.5",
+    "typescript": "^5.9.3"
+  }
+}

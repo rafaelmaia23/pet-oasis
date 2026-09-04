@@ -1,0 +1,22 @@
+# Compose base — só o esqueleto do serviço `web`. O override por ambiente
+# completa build target, env_file, portas e rede:
+#   prod → docker-compose.prod.yml
+#
+# Não há override de desenvolvimento: o dev roda no host, na porta 3001, contra
+# a API dockerizada (`npm run dev`).
+#
+# Sempre invocar pelos scripts npm, que passam `-p <projeto>`, `--env-file` e os
+# `-f` certos. Nunca um `docker compose` pelado.
+services:
+  web:
+    build:
+      # A raiz do repo, não infra/ — os caminhos aqui são relativos a este
+      # arquivo. Com o contexto na raiz, o Dockerfile é achado em
+      # <context>/Dockerfile e o .dockerignore da raiz continua valendo.
+      context: ..
+      # O DNS do host é MagicDNS do Tailscale (100.100.100.100), alcançável só
+      # do namespace de rede do host; a bridge padrão do Docker não roteia até
+      # lá e o `npm ci` trava. Buildar na rede do host contorna isso sem mexer
+      # no DNS global do daemon. Mesmo motivo do repo da API.
+      network: host
+    restart: unless-stopped

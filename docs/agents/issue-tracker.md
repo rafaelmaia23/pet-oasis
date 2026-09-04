@@ -1,66 +1,108 @@
-# Issue tracker: markdown local
+# Issue tracker: markdown local em `.scratch/`
 
-Este repo **não usa um issue tracker externo**. Não existe GitHub Issues em uso, não existe `gh`
-instalado, e nenhuma skill deve tentar criar issue remota. Tarefas, specs e ideias vivem como
-markdown versionado dentro do próprio repo.
+Este repo **não usa um issue tracker externo**. Não existe GitHub Issues em uso, não existe
+`gh` instalado, e nenhuma skill deve tentar criar issue remota. Specs e issues vivem como
+markdown versionado dentro do próprio repo, em `.scratch/`.
 
 ## Onde fica cada coisa
 
 | Arquivo | O que guarda |
 | --- | --- |
-| [`docs/todo.md`](../todo.md) | O trabalho **ordenado e agendado**: fases, sessões e seus itens. É o tracker propriamente dito. |
+| [`.scratch/<slug>/spec.md`](../../.scratch/) | O desenho negociado de um esforço: problema, solução, decisões, escopo de fora. |
+| [`.scratch/<slug>/issues/NN-<slug>.md`](../../.scratch/) | Uma issue por arquivo, numerada a partir de `01` em ordem de dependência. É o tracker propriamente dito. |
+| [`docs/todo.md`](../todo.md) | O **índice** das fases: estado de cada uma, ponteiro para a pasta da fase aberta, resumo destilado das fechadas. |
 | [`docs/reference/backlog.md`](../reference/backlog.md) | O que foi levantado e **conscientemente adiado** — sem fase, sem data. |
-| [`docs/specs/`](../specs/) | Spec longa demais para caber em bullets: o desenho de uma fase ou de um esforço grande. **Efêmera** — apagada no fecho, com o *porquê* promovido a ADR ou a `docs/context/`. |
-| [`.scratch/`](../../.scratch/) | Rascunho **fora do git**: ideia crua, brainstorming, material de grilling. Nada aqui é citável. |
 
 O caminho completo, da ideia ao código, está em [`docs/README.md`](../README.md); as duas
-formas de uma fase no `todo.md`, em
-[`docs/guides/todo-phases.md`](../guides/todo-phases.md).
+formas de uma fase no `todo.md`, em [`docs/guides/todo-phases.md`](../guides/todo-phases.md).
 
-## Convenções do `docs/todo.md`
+## A forma de uma issue
 
-- A hierarquia é **fase** (`## Fase <n> — <título>`) → **sessão** (`### [Sessão <n>.<m>] Fase <n>.<m> — <título>`) → **itens** (bullets).
-- Estado por emoji, na legenda do topo do arquivo: `✅` feito · `🔄` em andamento · `⬜` a fazer · `🔸` polimento (não bloqueia). O mesmo emoji marca a sessão inteira no seu `###`.
-- A fase **em execução** fica expandida (passo-a-passo, decisões de kickoff, pendências); a fase **fechada** é destilada em poucos bullets de resultado, no fecho da **própria** fase. Destilar faz parte do trabalho — o *porquê* migra antes para `docs/context/` ou para um ADR. O molde das duas formas está em [`docs/guides/todo-phases.md`](../guides/todo-phases.md).
-- Um item que herda contexto de uma sessão anterior diz de onde veio: `**Herdado da 9.7:** …`.
+Uma issue é uma **fatia vertical**: atravessa schema, API e teste, é verificável sozinha, e
+cabe num contexto fresco. Não é uma fatia horizontal de uma camada.
+
+```markdown
+# NN: <título>
+
+**What to build:** o comportamento ponta a ponta que esta issue faz funcionar, do ponto de
+vista de quem usa — não uma lista camada a camada.
+
+**Blocked by:** os números que travam esta, ou "None (can start immediately)".
+
+**Status:** ready-for-agent
+
+- [ ] Critério de aceite 1
+- [ ] Critério de aceite 2
+```
+
+Sem caminho de arquivo e sem trecho de código: envelhecem rápido. A exceção é um trecho que
+codifica uma decisão com mais precisão que a prosa (máquina de estados, shape de tipo,
+schema) — esse entra, aparado só na parte que decide.
+
+**A exceção à fatia vertical é o refactor largo**: uma mudança mecânica cujo raio de impacto
+atinge o repo inteiro (renomear um serviço do Compose, retipar um símbolo compartilhado).
+Sequencie como expand–contract em issues próprias, em vez de forçar numa fatia.
+
+## Convenções de branch e numeração
+
+- Branch de fase: `fase-<n>`, a partir da `dev`.
+- Branch de issue: `feat/fase-<n>-<NN>-<slug>`, a partir da branch da fase.
+- O `<NN>` é **local à fase** (reinicia em `01` a cada fase); o `<n>` da fase é **global e
+  nunca reinicia**. É a combinação dos dois que dá nome não-ambíguo à branch.
+- Trabalho fora de fase sai da `dev` em branch descritiva (`chore/<slug>`, `fix/<slug>`,
+  `docs/<slug>`) e volta por merge `--no-ff`.
+
+## Fechar uma issue
+
+Marque os critérios de aceite e descreva o que de fato ficou pronto, não o que estava
+planejado. Item que veio do backlog também é marcado lá
+([`docs/reference/backlog.md`](../reference/backlog.md)), senão a entrada vira lixo que
+ressurge no fecho da fase seguinte.
+
+## Fechar um esforço
+
+1. Cada decisão nomeada na spec ganha dono permanente — `docs/context/` ou um ADR.
+   **Migrar antes de fechar**: decisão sem dono não é fechada; escrever o dono é o trabalho.
+2. A primeira linha do `spec.md` vira
+   `Status: fechada em <AAAA-MM-DD> — porquê promovido a <caminhos>`. O `npm run docs:check`
+   exige que os caminhos nomeados existam.
+3. A fase encolhe no [`docs/todo.md`](../todo.md) para o resumo de resultado.
+
+A pasta **não é apagada**: o histórico da negociação fica legível, e o marcador é o que
+impede alguém de ler uma spec morta como corrente.
 
 ## A regra que mais quebra: pendência vai para a frente, nunca para trás
 
-Ao terminar um trabalho, uma pendência para uma etapa **futura** é escrita **na seção da sessão que
-vai executá-la** — nunca ao fim da seção recém-fechada. Se a seção futura ainda não existe, crie o
-placeholder dela. Anotar para trás garante que ninguém leia a nota na hora certa.
+Ao terminar um trabalho, uma pendência para uma etapa **futura** vira **uma issue nova** na
+pasta do esforço — nunca uma nota ao fim da issue recém-fechada. Anotar para trás garante que
+ninguém leia a nota na hora certa.
 
 ## Quando uma skill disser "publicar no issue tracker"
 
-Escreva um bullet `⬜` na seção da sessão de `docs/todo.md` que vai executar aquilo. Se o item não
-pertence a nenhuma fase planejada, ele vai para `docs/reference/backlog.md` — com o problema que
-resolve e o esforço estimado (**P** = uma sessão · **M** = uma feat-branch · **G** = fase própria),
-que é o formato daquele arquivo. Nunca crie um arquivo de tickets novo ao lado desses dois.
-
-Um conjunto grande de tickets (uma fase inteira, uma spec) vira arquivo em `docs/specs/<slug>.md`,
-e o `docs/todo.md` só aponta para ele — **só ele**: documento permanente (ADR, `docs/context/`,
-`README`, `CLAUDE.md`, comentário de `src/`) nunca cita spec nem rascunho, e o
-`npm run docs:check` reprova quem tentar.
+Escreva um arquivo de issue em `.scratch/<slug>/issues/`. Se o item não pertence a nenhum
+esforço planejado, ele vai para `docs/reference/backlog.md` — com o problema que resolve e o
+esforço estimado (**P** = uma issue · **M** = uma feat-branch · **G** = fase própria), que é o
+formato daquele arquivo. Nunca crie um arquivo de tickets novo ao lado desses dois.
 
 ## Quando uma skill disser "buscar o ticket relevante"
 
-Leia a seção da sessão correspondente em `docs/todo.md` (ache pelo `### [Sessão <n>.<m>]`). O
-usuário normalmente passa o número da sessão. Para o *porquê* por trás do item, siga o ponteiro
-para `docs/context.md` ou para o ADR citado — ver `docs/agents/domain.md`.
-
-## Fechar um item
-
-Troque `⬜` por `✅` no bullet e descreva o que de fato ficou pronto, não o que estava planejado.
-Item resolvido que veio do backlog também é marcado lá (`docs/reference/backlog.md`), senão a
-entrada vira lixo que ressurge no fecho da fase seguinte.
+Leia `.scratch/<slug>/issues/NN-*.md`. O usuário normalmente passa o número. Para o *porquê*
+por trás do item, siga o ponteiro para a spec do esforço, para `docs/context.md` ou para o
+ADR citado — ver [`docs/agents/domain.md`](domain.md).
 
 ## Operações de wayfinding
 
 Usadas pelo `/wayfinder`. O **mapa** é um arquivo com um **filho** por ticket.
 
-- **Mapa**: `docs/specs/<esforço>-map.md`, com o corpo Notas / Decisões-até-agora / Névoa.
-- **Filho**: `docs/specs/<esforço>/NN-<slug>.md`, numerado a partir de `01`, com a pergunta no corpo. Uma linha `Tipo:` registra o tipo (`research`/`prototype`/`grilling`/`task`); uma linha `Status:` registra `claimed`/`resolved`.
-- **Bloqueio**: linha `Bloqueado por: NN, NN` no topo. Desbloqueado quando todos os arquivos citados estão `resolved`.
-- **Fronteira**: varra `docs/specs/<esforço>/` por arquivos abertos, desbloqueados e não reclamados; vence o de menor número.
+- **Mapa**: `.scratch/<esforço>/map.md`, com o corpo Destino / Notas / Decisões-até-agora /
+  Névoa / Fora de escopo.
+- **Filho**: `.scratch/<esforço>/issues/NN-<slug>.md`, numerado a partir de `01`, com a
+  pergunta no corpo. Uma linha `Tipo:` registra o tipo (`research`/`prototype`/`grilling`/
+  `task`); uma linha `Status:` registra `claimed`/`resolved`.
+- **Bloqueio**: linha `Bloqueado por: NN, NN` no topo. Desbloqueado quando todos os arquivos
+  citados estão `resolved`.
+- **Fronteira**: varra `.scratch/<esforço>/issues/` por arquivos abertos, desbloqueados e não
+  reclamados; vence o de menor número.
 - **Reclamar**: `Status: claimed`, salvo **antes** de qualquer trabalho.
-- **Resolver**: a resposta sob `## Resposta`, `Status: resolved`, e um ponteiro de contexto acrescentado às Decisões-até-agora do mapa.
+- **Resolver**: a resposta sob `## Resposta`, `Status: resolved`, e um ponteiro de contexto
+  acrescentado às Decisões-até-agora do mapa.

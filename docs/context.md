@@ -212,10 +212,10 @@ completo, os contra-argumentos e os gotchas.
 
 *Documentação e processo*
 
-- Rascunho (`.scratch/`, fora do git) × spec (`docs/specs/`) × permanente (ADR e
-  `context/`) — e por que documento permanente nunca cita efêmero (9.12);
-  o mapa é [`docs/README.md`](README.md), as formas de fase estão em
-  [`guides/todo-phases.md`](guides/todo-phases.md)
+- Tracker (`.scratch/`, versionado: spec + uma issue por arquivo) × permanente (ADR e
+  `context/`) — e por que documento permanente nunca cita o tracker, mesmo ele sendo
+  versionado (9.12, retargetado na Fase 10); o mapa é [`docs/README.md`](README.md),
+  as formas de fase estão em [`guides/todo-phases.md`](guides/todo-phases.md)
 
 *Ordem de construção*
 

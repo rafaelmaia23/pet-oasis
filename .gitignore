@@ -13,7 +13,5 @@ uploads/*
 # Originais das imagens do seed fake (9.11/AB1) — só o base64 derivado é versionado.
 assets-inbox/
 
-# Rascunho efêmero (9.12/AC5): nada daqui é versionado, exceto o README que
-# explica o diretório para quem clona.
-.scratch/*
-!.scratch/README.md
+# `.scratch/` é VERSIONADO (Fase 10): é o tracker — specs e issues vivem lá.
+# Deixou de ser rascunho fora do git; ver .scratch/README.md e docs/README.md.

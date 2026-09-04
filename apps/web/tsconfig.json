@@ -31,6 +31,9 @@
     "paths": {
       "@/*": ["./src/*"]
     },
+    // Reposto pelo `next build` a cada execução (é "suggested value" dele).
+    // Tirar daqui só recria a mudança não commitada — mesma história do bloco
+    // que o `next dev` acrescenta ao CLAUDE.md.
     "allowJs": true
   },
   "include": [

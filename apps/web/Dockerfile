@@ -10,7 +10,9 @@ COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 COPY src ./src
 COPY public ./public
-COPY next.config.ts tsconfig.json next-env.d.ts postcss.config.mjs ./
+# next-env.d.ts fica de fora de propósito: é gerado (e ignorado pelo Git), então
+# num clone limpo ele não existe. O `next build` abaixo o regenera.
+COPY next.config.ts tsconfig.json postcss.config.mjs ./
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

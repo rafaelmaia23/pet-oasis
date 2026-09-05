@@ -25,11 +25,13 @@ ser verdade.
       execução manual de verificação.
 - [x] Guia de deploy e README mencionam o nome novo; uma varredura prova que nenhuma menção ao
       nome antigo sobrou fora de prosa histórica.
-- [ ] **Verificação manual** (não há teste automatizado — isto vive no Docker): subir a stack de
+- [x] **Verificação manual** (não há teste automatizado — isto vive no Docker): subir a stack de
       produção e provar de outro container na mesma rede que `api` resolve e responde.
 
-> A verificação manual segue **pendente**: exige subir a stack de produção no Docker, o que não
-> foi executado aqui. O roteiro é o abaixo.
+> Verificação manual **feita em 2026-09-05**, com os dois caminhos que dependem do nome novo:
+> um container avulso na rede da stack alcançou `http://api:3000/openapi.json` (**200**, sem
+> `ENOTFOUND`), e `docker exec pet-oasis-api node dist/cleanup-sessions.js --dry-run` — a forma
+> exata que os systemd units usam — rodou e logou. O roteiro, para repetir:
 
 ```sh
 npm run prod:up

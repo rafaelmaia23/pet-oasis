@@ -1,7 +1,9 @@
 # Prod override — api (runtime bundle) + Postgres-de-prod ONLY. No mailpit, no
-# dev/test DB. SMTP comes entirely from .env.production (e.g. Resend). The db
-# port is not published (reachable only inside the compose network); use
-# `docker exec` for maintenance/backups.
+# dev/test DB. SMTP comes entirely from .env.production (e.g. Resend).
+#
+# NENHUMA porta é publicada no host: nem a do banco, nem a do cache, nem a da
+# API. O nginx alcança a API por DNS de container na rede `proxy`, e manutenção
+# de banco é `docker exec`. Ver o bloco `networks:` no fim do arquivo.
 services:
   db:
     image: postgres:16-alpine
@@ -13,19 +15,22 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - prod_pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Porta não publicada: alcançável só dentro da rede do compose.
   redis:
     image: redis:7-alpine
     container_name: pet-oasis-prod-redis
     restart: unless-stopped
     volumes:
       - prod_redisdata:/data
+    networks:
+      - backend
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -47,14 +52,52 @@ services:
         condition: service_healthy
     # > the app's graceful-shutdown timeout (10s) so draining finishes first.
     stop_grace_period: 15s
-    ports:
-      - "${API_PORT:-3000}:3000"
+    # Sem `ports:` — a porta 3000 fica só no `expose:` do compose base. É o que
+    # torna seguro o `trust proxy` por endereço privado do `app.ts` (10.2):
+    # conexão vinda da internet direto na API não existe, então `X-Forwarded-For`
+    # forjado da internet também não. Republicar a porta aqui reabre o furo.
+    networks:
+      backend:
+        aliases:
+          - api
+      pet-oasis:
+        aliases:
+          - api
+      proxy:
+        aliases:
+          - api
     volumes:
       # Bind mount (9.10/AA2), com o caminho do host configurável: hoje o Node
       # serve `/uploads` por `express.static`, e o dia em que o nginx da frente
       # passar a servi-lo direto (`alias`) é config, não deploy novo. O
       # diretório precisa existir e ser gravável pelo usuário do container.
       - "${UPLOAD_HOST_DIR:-./uploads}:/app/uploads"
+
+# Três redes, três papéis. A API é o único serviço nas três — é ela que atravessa
+# a fronteira entre os dados e quem os pede.
+networks:
+  # Onde os dados vivem. `internal: true` = sem gateway para fora, então nem o
+  # Postgres nem o Redis têm rota para a internet e ninguém os alcança de fora.
+  # A API continua com saída (SMTP, etc.) pelas outras duas, que não são
+  # internas.
+  backend:
+    internal: true
+
+  # Nomeada e dedicada, compartilhada com clientes internos que rodam no mesmo
+  # host (hoje o `pet-oasis-web`). O `name:` explícito derruba o prefixo do
+  # projeto (`pet-oasis-prod_`): é este nome que o compose do cliente escreve
+  # como `external: true`, então ele é contrato, não detalhe. Quem entra aqui
+  # alcança a API e **não** alcança Postgres nem Redis, de propósito.
+  pet-oasis:
+    name: pet-oasis
+
+  # A rede do reverse proxy, criada fora deste repositório (o nginx do servidor
+  # não é versionado aqui — ver docs/context/infrastructure.md). Declarada, e não
+  # mais conectada à mão com `docker network connect` depois de cada deploy:
+  # passo manual esquecido é a API inalcançável pelo público, com o container de
+  # pé e o healthcheck verde.
+  proxy:
+    external: true
 
 volumes:
   prod_pgdata:

@@ -164,36 +164,17 @@ A cascata é justamente o que dá valor à detecção — enfraquecê-la para re
 concorrência troca segurança por conveniência, enquanto a janela resolve a concorrência
 sem tocar na segurança.
 
-### IP do visitante atrás do front renderizado no servidor — **M**
-
-**Problema:** `GET /products` e `GET /products/:idOrSlug` estão no balde `catalog-read`
-(300 req / 15min), chaveado por `req.ip` (`src/lib/rateLimit.ts:147`,
-`src/modules/product/product.routes.ts:31,40`). Com o front em Next renderizando a
-vitrine no servidor, quem chama a API é o **container do front**, não o visitante: todos
-os visitantes colapsam num IP só e o site inteiro passa a dividir 300 requisições a cada
-15 minutos. ISR esconde a maior parte, mas **não a busca** — `?q=` e combinação de filtro
-têm cardinalidade alta, cada combinação nova é cache miss, e é exatamente o caminho por
-onde chega quem veio do Google.
-
-**Motivo:** não é bug de nenhum dos dois lados. Limitar por IP está certo para um cliente
-que fala direto com a API; SSR é o que quebra a premissa "um IP ≈ um visitante". E como o
-mesmo `req.ip` alimenta lockout e audit log, a correção não pode ser local ao rate limit.
-
-**Proposta:** o container do front repassa o IP do visitante em `X-Forwarded-For` e a API
-passa a confiar em **dois** saltos (`app.set("trust proxy", 2)`; hoje é `1`, em
-`src/app.ts:20`), porque a cadeia vira nginx → front → api. Duas condições fazem parte do
-item, não são detalhe de implementação:
-
-1. **O salto extra só pode ser confiado quando a requisição vem da rede interna.**
-   Confiar em dois saltos vindos da internet deixa qualquer um forjar o próprio IP e
-   furar rate limit, lockout e audit log de uma vez — trocaria um problema de capacidade
-   por um buraco de segurança.
-2. **Teste cobrindo os três caminhos** (direto, via nginx, via front): erro aqui é
-   silencioso e envenena o audit log sem ninguém perceber.
-
-**Ordem:** o front assume que isto estará pronto antes dele. Enquanto não estiver, a
-mitigação possível do lado do front é ISR agressivo, que não cobre a busca — então a
-vitrine com `?q=` fica atrás deste item.
+### ~~IP do visitante atrás do front renderizado no servidor~~ — ✅ resolvido (Fase 10.2)
+`req.ip` passou a vir do `X-Forwarded-For` por **endereço de origem**
+(`app.set("trust proxy", ["loopback", "uniquelocal"])`), e não pelos **dois saltos** que este item
+propunha: com o front renderizando no servidor existem duas cadeias vivas ao mesmo tempo
+(`visitante → nginx → api` e `visitante → nginx → front → api`), e nenhuma contagem única acerta as
+duas. A condição que o item já exigia — só confiar vindo da rede interna — virou a despublicação da
+porta 3000 em produção, feita na mesma issue porque as duas são uma decisão só. Rate limit, lockout
+e audit log voltam a ver o visitante; o cliente pode copiar o header ou acrescentar o próprio salto,
+tanto faz. Três cadeias cobertas por teste em `tests/integration/v1/visitor-ip.test.ts`. Racional em
+`docs/context/security.md` § "`trust proxy` é por endereço de origem" e `docs/context/infrastructure.md`
+§ "Três redes com papéis distintos".
 
 ### Apex passa a ser o front; API migra para `api.pet-oasis.maiahub.com.br` — **M**
 

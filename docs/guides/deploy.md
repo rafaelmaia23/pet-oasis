@@ -33,7 +33,42 @@ Criar o diretório de uploads antes da primeira subida — o container roda como
 mkdir -p "$UPLOAD_HOST_DIR" && sudo chown 1000:1000 "$UPLOAD_HOST_DIR"
 ```
 
-Então:
+## Redes
+
+O Compose de produção declara **três** redes, e o `up` falha se a do proxy não existir — o que é
+a mensagem certa, e o motivo de ela ser declarada em vez de conectada à mão depois do deploy:
+
+| Rede | Quem entra | Criada por |
+|---|---|---|
+| `backend` (`internal: true`) | `db`, `redis`, `api` | o próprio `prod:up` |
+| `pet-oasis` | `api` + clientes internos (o front) | o próprio `prod:up` |
+| `proxy` | `api` + nginx + clientes internos que o nginx serve | **fora deste repo**, uma vez |
+
+A `proxy` é a única com pré-requisito. Se ainda não existir no host:
+
+```bash
+docker network create proxy   # idempotente na prática: erra se já existir
+```
+
+O nginx precisa estar nela (`docker network inspect proxy`) e passa a alcançar a API por
+`http://api:3000` — **não** por `127.0.0.1:3000`. A porta 3000 não é mais publicada no host:
+
+```nginx
+proxy_pass http://api:3000;
+```
+
+> ⚠️ **Não republique a porta da API.** A ausência de publicação é o que torna seguro o
+> `trust proxy` por endereço privado do `app.ts`: com a porta aberta na internet, qualquer um
+> forja o próprio `X-Forwarded-For` e fura rate limit, lockout e audit log de uma vez. Para
+> depurar de dentro do host, use `docker exec pet-oasis-api …` ou uma publicação temporária em
+> `127.0.0.1:3000:3000`, nunca em `0.0.0.0`.
+
+Cliente interno (o front) entra na `pet-oasis`, declarando-a como externa no compose dele. Estar
+nela dá acesso à API e **só**: Postgres e Redis ficam na `backend`, que é `internal:` e não tem
+rota para lugar nenhum. O contrato completo do lado do cliente está em
+[`integrating-with-the-api.md`](integrating-with-the-api.md).
+
+## Subir
 
 ```bash
 npm run prod:up    # build + up; migrate deploy + seed no entrypoint

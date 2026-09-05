@@ -59,8 +59,10 @@ https://api.pet-oasis.maiahub.com.br/api/v1
 Para o que roda no navegador de alguém ou fora do VPS. A porta 3000 **não é publicada no
 host**: todo tráfego público entra pelo nginx.
 
-> Prefira a rede interna sempre que o cliente rodar no mesmo VPS. É mais rápido, não gasta
-> TLS, e — o que mais importa — mantém o tráfego de serviço fora do rate limit público.
+> Prefira a rede interna sempre que o cliente rodar no mesmo VPS: é mais rápido e não gasta TLS.
+> O que ela **não** faz é isentar de rate limit — os limitadores são chaveados por `req.ip`,
+> venha ele de onde vier. O que decide o balde é o `X-Forwarded-For` da seção seguinte: com ele,
+> cada visitante tem o seu; sem ele, a vitrine inteira divide o balde do container.
 
 ---
 

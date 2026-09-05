@@ -139,7 +139,7 @@
 > Tudo que o `pet-oasis-web` precisa da API para sair do lugar, mais a dívida de deploy que já
 > derrubou a produção uma vez. Nenhum domínio novo. Spec e issues em
 > `.scratch/fase-10-frontline/`.
-- Progresso: 0 de 14 issues fechadas.
+- Progresso: 2 de 14 issues fechadas.
 
 ---
 

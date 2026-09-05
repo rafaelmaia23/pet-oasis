@@ -62,6 +62,40 @@ O nome do container de produção está **gravado nos três systemd units** de `
 renomeia — procedimento e verificação manual em [`infra/cron/README.md`](../../infra/cron/README.md).
 Unit apontando para container inexistente falha de um jeito que não acorda ninguém.
 
+### Três redes com papéis distintos, e a porta da API despublicada (10.2)
+
+Produção declara **três** redes, e a API é o único serviço nas três — é ela que atravessa a
+fronteira entre os dados e quem os pede:
+
+| Rede | Quem entra | Para quê |
+|---|---|---|
+| `backend` (`internal: true`) | `db`, `redis`, `api` | onde os dados vivem, sem rota para a internet |
+| `pet-oasis` (`name:` explícito) | `api` + clientes internos | o endereço que um cliente no mesmo VPS usa |
+| `proxy` (`external: true`) | `api` + nginx + clientes internos que o nginx serve | por onde o público entra |
+
+O `internal: true` é o que faz um cliente na rede compartilhada **não** alcançar Postgres nem
+Redis: estar na `pet-oasis` dá acesso à API, e só. A API mantém saída para a internet (SMTP) pelas
+outras duas, que não são internas. O `name: pet-oasis` derruba o prefixo do projeto compose
+(`pet-oasis-prod_`) porque esse nome é **contrato**: é o que o compose do cliente escreve como
+`external: true`, e um prefixo vazado ali quebraria o `up` dele.
+
+A rede do nginx é **declarada** em vez de conectada à mão. O passo manual que existia
+(`docker network connect` depois de cada deploy) falhava do pior jeito possível: esquecê-lo deixa
+a API inalcançável pelo público com o container de pé e o healthcheck verde, ou seja, sem nenhum
+sinal apontando para a causa. Declarada, ou o `up` sobe conectado ou falha dizendo que a rede não
+existe.
+
+**A porta 3000 deixou de ser publicada no host em produção** — o nginx alcança a API por DNS de
+container, então a publicação não tinha mais função. Isso não é higiene: é a metade que torna
+segura a outra metade da decisão, o `trust proxy` por endereço privado registrado em
+[`security.md`](security.md). `API_PORT` sobrevive **só em dev**, onde publicar é como o navegador
+e o Bruno alcançam a API na máquina de quem desenvolve.
+
+Dev não herda a topologia, de propósito: lá `db` e `redis` publicam porta para o tooling do host
+(prisma, vitest), o que é o oposto de `internal: true`. E a rede do proxy não pode ser declarada no
+compose **base** porque `external: true` exige que ela exista — declará-la ali quebraria o
+`npm run dev` de quem nunca subiu um nginx.
+
 ### Envs por arquivo + dotenv-cli
 
 `.env.development`/`.env.test`/`.env.production` (fora do git) + `.env.example` versionado — colapsa
@@ -120,9 +154,9 @@ node` — higiene básica de container.
 
 `GET /uploads/*` é servido pelo **próprio Node** (`express.static`, em `src/app.ts`), e não pelo
 reverse proxy que o [ADR de upload](../adr/file-storage-and-uploads.md) pressupunha. O motivo é
-factual: não há proxy nenhum versionado aqui — `infra/docker-compose.prod.yml` publica `api:3000`
-direto. O nginx existe no servidor pessoal que hospeda a demo de portfólio, e a configuração dele
-vive fora do git (é também o que justifica o `trust proxy 1` do `app.ts`).
+factual: não há proxy nenhum versionado aqui. O nginx existe no servidor pessoal que hospeda a
+demo de portfólio, e a configuração dele vive fora do git — este repositório só **declara** a rede
+por onde ele alcança a API (10.2, acima).
 
 Servir por Node é o que mantém **um caminho só** nos três ambientes. A alternativa — Node em dev,
 nginx em produção — fabricaria a classe de bug "funciona na minha máquina, 404 no deploy", num

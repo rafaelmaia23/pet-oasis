@@ -116,7 +116,7 @@ Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real 
 
 **Problema:** o entrypoint trata falha de seed como fatal. Um `EACCES` ao gravar imagem de catálogo em `uploads/` colocou o container em crash loop e a API inteira fora do ar (502 no proxy), por causa de dado de demonstração. Contraria o padrão de degradação fail-open já adotado para Axiom/Sentry.
 
-**Proposta:** separar o seed do boot — passo one-shot (`docker compose run --rm app npm run db:seed`) ou serviço dedicado com `restart: no`. Se mantido no entrypoint, tornar fail-open: logar em `error` e seguir para o start do servidor. Deploy da fase 9 (2026-09-03).
+**Proposta:** separar o seed do boot — passo one-shot (`docker compose run --rm api npm run db:seed`) ou serviço dedicado com `restart: no`. Se mantido no entrypoint, tornar fail-open: logar em `error` e seguir para o start do servidor. Deploy da fase 9 (2026-09-03).
 
 ---
 

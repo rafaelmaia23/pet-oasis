@@ -249,7 +249,7 @@ Cada fase do roadmap tem sua branch, cada feature a sua, e nada é desenvolvido 
 
 ## Rodar localmente
 
-Sobe inteiro com Docker — banco, Redis, mail-catcher e app com hot-reload:
+Sobe inteiro com Docker — banco, Redis, mail-catcher e a API (serviço `api` do Compose, container `pet-oasis-dev-api`) com hot-reload:
 
 ```bash
 git clone https://github.com/rafaelmaia23/pet-oasis.git && cd pet-oasis

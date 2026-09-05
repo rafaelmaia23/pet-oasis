@@ -5,4 +5,4 @@ After=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker exec pet-oasis-app node dist/cleanup-sessions.js
+ExecStart=/usr/bin/docker exec pet-oasis-api node dist/cleanup-sessions.js

@@ -287,6 +287,8 @@ completo, os contra-argumentos e os gotchas.
 
 - Os dois bugs que motivaram a reformulação (Fase 6)
 - Compose base + overrides
+- O serviço do Compose se chama `api`, com alias de rede explícito (10.1) — o nome do serviço é o
+  endereço que o cliente interno escreve, e o alias explícito impede DNS que some em silêncio
 - Envs por arquivo + dotenv-cli
 - Graceful shutdown nativo do Compose, não script com `spawn`
 - O client Prisma do dev num volume anônimo

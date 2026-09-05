@@ -1,4 +1,4 @@
-# Prod override — app (runtime bundle) + Postgres-de-prod ONLY. No mailpit, no
+# Prod override — api (runtime bundle) + Postgres-de-prod ONLY. No mailpit, no
 # dev/test DB. SMTP comes entirely from .env.production (e.g. Resend). The db
 # port is not published (reachable only inside the compose network); use
 # `docker exec` for maintenance/backups.
@@ -32,10 +32,10 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
+  api:
     build:
       target: runtime
-    container_name: pet-oasis-app
+    container_name: pet-oasis-api
     env_file: ../.env.production
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
@@ -48,7 +48,7 @@ services:
     # > the app's graceful-shutdown timeout (10s) so draining finishes first.
     stop_grace_period: 15s
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${API_PORT:-3000}:3000"
     volumes:
       # Bind mount (9.10/AA2), com o caminho do host configurável: hoje o Node
       # serve `/uploads` por `express.static`, e o dia em que o nginx da frente

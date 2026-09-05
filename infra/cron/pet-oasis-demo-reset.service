@@ -6,4 +6,4 @@ After=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker exec pet-oasis-app node dist/demo-reset.js
+ExecStart=/usr/bin/docker exec pet-oasis-api node dist/demo-reset.js

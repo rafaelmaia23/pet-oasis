@@ -1,6 +1,8 @@
 # Deploy em produção
 
-Produção sobe **só** o app + Postgres-de-prod. O app é buildado e roda direto num VPS **ARM64**. 
+Produção sobe **só** a API + Postgres-de-prod. No Compose o serviço se chama **`api`** e o
+container, **`pet-oasis-api`** — o nome do serviço é o que o DNS da rede publica, então é por
+ele que um cliente interno (o front) alcança a API. É buildado e roda direto num VPS **ARM64**.
 
 No servidor:
 
@@ -45,5 +47,16 @@ npm run prod:up    # build + up; migrate deploy + seed no entrypoint
 `npm run prod:down` derruba; 
 `npm run prod:logs` acompanha. 
 A migração roda via `prisma migrate deploy` e o seed é idempotente — a subida deixa o ambiente do zero funcionando.
+
+## Timers de manutenção
+
+Os scripts de faxina (`cleanup-sessions`, `cleanup-audit-log` e, no deploy demo, `demo-reset`)
+são agendados por systemd timer — passo manual, fora do Compose. Instalação, verificação e o
+procedimento de troca das units estão em [`infra/cron/README.md`](../../infra/cron/README.md).
+
+> ⚠️ Cada unit chama `docker exec pet-oasis-api …`, ou seja, **o nome do container está gravado
+> nela**. Num deploy que renomeia o container, reinstale as units **antes** do `prod:up` e rode
+> uma delas à mão **depois** dele (antes, o `docker exec` erra o nome por construção) — unit
+> apontando para container inexistente falha em silêncio, só no journal.
 
 > Fora do escopo da app (infra do servidor): reverse proxy/TLS (Caddy/nginx), backup do volume `prod_pgdata`, firewall.

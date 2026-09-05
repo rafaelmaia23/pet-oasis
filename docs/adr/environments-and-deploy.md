@@ -3,6 +3,12 @@
 > Decisão de infraestrutura registrada na Fase 6. Não altera regra de negócio.
 > Nasceu de dois bugs de deploy e de um débito estrutural (env único, sem
 > separação de ambientes, sem graceful shutdown).
+>
+> **Atualização (Fase 10, 10.1):** o serviço do Compose passou a se chamar `api` (container
+> de produção `pet-oasis-api`), com alias de rede explícito, porque o nome do serviço é o que
+> o DNS da rede publica — e portanto o endereço que o front escreve no código. Onde este
+> documento diz `app` (texto da Fase 6), leia `api`; a estrutura base+overrides não mudou.
+> Racional em [`context/infrastructure.md`](../context/infrastructure.md).
 
 ## O problema
 
@@ -90,5 +96,5 @@ futura, e um comentário no próprio helper.
 - Ao **automatizar o deploy**: `prod:up` já é idempotente (`migrate deploy` no
   entrypoint); falta só o gatilho externo (CI/registry).
 - Se o `--wait` de prod precisar esperar o app *servir* (não só *subir*): adicionar
-  um healthcheck HTTP ao serviço `app` de prod (hoje sem, para manter o runtime
+  um healthcheck HTTP ao serviço `api` de prod (hoje sem, para manter o runtime
   intocado).

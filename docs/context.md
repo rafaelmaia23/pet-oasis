@@ -248,7 +248,7 @@ completo, os contra-argumentos e os gotchas.
 
 *Hardening HTTP*
 
-- `app.set("trust proxy", 1)` (D7)
+- `trust proxy` é por endereço de origem, não por contagem de saltos (D7, revisto na 10.2)
 - Corpo grande demais é 413
 - CORS de origem não-permitida responde sem os headers, não com erro
 - Auto-hospedar o bundle do Scalar em vez de allowlistar o CDN
@@ -289,6 +289,9 @@ completo, os contra-argumentos e os gotchas.
 - Compose base + overrides
 - O serviço do Compose se chama `api`, com alias de rede explícito (10.1) — o nome do serviço é o
   endereço que o cliente interno escreve, e o alias explícito impede DNS que some em silêncio
+- Três redes com papéis distintos, e a porta da API despublicada (10.2) — `backend` interna com os
+  dados, `pet-oasis` compartilhada com clientes internos, `proxy` declarada em vez de conectada à
+  mão; não publicar a porta é o que torna seguro o `trust proxy` por endereço
 - Envs por arquivo + dotenv-cli
 - Graceful shutdown nativo do Compose, não script com `spawn`
 - O client Prisma do dev num volume anônimo

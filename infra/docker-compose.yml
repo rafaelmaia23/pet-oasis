@@ -26,11 +26,14 @@ services:
     restart: unless-stopped
     expose:
       - "3000"
-    networks:
-      # Alias explícito, mesmo o Compose já criando um implícito com o nome do
-      # serviço: DNS que some numa renomeação falha em silêncio (o cliente vê
-      # ENOTFOUND, não uma pista), e essa é a falha cara aqui. Declarado, o
-      # endereço `api` sobrevive a um rename futuro do serviço.
-      default:
-        aliases:
-          - api
+    # A topologia de rede é por ambiente e vive nos overrides: produção tem três
+    # redes com papéis distintos (uma `internal:` com os dados, uma nomeada e
+    # compartilhada com clientes internos, e a do nginx, externa a este repo) e
+    # dev tem a `default` do projeto. Só a de produção pode declarar a rede do
+    # proxy como `external:`, porque só lá ela existe — declará-la aqui quebraria
+    # o `npm run dev` de quem nunca subiu um nginx.
+    #
+    # Em toda rede que integra, o serviço leva um **alias explícito** `api`,
+    # mesmo o Compose já criando um implícito com o nome do serviço: DNS que some
+    # numa renomeação falha em silêncio (o cliente vê ENOTFOUND, não uma pista),
+    # e essa é a falha cara aqui.

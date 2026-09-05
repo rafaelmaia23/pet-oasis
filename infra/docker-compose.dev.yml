@@ -1,4 +1,4 @@
-# Dev override — db + mailpit + app (tsx watch in-container against bind-mounted
+# Dev override — db + mailpit + api (tsx watch in-container against bind-mounted
 # src/). Distinct container names / volume / ports from test so both can run at
 # once. Bring up in FOREGROUND (`npm run dev`); Ctrl+C → graceful SIGTERM.
 services:
@@ -42,10 +42,10 @@ services:
       - "1025:1025" # SMTP
       - "8025:8025" # Web UI
 
-  app:
+  api:
     build:
       target: dev
-    container_name: pet-oasis-dev-app
+    container_name: pet-oasis-dev-api
     env_file: ../.env.development
     environment:
       # env_file keeps localhost/1025 for host tooling; inside the compose network
@@ -59,7 +59,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${API_PORT:-3000}:3000"
     volumes:
       - ../src:/app/src
       - ../prisma:/app/prisma

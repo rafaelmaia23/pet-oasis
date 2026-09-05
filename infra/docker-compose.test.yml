@@ -1,5 +1,5 @@
 # Test override — isolated Postgres-de-test only (distinct names/port/volume from
-# dev, so tests run with the dev stack up). The app is NOT started here: Vitest
+# dev, so tests run with the dev stack up). The `api` service is NOT started here: Vitest
 # runs it in-process on the host (supertest). mailpit is defined but gated behind
 # `--profile mail` — integration tests mock @/lib/email, so it stays inert unless
 # a future real-SMTP e2e needs it.

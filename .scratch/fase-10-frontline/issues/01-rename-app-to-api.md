@@ -10,20 +10,34 @@ ser verdade.
 
 **Status:** ready-for-agent
 
-- [ ] O serviço se chama `api` nos três arquivos de Compose (base, dev, prod) e o container de
+- [x] O serviço se chama `api` nos três arquivos de Compose (base, dev, prod) e o container de
       produção se chama `pet-oasis-api`; o de dev acompanha.
-- [ ] Um alias de rede explícito `api` é declarado, em vez de depender do comportamento
+- [x] Um alias de rede explícito `api` é declarado, em vez de depender do comportamento
       implícito do Compose — DNS que falha em silêncio é o modo de falha caro aqui.
-- [ ] A variável de porta passa a se chamar `API_PORT`, no arquivo de exemplo de ambiente e em
+- [x] A variável de porta passa a se chamar `API_PORT`, no arquivo de exemplo de ambiente e em
       todo consumidor.
-- [ ] **Não** são renomeados: o diretório de trabalho dentro do container, os caminhos internos
+- [x] **Não** são renomeados: o diretório de trabalho dentro do container, os caminhos internos
       montados, e a variável que guarda a URL pública do cliente. Confundir esses três é o jeito
       de quebrar os bind mounts e os emails.
-- [ ] Os três arquivos de serviço systemd apontam para o container novo.
-- [ ] O procedimento de remover as units antigas e instalar as novas está escrito no README de
+- [x] Os três arquivos de serviço systemd apontam para o container novo.
+- [x] O procedimento de remover as units antigas e instalar as novas está escrito no README de
       agendamento, com a ordem (reinstalar **antes** do deploy que renomeia) e um passo de
       execução manual de verificação.
-- [ ] Guia de deploy e README mencionam o nome novo; uma varredura prova que nenhuma menção ao
+- [x] Guia de deploy e README mencionam o nome novo; uma varredura prova que nenhuma menção ao
       nome antigo sobrou fora de prosa histórica.
 - [ ] **Verificação manual** (não há teste automatizado — isto vive no Docker): subir a stack de
       produção e provar de outro container na mesma rede que `api` resolve e responde.
+
+> A verificação manual segue **pendente**: exige subir a stack de produção no Docker, o que não
+> foi executado aqui. O roteiro é o abaixo.
+
+```sh
+npm run prod:up
+# de um container qualquer na mesma rede, sem publicar porta nenhuma:
+docker run --rm --network pet-oasis-prod_default alpine \
+  sh -c 'apk add -q curl >/dev/null && curl -sSo /dev/null -w "%{http_code}\n" http://api:3000/openapi.json'
+npm run prod:down
+```
+
+Espera-se resolução de DNS (sem `ENOTFOUND`) e resposta da API. `docker exec pet-oasis-api ...`
+também deve funcionar — é a forma que os systemd units de `infra/cron/` usam.

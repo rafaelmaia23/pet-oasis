@@ -16,8 +16,8 @@
 
 ### Compose base + overrides
 
-Um `docker-compose.yml` base (só o esqueleto do `app`) + `docker-compose.{dev,prod,test}.yml`.
-Mailpit e Postgres-de-dev existem só no override de dev; **prod sobe só `app` + Postgres-de-prod**;
+Um `docker-compose.yml` base (só o esqueleto do `api`) + `docker-compose.{dev,prod,test}.yml`.
+Mailpit e Postgres-de-dev existem só no override de dev; **prod sobe só `api` + Postgres-de-prod**;
 test sobe só Postgres-de-test (mailpit-de-test atrás de `--profile mail`, inerte porque os testes
 mockam `@/lib/email`). Isolamento por **nome de projeto** (`-p pet-oasis-{dev,test,prod}`) +
 `container_name`/volumes/portas distintos → dev e test rodam juntos. O SMTP do app passa a vir
@@ -25,12 +25,42 @@ inteiro do `env_file` (mata o bug 1); prod não instancia infra de dev/test (mat
 app-em-dev também passou a rodar **em container** (via `tsx watch` lendo `src/` por bind-mount),
 não mais no host.
 
-Isso **superou o desenho anterior** (Fase 5), em que o serviço `app` ficava atrás de um profile
-`full` e derivava a própria `DATABASE_URL` (`@db:5432`) porque o app rodava no host: o profile
-existia para que `docker compose up -d` não subisse um app-em-container brigando pela porta, e a
-`DATABASE_URL` própria existia porque o app-em-container alcança o Postgres pelo **nome do
-serviço**, não por `localhost`. Com um override por ambiente, os dois artifícios deixaram de ser
+Isso **superou o desenho anterior** (Fase 5), em que o serviço (então chamado `app`) ficava
+atrás de um profile `full` e derivava a própria `DATABASE_URL` (`@db:5432`) porque o app rodava
+no host: o profile existia para que `docker compose up -d` não subisse um app-em-container
+brigando pela porta, e a `DATABASE_URL` própria existia porque o app-em-container alcança o
+Postgres pelo **nome do serviço**, não por `localhost`. Com um override por ambiente, os dois artifícios deixaram de ser
 necessários.
+
+### O serviço do Compose se chama `api`, com alias de rede explícito (10.1)
+
+O nome do serviço **é** o endereço: o Compose o publica no DNS da rede, então é o que um cliente
+interno escreve no código. Enquanto o serviço se chamou `app`, o DNS publicava `app` — e o front
+(`pet-oasis-web`), cujo ADR já dizia `http://api:3000`, teria falhado em resolução de DNS no
+primeiro deploy conjunto. Renomear o serviço para `api` (container de produção `pet-oasis-api`,
+o de dev `pet-oasis-dev-api`) é o que torna verdadeiro um contrato já publicado do outro lado.
+
+Um **alias de rede explícito** é declarado no compose base, apesar de o Compose já criar um
+implícito com o nome do serviço. O motivo é o modo de falha: DNS que some numa renomeação não
+grita — o cliente vê `ENOTFOUND` e a causa fica a três camadas de distância. Declarado, o
+endereço `api` sobrevive a um rename futuro do serviço.
+
+O que **não** foi renomeado, de propósito: o `WORKDIR /app` e os caminhos montados dentro do
+container (são sistema de arquivos, não serviço — renomear quebra os bind mounts) e `APP_URL`
+(é a URL pública do **cliente**, e sempre quis dizer isso). Só a variável da porta publicada no
+host acompanhou o serviço: `APP_PORT` → `API_PORT`.
+
+Renomear um serviço **órfã o container antigo**: ele continua rodando, com o rótulo do projeto
+compose mas sem serviço correspondente na config, e o `down` não o leva junto — o próximo `up`
+falha por porta já alocada, e o diagnóstico ("port is already allocated") não aponta para a
+renomeação. Por isso `dev`, `dev:down`, `dev:reset`, `prod:up` e `prod:down` passaram a levar
+`--remove-orphans`: a limpeza vira parte do ciclo normal, e a próxima renomeação não repete o
+episódio.
+
+O nome do container de produção está **gravado nos três systemd units** de `infra/cron/`
+(`docker exec pet-oasis-api …`), que por isso precisam ser reinstalados **antes** do deploy que
+renomeia — procedimento e verificação manual em [`infra/cron/README.md`](../../infra/cron/README.md).
+Unit apontando para container inexistente falha de um jeito que não acorda ninguém.
 
 ### Envs por arquivo + dotenv-cli
 
@@ -90,7 +120,7 @@ node` — higiene básica de container.
 
 `GET /uploads/*` é servido pelo **próprio Node** (`express.static`, em `src/app.ts`), e não pelo
 reverse proxy que o [ADR de upload](../adr/file-storage-and-uploads.md) pressupunha. O motivo é
-factual: não há proxy nenhum versionado aqui — `infra/docker-compose.prod.yml` publica `app:3000`
+factual: não há proxy nenhum versionado aqui — `infra/docker-compose.prod.yml` publica `api:3000`
 direto. O nginx existe no servidor pessoal que hospeda a demo de portfólio, e a configuração dele
 vive fora do git (é também o que justifica o `trust proxy 1` do `app.ts`).
 

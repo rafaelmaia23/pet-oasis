@@ -23,7 +23,7 @@ pode ser feita a qualquer momento, inclusive antes da 01.
 > trocando um warning por um erro. Também se optou por **detectar e não pinar**
 > (`PRISMA_CLI_BINARY_TARGETS`): o alvo carrega a arquitetura junto da versão do SSL, então fixá-lo
 > congelaria a fragilidade em ARM64 que motivou o item. Racional permanente em
-> `docs/context/infrastructure.md` § "O OpenSSL vai nos dois estágios da imagem".
+> `docs/context/infrastructure.md` § "O OpenSSL vai nos três estágios da imagem".
 
 > **Tamanho, medido nas duas imagens do estágio `runtime`** (soma das camadas via
 > `docker history`; o `docker image ls` arredonda as duas para 1.17 GB e esconde a diferença):
@@ -57,7 +57,9 @@ npm run prod:up && docker logs pet-oasis-api
 npm run prod:down
 ```
 
-> **Fora de escopo, de propósito:** o estágio `dev` tem o mesmo defeito — roda `prisma generate` e
+> **O estágio `dev`, que ficou de fora daqui:** ele tem o mesmo defeito — roda `prisma generate` e
 > `migrate deploy` no entrypoint e emite os mesmos warnings —, mas esta issue nomeia o runtime e a
-> verificação é do container de produção. Correção é a mesma linha de `apt-get`. Registrado em
-> `docs/reference/backlog.md`.
+> verificação é do container de produção, então saiu como item próprio do
+> `docs/reference/backlog.md` em vez de nota no fim de issue fechada. **Foi feito logo depois**, na
+> branch `fix/openssl-in-dev-stage`, com a mesma linha de `apt-get` e um `npm run dev` de verdade
+> como verificação; o item do backlog já está riscado.

@@ -303,9 +303,11 @@ completo, os contra-argumentos e os gotchas.
   feature/role/raça/léxico e fail-open no dado atrás de flag, que só loga e some do `SeedResult`
 - O seed é bundlado pelo tsup (`dist/seed.js`)
 - Imagem multi-stage e não-root
-- O OpenSSL vai nos dois estágios da imagem, e a engine do Prisma é detectada (10.5) — sem ele a
+- O OpenSSL vai nos três estágios da imagem, e a engine do Prisma é detectada (10.5) — sem ele a
   detecção falha e o default silencioso é a engine errada; detectar em vez de pinar é o que mantém
   o ARM64 correto
+- Não existe script para apagar o banco de produção (10.5) — `down -v` de produção é ato
+  deliberado, digitado à mão; script de nome amigável ao lado do `prod:up` vira erro de digitação
 - O reverse proxy do upload existe, mas não neste repositório (9.10) — quem serve `/uploads/*` é
   o Node, e o bind mount é o que deixa a troca por nginx ser configuração
 - `sharp` no ARM64 exige build no próprio servidor (9.10)

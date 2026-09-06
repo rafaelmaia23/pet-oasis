@@ -61,6 +61,13 @@ ENTRYPOINT ["./docker-entrypoint.sh"]
 # (see infra/docker-compose.dev.yml + infra/docker-entrypoint.dev.sh) — not baked here.
 FROM node:22-bookworm-slim AS dev
 WORKDIR /app
+# O mesmo OpenSSL dos outros dois estágios, pelo mesmo motivo: o
+# docker-entrypoint.dev.sh roda `prisma generate` e `migrate deploy`, então o
+# `npm run dev` detecta o libssl igual ao boot de produção. Antes do `npm ci`,
+# que é onde o @prisma/engines escolhe qual schema-engine baixar.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 COPY prisma ./prisma

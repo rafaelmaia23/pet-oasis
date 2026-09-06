@@ -29,8 +29,11 @@ import app from "@/app";
 import { env } from "@/config/env";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { redis } from "@/lib/redis";
+import { refreshGraceKey } from "@/lib/refreshGrace";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import {
+  REFRESH_GRACE_WINDOW_MS,
   REFRESH_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_PATH,
 } from "@/modules/auth/auth.constants";
@@ -95,6 +98,20 @@ async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
     },
   });
   return session.id;
+}
+
+/**
+ * Posiciona uma requisição **fora** da janela de graça sem injetar relógio: envelhece
+ * o `usedAt` da linha e apaga a chave do cache — exatamente o estado em que a janela
+ * já passou (o TTL do Redis teria expirado sozinho).
+ */
+async function ageOutOfGraceWindow(rawRefreshToken: string): Promise<void> {
+  const refreshTokenHash = hashToken(rawRefreshToken);
+  await prisma.session.update({
+    where: { refreshTokenHash },
+    data: { usedAt: new Date(Date.now() - REFRESH_GRACE_WINDOW_MS - 1_000) },
+  });
+  await redis.del(refreshGraceKey(refreshTokenHash));
 }
 
 afterEach(async () => {
@@ -554,6 +571,8 @@ describe("POST /api/v1/auth/refresh", () => {
 
     expect(rotateResponse.status).toBe(200);
 
+    await ageOutOfGraceWindow(rawRefreshTokenFromCookie(refreshCookieA));
+
     const replayResponse = await request(app)
       .post("/api/v1/auth/refresh")
       .set("Cookie", refreshCookieA);
@@ -602,6 +621,100 @@ describe("POST /api/v1/auth/refresh", () => {
 
     expect(session.refreshTokenHash).not.toBe(rawToken);
     expect(session.refreshTokenHash).toBe(hashToken(rawToken));
+  });
+
+  it("should replay the same pair when a used refresh token comes back inside the grace window (10.7)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(rotateResponse.status).toBe(200);
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(200);
+    expect(replayResponse.body.accessToken).toBe(
+      rotateResponse.body.accessToken,
+    );
+    expect(extractRefreshCookie(replayResponse)).toBe(
+      extractRefreshCookie(rotateResponse),
+    );
+
+    // Nenhuma rotação nova (duas linhas: a do login e a que a rotação criou) e
+    // nenhuma sessão morta — é o dano que a janela existe para evitar.
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    expect(sessions).toHaveLength(2);
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+
+    const auditLine = await prisma.auditLog.findFirst({
+      where: { action: "AUTH_REFRESH_GRACE_SERVED" },
+    });
+    expect(auditLine).not.toBeNull();
+    expect(auditLine?.targetId).toBe(user.id);
+  });
+
+  it("should not grace a link killed in the meantime, even inside the window (10.7)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(rotateResponse.status).toBe(200);
+
+    // O que um ban, um reset de senha ou a cascata de um roubo anterior fazem.
+    // A janela não pode reabrir por dez segundos o que a API acabou de fechar.
+    await prisma.session.updateMany({
+      where: { userId: user.id },
+      data: { invalidatedAt: new Date() },
+    });
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(401);
+  });
+
+  it("should return 503 and kill nothing when the cached pair is gone inside the window (10.7)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(rotateResponse.status).toBe(200);
+
+    // Chave ausente com o Redis vivo — evicção por limite de memória, na
+    // produção. A janela ainda não passou: a API não decide entre concorrência
+    // e roubo, ela recusa a decisão.
+    await redis.del(
+      refreshGraceKey(hashToken(rawRefreshTokenFromCookie(refreshCookie))),
+    );
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(503);
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
   });
 
   it("should return 401 when the refresh token is tampered with (D1 regression)", async () => {

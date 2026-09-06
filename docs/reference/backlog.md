@@ -120,11 +120,34 @@ Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real 
 
 ---
 
-### `uploads/` dentro do working tree do repositório
+### `res.sendFile` do bundle do Scalar quebra em checkout sob caminho com ponto
 
-**Problema:** o diretório de dados fica dentro do repo clonado em `/srv/pet-oasis`. O git escreve como o usuário do host (uid 1001) e o container como `node` (uid 1000) — não há dono que satisfaça os dois. Já causou dois incidentes: `git pull` abortado por `Permission denied` em `uploads/.gitkeep` (deixando checkout pela metade) e `EACCES` no seed. Arquivos enviados também ficam expostos a um `git clean -fd`.
+**Problema:** `router.get(SCALAR_BUNDLE_PATH, …)` chama `res.sendFile(scalarBundleFile)` com o
+caminho absoluto resolvido do `node_modules`. O `send` do Express recusa qualquer caminho que
+tenha um **segmento começando com ponto** (`dotfiles: "ignore"`): devolve `NotFoundError`, que o
+error handler central traduz em **500**. Em produção o caminho é `/app/node_modules/…` e nunca
+morde; morde quem clona o repo sob um diretório pontuado — um worktree em `.claude/worktrees/`,
+por exemplo, faz `tests/integration/v1/reference.test.ts` falhar com "expected 500 to be 200",
+mensagem que não aponta para a causa. Encontrado na Fase 10.4.
 
-**Proposta:** mover para fora do working tree (`/srv/pet-oasis-data/uploads`) e declarar bind mount no compose. Documentar o uid esperado no guia de deploy, ou fixar `user:` no serviço para não depender do `USER` da imagem base.
+**Proposta:** `res.sendFile(scalarBundleFile, { dotfiles: "allow" })` — o caminho não vem de
+request nenhum, é resolvido do próprio `node_modules`, então a guarda de dotfile não está
+protegendo nada aqui. Esforço: uma linha e um comentário dizendo por que é seguro.
+
+---
+
+### ~~`uploads/` dentro do working tree do repositório~~ — ✅ resolvido (Fase 10.4)
+
+O diretório saiu para `/srv/pet-oasis-data/uploads` e **os dois** caminhos propostos foram
+tomados, não um ou outro: o uid está fixado no serviço (`user: "1000:1000"`) *e* documentado no
+guia, porque é o mesmo número dos dois lados e escrevê-lo num só deixaria o outro adivinhando.
+
+Além do proposto, `uploads/.gitkeep` foi removido e o `.gitignore` passou a ignorar o diretório
+inteiro: enquanto o git versionasse aquele caminho, ele continuaria dono dele em todo clone — era
+justamente o `.gitkeep` que o `pull` não conseguia escrever. E `UPLOAD_HOST_DIR` perdeu o
+fallback `:-./uploads`, que era o caminho silencioso de volta para dentro da árvore; faltando a
+variável, o `prod:up` falha nomeando-a. Racional em `docs/context/infrastructure.md` § "O
+diretório de uploads mora fora do working tree, e o uid é fixado no serviço".
 
 ---
 

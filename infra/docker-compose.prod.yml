@@ -41,6 +41,13 @@ services:
     build:
       target: runtime
     container_name: pet-oasis-api
+    # O uid fixado aqui, e não herdado do `USER node` da imagem base: é ele que
+    # precisa casar com o dono do UPLOAD_HOST_DIR no host. Um bump da base que
+    # mudasse o uid do usuário `node` viraria EACCES no primeiro upload — e o
+    # sintoma (500 ao enviar imagem) não aponta para a causa. 1000:1000 é o que
+    # a node:22-bookworm-slim usa hoje; o guia de deploy manda chownar o
+    # diretório para o mesmo par, e os dois números mudam juntos ou nenhum.
+    user: "1000:1000"
     env_file: ../.env.production
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
@@ -70,8 +77,17 @@ services:
       # Bind mount (9.10/AA2), com o caminho do host configurável: hoje o Node
       # serve `/uploads` por `express.static`, e o dia em que o nginx da frente
       # passar a servi-lo direto (`alias`) é config, não deploy novo. O
-      # diretório precisa existir e ser gravável pelo usuário do container.
-      - "${UPLOAD_HOST_DIR:-./uploads}:/app/uploads"
+      # diretório precisa existir e ser gravável pelo uid fixado acima.
+      #
+      # O caminho precisa ficar **fora do working tree** do repo clonado (10.4):
+      # lá dentro, o git escreve como o usuário do host e o container como uid
+      # 1000, e não há dono que satisfaça os dois — o que já abortou um `pull`
+      # pela metade e derrubou o seed com EACCES.
+      #
+      # Sem fallback, de propósito: o `:-./uploads` que estava aqui era o
+      # caminho silencioso de volta para dentro da árvore. Faltando a variável,
+      # o `prod:up` falha nomeando-a, que é a mensagem certa.
+      - "${UPLOAD_HOST_DIR:?obrigatorio - caminho absoluto FORA do working tree, ex. /srv/pet-oasis-data/uploads}:/app/uploads"
 
 # Três redes, três papéis. A API é o único serviço nas três — é ela que atravessa
 # a fronteira entre os dados e quem os pede.

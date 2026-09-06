@@ -150,6 +150,26 @@ node` — higiene básica de container.
 
 ---
 
+### O OpenSSL vai nos dois estágios da imagem, e a engine do Prisma é detectada (10.5)
+
+`node:22-bookworm-slim` não traz o binário `openssl` nem o libssl — o Node linka o seu
+estaticamente. Sem eles a detecção de libssl do Prisma falha, e o default silencioso é o
+schema-engine `debian-openssl-1.1.x`. Rodava, porque a engine só é exercida no `migrate deploy` do
+entrypoint, mas o log de inicialização abria com dois blocos de warning e a engine era a errada
+escolhida por acidente — acidente que muda de resultado em ARM64 ou num bump da imagem base.
+
+O `openssl` é instalado nos estágios **`build` e `runtime`**, porque a escolha acontece duas vezes:
+no `npm ci`, onde o `@prisma/engines` decide qual build do schema-engine baixar, e no boot, onde o
+CLI redetecta. Instalar só no runtime faria os dois discordarem — a detecção pediria 3.0.x e a
+imagem carregaria o binário 1.1.x, que é o caso pior dos dois.
+
+**Detectar, e não pinar** com `PRISMA_CLI_BINARY_TARGETS`: o alvo carrega a arquitetura junto da
+versão do SSL (`debian-openssl-3.0.x` contra `linux-arm64-openssl-3.0.x`), então fixá-lo calaria o
+warning e congelaria justamente a fragilidade em ARM64 que motivou o item. Custo medido: +7,34 MB
+da camada do apt, −5 MB da engine menor que a anterior, +2,34 MB líquidos numa imagem de ~942 MB.
+
+---
+
 ### O reverse proxy do upload existe, mas não neste repositório (9.10)
 
 `GET /uploads/*` é servido pelo **próprio Node** (`express.static`, em `src/app.ts`), e não pelo

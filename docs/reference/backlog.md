@@ -128,11 +128,27 @@ Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real 
 
 ---
 
-### Prisma não detecta libssl no runtime
+### ~~Prisma não detecta libssl no runtime~~ — ✅ resolvido (Fase 10.5)
 
-**Problema:** `node:22-bookworm-slim` não traz OpenSSL; o Prisma emite warning a cada boot e cai no default `openssl-1.1.x`. Funciona hoje, mas é escolha implícita de engine — frágil em ARM64 e em bump de imagem base.
+O `openssl` foi instalado — mas nos **dois** estágios, não só no runtime que este item propunha: a
+engine é escolhida duas vezes, no `npm ci` (onde o `@prisma/engines` baixa o binário) e no boot
+(onde o CLI redetecta), e instalar num só faria os dois discordarem. O baked engine passou de
+`schema-engine-debian-openssl-1.1.x` para `debian-openssl-3.0.x` e o boot ficou sem warning, com as
+24 migrations aplicadas contra banco vazio na verificação. Custo: +2,34 MB líquidos. Racional em
+`docs/context/infrastructure.md` § "O OpenSSL vai nos dois estágios da imagem".
 
-**Proposta:** instalar `openssl` no estágio runtime do Dockerfile. Baixo custo, remove ruído do log de inicialização.
+---
+
+### O estágio `dev` da imagem ainda não detecta o libssl — **P**
+
+**Problema:** a 10.5 instalou o `openssl` nos estágios `build` e `runtime`, que são os que fazem a
+imagem de produção. O estágio `dev` ficou de fora por escopo — e tem o mesmo defeito: o
+`docker-entrypoint.dev.sh` roda `prisma generate` e `prisma migrate deploy`, então todo `npm run
+dev` abre com os mesmos blocos de warning e usa o mesmo schema-engine escolhido por acidente.
+
+**Proposta:** a mesma linha de `apt-get install -y --no-install-recommends openssl` no estágio
+`dev`, antes do `npm ci` (é o install que baixa a engine). Custo idêntico, ~2 MB numa imagem que
+nunca vai para produção.
 
 ## Necessidades do front web
 

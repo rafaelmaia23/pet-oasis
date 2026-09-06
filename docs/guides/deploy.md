@@ -83,6 +83,35 @@ npm run prod:up    # build + up; migrate deploy + seed no entrypoint
 `npm run prod:logs` acompanha. 
 A migração roda via `prisma migrate deploy` e o seed é idempotente — a subida deixa o ambiente do zero funcionando.
 
+### O que no seed derruba o boot, e o que só loga
+
+O seed roda a cada boot do container, e **não** é tudo-ou-nada:
+
+| Classe | O que é | Falhando |
+|---|---|---|
+| Dado de referência | features, roles, raças, léxico da busca | **para o boot** — é pré-requisito, como a migration |
+| Dado de demonstração | usuário demo, admin de teste, dataset fake (`SEED_*`) | **só loga** em nível de erro; o servidor sobe |
+
+Dado de demonstração não vale uma API fora do ar: uma falha de permissão gravando imagem do
+catálogo fake já pôs este container em crash loop e o site inteiro em 502. Quando isso acontece, a
+última linha do seed diz exatamente quais passos faltaram:
+
+```
+SEEDING COMPLETED WITH FAILURES: fake-catalog — dado de demonstração faltando; a API sobe assim mesmo.
+```
+
+Ou seja: **a API está no ar e incompleta**, não fora do ar. Corrigida a causa (quase sempre a
+permissão do `UPLOAD_HOST_DIR` — ver o `chown` acima), rode o seed à mão, sem redeploy e sem
+downtime:
+
+```bash
+docker exec pet-oasis-api node dist/seed.js
+```
+
+O seed é idempotente: o que já foi semeado é pulado, e só o que faltou entra. Se em vez disso o
+**boot** parou, o `prod:logs` mostra o erro e o container reiniciando — aí a falha é de dado de
+referência (ou do banco), e é para parar mesmo.
+
 ## Timers de manutenção
 
 Os scripts de faxina (`cleanup-sessions`, `cleanup-audit-log` e, no deploy demo, `demo-reset`)

@@ -15,6 +15,11 @@ export const AUDIT_ACTIONS = [
   "AUTH_LOCKOUT_TRIGGERED",
   "AUTH_LOCKOUT_CLEARED",
   "AUTH_RATE_LIMIT_EXCEEDED",
+  // Acerto da janela de graça (10.7): o mesmo refresh voltou dentro da janela e
+  // a API devolveu o par que já tinha emitido. Informativo — quem investiga
+  // roubo procura o `warn` do reuso fora da janela, e diluir os dois numa ação
+  // só faria a concorrência rotineira de um cliente enterrar o sinal.
+  "AUTH_REFRESH_GRACE_SERVED",
   "USER_CREATED",
   "USER_DELETED",
   // Perfil (não a conta). Criação e restauração entraram na 8.3; a deleção,

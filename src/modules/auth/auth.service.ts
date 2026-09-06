@@ -4,6 +4,7 @@ import { env } from "@/config/env";
 import {
   createForbiddenError,
   createNotFoundError,
+  createServiceUnavailableError,
   createTooManyRequestsError,
   createUnauthorizedError,
 } from "@/errors";
@@ -11,12 +12,16 @@ import { record } from "@/lib/auditLog";
 import * as lockout from "@/lib/lockout";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
+import { lookupPair, rememberPair } from "@/lib/refreshGrace";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import { describeUserAgent } from "@/lib/userAgent";
 import * as userService from "@/modules/user/user.service";
 import * as userRepository from "../user/user.repository";
 import type { CreateCustomerInput } from "../user/user.schema";
-import { REFRESH_TOKEN_TTL_MS } from "./auth.constants";
+import {
+  REFRESH_GRACE_WINDOW_MS,
+  REFRESH_TOKEN_TTL_MS,
+} from "./auth.constants";
 import * as authRepository from "./auth.repository";
 import type { LoginInput } from "./auth.schema";
 
@@ -177,15 +182,67 @@ export async function refresh(
     throw createUnauthorizedError(REFRESH_INVALID_ERROR);
   }
 
-  const session = await authRepository.findSessionByHash(
-    hashToken(refreshToken),
-  );
+  const presentedTokenHash = hashToken(refreshToken);
+
+  const session = await authRepository.findSessionByHash(presentedTokenHash);
 
   if (!session) {
     throw createUnauthorizedError(REFRESH_INVALID_ERROR);
   }
 
   if (session.usedAt) {
+    // Segunda apresentação do mesmo token. Duas leituras possíveis — cliente
+    // concorrente ou cópia roubada — e o `usedAt` decide **qual pergunta
+    // fazer**, não qual resposta dar: dentro da janela, quem responde é o
+    // cache (10.7); fora dela, é roubo, como sempre foi.
+    //
+    // A graça só socorre a corrida de rotação de um elo por tudo o mais
+    // corriqueiro. Um elo que foi **explicitamente morto** — logout, ban,
+    // reset de senha, ou a cascata de um roubo anterior — cai no caminho de
+    // sempre: devolver 200 ali reabriria uma sessão que a API acabou de
+    // fechar, e por dez segundos depois do fato.
+    const graceApplies =
+      !session.invalidatedAt &&
+      session.expiresAt > new Date() &&
+      session.usedAt.getTime() + REFRESH_GRACE_WINDOW_MS > Date.now();
+
+    if (graceApplies) {
+      const cached = await lookupPair(presentedTokenHash);
+
+      if (cached.status === "HIT") {
+        log.info(
+          { userId: session.userId, sessionId: session.id },
+          "refresh token replayed inside the grace window, replaying the pair",
+        );
+        await record({
+          action: "AUTH_REFRESH_GRACE_SERVED",
+          targetType: "User",
+          targetId: session.userId,
+          metadata: { sessionId: session.id },
+        });
+        return cached.pair;
+      }
+
+      // Recusa de decidir, de propósito. Cascatear aqui faria uma falha de
+      // infraestrutura deslogar o dono de todos os dispositivos — o dano que a
+      // janela existe para evitar —, e rotacionar em modo degradado criaria um
+      // caminho que só roda durante incidente, ou seja, que nunca roda.
+      // `reason` separa "Redis fora do ar" de "chave sumiu com Redis vivo": a
+      // segunda, se recorrente, é evicção por limite de memória.
+      log.error(
+        {
+          userId: session.userId,
+          sessionId: session.id,
+          reason: cached.status,
+        },
+        "refresh replayed inside the grace window but the pair is gone",
+      );
+      throw createServiceUnavailableError({
+        message: "Não foi possível renovar a sessão agora",
+        action: "Tente novamente em alguns instantes",
+      });
+    }
+
     // Um refresh token só é apresentado uma vez; a segunda apresentação
     // significa que alguém tem uma cópia. Anomalia tratada (todas as sessões
     // caem) — mas é o sinal mais importante deste módulo.
@@ -211,6 +268,17 @@ export async function refresh(
   }
 
   const newRefreshToken = generateOpaqueToken();
+  const pair = {
+    accessToken: generateToken(session.userId),
+    refreshToken: newRefreshToken,
+  };
+
+  // Antes da rotação de propósito: o par só é servido a quem encontra a linha
+  // já marcada como usada, então gravar antes fecha a fresta em que a segunda
+  // requisição vê `usedAt` preenchido e o cache ainda vazio. Se a rotação
+  // falhar, a chave fica órfã — ninguém a alcança, e a rotação seguinte a
+  // sobrescreve. A escrita é best-effort: sua falha não derruba a renovação.
+  await rememberPair(presentedTokenHash, pair);
 
   await authRepository.rotateSession(session.id, {
     userId: session.userId,
@@ -220,14 +288,12 @@ export async function refresh(
     ipAddress: context.ipAddress,
   });
 
-  const accessToken = generateToken(session.userId);
-
   log.info(
     { userId: session.userId, sessionId: session.id },
     "refresh token rotated",
   );
 
-  return { accessToken, refreshToken: newRefreshToken };
+  return pair;
 }
 
 const LOGOUT_INVALID_ERROR = {

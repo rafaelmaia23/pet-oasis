@@ -73,10 +73,17 @@ export const authPaths: ZodOpenApiPathsObject = {
     post: {
       tags: ["Auth"],
       summary: "Rotaciona o refresh cookie e devolve um novo access token",
+      description:
+        "Reapresentar o token já usado dentro da janela de graça (10s) devolve " +
+        "**o mesmo par** já emitido, em vez de rotacionar de novo; fora da " +
+        "janela, é tratado como roubo e invalida todas as sessões. O 503 é " +
+        "retentável: dentro da janela, a API não conseguiu reproduzir o par " +
+        "emitido e prefere não decidir entre concorrência e roubo.",
       security: [],
       responses: {
         200: jsonResponse("Token renovado", accessTokenSchema),
         401: errorResponses[401],
+        503: errorResponses[503],
       },
     },
   },

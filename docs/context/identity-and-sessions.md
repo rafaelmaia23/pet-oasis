@@ -43,6 +43,54 @@ porque numa resposta a roubo o objetivo é marcar `invalidatedAt` em toda sessã
 completa, inclusive as já usadas. A segunda inclui `usedAt: null`, porque ali o objetivo é só
 limpar sessões que ainda poderiam ser usadas — não é resposta a incidente, é encerramento de conta.
 
+### A janela de graça de 10s na rotação (10.7)
+
+Reapresentar um refresh já usado continua sendo roubo — mas só **fora** de uma janela de 10
+segundos a partir do `usedAt`. Dentro dela, a API devolve **o mesmo par** que já emitiu naquela
+rotação. O motivo é que a detecção, sozinha, punia o cliente legítimo: dois processos ou uma
+requisição de prefetch apresentam o mesmo token duas vezes sem ninguém ter feito nada errado, e o
+efeito era deslogar o dono de **todos** os dispositivos, sem erro visível para nenhuma das partes.
+A trava em memória do cliente resolve enquanto ele for um processo só; deixa de resolver na
+segunda réplica.
+
+Três decisões sustentam isso:
+
+**A janela é o TTL de uma chave no Redis**, não uma comparação de timestamp para decidir o que
+devolver. O par emitido é gravado em `refresh:grace:{hash do token apresentado}` com `PX` de 10s
+(`src/lib/refreshGrace.ts`); se a chave existe, o par é replicável, e nenhum relógio precisa
+concordar com outro. Sem migration: não há "hash anterior a guardar" — cada rotação já cria uma
+linha nova e marca a anterior como usada, então uma linha de `Session` é um **elo da corrente de
+rotação**, não a sessão de um dispositivo. O que faltava era o **texto claro** do par, que a
+requisição descartava no fim. A escrita acontece **antes** da rotação, de propósito: o par só é
+servido a quem encontra a linha já marcada como usada, então gravar antes fecha a fresta em que a
+segunda requisição vê `usedAt` preenchido e o cache ainda vazio. É best-effort — sua falha não
+derruba a renovação.
+
+**O `usedAt` decide qual pergunta fazer, não qual resposta dar.** Dentro da janela quem responde é
+o cache; fora dela, o Redis nem é consultado e a cascata é a de sempre — uma queda do Redis não
+enfraquece a detecção de roubo. E a graça só alcança um elo **por tudo o mais corriqueiro**: um
+que tenha sido explicitamente morto no intervalo — logout, ban, reset de senha, a cascata de um
+roubo anterior — mantém o comportamento que já tinha, porque devolver 200 ali reabriria por dez
+segundos uma sessão que a API acabou de fechar.
+
+**Dentro da janela sem par para devolver é 503, não cascata e não rotação nova.** Cascatear faria
+uma falha de infraestrutura causar exatamente o dano que a janela existe para evitar; rotacionar
+em modo degradado criaria um caminho que só roda durante incidente, isto é, que nunca roda de
+verdade e que ninguém percebe quebrado. O 503 é a recusa explícita de decidir entre concorrência e
+roubo, e é retentável. "Redis inalcançável" e "chave ausente com o Redis vivo" dão o mesmo 503 com
+`reason` distinta no log: a segunda, se recorrente, é evicção por limite de memória, e o
+diagnóstico é outro.
+
+Os 10 segundos são **constante nomeada, não env var** (`REFRESH_GRACE_WINDOW_MS`): concorrência
+real resolve em menos de um segundo, e 30s já seria tempo em que um token capturado de log de
+proxy é usável. Número que ninguém deve ajustar em produção sem pensar não merece um botão.
+
+O acerto de janela tem ação própria no audit log (`AUTH_REFRESH_GRACE_SERVED`), em nível
+informativo; o `warn` continua reservado ao reuso fora da janela, que é o sinal mais importante do
+módulo — diluir os dois faria a concorrência rotineira de um cliente enterrar o sinal. O contrato
+para quem consome está em [`guides/integrating-with-the-api.md`](../guides/integrating-with-the-api.md),
+com o aviso de que a janela **não** substitui serialização no cliente.
+
 ### Refresh token hasheado em repouso — item que virou teste, não código
 
 Levantado na Fase 7 e, na análise, **já estava implementado desde a Fase 3**:

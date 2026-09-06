@@ -130,25 +130,23 @@ Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real 
 
 ### ~~Prisma não detecta libssl no runtime~~ — ✅ resolvido (Fase 10.5)
 
-O `openssl` foi instalado — mas nos **dois** estágios, não só no runtime que este item propunha: a
-engine é escolhida duas vezes, no `npm ci` (onde o `@prisma/engines` baixa o binário) e no boot
-(onde o CLI redetecta), e instalar num só faria os dois discordarem. O baked engine passou de
+O `openssl` foi instalado — mas nos estágios `build` **e** `runtime`, não só no runtime que este
+item propunha: a engine é escolhida duas vezes, no `npm ci` (onde o `@prisma/engines` baixa o
+binário) e no boot (onde o CLI redetecta), e instalar num só faria os dois discordarem. O estágio
+`dev` recebeu a mesma linha logo depois, fechando o item abaixo. O baked engine passou de
 `schema-engine-debian-openssl-1.1.x` para `debian-openssl-3.0.x` e o boot ficou sem warning, com as
 24 migrations aplicadas contra banco vazio na verificação. Custo: +2,34 MB líquidos. Racional em
-`docs/context/infrastructure.md` § "O OpenSSL vai nos dois estágios da imagem".
+`docs/context/infrastructure.md` § "O OpenSSL vai nos três estágios da imagem".
 
 ---
 
-### O estágio `dev` da imagem ainda não detecta o libssl — **P**
+### ~~O estágio `dev` da imagem ainda não detecta o libssl~~ — ✅ resolvido (logo após a 10.5)
 
-**Problema:** a 10.5 instalou o `openssl` nos estágios `build` e `runtime`, que são os que fazem a
-imagem de produção. O estágio `dev` ficou de fora por escopo — e tem o mesmo defeito: o
-`docker-entrypoint.dev.sh` roda `prisma generate` e `prisma migrate deploy`, então todo `npm run
-dev` abre com os mesmos blocos de warning e usa o mesmo schema-engine escolhido por acidente.
-
-**Proposta:** a mesma linha de `apt-get install -y --no-install-recommends openssl` no estágio
-`dev`, antes do `npm ci` (é o install que baixa a engine). Custo idêntico, ~2 MB numa imagem que
-nunca vai para produção.
+A mesma linha de `apt-get`, antes do `npm ci`. Verificado com um `npm run dev` de verdade: o
+`prisma generate` e o `migrate deploy` do entrypoint de dev não emitem mais `prisma:warn`, e o
+schema-engine baked passou de `debian-openssl-1.1.x` para `debian-openssl-3.0.x`. A estimativa de
+"~2 MB a mais" saiu errada de sinal: a imagem **encolheu** 2,66 MB (1368,56 → 1365,90 MB), porque a
+engine 3.0.x é menor que a 1.1.x o bastante para pagar a camada do apt e ainda sobrar.
 
 ## Necessidades do front web
 

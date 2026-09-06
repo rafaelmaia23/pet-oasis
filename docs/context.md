@@ -313,6 +313,8 @@ completo, os contra-argumentos e os gotchas.
   guarda a chave), e `APP_URL` só vira depois de o front ter as quatro rotas de email
 - O reverse proxy do upload existe, mas não neste repositório (9.10) — quem serve `/uploads/*` é
   o Node, e o bind mount é o que deixa a troca por nginx ser configuração
+- O diretório de uploads mora fora do working tree, e o uid é fixado no serviço (10.4) — git e
+  container não têm dono em comum; `UPLOAD_HOST_DIR` é obrigatória, sem fallback para dentro da árvore
 - `sharp` no ARM64 exige build no próprio servidor (9.10)
 
 *Documentação da API*

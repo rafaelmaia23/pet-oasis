@@ -276,6 +276,36 @@ visível no filesystem do host, e o dia em que o tráfego justificar, a mudança
 no banco muda — ele guarda a **chave**, nunca a URL. De brinde, backup de imagem vira `rsync` de
 um diretório em vez de arqueologia em `/var/lib/docker/volumes`.
 
+### O diretório de uploads mora fora do working tree, e o uid é fixado no serviço (10.4)
+
+A 9.10 escolheu bind mount e o pôs em `./uploads`, **dentro do repo clonado**, com um
+`uploads/.gitkeep` versionado para garantir que o diretório existisse antes do primeiro `up`. O
+raciocínio de então estava certo na metade que enxergava (bind mount criado pelo Docker nasce de
+`root`, e o container não-root não escreveria nele) e errado na que faltava: versionar o
+diretório põe o **git como dono de um caminho que o container escreve**. No servidor, o git roda
+como o usuário do host (uid 1001) e o container como `node` (uid 1000) — não existe dono que
+satisfaça os dois. O preço foi um `pull` abortado por `Permission denied` em `uploads/.gitkeep`,
+deixando o checkout pela metade, e um `EACCES` no seed. Fora da árvore, os dois donos deixam de
+disputar o mesmo caminho, e o dado enviado também deixa de estar ao alcance de uma limpeza de
+arquivos não rastreados no repo.
+
+Então `uploads/` saiu do git por inteiro (o `.gitkeep` foi removido, o `.gitignore` ignora o
+diretório) e `UPLOAD_HOST_DIR` virou **obrigatória** em produção: o `:-./uploads` que ela tinha
+era o caminho silencioso de volta para dentro da árvore, e um fallback que reintroduz o bug que
+se acabou de corrigir não é conveniência. Faltando a variável, o `prod:up` falha nomeando-a — a
+mesma política da rede `proxy` declarada como `external:`. Em dev nada disso morde (o estágio
+`dev` da imagem roda como root, e o `put` do storage cria o diretório sozinho), então o mount de
+dev continua em `../uploads`, sem variável nova para quem clona.
+
+O uid ficou **fixado no serviço** (`user: "1000:1000"`) em vez de herdado do `USER node` da
+imagem base. Herdar amarra a permissão do diretório do host a uma escolha da base: um bump que
+mudasse o uid de `node` viraria EACCES no primeiro upload, e o sintoma — 500 ao enviar imagem —
+não aponta para a causa. Fixado, o número está escrito nos dois lugares que precisam concordar
+(o compose e o `chown` do [guia de deploy](../guides/deploy.md)), e eles mudam juntos ou nenhum.
+
+Nada gravado no banco mudou, e essa é a propriedade que tornou a migração um `mv`: o banco guarda
+a **chave** do arquivo, nunca a URL — que nasce de `UPLOAD_PUBLIC_BASE_URL` a cada resposta.
+
 ### `sharp` no ARM64 exige build no próprio servidor (9.10)
 
 O `Dockerfile` é `node:22-bookworm-slim` (glibc, não Alpine), então o `npm ci` baixa o prebuild

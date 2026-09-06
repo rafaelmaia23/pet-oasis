@@ -115,12 +115,17 @@ para o nginx passar a servi-lo direto. No dia em que o tráfego justificar, a
 mudança inteira é
 
 ```nginx
-location /uploads/ { alias /srv/pet-oasis/uploads/; expires 30d; }
+location /uploads/ { alias /srv/pet-oasis-data/uploads/; expires 30d; }
 ```
 
 mais um `UPLOAD_PUBLIC_BASE_URL` novo. **Nada gravado no banco muda**, porque o
 banco guarda a chave e nunca a URL — que era o ponto do ADR original e continua
 valendo.
+
+O caminho do host acima não é o do repo clonado por acidente: o diretório de
+dados foi movido para **fora do working tree** na 10.4, porque lá dentro o git e
+o container escrevem com uids diferentes. É a mesma propriedade — o banco guarda
+a chave — que fez daquela mudança um `mv` e não uma migração de dados.
 
 ### `sharp` no ARM64: a condição que precisa ficar escrita
 

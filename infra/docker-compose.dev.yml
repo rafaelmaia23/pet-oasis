@@ -81,6 +81,13 @@ services:
       # filesystem do host, que é o pré-requisito para um nginx passar a servi-lo
       # direto. De brinde, backup vira `rsync` de um diretório em vez de
       # arqueologia em /var/lib/docker/volumes.
+      #
+      # Aqui — e só aqui — o caminho fica dentro da árvore. O que obriga produção
+      # a sair dela (10.4) é o git e o container disputarem o dono do diretório,
+      # e em dev essa disputa não existe: o estágio `dev` da imagem roda como
+      # root, e `uploads/` não é mais versionado (o `.gitkeep` saiu). Trocar isto
+      # por uma variável custaria um passo de setup a quem clona, sem resolver
+      # problema que dev tenha.
       - ../uploads:/app/uploads
       # Anonymous volume: keeps the container's generated Prisma client from being
       # masked by the host's src/ bind-mount (entrypoint runs `prisma generate`).

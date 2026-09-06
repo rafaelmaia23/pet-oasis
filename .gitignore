@@ -5,10 +5,12 @@ src/generated
 .env
 .env.*
 !.env.example
-# Uploads: o diretório é versionado (uploads/.gitkeep explica por quê), o
-# conteúdo não.
-uploads/*
-!uploads/.gitkeep
+# Uploads: nem o conteúdo nem o diretório são versionados (10.4). Versionar o
+# diretório punha o git como dono de um caminho que o container escreve com
+# outro uid, e foi isso que abortou um `pull` no servidor. Em produção o
+# diretório vive fora do working tree (UPLOAD_HOST_DIR); em dev o `put` do
+# storage o cria sozinho na primeira gravação.
+uploads/
 
 # Originais das imagens do seed fake (9.11/AB1) — só o base64 derivado é versionado.
 assets-inbox/

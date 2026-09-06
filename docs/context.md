@@ -299,6 +299,8 @@ completo, os contra-argumentos e os gotchas.
 *Imagem e boot de produção*
 
 - `migrate deploy`, nunca `migrate dev`
+- O boot para no dado de referência e segue no de demonstração (10.3) — o seed é fatal em
+  feature/role/raça/léxico e fail-open no dado atrás de flag, que só loga e some do `SeedResult`
 - O seed é bundlado pelo tsup (`dist/seed.js`)
 - Imagem multi-stage e não-root
 - O OpenSSL vai nos dois estágios da imagem, e a engine do Prisma é detectada (10.5) — sem ele a

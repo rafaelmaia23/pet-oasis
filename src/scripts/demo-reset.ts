@@ -204,6 +204,8 @@ export async function runDemoReset(options: {
         fakeUsersCreated: 0,
         fakePetsCreated: 0,
         fakeProductsCreated: 0,
+        // Dry-run não roda passo nenhum, então não há passo opcional a falhar.
+        failedOptionalSteps: [],
       }
     : await runSeed();
   const durationMs = Date.now() - start;
@@ -212,7 +214,14 @@ export async function runDemoReset(options: {
     await record({
       action: "DEMO_RESET_EXECUTED",
       targetType: "System",
-      metadata: { ...counts, durationMs },
+      // Os passos de demonstração que falharam entram na linha de audit (10.3):
+      // é ela o registro permanente de *qual* reset deixou a demo incompleta —
+      // o log de erro do seed some com a rotação, a linha não.
+      metadata: {
+        ...counts,
+        durationMs,
+        failedSeedSteps: seed.failedOptionalSteps,
+      },
     });
   }
 
@@ -235,6 +244,17 @@ if (isMainModule) {
 
   runDemoReset({ dryRun })
     .then((result) => {
+      // O seed é fail-open no dado de demonstração (10.3) — mas aqui isso não
+      // pode virar sucesso silencioso. O fail-open existe para não derrubar o
+      // **boot** da API; este script não é o boot: ele já truncou tudo antes de
+      // resemear, então um passo que falhou deixa a demo sem aquilo até o
+      // próximo timer. Sair 1 é o que faz o systemd marcar a unit como falha em
+      // vez de verde.
+      if (result.seed.failedOptionalSteps.length > 0) {
+        log.error(result, "demo-reset finished with failed seed steps");
+        process.exit(1);
+      }
+
       log.info(result, dryRun ? "demo-reset dry-run" : "demo-reset completed");
       process.exit(0);
     })

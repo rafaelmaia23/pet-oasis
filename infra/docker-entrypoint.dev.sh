@@ -11,6 +11,9 @@ echo "Applying migrations..."
 node_modules/.bin/prisma migrate deploy
 
 echo "Seeding database..."
+# Same split as production (10.3): reference data failing stops the boot here
+# via `set -e`; demonstration data failing only logs, so `npm run dev` never
+# dies over a fake catalog. The fence lives in src/lib/seed/optionalSeedStep.ts.
 # Run the seed directly with the local tsx binary. `prisma db seed` would spawn
 # `tsx` expecting it on PATH, which fails when prisma is invoked directly (not
 # via an npm script that prepends node_modules/.bin).

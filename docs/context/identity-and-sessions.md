@@ -85,6 +85,34 @@ Os 10 segundos são **constante nomeada, não env var** (`REFRESH_GRACE_WINDOW_M
 real resolve em menos de um segundo, e 30s já seria tempo em que um token capturado de log de
 proxy é usável. Número que ninguém deve ajustar em produção sem pensar não merece um botão.
 
+**A janela devolve o par atual da corrente, não o que aquele elo emitiu (10.15).** Devolver o par
+cru tinha um furo: um cliente que rotaciona A → B → C dentro dos mesmos dez segundos — e um
+cliente com prefetch rotaciona assim — faria o retardatário que chega com A receber **B**, que já
+está usado. O cliente voltaria um elo, perderia C, e levaria a cascata na renovação seguinte, uma
+vez que a janela de B já teria passado. Ou seja: exatamente o dano que a janela existe para evitar,
+por um caminho mais estreito.
+
+A correção anda pela corrente **conferindo cada elo antes de servir**: o cache dá o caminho, o
+banco dá o direito de trafegar nele. Um elo já usado manda seguir adiante; um elo invalidado,
+expirado ou inexistente encerra a busca. Conferir era obrigatório por um segundo motivo, achado
+na revisão: **a linha apresentada nada diz sobre a linha seguinte, que é a que se vai servir.** A
+guarda de `invalidatedAt` da 10.7 olhava só o elo apresentado, e por isso um `logout` — que
+invalida o elo **seguinte**, não o apresentado — deixava a janela devolver 200 e um cookie novo
+para uma sessão que a API acabou de fechar. A cascata de roubo e o reset de senha escapavam por
+acidente, porque tocam *todas* as linhas do usuário; o logout e o `DELETE /auth/sessions/:id`,
+não.
+
+Corrente sem ponta viva (`STALE`) **não** é 503: cai no caminho de sempre, que é o que aquela
+apresentação receberia se a janela nunca tivesse existido. Falha do Redis no meio da caminhada,
+ao contrário, sai como falha de infraestrutura — o invariante do módulo é que Redis fora do ar
+não derruba sessão de ninguém. O teto de saltos (`REFRESH_GRACE_MAX_CHAIN_HOPS`) limita o laço e
+não modela o cliente: quem passar dele cai no caminho de sempre, em vez de receber um elo gasto.
+
+Os outros dois caminhos foram **recusados**. Não fazer nada deixaria de pé um defeito cujo sintoma
+é deslogar de tudo e que ninguém consegue reproduzir. Responder 503 ao ver o elo vencido faria o
+único ramo em que a promessa do 503 deste módulo — "é retentável" — seria falsa, já que a
+retentativa cairia no mesmo lugar.
+
 O acerto de janela tem ação própria no audit log (`AUTH_REFRESH_GRACE_SERVED`), em nível
 informativo; o `warn` continua reservado ao reuso fora da janela, que é o sinal mais importante do
 módulo — diluir os dois faria a concorrência rotineira de um cliente enterrar o sinal. O contrato

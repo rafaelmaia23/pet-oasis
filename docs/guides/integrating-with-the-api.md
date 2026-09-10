@@ -185,18 +185,22 @@ usuário. É a proteção mais importante do módulo, e ela é agressiva de prop
 
 **A janela de graça.** Um cliente que renove de forma concorrente — dois processos, ou uma
 requisição de prefetch — apresentaria o mesmo token duas vezes e cairia nessa proteção sem ter
-feito nada errado. Por isso, o refresh imediatamente anterior é aceito por **10 segundos** a
-partir do momento em que foi usado, e a API devolve **o mesmo par** que já emitiu naquela
-rotação, em vez de emitir outro. Fora da janela, reuso continua sendo roubo e continua
-derrubando tudo.
+feito nada errado. Por isso, um refresh já usado é aceito por **10 segundos** a partir do momento
+em que foi usado, e a API devolve **o par que já está valendo** naquela corrente de rotação, em vez
+de emitir outro. Fora da janela, reuso continua sendo roubo e continua derrubando tudo.
 
 O que o cliente precisa saber:
 
 - **Não é licença para renovar em paralelo.** Serialize a renovação por sessão (single-flight)
   se puder; a janela é rede de segurança para a corrida que sobra, não substituto da trava.
-- **Um 503 no `/auth/refresh` é retentável.** Dentro da janela, se a API não conseguir
-  reproduzir o par emitido, ela responde 503 em vez de decidir entre "concorrência" e "roubo" —
-  nenhuma sessão morre. Tente de novo.
+- **O par que volta é o atual, não necessariamente o que aquela rotação emitiu.** Se o cliente
+  rotacionou duas vezes dentro dos dez segundos, quem chega atrasado com o token mais antigo
+  recebe o par **mais recente** — não um par intermediário já gasto. Trate a resposta como a
+  verdade e sobrescreva o que tiver em mão.
+- **Um 503 no `/auth/refresh` é retentável, e a retentativa é para agora.** Dentro da janela, se
+  a API não conseguir reproduzir o par, ela responde 503 em vez de decidir entre "concorrência" e
+  "roubo" — nenhuma sessão morre. Tente de novo **imediatamente**: uma retentativa que só chegue
+  depois de a janela fechar é indistinguível de roubo, e aí a proteção dispara.
 - **O `id` de uma sessão muda a cada renovação.** Uma linha de `Session` no banco é um **elo**
   de uma corrente de rotação, não a sessão de um dispositivo: `GET /auth/sessions` mostra um
   por dispositivo porque filtra os elos já usados. Não guarde o `id` de uma sessão entre

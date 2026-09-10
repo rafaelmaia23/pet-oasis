@@ -12,7 +12,11 @@ import { record } from "@/lib/auditLog";
 import * as lockout from "@/lib/lockout";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
-import { lookupPair, rememberPair } from "@/lib/refreshGrace";
+import {
+  type GraceLinkState,
+  lookupServeablePair,
+  rememberPair,
+} from "@/lib/refreshGrace";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import { describeUserAgent } from "@/lib/userAgent";
 import * as userService from "@/modules/user/user.service";
@@ -174,6 +178,22 @@ const REFRESH_INVALID_ERROR = {
   action: "Faça login novamente",
 };
 
+/**
+ * O estado do elo seguinte, para a janela de graça (10.15). Fica aqui, e não na
+ * `lib`, porque a pergunta é ao banco e só o repository fala com o Prisma.
+ */
+async function classifyGraceLink(
+  refreshTokenHash: string,
+): Promise<GraceLinkState> {
+  const link = await authRepository.findSessionByHash(refreshTokenHash);
+
+  if (!link || link.invalidatedAt || link.expiresAt < new Date()) {
+    return "DEAD";
+  }
+
+  return link.usedAt ? "ROTATED" : "LIVE";
+}
+
 export async function refresh(
   refreshToken: string | undefined,
   context: { userAgent?: string | undefined; ipAddress?: string | undefined },
@@ -207,40 +227,65 @@ export async function refresh(
       session.usedAt.getTime() + REFRESH_GRACE_WINDOW_MS > Date.now();
 
     if (graceApplies) {
-      const cached = await lookupPair(presentedTokenHash);
+      // O par da **ponta viva** da corrente, não o que este elo emitiu. Um par
+      // já rotacionado faria o cliente voltar um elo e levar a cascata na
+      // renovação seguinte; um par de sessão fechada reabriria por dez segundos
+      // o que um logout acabou de encerrar.
+      const cached = await lookupServeablePair(
+        presentedTokenHash,
+        classifyGraceLink,
+      );
 
       if (cached.status === "HIT") {
         log.info(
-          { userId: session.userId, sessionId: session.id },
+          {
+            userId: session.userId,
+            sessionId: session.id,
+            chainHops: cached.hops,
+          },
           "refresh token replayed inside the grace window, replaying the pair",
         );
         await record({
           action: "AUTH_REFRESH_GRACE_SERVED",
           targetType: "User",
           targetId: session.userId,
-          metadata: { sessionId: session.id },
+          metadata: { sessionId: session.id, chainHops: cached.hops },
         });
         return cached.pair;
       }
 
-      // Recusa de decidir, de propósito. Cascatear aqui faria uma falha de
-      // infraestrutura deslogar o dono de todos os dispositivos — o dano que a
-      // janela existe para evitar —, e rotacionar em modo degradado criaria um
-      // caminho que só roda durante incidente, ou seja, que nunca roda.
-      // `reason` separa "Redis fora do ar" de "chave sumiu com Redis vivo": a
-      // segunda, se recorrente, é evicção por limite de memória.
-      log.error(
-        {
-          userId: session.userId,
-          sessionId: session.id,
-          reason: cached.status,
-        },
-        "refresh replayed inside the grace window but the pair is gone",
-      );
-      throw createServiceUnavailableError({
-        message: "Não foi possível renovar a sessão agora",
-        action: "Tente novamente em alguns instantes",
-      });
+      // Corrente sem ponta viva não é falha de infraestrutura, e por isso não
+      // é 503: cai no caminho de sempre, logo abaixo, que é o que esta
+      // apresentação receberia se a janela nunca tivesse existido.
+      if (cached.status === "STALE") {
+        log.warn(
+          {
+            userId: session.userId,
+            sessionId: session.id,
+            chainHops: cached.hops,
+          },
+          "refresh replayed inside the grace window with no live link to serve",
+        );
+      } else {
+        // Recusa de decidir, de propósito. Cascatear aqui faria uma falha de
+        // infraestrutura deslogar o dono de todos os dispositivos — o dano que a
+        // janela existe para evitar —, e rotacionar em modo degradado criaria um
+        // caminho que só roda durante incidente, ou seja, que nunca roda.
+        // `reason` separa "Redis fora do ar" de "chave sumiu com Redis vivo": a
+        // segunda, se recorrente, é evicção por limite de memória.
+        log.error(
+          {
+            userId: session.userId,
+            sessionId: session.id,
+            reason: cached.status,
+          },
+          "refresh replayed inside the grace window but the pair is gone",
+        );
+        throw createServiceUnavailableError({
+          message: "Não foi possível renovar a sessão agora",
+          action: "Tente novamente em alguns instantes",
+        });
+      }
     }
 
     // Um refresh token só é apresentado uma vez; a segunda apresentação

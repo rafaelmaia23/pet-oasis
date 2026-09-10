@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { lookupPair, refreshGraceKey, rememberPair } from "@/lib/refreshGrace";
+import {
+  type GraceLinkState,
+  lookupPair,
+  lookupServeablePair,
+  REFRESH_GRACE_MAX_CHAIN_HOPS,
+  refreshGraceKey,
+  rememberPair,
+} from "@/lib/refreshGrace";
+import { hashToken } from "@/lib/token";
 import { REFRESH_GRACE_WINDOW_MS } from "@/modules/auth/auth.constants";
 
 const { getMock, setMock } = vi.hoisted(() => ({
@@ -67,5 +75,129 @@ describe("lookupPair", () => {
     getMock.mockRejectedValue(new Error("redis down"));
 
     expect(await lookupPair("hash")).toEqual({ status: "UNAVAILABLE" });
+  });
+});
+
+describe("lookupServeablePair", () => {
+  const pairAt = (hop: number) => ({
+    accessToken: `access-${hop}`,
+    refreshToken: `token-${hop}`,
+  });
+
+  /** Um elo por entrada: a chave do token apresentado guarda o par que a rotação emitiu. */
+  function serveChain(store: Map<string, string>): void {
+    getMock.mockImplementation((key: string) =>
+      Promise.resolve(store.get(key) ?? null),
+    );
+  }
+
+  /** O estado de cada elo, pelo token — o papel que o banco cumpre em produção. */
+  function classifyBy(
+    states: Record<string, GraceLinkState>,
+  ): (refreshTokenHash: string) => Promise<GraceLinkState> {
+    return (refreshTokenHash) => {
+      const token = Object.keys(states).find(
+        (candidate) => hashToken(candidate) === refreshTokenHash,
+      );
+      return Promise.resolve((token && states[token]) || "DEAD");
+    };
+  }
+
+  it("serves the presented link's own pair when it is the live tip", async () => {
+    serveChain(
+      new Map([[refreshGraceKey("hash-a"), JSON.stringify(pairAt(1))]]),
+    );
+
+    expect(
+      await lookupServeablePair("hash-a", classifyBy({ "token-1": "LIVE" })),
+    ).toEqual({ status: "HIT", pair: pairAt(1), hops: 0 });
+  });
+
+  it("follows the chain to the live tip when the client is links behind", async () => {
+    serveChain(
+      new Map([
+        [refreshGraceKey("hash-a"), JSON.stringify(pairAt(1))],
+        [
+          refreshGraceKey(hashToken(pairAt(1).refreshToken)),
+          JSON.stringify(pairAt(2)),
+        ],
+      ]),
+    );
+
+    expect(
+      await lookupServeablePair(
+        "hash-a",
+        classifyBy({ "token-1": "ROTATED", "token-2": "LIVE" }),
+      ),
+    ).toEqual({ status: "HIT", pair: pairAt(2), hops: 1 });
+  });
+
+  it("is STALE when the pair belongs to a link that is dead", async () => {
+    serveChain(
+      new Map([[refreshGraceKey("hash-a"), JSON.stringify(pairAt(1))]]),
+    );
+
+    expect(
+      await lookupServeablePair("hash-a", classifyBy({ "token-1": "DEAD" })),
+    ).toEqual({ status: "STALE", hops: 0 });
+  });
+
+  it("is STALE when the chain breaks before a live tip", async () => {
+    serveChain(
+      new Map([[refreshGraceKey("hash-a"), JSON.stringify(pairAt(1))]]),
+    );
+
+    expect(
+      await lookupServeablePair("hash-a", classifyBy({ "token-1": "ROTATED" })),
+    ).toEqual({ status: "STALE", hops: 0 });
+  });
+
+  it("is STALE at the hop cap instead of serving a spent link", async () => {
+    const store = new Map([
+      [refreshGraceKey("hash-a"), JSON.stringify(pairAt(1))],
+    ]);
+    const states: Record<string, GraceLinkState> = {};
+    for (let hop = 1; hop <= REFRESH_GRACE_MAX_CHAIN_HOPS + 2; hop++) {
+      store.set(
+        refreshGraceKey(hashToken(pairAt(hop).refreshToken)),
+        JSON.stringify(pairAt(hop + 1)),
+      );
+      states[`token-${hop}`] = "ROTATED";
+    }
+    serveChain(store);
+
+    expect(await lookupServeablePair("hash-a", classifyBy(states))).toEqual({
+      status: "STALE",
+      hops: REFRESH_GRACE_MAX_CHAIN_HOPS,
+    });
+  });
+
+  it("is UNAVAILABLE — never STALE — when the store dies mid-walk", async () => {
+    getMock.mockImplementation((key: string) => {
+      if (key === refreshGraceKey("hash-a")) {
+        return Promise.resolve(JSON.stringify(pairAt(1)));
+      }
+      return Promise.reject(new Error("redis down"));
+    });
+
+    expect(
+      await lookupServeablePair("hash-a", classifyBy({ "token-1": "ROTATED" })),
+    ).toEqual({ status: "UNAVAILABLE" });
+  });
+
+  it("propagates MISS from the first lookup — there is no chain to walk", async () => {
+    getMock.mockResolvedValue(null);
+
+    expect(await lookupServeablePair("hash-a", classifyBy({}))).toEqual({
+      status: "MISS",
+    });
+  });
+
+  it("propagates UNAVAILABLE from the first lookup", async () => {
+    getMock.mockRejectedValue(new Error("redis down"));
+
+    expect(await lookupServeablePair("hash-a", classifyBy({}))).toEqual({
+      status: "UNAVAILABLE",
+    });
   });
 });

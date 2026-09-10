@@ -125,6 +125,7 @@ completo, os contra-argumentos e os gotchas.
 - Design de `Session` — access JWT 15min + refresh opaco rotativo
 - Ordem de checagem no `refresh`: reuso → invalidada → expirada
 - A janela de graça de 10s na rotação (10.7) — o mesmo par de volta, e o 503 que recusa decidir
+- A janela devolve o par **atual** da corrente, não o que o elo emitiu (10.15)
 - Refresh token hasheado em repouso — item que virou teste, não código
 - Teto de sessões vivas
 

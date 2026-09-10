@@ -662,6 +662,82 @@ describe("POST /api/v1/auth/refresh", () => {
     expect(auditLine?.targetId).toBe(user.id);
   });
 
+  it("should hand back the freshest pair when the chain moved on inside the window (10.15)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie: cookieA } = await loginWithSession(
+      user.email,
+      user.password,
+    );
+
+    // A → B → C, tudo dentro da janela: é o que um cliente com prefetch faz.
+    const rotatedToB = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", cookieA);
+    expect(rotatedToB.status).toBe(200);
+
+    const rotatedToC = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", extractRefreshCookie(rotatedToB));
+    expect(rotatedToC.status).toBe(200);
+
+    // O retardatário chega com A, dois elos atrás.
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", cookieA);
+
+    expect(replayResponse.status).toBe(200);
+    // Recebe C, não B: B já foi rotacionado, e devolvê-lo faria o cliente
+    // voltar um elo e levar a cascata na renovação seguinte.
+    expect(extractRefreshCookie(replayResponse)).toBe(
+      extractRefreshCookie(rotatedToC),
+    );
+
+    // Converge: o par devolvido renova de novo, que é o ponto de seguir a corrente.
+    const nextResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", extractRefreshCookie(replayResponse));
+    expect(nextResponse.status).toBe(200);
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+
+    const auditLine = await prisma.auditLog.findFirst({
+      where: { action: "AUTH_REFRESH_GRACE_SERVED" },
+    });
+    expect(auditLine?.metadata).toMatchObject({ chainHops: 1 });
+  });
+
+  it("should not grace a link whose successor a logout just killed (10.15)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie: cookieA } = await loginWithSession(
+      user.email,
+      user.password,
+    );
+
+    const rotatedToB = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", cookieA);
+    expect(rotatedToB.status).toBe(200);
+
+    // O logout mata **B**, não A. Servir a graça olhando só a linha de A
+    // devolveria 200 e um cookie novo para uma sessão que acabou de ser fechada.
+    const logoutResponse = await request(app)
+      .post("/api/v1/auth/logout")
+      .set("Authorization", `Bearer ${rotatedToB.body.accessToken}`)
+      .set("Cookie", extractRefreshCookie(rotatedToB));
+    expect(logoutResponse.status).toBe(204);
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", cookieA);
+
+    expect(replayResponse.status).toBe(401);
+  });
+
   it("should not grace a link killed in the meantime, even inside the window (10.7)", async () => {
     const user = await buildCustomer();
     const { refreshCookie } = await loginWithSession(user.email, user.password);

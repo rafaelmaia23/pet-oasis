@@ -17,8 +17,8 @@ Depois da 10.9 sobra ~1 ms entre as duas recusas: o ramo com conta grava o conta
 ### Comprimento máximo em todo campo de texto — **P**
 `express.json({ limit: "100kb" })` (Fase 7.0) protege o total do body, mas nada impede 99KB dentro de um campo `name`. Sem `.max()` nos schemas Zod isso vira lixo no banco, índice inchado e — agora que existe log estruturado — linhas de log gigantes. **Correção:** varredura em todos os schemas adicionando `.max()` coerente com a coluna do Prisma.
 
-### Auditar mass assignment nos schemas de update — **P**
-Confirmar que os schemas de update rejeitam (ou removem) chaves desconhecidas, para ninguém enviar `status`, `roleId`, `bannedAt` ou `mustChangePassword` no body de um update legítimo. Se já estiver coberto pelo comportamento default do Zod, o item vira apenas um teste de regressão explícito — que vale ter, porque é o tipo de proteção que se perde silenciosamente num refactor.
+### ~~Auditar mass assignment nos schemas de update~~ — ✅ resolvido (Fase 10.12)
+Nenhum schema estava permissivo: todo update é `.strict()`, create e upsert descartam a chave desconhecida. O resultado foi só a suíte de regressão (`tests/integration/v1/mass-assignment.test.ts`, um caso por endpoint de escrita) e a regra de que schema de escrita novo entra nela no mesmo commit. Racional em `docs/context/security.md` § "Mass assignment".
 
 ### Endurecer a verificação do JWT — **P**
 Fixar `algorithms: ["HS256"]` na verificação (sem pinar, o token fica exposto a *algorithm confusion*), validar `iss` e `aud`, e definir tolerância de clock skew. Poucas linhas, vulnerabilidade de manual.
@@ -56,6 +56,9 @@ A correção de erro de digitação da busca (9.9) trabalha contra um dicionári
 
 ### Systemd timer para a varredura de arquivos órfãos — **P**
 O `db:cleanup-uploads` (9.10) nasceu sem agendamento: roda à mão, ao contrário dos outros dois `cleanup-*`, que têm timer em `infra/cron/`. **Gatilho:** o dia em que ela encontrar arquivo órfão duas vezes — antes disso, agendar é automatizar um problema que ainda não se provou existir.
+
+### Subir `loginAsCatalogManager` para `tests/helpers/auth.ts` — **P**
+A função (`buildEmployee({ roleNames: ["catalog-manager"] })` + `loginAs`) está copiada verbatim em seis arquivos de integração (`tag`, `category`, `product.variant`, `product.image`, `product.read`, `mass-assignment`). A convenção do projeto tolera a cópia por arquivo, mas seis é o limiar em que uma mudança na role do catálogo vira seis edições. **Correção:** um helper `loginAsRole(roleName)` em `tests/helpers/auth.ts`, e os seis arquivos passam a importá-lo. Mecânico, sem mudança de comportamento; ficou fora da 10.12 para não espalhar aquele diff por cinco arquivos alheios.
 
 ### Backup e restore do Postgres — **M**
 Dump agendado do banco do deploy, com um *restore* de fato testado — backup nunca verificado não é backup. Complementa a política de retenção de logs.

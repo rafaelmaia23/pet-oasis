@@ -226,11 +226,18 @@ service, então a chave descartada não existe mais quando o Prisma monta o `dat
 O levantamento da Fase 10 não achou schema permissivo. O que faltava era o teste: essa é a
 classe de proteção que se perde em silêncio num refactor (um `.strict()` que vira `.strip()`, um
 `.extend()` na ordem errada, um `data: req.body` num controller novo) e que ninguém nota até virar
-incidente. `tests/integration/v1/mass-assignment.test.ts` cobre cada endpoint de escrita com um
-caso que prova as duas metades — a chave privilegiada é recusada **por nome** (ou descartada, nos
-schemas strip) **e** a linha no banco não mudou. O vermelho foi verificado trocando `.strict()`
-por `.strip()` em dois schemas: os dois casos falharam apontando a chave que passou a entrar.
-Schema de escrita novo entra nesse arquivo no mesmo commit em que nasce.
+incidente. `tests/integration/v1/mass-assignment.test.ts` cobre cada endpoint de escrita que
+recebe corpo — os sete `PATCH`, o `PUT` do override, e os `POST` que criam conta ou perfil ou
+alteram estado (`signup`, `users`, `ban`, `reactivate`, `change-password`, `change-email`,
+perfil de cliente) — com um caso que prova as duas metades. Nos `.strict()`, a chave privilegiada
+é recusada **por nome** e a linha é idêntica à de antes (a recusa é da requisição inteira, o campo
+legítimo que veio junto também não entra). Nos strip, a resposta é de sucesso e a coluna carrega o
+valor **do sistema** — `PENDING` no signup, o relógio e o ator no ban, `pendingEmail` e não
+`email` na troca de endereço —, nunca o do corpo; por isso cada probe manda um valor distinto do
+default, senão a asserção seria vácua. O vermelho foi verificado trocando `.strict()` por
+`.strip()` em dois schemas: os dois casos falharam apontando a chave que passou a entrar. Schema
+de escrita novo entra nesse arquivo no mesmo commit em que nasce — regra apontada em `CLAUDE.md`,
+que é onde quem cria schema lê.
 
 ### Auto-hospedar o bundle do Scalar em vez de allowlistar o CDN
 

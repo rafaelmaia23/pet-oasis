@@ -201,6 +201,18 @@ A cascata é justamente o que dá valor à detecção — enfraquecê-la para re
 concorrência troca segurança por conveniência, enquanto a janela resolve a concorrência
 sem tocar na segurança.
 
+### `enum` de `code` no schema do 403 do login — **P**
+
+**Problema:** desde a 10.8 o `POST /auth/login` responde `ACCOUNT_BANNED`, `PASSWORD_RESET_REQUIRED`
+ou `EMAIL_NOT_VERIFIED` no 403, e o OpenAPI os nomeia — mas só na **descrição** da resposta. O
+schema continua sendo o `ErrorResponse` genérico (`code: string`), então um cliente que gera tipos
+a partir da spec não ganha o union e volta a digitar os literais à mão. O guia de integração é o
+contrato que o front lê, e ele já tem a tabela; o `enum` é polimento da spec gerada.
+
+**Decisão a tomar:** dar ao 403 do login um schema próprio com `code: z.enum([...])` cria um
+segundo componente de erro — precedente para outros endpoints com `code` por condição. Vale
+decidir se a spec deve carregar esse nível de detalhe por rota, ou se a tabela do guia basta.
+
 ### ~~IP do visitante atrás do front renderizado no servidor~~ — ✅ resolvido (Fase 10.2)
 `req.ip` passou a vir do `X-Forwarded-For` por **endereço de origem**
 (`app.set("trust proxy", ["loopback", "uniquelocal"])`), e não pelos **dois saltos** que este item

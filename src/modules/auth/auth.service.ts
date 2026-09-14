@@ -11,7 +11,7 @@ import {
 import { record } from "@/lib/auditLog";
 import * as lockout from "@/lib/lockout";
 import { logger } from "@/lib/logger";
-import { verifyPassword } from "@/lib/password";
+import { simulatePasswordVerification, verifyPassword } from "@/lib/password";
 import {
   type GraceLinkState,
   lookupServeablePair,
@@ -50,6 +50,9 @@ export async function login(
   const user = await userRepository.findUserByEmail(data.email);
 
   if (!user) {
+    // Paga o bcrypt mesmo sem conta: senão o relógio distingue este ramo do de
+    // senha errada, e vira oráculo de existência de conta (10.9).
+    await simulatePasswordVerification(data.password);
     // Sem `userId`: não há conta. O email fica de fora de propósito — a linha
     // não precisa dele para contar a história, e ele é PII.
     log.warn({ reason: "UNKNOWN_EMAIL" }, "login failed");

@@ -135,6 +135,7 @@ completo, os contra-argumentos e os gotchas.
 - Todo usuário nasce PENDING, inclusive os criados por admin
 - 403 (não 401) no login quando a senha está certa mas a conta não está ACTIVE — e um `code` por condição (`ACCOUNT_BANNED`/`PASSWORD_RESET_REQUIRED`/`EMAIL_NOT_VERIFIED`, 10.8)
 - Anti-enumeração em forgot / resend / signup
+- O relógio do login não é oráculo: email desconhecido paga o bcrypt (10.9)
 
 *Ban — a conta congelada*
 

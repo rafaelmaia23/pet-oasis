@@ -1,7 +1,20 @@
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import app from "@/app";
 import { env } from "@/config/env";
+
+// A allowlist de CORS sai **só** de `CORS_ALLOWED_ORIGINS` (10.11) — nada entra
+// por inércia, nem a `APP_URL`. `vi.hoisted` roda antes dos imports, então as
+// duas variáveis já estão fixadas quando `@/config/env` é lido — o teste não
+// depende do `.env.test` de cada máquina, e as duas origens são distintas por
+// construção.
+const { allowedOrigin, appUrl } = vi.hoisted(() => {
+  const allowedOrigin = "https://browser-client.example";
+  const appUrl = "https://front.example";
+  process.env.CORS_ALLOWED_ORIGINS = allowedOrigin;
+  process.env.APP_URL = appUrl;
+  return { allowedOrigin, appUrl };
+});
 
 describe("Bordas HTTP — helmet", () => {
   it("should send the security headers on an API response", async () => {
@@ -72,11 +85,23 @@ describe("Bordas HTTP — CORS", () => {
   it("should answer a preflight from an allowed origin with credentials", async () => {
     const response = await request(app)
       .options("/api/v1/auth/login")
-      .set("Origin", env.APP_URL)
+      .set("Origin", allowedOrigin)
       .set("Access-Control-Request-Method", "POST");
 
-    expect(response.headers["access-control-allow-origin"]).toBe(env.APP_URL);
+    expect(response.headers["access-control-allow-origin"]).toBe(allowedOrigin);
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
+  });
+
+  // A URL pública do cliente (`APP_URL`) é o front, e o front fala com a API
+  // pelo servidor (BFF) — nunca pelo navegador. Entrar na allowlist por ser
+  // "quem chama" seria permissão concedida a um consumidor que não existe.
+  it("should not grant APP_URL an origin by inertia", async () => {
+    const response = await request(app)
+      .get("/api/v1/status")
+      .set("Origin", appUrl);
+
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(response.status).toBe(200);
   });
 
   it("should not send CORS headers to an origin outside the allowlist", async () => {

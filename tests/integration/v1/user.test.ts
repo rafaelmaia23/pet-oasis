@@ -77,6 +77,7 @@ describe("POST /api/v1/users", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["cpf"]);
   });
+
   it("should return 422 if required fields are missing", async () => {
     const user = await buildEmployee({ roleNames: ["manager"] });
 

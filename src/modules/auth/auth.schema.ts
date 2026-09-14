@@ -6,7 +6,7 @@ import {
   PASSWORD_MAX_LENGTH,
   passwordSchema,
   phoneSchema,
-} from "../user/user.schema";
+} from "@/modules/user/user.schema";
 
 export const signupSchema = createCustomerSchema;
 
@@ -16,7 +16,7 @@ export const signupSchema = createCustomerSchema;
  * gravada, então também nunca vai bater (10.13). A força não se checa: quem
  * confere é o bcrypt.
  */
-const presentedPasswordSchema = (requiredMessage: string) =>
+const presentedPassword = (requiredMessage: string) =>
   z
     .string()
     .min(1, requiredMessage)
@@ -37,7 +37,7 @@ const tokenSchema = z
 export const loginSchema = z.object({
   body: z.object({
     email: emailSchema.meta({ example: "demo@petoasis.dev" }),
-    password: presentedPasswordSchema("Password is required").meta({
+    password: presentedPassword("Password is required").meta({
       example: "DemoOasis2026!",
     }),
   }),
@@ -82,18 +82,18 @@ export const resetPasswordSchema = z.object({
 
 export const changePasswordSchema = z.object({
   body: z.object({
-    currentPassword: presentedPasswordSchema(
-      "Current password is required",
-    ).meta({ example: "SenhaAtual1!" }),
+    currentPassword: presentedPassword("Current password is required").meta({
+      example: "SenhaAtual1!",
+    }),
     newPassword: passwordSchema,
   }),
 });
 
 export const changeEmailSchema = z.object({
   body: z.object({
-    currentPassword: presentedPasswordSchema(
-      "Current password is required",
-    ).meta({ example: "SenhaAtual1!" }),
+    currentPassword: presentedPassword("Current password is required").meta({
+      example: "SenhaAtual1!",
+    }),
     newEmail: emailSchema.meta({ example: "novo@example.com" }),
   }),
 });

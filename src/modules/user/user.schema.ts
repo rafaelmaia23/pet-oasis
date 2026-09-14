@@ -34,14 +34,17 @@ export const emailSchema = z
  */
 export const cpfSchema = z
   .string()
-  .max(CPF_MAX_LENGTH, `CPF must be at most ${CPF_MAX_LENGTH} characters`)
+  .max(CPF_MAX_LENGTH, `CPF deve ter no máximo ${CPF_MAX_LENGTH} caracteres`)
   .transform((val) => val.replace(/\D/g, ""))
   .pipe(z.string().length(11, "CPF must be exactly 11 digits"))
   .meta({ description: "CPF (11 dígitos)", example: "12345678901" });
 
 export const phoneSchema = z
   .string()
-  .max(PHONE_MAX_LENGTH, `Phone must be at most ${PHONE_MAX_LENGTH} characters`)
+  .max(
+    PHONE_MAX_LENGTH,
+    `Telefone deve ter no máximo ${PHONE_MAX_LENGTH} caracteres`,
+  )
   .transform((val) => val.replace(/\D/g, ""))
   .pipe(
     z

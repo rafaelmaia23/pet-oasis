@@ -36,6 +36,7 @@ describe("POST /api/v1/users/:userId/customer", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["phone"]);
   });
+
   it("should return 401 if no token is provided", async () => {
     const response = await request(app)
       .post("/api/v1/users/some-id/customer")

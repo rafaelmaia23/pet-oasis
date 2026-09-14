@@ -51,6 +51,13 @@ function buildFullReader() {
 }
 
 describe("GET /api/v1/audit-logs", () => {
+  beforeEach(async () => {
+    sendMock.mockReset();
+    sendMock.mockResolvedValue(undefined);
+    await clearDatabase();
+    await flushRedis();
+  });
+
   it("should reject a targetId above 36 characters with 422 naming targetId (10.13)", async () => {
     const reader = await buildFullReader();
     const token = await loginAs(reader.email, reader.password);
@@ -84,13 +91,6 @@ describe("GET /api/v1/audit-logs", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["cursor"]);
   });
-  beforeEach(async () => {
-    sendMock.mockReset();
-    sendMock.mockResolvedValue(undefined);
-    await clearDatabase();
-    await flushRedis();
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });

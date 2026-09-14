@@ -130,6 +130,7 @@ describe("POST /api/v1/auth/signup", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["phone"]);
   });
+
   it("should return 201 and create a new user for valid data", async () => {
     const data = makeCustomerData();
 
@@ -317,6 +318,7 @@ describe("POST /api/v1/auth/login", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["password"]);
   });
+
   it("should return 200 with only the access token in the body", async () => {
     const user = await buildCustomer();
 
@@ -1441,6 +1443,7 @@ describe("POST /api/v1/auth/verify-email", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["token"]);
   });
+
   it("should return 422 when the token is missing", async () => {
     const response = await request(app)
       .post("/api/v1/auth/verify-email")
@@ -1531,6 +1534,7 @@ describe("POST /api/v1/auth/verify-email/resend", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["email"]);
   });
+
   it("should return 422 when the email is invalid", async () => {
     const response = await request(app)
       .post("/api/v1/auth/verify-email/resend")
@@ -1604,6 +1608,7 @@ describe("POST /api/v1/auth/forgot-password", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["email"]);
   });
+
   it("should return 422 when the email is invalid", async () => {
     const response = await request(app)
       .post("/api/v1/auth/forgot-password")
@@ -1675,6 +1680,8 @@ describe("POST /api/v1/auth/forgot-password", () => {
 });
 
 describe("POST /api/v1/auth/reset-password", () => {
+  const NEW_PASSWORD = "NewPass@123";
+
   it("should reject a token above 64 characters with 422 naming token (10.13)", async () => {
     const response = await request(app)
       .post("/api/v1/auth/reset-password")
@@ -1683,8 +1690,6 @@ describe("POST /api/v1/auth/reset-password", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["token"]);
   });
-  const NEW_PASSWORD = "NewPass@123";
-
   it("should return 422 when the token is missing", async () => {
     const response = await request(app)
       .post("/api/v1/auth/reset-password")
@@ -1840,6 +1845,8 @@ describe("POST /api/v1/auth/reset-password", () => {
 });
 
 describe("POST /api/v1/auth/change-password", () => {
+  const NEW_PASSWORD = "NewPass@123";
+
   it("should reject a currentPassword above 100 characters with 422 naming it (10.13)", async () => {
     const user = await buildCustomer();
     const token = await loginAs(user.email, user.password);
@@ -1855,8 +1862,6 @@ describe("POST /api/v1/auth/change-password", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["currentPassword"]);
   });
-  const NEW_PASSWORD = "NewPass@123";
-
   it("should return 401 without an access token", async () => {
     const response = await request(app)
       .post("/api/v1/auth/change-password")
@@ -1997,6 +2002,7 @@ describe("POST /api/v1/auth/change-email", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["newEmail"]);
   });
+
   it("should return 401 without an access token", async () => {
     const response = await request(app)
       .post("/api/v1/auth/change-email")
@@ -2238,6 +2244,7 @@ describe("POST /api/v1/auth/confirm-email-change", () => {
     expect(response.status).toBe(422);
     expectValidationError(response, ["token"]);
   });
+
   it("should return 422 when token is missing", async () => {
     const response = await request(app)
       .post("/api/v1/auth/confirm-email-change")

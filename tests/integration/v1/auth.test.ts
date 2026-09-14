@@ -333,7 +333,9 @@ describe("POST /api/v1/auth/login", () => {
     expect(response.status).toBe(401);
   });
 
-  it("should return 403 when the account is not verified (PENDING)", async () => {
+  // 10.8: cada recusa pós-senha tem `code` próprio — é nele que o cliente
+  // ramifica a tela, nunca na prosa em pt-BR de `message`.
+  it("should return 403 EMAIL_NOT_VERIFIED when the account is not verified (PENDING)", async () => {
     const user = await buildCustomer({ status: "PENDING" });
 
     const response = await request(app).post("/api/v1/auth/login").send({
@@ -342,10 +344,10 @@ describe("POST /api/v1/auth/login", () => {
     });
 
     expect(response.status).toBe(403);
-    expect(response.body.code).toBe("FORBIDDEN");
+    expect(response.body.code).toBe("EMAIL_NOT_VERIFIED");
   });
 
-  it("should return 403 when the account is banned", async () => {
+  it("should return 403 ACCOUNT_BANNED when the account is banned", async () => {
     const user = await buildCustomer();
     await prisma.user.update({
       where: { id: user.id },
@@ -358,7 +360,26 @@ describe("POST /api/v1/auth/login", () => {
     });
 
     expect(response.status).toBe(403);
-    expect(response.body.code).toBe("FORBIDDEN");
+    expect(response.body.code).toBe("ACCOUNT_BANNED");
+  });
+
+  it("should keep unknown email and wrong password indistinguishable (same status and code)", async () => {
+    const user = await buildCustomer();
+
+    const wrongPassword = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: "wrongpassword",
+    });
+    const unknownEmail = await request(app).post("/api/v1/auth/login").send({
+      email: "nonexisting@test.com",
+      password: "Test@1234",
+    });
+
+    expect(wrongPassword.status).toBe(401);
+    expect(unknownEmail.status).toBe(401);
+    expect(wrongPassword.body.code).toBe("UNAUTHORIZED");
+    expect(unknownEmail.body.code).toBe("UNAUTHORIZED");
+    expect(wrongPassword.body.message).toBe(unknownEmail.body.message);
   });
 
   it("should return 401 for non-existing email", async () => {
@@ -418,7 +439,7 @@ describe("POST /api/v1/auth/login", () => {
 });
 
 describe("login refused by mustChangePassword (7.16)", () => {
-  it("should return 403 with the correct password when a reset was forced", async () => {
+  it("should return 403 PASSWORD_RESET_REQUIRED with the correct password when a reset was forced", async () => {
     const user = await buildCustomer();
     await prisma.user.update({
       where: { id: user.id },
@@ -431,6 +452,7 @@ describe("login refused by mustChangePassword (7.16)", () => {
     });
 
     expect(response.status).toBe(403);
+    expect(response.body.code).toBe("PASSWORD_RESET_REQUIRED");
     expect(response.body.message).toBe("Você precisa definir uma nova senha");
   });
 
@@ -451,7 +473,46 @@ describe("login refused by mustChangePassword (7.16)", () => {
     });
 
     expect(response.status).toBe(403);
+    expect(response.body.code).toBe("ACCOUNT_BANNED");
     expect(response.body.message).toBe("Conta suspensa");
+  });
+
+  it("should prioritize the lockout (429) over the banned refusal (order regression)", async () => {
+    const user = await buildCustomer();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { bannedAt: new Date(), banReason: "abuse" },
+    });
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.body.code).toBe("TOO_MANY_REQUESTS");
+  });
+
+  it("should prioritize the forced reset over the pending verification (order regression)", async () => {
+    const user = await buildCustomer({ status: "PENDING" });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { mustChangePassword: true },
+    });
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("PASSWORD_RESET_REQUIRED");
   });
 
   it("should complete the end-to-end forced reset flow (force -> reset -> login)", async () => {

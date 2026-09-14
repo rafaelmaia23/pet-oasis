@@ -128,4 +128,15 @@ describe("GET /openapi.json", () => {
       expect(operation?.security).toBeUndefined();
     }
   });
+
+  it("should name the per-condition codes of the login 403 (10.8)", async () => {
+    const { body } = await request(app).get("/openapi.json");
+
+    // A resposta 403 do login é uma por condição, e o cliente ramifica pelo
+    // `code`: a spec precisa nomeá-los, senão ficam só na prosa da API.
+    const forbidden = body.paths["/auth/login"].post.responses["403"];
+    expect(forbidden.description).toContain("ACCOUNT_BANNED");
+    expect(forbidden.description).toContain("PASSWORD_RESET_REQUIRED");
+    expect(forbidden.description).toContain("EMAIL_NOT_VERIFIED");
+  });
 });

@@ -16,6 +16,7 @@ import {
 } from "@/modules/auth/auth.schema";
 import { userViews } from "@/modules/user/user.presenter";
 import {
+  errorResponseSchema,
   errorResponses,
   jsonResponse,
   noContentResponse,
@@ -58,12 +59,27 @@ export const authPaths: ZodOpenApiPathsObject = {
     post: {
       tags: ["Auth"],
       summary: "Login — retorna access token e seta o refresh cookie",
+      description:
+        "Recusa em cinco condições, nesta ordem: credencial errada (401), " +
+        "conta travada por tentativas (429, com `Retry-After`), conta banida, " +
+        "troca de senha forçada e conta não verificada (as três em 403, cada " +
+        "uma com `code` próprio). Email desconhecido e senha errada são " +
+        "deliberadamente indistinguíveis; as de 403 só disparam depois de a " +
+        "senha conferir, então quem as recebe é o dono da conta.",
       security: [],
       ...fromEnvelope(loginSchema),
       responses: {
         200: jsonResponse("Autenticado", accessTokenSchema),
         401: errorResponses[401],
-        403: errorResponses[403],
+        // 10.8: a senha conferiu, a *conta* é que está recusada — e o
+        // cliente ramifica a tela pelo `code`, nunca pela prosa de `message`.
+        403: jsonResponse(
+          "Conta recusada após a senha conferir. `code` distingue a condição: " +
+            "`ACCOUNT_BANNED` (banida), `PASSWORD_RESET_REQUIRED` (troca de " +
+            "senha forçada — o link chega por email) ou `EMAIL_NOT_VERIFIED` " +
+            "(ainda pendente de verificação)",
+          errorResponseSchema,
+        ),
         422: errorResponses[422],
         429: errorResponses[429],
       },

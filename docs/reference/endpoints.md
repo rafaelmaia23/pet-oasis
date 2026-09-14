@@ -60,7 +60,7 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | Método + Path | Auth | Descrição |
 |---|---|---|
 | POST `/api/v1/auth/signup` | público | Auto-cadastro; cria um usuário (customer), 201. Email de conta soft-deletada com o **cpf batendo** → dispara reativação e responde **202** genérico (nada é criado); cpf não batendo, conta banida ou conta ativa → 409 genérico |
-| POST `/api/v1/auth/login` | público | Autentica; seta cookie httpOnly de refresh, retorna access token |
+| POST `/api/v1/auth/login` | público | Autentica; seta cookie httpOnly de refresh, retorna access token. Recusa, nesta ordem: 401 (credencial errada — email desconhecido e senha errada indistinguíveis) · 429 (lockout, com `Retry-After`) · 403 com `code` por condição: `ACCOUNT_BANNED`, `PASSWORD_RESET_REQUIRED`, `EMAIL_NOT_VERIFIED` (10.8) |
 | POST `/api/v1/auth/refresh` | público (usa cookie de refresh) | Rotaciona o refresh e emite novo access token |
 | POST `/api/v1/auth/logout` | `manage:session` | Revoga a sessão do cookie de refresh, limpa o cookie |
 | GET `/api/v1/auth/sessions` | `read:session` | Lista as sessões vivas do próprio usuário |

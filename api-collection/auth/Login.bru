@@ -31,3 +31,12 @@ script:post-response {
 assert {
   res.status: eq 200
 }
+
+docs {
+  Público. 200 devolve o access token e seta o refresh cookie httpOnly (cookie jar do Bruno).
+
+  Recusas, nesta ordem: 401 (email desconhecido ou senha errada — indistinguíveis),
+  429 (lockout, com Retry-After) e 403 quando a senha confere mas a conta está recusada.
+  No 403 ramifique pelo `code`, nunca pela `message`: ACCOUNT_BANNED,
+  PASSWORD_RESET_REQUIRED (o link de redefinição chega por email) ou EMAIL_NOT_VERIFIED.
+}

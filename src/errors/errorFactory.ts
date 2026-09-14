@@ -6,6 +6,7 @@ import {
   InternalServerError,
   MethodNotAllowedError,
   NotFoundError,
+  type OmitFixed,
   PayloadTooLargeError,
   PresentationError,
   ServiceUnavailableError,
@@ -14,8 +15,6 @@ import {
   ValidationError,
   type ValidationErrorFields,
 } from "./AppErrors";
-
-type OmitFixed<T> = Omit<T, "statusCode" | "code">;
 
 export const createBadRequestError = (params: OmitFixed<AppErrorParams> = {}) =>
   new BadRequestError(params);

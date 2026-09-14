@@ -116,6 +116,7 @@ export async function login(
       metadata: { reason: "BANNED" },
     });
     throw createForbiddenError({
+      code: "ACCOUNT_BANNED",
       message: "Conta suspensa",
       action: "Se você acha que isso é um erro, entre em contato com o suporte",
     });
@@ -127,6 +128,7 @@ export async function login(
       "login refused",
     );
     throw createForbiddenError({
+      code: "PASSWORD_RESET_REQUIRED",
       message: "Você precisa definir uma nova senha",
       action: "Verifique seu email para o link de redefinição de senha",
     });
@@ -138,6 +140,7 @@ export async function login(
       "login refused",
     );
     throw createForbiddenError({
+      code: "EMAIL_NOT_VERIFIED",
       message: "Conta não verificada",
       action: "Verifique seu email para ativar a conta",
     });

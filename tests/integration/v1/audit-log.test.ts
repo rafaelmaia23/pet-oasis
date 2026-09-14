@@ -1,4 +1,5 @@
 import { buildEmployee } from "@tests/factories/user.factory";
+import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
 import { flushRedis } from "@tests/helpers/redis";
@@ -50,6 +51,39 @@ function buildFullReader() {
 }
 
 describe("GET /api/v1/audit-logs", () => {
+  it("should reject a targetId above 36 characters with 422 naming targetId (10.13)", async () => {
+    const reader = await buildFullReader();
+    const token = await loginAs(reader.email, reader.password);
+
+    const response = await request(app)
+      .get(`/api/v1/audit-logs?targetId=${"a".repeat(37)}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["targetId"]);
+  });
+
+  it("should reject a cursor above 128 characters with 422 naming cursor (10.13)", async () => {
+    const reader = await buildFullReader();
+    const token = await loginAs(reader.email, reader.password);
+
+    // Decodificável — `decodeCursor` ignora chave extra —, então sem o teto
+    // este cursor inchado passaria e responderia 200.
+    const padded = Buffer.from(
+      JSON.stringify({
+        c: new Date().toISOString(),
+        i: crypto.randomUUID(),
+        pad: "x".repeat(200),
+      }),
+    ).toString("base64url");
+
+    const response = await request(app)
+      .get(`/api/v1/audit-logs?cursor=${padded}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["cursor"]);
+  });
   beforeEach(async () => {
     sendMock.mockReset();
     sendMock.mockResolvedValue(undefined);

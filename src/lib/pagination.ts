@@ -44,10 +44,25 @@ export const offsetQuerySchema = z.object({
   limit: limitField,
 });
 
+/**
+ * Um cursor legítimo é o base64url de `{ c: ISO-8601, i: uuid }` — 100
+ * caracteres, sempre. O teto tem folga para não se casar com o formato exato,
+ * mas fica bem abaixo do que valeria a pena decodificar e logar (10.13).
+ */
+export const CURSOR_MAX_LENGTH = 128;
+
 export const cursorQuerySchema = z.object({
-  cursor: z.string().optional().meta({
-    description: "Cursor opaco da página seguinte (obtido em meta.nextCursor)",
-  }),
+  cursor: z
+    .string()
+    .max(
+      CURSOR_MAX_LENGTH,
+      `cursor deve ter no máximo ${CURSOR_MAX_LENGTH} caracteres`,
+    )
+    .optional()
+    .meta({
+      description:
+        "Cursor opaco da página seguinte (obtido em meta.nextCursor)",
+    }),
   limit: limitField,
 });
 

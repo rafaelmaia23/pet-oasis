@@ -24,6 +24,18 @@ afterEach(async () => {
 });
 
 describe("POST /api/v1/users/:userId/customer", () => {
+  it("should reject a phone above 20 characters with 422 naming phone (10.13)", async () => {
+    const manager = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(manager.email, manager.password);
+
+    const response = await request(app)
+      .post(`/api/v1/users/${manager.id}/customer`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ phone: `${"-".repeat(20)}11987654321` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["phone"]);
+  });
   it("should return 401 if no token is provided", async () => {
     const response = await request(app)
       .post("/api/v1/users/some-id/customer")

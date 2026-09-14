@@ -179,6 +179,31 @@ describe("POST /api/v1/auth/signup — conta soft-deletada", () => {
 });
 
 describe("POST /api/v1/auth/confirm-account-reactivation", () => {
+  it("should reject a token above 64 characters with 422 naming token (10.13)", async () => {
+    const response = await confirm({
+      token: `${"a".repeat(65)}`,
+      newPassword: "NewPass@123",
+    });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["token"]);
+  });
+
+  it("should reject a phone above 20 characters with 422 naming phone (10.13)", async () => {
+    const target = await buildCustomer();
+    await softDeleteUserAndInvalidateSessions(target.id);
+
+    await signupReclaiming(target);
+
+    const response = await confirm({
+      token: tokenFromLastEmail(),
+      newPassword: "NewPass@123",
+      phone: `${"-".repeat(20)}11987654321`,
+    });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["phone"]);
+  });
   it("should bring back the account and the customer profile (Caso A)", async () => {
     const target = await buildCustomer();
     await attachOverrides(target.id, { grants: ["read:log"] });

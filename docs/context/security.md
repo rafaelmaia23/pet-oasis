@@ -211,6 +211,27 @@ tabela de quem precisa e quem não precisa está em
 [`guides/integrating-with-the-api.md`](../guides/integrating-with-the-api.md#3-cors-quando-se-aplica-e-quando-não).
 A `APP_URL` continua existindo, mas só para o que sempre foi dela: os links dos emails.
 
+### Mass assignment: schema de update é `.strict()`, e a proteção tem teste próprio (10.12)
+
+O que só o sistema escreve — estado da conta, marca de banimento, `mustChangePassword`,
+`passwordHash`, vínculo de papel, `deletedAt`, dono de um recurso — nunca pode chegar pelo corpo
+da requisição. A defesa está no schema, não no service: todo schema de **update** é `.strict()`
+(chave desconhecida → 422 nomeando a chave em `errors.body`, e a requisição inteira é recusada,
+inclusive o campo legítimo que veio junto), e o que o endpoint recusa de propósito tem `z.never`
+com mensagem própria (`cpf`, `email`, `roleNames` no user; `customerId`, `deceasedAt` no pet;
+`logoPath` na marca). Os schemas de **create** e o `PUT` do override ficam no modo padrão do Zod,
+que *descarta* a chave desconhecida — e é o corpo parseado, não `req.body`, que segue para o
+service, então a chave descartada não existe mais quando o Prisma monta o `data`.
+
+O levantamento da Fase 10 não achou schema permissivo. O que faltava era o teste: essa é a
+classe de proteção que se perde em silêncio num refactor (um `.strict()` que vira `.strip()`, um
+`.extend()` na ordem errada, um `data: req.body` num controller novo) e que ninguém nota até virar
+incidente. `tests/integration/v1/mass-assignment.test.ts` cobre cada endpoint de escrita com um
+caso que prova as duas metades — a chave privilegiada é recusada **por nome** (ou descartada, nos
+schemas strip) **e** a linha no banco não mudou. O vermelho foi verificado trocando `.strict()`
+por `.strip()` em dois schemas: os dois casos falharam apontando a chave que passou a entrar.
+Schema de escrita novo entra nesse arquivo no mesmo commit em que nasce.
+
 ### Auto-hospedar o bundle do Scalar em vez de allowlistar o CDN
 
 `helmet()` traz CSP com `script-src 'self'`, que bloqueia o `cdn.jsdelivr.net` de onde o

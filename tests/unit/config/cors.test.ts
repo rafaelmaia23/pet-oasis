@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseAllowedOrigins } from "@/config/cors";
 
 describe("parseAllowedOrigins()", () => {
-  it("should build the allowlist only from the explicit CSV", () => {
+  it("should split the CSV, trim entries and strip the trailing slash", () => {
     const origins = parseAllowedOrigins(
       "https://one.example, https://two.example/",
     );

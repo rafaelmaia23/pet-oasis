@@ -203,8 +203,8 @@ entrava sozinha, por ser presumidamente quem chama por navegador. A Fase 10 desf
 da migração de domínio a `APP_URL` é o front, e o front adota BFF — quem fala com a API é o
 servidor dele, e a requisição chega **sem `Origin`**. A entrada automática viraria permissão
 concedida a um consumidor que não existe, e permissão que ninguém pediu é permissão que ninguém
-revisa. Hoje `src/config/cors.ts` monta a lista **só** de `CORS_ALLOWED_ORIGINS`, e em produção
-ela é vazia. O middleware e a variável ficam para o dia em que houver uma página web de outra
+revisa. Hoje `src/config/cors.ts` monta a lista **só** de `CORS_ALLOWED_ORIGINS`, e a lista vazia é o
+estado esperado enquanto o único cliente for o front com BFF. O middleware e a variável ficam para o dia em que houver uma página web de outra
 origem chamando a API direto do JavaScript — esse é o único cliente que precisa de CORS. App
 mobile nativo **não** é motivo para reabrir a allowlist: não há navegador, não há preflight. A
 tabela de quem precisa e quem não precisa está em

@@ -11,11 +11,13 @@ import { env } from "@/config/env";
  * de navegador de outra origem.
  */
 export const parseAllowedOrigins = (csv: string | undefined): Set<string> =>
-  new Set(
-    (csv?.split(",") ?? [])
-      .map((origin) => origin.trim().replace(/\/$/, ""))
-      .filter(Boolean),
-  );
+  new Set((csv?.split(",") ?? []).map(normalizeOrigin).filter(Boolean));
+
+// A mesma forma nos dois lados da comparação: o que entra na lista e o que
+// chega no header `Origin`.
+function normalizeOrigin(origin: string): string {
+  return origin.trim().replace(/\/$/, "");
+}
 
 const allowedOrigins = parseAllowedOrigins(env.CORS_ALLOWED_ORIGINS);
 
@@ -30,7 +32,7 @@ const allowedOrigins = parseAllowedOrigins(env.CORS_ALLOWED_ORIGINS);
  */
 export const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.has(origin.replace(/\/$/, ""))) {
+    if (!origin || allowedOrigins.has(normalizeOrigin(origin))) {
       return callback(null, true);
     }
     return callback(null, false);

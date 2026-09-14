@@ -4,13 +4,16 @@ import app from "@/app";
 import { env } from "@/config/env";
 
 // A allowlist de CORS sai **só** de `CORS_ALLOWED_ORIGINS` (10.11) — nada entra
-// por inércia, nem a `APP_URL`. `vi.hoisted` roda antes dos imports, então a
-// variável já está fixada quando `@/config/env` é lido — o teste não depende
-// do `.env.test` de cada máquina.
-const { allowedOrigin } = vi.hoisted(() => {
+// por inércia, nem a `APP_URL`. `vi.hoisted` roda antes dos imports, então as
+// duas variáveis já estão fixadas quando `@/config/env` é lido — o teste não
+// depende do `.env.test` de cada máquina, e as duas origens são distintas por
+// construção.
+const { allowedOrigin, appUrl } = vi.hoisted(() => {
   const allowedOrigin = "https://browser-client.example";
+  const appUrl = "https://front.example";
   process.env.CORS_ALLOWED_ORIGINS = allowedOrigin;
-  return { allowedOrigin };
+  process.env.APP_URL = appUrl;
+  return { allowedOrigin, appUrl };
 });
 
 describe("Bordas HTTP — helmet", () => {
@@ -95,7 +98,7 @@ describe("Bordas HTTP — CORS", () => {
   it("should not grant APP_URL an origin by inertia", async () => {
     const response = await request(app)
       .get("/api/v1/status")
-      .set("Origin", env.APP_URL);
+      .set("Origin", appUrl);
 
     expect(response.headers["access-control-allow-origin"]).toBeUndefined();
     expect(response.status).toBe(200);

@@ -1,17 +1,45 @@
 import { z } from "zod";
-import { createCustomerSchema, passwordSchema } from "../user/user.schema";
+import { OPAQUE_TOKEN_LENGTH } from "@/lib/token";
+import {
+  createCustomerSchema,
+  emailSchema,
+  PASSWORD_MAX_LENGTH,
+  passwordSchema,
+  phoneSchema,
+} from "@/modules/user/user.schema";
 
 export const signupSchema = createCustomerSchema;
 
+/**
+ * Senha *conferida* (login, troca de senha, troca de email): só o que o
+ * `passwordSchema` já limita é aceito aqui, e nada além — senha maior nunca foi
+ * gravada, então também nunca vai bater (10.13). A força não se checa: quem
+ * confere é o bcrypt.
+ */
+const presentedPassword = (requiredMessage: string) =>
+  z
+    .string()
+    .min(1, requiredMessage)
+    .max(
+      PASSWORD_MAX_LENGTH,
+      `Password must be at most ${PASSWORD_MAX_LENGTH} characters long`,
+    );
+
+/** Token opaco recebido por email — tem o tamanho que o gerador emite, e só ele. */
+const tokenSchema = z
+  .string()
+  .min(1, "Token is required")
+  .max(
+    OPAQUE_TOKEN_LENGTH,
+    `Token must be at most ${OPAQUE_TOKEN_LENGTH} characters`,
+  );
+
 export const loginSchema = z.object({
   body: z.object({
-    email: z
-      .email("Invalid email address")
-      .meta({ example: "demo@petoasis.dev" }),
-    password: z
-      .string()
-      .min(1, "Password is required")
-      .meta({ example: "DemoOasis2026!" }),
+    email: emailSchema.meta({ example: "demo@petoasis.dev" }),
+    password: presentedPassword("Password is required").meta({
+      example: "DemoOasis2026!",
+    }),
   }),
 });
 
@@ -23,7 +51,7 @@ export const sessionParamsSchema = z.object({
 
 export const verifyEmailSchema = z.object({
   body: z.object({
-    token: z.string().min(1, "Token is required").meta({
+    token: tokenSchema.meta({
       description: "Token recebido por email",
       example: "a1b2c3d4...",
     }),
@@ -32,23 +60,19 @@ export const verifyEmailSchema = z.object({
 
 export const resendVerificationSchema = z.object({
   body: z.object({
-    email: z
-      .email("Invalid email address")
-      .meta({ example: "maria@example.com" }),
+    email: emailSchema.meta({ example: "maria@example.com" }),
   }),
 });
 
 export const forgotPasswordSchema = z.object({
   body: z.object({
-    email: z
-      .email("Invalid email address")
-      .meta({ example: "maria@example.com" }),
+    email: emailSchema.meta({ example: "maria@example.com" }),
   }),
 });
 
 export const resetPasswordSchema = z.object({
   body: z.object({
-    token: z.string().min(1, "Token is required").meta({
+    token: tokenSchema.meta({
       description: "Token de reset recebido por email",
       example: "a1b2c3d4...",
     }),
@@ -58,29 +82,25 @@ export const resetPasswordSchema = z.object({
 
 export const changePasswordSchema = z.object({
   body: z.object({
-    currentPassword: z
-      .string()
-      .min(1, "Current password is required")
-      .meta({ example: "SenhaAtual1!" }),
+    currentPassword: presentedPassword("Current password is required").meta({
+      example: "SenhaAtual1!",
+    }),
     newPassword: passwordSchema,
   }),
 });
 
 export const changeEmailSchema = z.object({
   body: z.object({
-    currentPassword: z
-      .string()
-      .min(1, "Current password is required")
-      .meta({ example: "SenhaAtual1!" }),
-    newEmail: z
-      .email("Invalid email address")
-      .meta({ example: "novo@example.com" }),
+    currentPassword: presentedPassword("Current password is required").meta({
+      example: "SenhaAtual1!",
+    }),
+    newEmail: emailSchema.meta({ example: "novo@example.com" }),
   }),
 });
 
 export const confirmEmailChangeSchema = z.object({
   body: z.object({
-    token: z.string().min(1, "Token is required").meta({
+    token: tokenSchema.meta({
       description: "Token recebido por email",
       example: "a1b2c3d4...",
     }),
@@ -89,25 +109,16 @@ export const confirmEmailChangeSchema = z.object({
 
 export const confirmAccountReactivationSchema = z.object({
   body: z.object({
-    token: z.string().min(1, "Token is required").meta({
+    token: tokenSchema.meta({
       description: "Token recebido por email",
       example: "a1b2c3d4...",
     }),
     newPassword: passwordSchema,
-    phone: z
-      .string()
-      .transform((val) => val.replace(/\D/g, ""))
-      .pipe(
-        z
-          .string()
-          .regex(/^\d{10,11}$/, "Telefone deve ter 10 ou 11 dígitos (com DDD)"),
-      )
-      .optional()
-      .meta({
-        description:
-          "Telefone com DDD — obrigatório apenas quando a reativação precisa criar um perfil de cliente do zero",
-        example: "11987654321",
-      }),
+    phone: phoneSchema.optional().meta({
+      description:
+        "Telefone com DDD — obrigatório apenas quando a reativação precisa criar um perfil de cliente do zero",
+      example: "11987654321",
+    }),
   }),
 });
 

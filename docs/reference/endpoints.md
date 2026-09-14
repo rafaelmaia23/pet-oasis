@@ -38,6 +38,8 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 
 **Ordenação (Fase 9.2):** listagens por **offset** aceitam `?sort=<campo>&order=asc|desc`, com allowlist própria de cada recurso (campo fora dela → 422; `order` sem `sort` → 422). Omitir `order` usa a direção natural do campo. O cursor não tem ordenação configurável.
 
+**Comprimento máximo (Fase 10.13):** todo campo de texto — corpo, query ou path — tem teto, e acima dele a resposta é **422** nomeando o campo. O teto é contrato: sai no `/openapi.json` como `maxLength`, e o front pode usá-lo no `<input>`. Os do catálogo e do pet já vinham dos próprios módulos (nome 80, slug 80, descrição 500/2000, SKU 40, rótulo 60, `q` 100, …); a fase fechou os que faltavam, todos de identidade e de sessão: **email 254** (RFC 5321), **senha 100** também onde ela é só *conferida* (login, troca de senha e de email — senha maior nunca foi gravada), **token de email 64** (o tamanho exato que o gerador emite), **CPF 14** e **telefone 20** medidos no **texto cru, com máscara** — a normalização tira os separadores depois, então o teto é sobre o que o cliente digita —, **`cursor` 128** e **`targetId` 36** no audit log. Racional em [`../context/security.md`](../context/security.md#todo-campo-de-texto-tem-teto-e-o-teto-é-contrato-1013).
+
 ---
 
 ## Docs — `src/routes/index.ts` (router de topo)

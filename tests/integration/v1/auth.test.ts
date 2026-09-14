@@ -120,6 +120,17 @@ afterEach(async () => {
 });
 
 describe("POST /api/v1/auth/signup", () => {
+  it("should reject a phone above 20 characters with 422 naming phone (10.13)", async () => {
+    // Onze dígitos válidos afogados em separadores: o regex pós-normalização
+    // aceitaria — só o teto sobre o texto cru recusa.
+    const data = makeCustomerData({ phone: `${"-".repeat(20)}11987654321` });
+
+    const response = await request(app).post("/api/v1/auth/signup").send(data);
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["phone"]);
+  });
+
   it("should return 201 and create a new user for valid data", async () => {
     const data = makeCustomerData();
 
@@ -285,6 +296,29 @@ describe("POST /api/v1/auth/signup", () => {
 });
 
 describe("POST /api/v1/auth/login", () => {
+  it("should reject an email above 254 characters with 422 naming email (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/login")
+      .send({
+        email: `${"a".repeat(250)}@example.com`,
+        password: "Whatever@1",
+      });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["email"]);
+  });
+
+  it("should reject a password above 100 characters with 422 naming password (10.13)", async () => {
+    const user = await buildCustomer();
+
+    const response = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: user.email, password: `Aa1!${"x".repeat(97)}` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["password"]);
+  });
+
   it("should return 200 with only the access token in the body", async () => {
     const user = await buildCustomer();
 
@@ -1401,6 +1435,15 @@ describe("DELETE /api/v1/auth/sessions/:id", () => {
 });
 
 describe("POST /api/v1/auth/verify-email", () => {
+  it("should reject a token above 64 characters with 422 naming token (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/verify-email")
+      .send({ token: `${generateOpaqueToken()}a` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["token"]);
+  });
+
   it("should return 422 when the token is missing", async () => {
     const response = await request(app)
       .post("/api/v1/auth/verify-email")
@@ -1483,6 +1526,15 @@ describe("POST /api/v1/auth/verify-email", () => {
 });
 
 describe("POST /api/v1/auth/verify-email/resend", () => {
+  it("should reject an email above 254 characters with 422 naming email (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/verify-email/resend")
+      .send({ email: `${"a".repeat(250)}@example.com` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["email"]);
+  });
+
   it("should return 422 when the email is invalid", async () => {
     const response = await request(app)
       .post("/api/v1/auth/verify-email/resend")
@@ -1548,6 +1600,15 @@ describe("POST /api/v1/auth/verify-email/resend", () => {
 });
 
 describe("POST /api/v1/auth/forgot-password", () => {
+  it("should reject an email above 254 characters with 422 naming email (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: `${"a".repeat(250)}@example.com` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["email"]);
+  });
+
   it("should return 422 when the email is invalid", async () => {
     const response = await request(app)
       .post("/api/v1/auth/forgot-password")
@@ -1621,6 +1682,14 @@ describe("POST /api/v1/auth/forgot-password", () => {
 describe("POST /api/v1/auth/reset-password", () => {
   const NEW_PASSWORD = "NewPass@123";
 
+  it("should reject a token above 64 characters with 422 naming token (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: `${generateOpaqueToken()}a`, newPassword: "NewPass@123" });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["token"]);
+  });
   it("should return 422 when the token is missing", async () => {
     const response = await request(app)
       .post("/api/v1/auth/reset-password")
@@ -1778,6 +1847,21 @@ describe("POST /api/v1/auth/reset-password", () => {
 describe("POST /api/v1/auth/change-password", () => {
   const NEW_PASSWORD = "NewPass@123";
 
+  it("should reject a currentPassword above 100 characters with 422 naming it (10.13)", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        currentPassword: `Aa1!${"x".repeat(97)}`,
+        newPassword: "NewPass@123",
+      });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["currentPassword"]);
+  });
   it("should return 401 without an access token", async () => {
     const response = await request(app)
       .post("/api/v1/auth/change-password")
@@ -1887,6 +1971,38 @@ describe("POST /api/v1/auth/change-password", () => {
 });
 
 describe("POST /api/v1/auth/change-email", () => {
+  it("should reject a currentPassword above 100 characters with 422 naming it (10.13)", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        currentPassword: `Aa1!${"x".repeat(97)}`,
+        newEmail: "new@example.com",
+      });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["currentPassword"]);
+  });
+
+  it("should reject a newEmail above 254 characters with 422 naming newEmail (10.13)", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        currentPassword: user.password,
+        newEmail: `${"a".repeat(250)}@example.com`,
+      });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["newEmail"]);
+  });
+
   it("should return 401 without an access token", async () => {
     const response = await request(app)
       .post("/api/v1/auth/change-email")
@@ -2120,6 +2236,15 @@ describe("POST /api/v1/auth/change-email", () => {
 });
 
 describe("POST /api/v1/auth/confirm-email-change", () => {
+  it("should reject a token above 64 characters with 422 naming token (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token: `${generateOpaqueToken()}a` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["token"]);
+  });
+
   it("should return 422 when token is missing", async () => {
     const response = await request(app)
       .post("/api/v1/auth/confirm-email-change")

@@ -14,8 +14,14 @@ Medido com o custo real do bcrypt: email desconhecido respondia em 5 ms e senha 
 ### Resíduo de tempo no login: o contador de lockout só no ramo com conta — **P**
 Depois da 10.9 sobra ~1 ms entre as duas recusas: o ramo com conta grava o contador de lockout no Redis (`lockout.recordFailure`) e o ramo sem conta não. Em rede local é ruído; em Redis remoto pode voltar a ser mensurável. **Correção possível:** uma escrita dummy no Redis no ramo sem conta, ou medir com o Redis de produção antes de decidir que não vale o custo. Decisão de produto, não tomada.
 
-### Comprimento máximo em todo campo de texto — **P**
-`express.json({ limit: "100kb" })` (Fase 7.0) protege o total do body, mas nada impede 99KB dentro de um campo `name`. Sem `.max()` nos schemas Zod isso vira lixo no banco, índice inchado e — agora que existe log estruturado — linhas de log gigantes. **Correção:** varredura em todos os schemas adicionando `.max()` coerente com a coluna do Prisma.
+### ~~Comprimento máximo em todo campo de texto~~ — ✅ resolvido (Fase 10.13)
+Catálogo e pet já tinham teto; faltavam identidade e sessão (email 254, senha conferida 100, token 64, CPF 14 e telefone 20 medidos no texto cru com máscara, `cursor` 128, `targetId` 36). Cada teto sai como `maxLength` no `/openapi.json` e tem teste no módulo. Racional em `docs/context/security.md` § "Todo campo de texto tem teto".
+
+### Teto para `User-Agent` e `X-Forwarded-For` antes de gravar em `Session`/`AuditLog` — **P**
+A varredura da 10.13 cobriu campo de schema; os dois headers vão para o banco (`Session.userAgent`/`ipAddress`, `AuditLog.userAgent`/`ip`) sem teto próprio — o único é o do Node (`--max-http-header-size`, 16KB), e 16KB numa coluna de sessão por login é o mesmo lixo que o `.max()` evitou no corpo. **Correção:** truncar no `requestContext` (o único ponto que lê os dois) para um teto documentado, sem recusar a requisição — header grande não é erro do cliente que valha 4xx.
+
+### Inteiro sem `.max()` estoura o `Int` do Postgres antes de virar 422 — **P**
+`stockQuantity`, `weightGrams` e `volumeMl` da variante não têm teto: um valor acima de 2³¹−1 passa pelo Zod e morre no Prisma, que responde 500 em vez de 422. Não é texto, então ficou fora da 10.13. **Correção:** `.max()` coerente com o que o campo representa (estoque, peso e volume têm teto físico óbvio), com teste por schema como na 10.13.
 
 ### ~~Auditar mass assignment nos schemas de update~~ — ✅ resolvido (Fase 10.12)
 Nenhum schema estava permissivo: todo update é `.strict()`, create e upsert descartam a chave desconhecida. O resultado foi só a suíte de regressão (`tests/integration/v1/mass-assignment.test.ts`, um caso por endpoint de escrita) e a regra de que schema de escrita novo entra nela no mesmo commit. Racional em `docs/context/security.md` § "Mass assignment".

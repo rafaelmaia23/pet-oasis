@@ -8,8 +8,11 @@
 
 ## Segurança
 
-### Timing attack no login e enumeração de usuário — **P**
-Hoje, um email inexistente provavelmente responde em poucos ms, enquanto um email existente com senha errada gasta o tempo do hash (centenas de ms). Essa diferença vira um oráculo de existência de conta e anula o cuidado anti-enumeração já tomado em `forgot-password` e `verify-email/resend`. **Correção:** rodar a verificação de hash contra um hash dummy fixo quando o usuário não existe, igualando o tempo dos dois caminhos. Barato e fecha um furo real.
+### ~~Timing attack no login e enumeração de usuário~~ — ✅ resolvido (Fase 10.9)
+Medido com o custo real do bcrypt: email desconhecido respondia em 5 ms e senha errada em 172 ms. O ramo sem conta passou a verificar contra um hash de ninguém (`simulatePasswordVerification`, `src/lib/password.ts`) e as medianas ficaram em 171 ms contra 172 ms. Racional e método da medição em `docs/context/identity-and-sessions.md` § "O relógio do login não é oráculo".
+
+### Resíduo de tempo no login: o contador de lockout só no ramo com conta — **P**
+Depois da 10.9 sobra ~1 ms entre as duas recusas: o ramo com conta grava o contador de lockout no Redis (`lockout.recordFailure`) e o ramo sem conta não. Em rede local é ruído; em Redis remoto pode voltar a ser mensurável. **Correção possível:** uma escrita dummy no Redis no ramo sem conta, ou medir com o Redis de produção antes de decidir que não vale o custo. Decisão de produto, não tomada.
 
 ### Comprimento máximo em todo campo de texto — **P**
 `express.json({ limit: "100kb" })` (Fase 7.0) protege o total do body, mas nada impede 99KB dentro de um campo `name`. Sem `.max()` nos schemas Zod isso vira lixo no banco, índice inchado e — agora que existe log estruturado — linhas de log gigantes. **Correção:** varredura em todos os schemas adicionando `.max()` coerente com a coluna do Prisma.

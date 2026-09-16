@@ -292,21 +292,18 @@ Duas coisas que a migração **não** custou, e as duas são dividendo de decis�
   host que o serviu. Um `servers` absoluto teria feito o Scalar do subdomínio disparar "try it"
   contra o host velho.
 
-**A ordem é parte da decisão.** Subdomínio e certificado vêm primeiro; `APP_URL` — que sempre
-quis dizer *o app que a pessoa vê*, e passa a apontar para o front — só vira depois de o front
-ter no ar as quatro rotas de email (verificação, redefinição de senha, confirmação de troca de
-email, confirmação de reativação). Virar antes transforma verificação de conta e reset de senha
-em 404, que são justamente os fluxos que destravam conta nova, e a falha é silenciosa em todo
-lugar menos na caixa de entrada de quem se cadastrou.
-
-**A ordem foi relaxada na execução (10.14), e por decisão, não por descuido.** O dono do projeto
-virou `APP_URL` para o apex **antes** de o front ter as rotas no ar, com dois argumentos: o
-único ambiente de pé é uma demo efêmera, sem conta real, então o link 404 num email de
-demonstração não custa nada; e manter a issue aberta amarrava o fecho da fase ao calendário de
-outro repositório. A regra acima continua sendo a regra para um deploy com usuários — o que
-mudou foi o julgamento de que a demo não é um. A 10.14 fechou do lado do backend: subir o front
-no apex, apontar o proxy host do apex para o container dele e provar os quatro fluxos ponta a
-ponta é trabalho do `pet-oasis-web`, e esta pasta de issues guarda só o que é da API.
+**A ordem era parte da decisão, e foi relaxada na execução (10.14).** A regra escrita: subdomínio
+e certificado primeiro; `APP_URL` — que sempre quis dizer *o app que a pessoa vê*, e passa a
+apontar para o front — só depois de o front ter no ar as quatro rotas de email (verificação,
+redefinição de senha, confirmação de troca de email, confirmação de reativação), porque virar
+antes transforma verificação de conta e reset de senha em 404, justamente os fluxos que destravam
+conta nova, com a falha silenciosa em todo lugar menos na caixa de entrada de quem se cadastrou.
+Na execução o dono do projeto virou `APP_URL` **antes** de o front subir, e por decisão: o único
+ambiente de pé é uma demo efêmera, sem conta real, então o link 404 num email de demonstração não
+custa nada — e amarrar o fecho da API ao calendário do front custava. A regra continua sendo a
+regra para qualquer deploy com usuários; o que mudou foi o julgamento de que a demo não é um.
+Do lado da API a migração está completa; subir o front no apex, apontar o proxy host do apex para
+o container dele e provar os quatro fluxos ponta a ponta é trabalho do `pet-oasis-web`.
 
 A configuração do reverse proxy (Nginx Proxy Manager, certificado por desafio DNS na
 Cloudflare) continua **fora deste repositório** (mesmo motivo da seção seguinte); a forma que o

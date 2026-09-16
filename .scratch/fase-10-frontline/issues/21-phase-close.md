@@ -40,7 +40,7 @@ mandava fazer "no fecho" e que estavam pendurados na issue 14 (fechada como trab
 | `code` parametrizável nas factories; status não mudam; os três `code`s; ordem de avaliação | `identity-and-sessions.md` § "403 (não 401) no login", emenda **(10.8)** |
 | Serviço renomeado `app` → `api`; o que **não** se renomeia; alias explícito | `infrastructure.md` § 10.1 |
 | Três redes; porta despublicada; `docker network connect` some; `pet-oasis` externa | `infrastructure.md` § 10.2 (revisto na 10.17); alias fora da `proxy` no mesmo `###` |
-| Systemd units e a ordem "reinstalar antes do deploy" | `infra/cron/README.md` § "Trocar as units" (procedimento, não decisão) |
+| Systemd units e a ordem "reinstalar antes do deploy" | `infrastructure.md` § 10.1 (a decisão); o procedimento em `infra/cron/README.md` § "Trocar as units" |
 | `X-Forwarded-For` por endereço de origem; copiar ou acrescentar, tanto faz; seguro porque a porta não é publicada; Cloudflare na frente | `security.md` § "`trust proxy` é por endereço de origem" (D7, 10.2, 10.6) |
 | Janela de graça: par no Redis com TTL; 10 s como constante; quatro casos; 503 é "não decidir"; duas razões de 503; ação própria no audit; "sessão" é elo de corrente | `identity-and-sessions.md` § 10.7 — com 10.15 (ponta viva, teto de 5) e 10.18 (`graceDeferredAt`) dentro |
 | CORS: `APP_URL` sai da allowlist; mobile não é motivo | `security.md` § 10.11 |

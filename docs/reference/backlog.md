@@ -124,11 +124,15 @@ Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real 
 
 ## Bugs
 
-### Seed fatal derruba a aplicação no boot
-
-**Problema:** o entrypoint trata falha de seed como fatal. Um `EACCES` ao gravar imagem de catálogo em `uploads/` colocou o container em crash loop e a API inteira fora do ar (502 no proxy), por causa de dado de demonstração. Contraria o padrão de degradação fail-open já adotado para Axiom/Sentry.
-
-**Proposta:** separar o seed do boot — passo one-shot (`docker compose run --rm api npm run db:seed`) ou serviço dedicado com `restart: no`. Se mantido no entrypoint, tornar fail-open: logar em `error` e seguir para o start do servidor. Deploy da fase 9 (2026-09-03).
+### ~~Seed fatal derruba a aplicação no boot~~ — ✅ resolvido (Fase 10.3)
+O entrypoint tratava falha de seed como fatal, e um `EACCES` ao gravar imagem de catálogo pôs a
+API inteira em crash loop por causa de dado de demonstração. A proposta era "one-shot ou
+fail-open"; a decisão foi fail-open **por classe de dado**, não em bloco: referência (features,
+roles, raças, léxico da busca) continua fatal, porque é pré-requisito da API como a migration;
+demonstração é fail-open, com `SEEDING COMPLETED WITH FAILURES: <passos>` nomeando o que falhou.
+Fail-open no seed inteiro deixaria a API de pé com a tabela de autorização quebrada, escondida
+numa linha de log. Racional em `docs/context/infrastructure.md` § "O boot para no dado de
+referência e segue no de demonstração".
 
 ---
 
@@ -261,10 +265,7 @@ montados a partir de `APP_URL` e passam a ser obrigação do front, com estes no
 `/confirm-account-reactivation`, todos com `?token=`. Renomear qualquer um deles no front
 quebra o email correspondente sem erro visível em lugar nenhum.
 
-**Ordem de execução, planejada e relaxada:** a spec da Fase 10 mandava subir o subdomínio e o
-certificado **antes**, e só virar `APP_URL` para o apex quando o front tivesse as quatro rotas no
-ar — virar antes transforma todo email de verificação e de reset em 404. Na execução o dono do
-projeto virou a variável **antes** de o front subir, por decisão explícita: a demo é efêmera, sem
-conta real, e o custo de um link 404 num email de demonstração é zero, enquanto manter a issue
-aberta amarrava o fecho da fase a um repositório que não é este. A 10.14 fechou do lado do
-backend; subir o front no apex e provar os quatro fluxos é trabalho do `pet-oasis-web`.
+**Ordem de execução, planejada e relaxada:** a regra era virar `APP_URL` para o apex só depois de
+o front ter as quatro rotas no ar; na demo ela foi virada antes, por decisão do dono do projeto
+(demo efêmera, sem conta real). O porquê, e por que a regra segue valendo para deploy com
+usuários, em `docs/context/infrastructure.md` § "A API atende num subdomínio".

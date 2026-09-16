@@ -60,11 +60,10 @@ mostrá-lo com o nome que o host der a esse uid (`opc`, `ubuntu`, o que for). Co
 
 ### Não há deploy para migrar — mas há bytes a regravar
 
-Nenhum deploy com dados antecede este layout, então não há diretório a mover nem contagem a
-conferir. Mas o primeiro `prod:up` com ele mostrou o outro lado: o volume do banco sobrevive ao
-redeploy, e as linhas de imagem do seed anterior apontavam para bytes que viviam **dentro do
-container antigo** — mortos com ele. O seed do boot não regrava o que o banco já tem, então a
-API sobe limpa e toda imagem responde 404. No demo, o conserto é repovoar:
+Nenhum deploy com dados antecede este layout, então não há diretório a mover. Mas o volume do
+banco sobrevive ao redeploy e o seed não regrava o que o banco já tem — se as linhas de imagem
+apontam para bytes que ficaram para trás, a API sobe limpa e toda imagem responde 404. No demo,
+o conserto é repovoar:
 
 ```bash
 sudo systemctl start pet-oasis-demo-reset.service     # trunca e repovoa, gravando no mount novo

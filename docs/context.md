@@ -315,9 +315,11 @@ completo, os contra-argumentos e os gotchas.
   o ARM64 correto
 - Não existe script para apagar o banco de produção (10.5) — `down -v` de produção é ato
   deliberado, digitado à mão; script de nome amigável ao lado do `prod:up` vira erro de digitação
-- A API atende num subdomínio, e o apex guarda dois 301 (10.6) — o apex é do front; `/reference` e
-  `/openapi.json` continuam chegando por 301, a base das imagens segue a API sem migration (o banco
-  guarda a chave), e `APP_URL` só vira depois de o front ter as quatro rotas de email
+- A API atende num subdomínio, e o apex fica limpo (10.6) — `pet-oasis-api.maiahub.com.br`, de
+  primeiro nível porque segundo nível não fecha TLS atrás do proxy da Cloudflare; os 301 do apex
+  foram planejados e descartados; a cadeia de IP ganha a Cloudflare e o proxy resolve o visitante
+  por `CF-Connecting-IP`; a base das imagens segue a API sem migration (o banco guarda a chave), e
+  `APP_URL` só vira depois de o front ter as quatro rotas de email
 - O reverse proxy do upload existe, mas não neste repositório (9.10) — quem serve `/uploads/*` é
   o Node, e o bind mount é o que deixa a troca por nginx ser configuração
 - O diretório de uploads mora fora do working tree, e o uid é fixado no serviço (10.4) — git e

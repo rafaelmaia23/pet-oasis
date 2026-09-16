@@ -27,7 +27,7 @@ Preencher o `.env.production`:
   projeto** do Compose, que é o do primeiro `-f` — `infra/`, não a raiz do repo. `./uploads`
   aqui significaria `<repo>/infra/uploads` (é por isso que o compose de dev pede `../uploads`).
 - `UPLOAD_PUBLIC_BASE_URL` — a base pública das URLs de imagem, no host da **API**
-  (`https://api.pet-oasis.maiahub.com.br/uploads`). Quem serve o byte é a API, então é o
+  (`https://pet-oasis-api.maiahub.com.br/uploads`). Quem serve o byte é a API, então é o
   certificado dela que cobre o endereço. O banco guarda só a **chave**; a URL é montada com
   isto na resposta, o que faz trocar de host custar uma variável e nenhuma migration.
 - `SEED_FAKE_DATA=true` e `DEMO_MODE=true` — só num deploy de demonstração: povoam o
@@ -106,110 +106,90 @@ rota para lugar nenhum. O contrato completo do lado do cliente está em
 
 ## Domínio e reverse proxy
 
-A API atende em **`api.pet-oasis.maiahub.com.br`**. O apex (`pet-oasis.maiahub.com.br`) está a
-caminho de ser do front — enquanto a virada não acontece ele continua servindo a API —, e o que
-fica nele em definitivo é um resíduo: **301** dos dois caminhos de documentação que já foram
-publicados, para que link em README, badge e post não morra quando a virada vier.
+A API atende em **`pet-oasis-api.maiahub.com.br`**. O apex (`pet-oasis.maiahub.com.br`) é do
+front e fica **limpo**: nenhum caminho da API é redirecionado a partir dele. Quem chama a API
+usa a base do subdomínio — o README e a coleção Bruno (`api-collection/environments/prod.bru`)
+já apontam para lá. O porquê do nome (primeiro nível sob `maiahub.com.br`, e não
+`api.pet-oasis.…`) e o de não haver redirect estão em `docs/context/infrastructure.md`
+§ "A API atende num subdomínio, e o apex fica limpo (10.6)".
 
-| Caminho no apex | Resposta |
-|---|---|
-| `/reference` | `301` → `https://api.pet-oasis.maiahub.com.br/reference` |
-| `/openapi.json` | `301` → `https://api.pet-oasis.maiahub.com.br/openapi.json` |
+O reverse proxy é o **Nginx Proxy Manager** (NPM), e a configuração dele **não vive neste
+repositório** — é do servidor pessoal que hospeda a demo, pelo mesmo motivo registrado em
+`docs/context/infrastructure.md` § "O reverse proxy do upload existe, mas não neste repositório
+(9.10)". O que segue é a **forma** que ela precisa ter; versionar uma cópia aqui só criaria duas
+verdades divergindo em silêncio.
 
-São **só** esses dois. `/api/v1/*` no apex não é redirecionado: quem chama a API troca a base
-para o subdomínio, e o README e a coleção Bruno (`api-collection/environments/prod.bru`) já
-apontam para lá.
+### O que o proxy host precisa ter
 
-A configuração do nginx **não vive neste repositório** — é do servidor pessoal que hospeda a
-demo, pelo mesmo motivo registrado em `docs/context/infrastructure.md` § "O reverse proxy do
-upload existe, mas não neste repositório (9.10)". O que segue é a **forma** que ela precisa ter;
-versionar uma cópia aqui só criaria duas verdades divergindo em silêncio.
+1. **DNS.** Registro `A` de `pet-oasis-api.maiahub.com.br` na Cloudflare, **proxiado** como os
+   demais registros do domínio. O nome é de primeiro nível de propósito: o Universal SSL da
+   Cloudflare cobre o apex e `*.maiahub.com.br`, e nada além — um nome de segundo nível não tem
+   certificado na borda e falha no handshake TLS antes de a requisição chegar ao servidor.
+2. **Certificado** Let's Encrypt emitido pelo NPM por **desafio DNS** na Cloudflare (token de API
+   com permissão de editar a zona). É o desafio que funciona atrás do proxy da Cloudflare, onde a
+   porta 80 do servidor não é o que o mundo vê.
+3. **Proxy host** `pet-oasis-api.maiahub.com.br` → `http://pet-oasis-api:3000`. O NPM alcança a
+   API por **DNS de container**, na rede `proxy` (`docker network inspect proxy` tem que listar
+   o container do NPM). `pet-oasis-api` é o nome do container; `api` é o alias que o compose
+   declara e resolve igual. **NUNCA `127.0.0.1:3000`** — a porta não é publicada no host, e é
+   essa ausência que torna seguro o `trust proxy` por endereço privado (ver "Redes", acima).
+4. **Custom config** do proxy host, no bloco de `location` gerado pelo NPM:
 
-### A ordem, que não é livre
-
-O `certbot --nginx` não cria o server block: ele **acha** o que já tem o `server_name`, valida
-por HTTP-01 na porta 80 e escreve as linhas de TLS dentro dele. Fazer na ordem errada dá um erro
-que parece de configuração do nginx e é de DNS, ou um certbot que não encontra o que editar.
-
-1. **Registro `A`** de `api.pet-oasis.maiahub.com.br`, apontando para o mesmo IP do apex.
-   Conferir que resolve (`dig +short api.pet-oasis.maiahub.com.br`) antes de seguir — a
-   validação bate no nome, e sem registro ela falha.
-2. **Server block do subdomínio em HTTP**, com o `proxy_pass`, e `nginx -t && systemctl reload
-   nginx`.
-3. **`certbot`**, com os **dois** nomes num certificado só (é uma expansão da linhagem que já
-   existe para o apex, então o caminho em `/etc/letsencrypt/live/` continua sendo o do apex):
-
-   ```bash
-   sudo certbot --nginx -d pet-oasis.maiahub.com.br -d api.pet-oasis.maiahub.com.br
+   ```nginx
+   real_ip_header CF-Connecting-IP;
+   real_ip_recursive off;
    ```
 
-   Ele escreve o `listen 443 ssl`, as duas linhas de `ssl_certificate` e o bloco de redirect
-   80 → 443 sozinho.
-4. **Os dois `location` de 301** no server block do apex, e recarregar de novo.
+   Sem isto a cadeia de IP da 10.2 quebra. Com o proxy da Cloudflare ligado, quem abre a
+   conexão no NPM é a **borda da Cloudflare**, não o visitante. O NPM anexa o `$remote_addr`
+   dele ao `X-Forwarded-For`, e a API receberia `visitante, ip-da-cloudflare`: o
+   `trust proxy ["loopback","uniquelocal"]` do `app.ts` para no IP da Cloudflare (que não é
+   privado) e todo visitante cai num balde só — o problema exato que a 10.2 resolveu. O NPM já
+   traz `set_real_ip_from` com as faixas da Cloudflare (`ip_ranges.conf`, baixado no boot);
+   as duas linhas acima fazem o `$remote_addr` virar o valor de `CF-Connecting-IP`, o
+   visitante, e a API recebe `visitante, visitante` — e pega o visitante. `recursive off`
+   porque `CF-Connecting-IP` carrega **um** endereço, não uma lista. A configuração vale para
+   **todo** proxy host que receba visitante pela Cloudflare — o da API e, quando o front subir,
+   o do apex (cadeia `visitante → Cloudflare → NPM → front → api`).
+5. **Redirect da raiz** (`/` → `/reference`), se quiser: é do **NPM**, não da aplicação — a
+   API não tem rota `/`.
 
-### A forma final
-
-Depois do passo 4, é isto que os dois blocos precisam ter (as linhas que o certbot escreveu
-estão marcadas):
+O que o NPM gera é o equivalente a este `location`, e é isto que qualquer outro reverse proxy
+precisaria reproduzir — os quatro `proxy_set_header` são o contrato do `trust proxy`:
 
 ```nginx
-# O subdomínio: é ele que serve a API.
-server {
-    listen 443 ssl;                                                        # certbot
-    server_name api.pet-oasis.maiahub.com.br;
-
-    ssl_certificate     /etc/letsencrypt/live/pet-oasis.maiahub.com.br/fullchain.pem;  # certbot
-    ssl_certificate_key /etc/letsencrypt/live/pet-oasis.maiahub.com.br/privkey.pem;    # certbot
-
-    location / {
-        # Por DNS de container, na rede `proxy`. NUNCA 127.0.0.1:3000 — a porta
-        # não é publicada no host, e é essa ausência que torna seguro o
-        # `trust proxy` por endereço privado.
-        proxy_pass http://api:3000;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-
-# O apex: os dois links publicados continuam chegando.
-server {
-    listen 443 ssl;                                                        # certbot
-    server_name pet-oasis.maiahub.com.br;
-
-    ssl_certificate     /etc/letsencrypt/live/pet-oasis.maiahub.com.br/fullchain.pem;  # certbot
-    ssl_certificate_key /etc/letsencrypt/live/pet-oasis.maiahub.com.br/privkey.pem;    # certbot
-
-    location = /reference {
-        return 301 https://api.pet-oasis.maiahub.com.br$request_uri;
-    }
-    location = /openapi.json {
-        return 301 https://api.pet-oasis.maiahub.com.br$request_uri;
-    }
-
-    # ... o resto do apex.
+location / {
+    proxy_pass http://pet-oasis-api:3000;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
-
-`$request_uri` em vez do caminho literal preserva a query string — é o que faz um
-`/reference?foo=bar` chegar inteiro do outro lado.
 
 ### Verificar
 
 ```bash
-# TLS válido e a API respondendo no host novo
+# TLS válido e a API respondendo no host
 curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' \
-  https://api.pet-oasis.maiahub.com.br/api/v1/status        # 200 0
+  https://pet-oasis-api.maiahub.com.br/api/v1/status        # 200 0
 
-# Os dois links publicados, ainda chegando
-curl -sSI https://pet-oasis.maiahub.com.br/reference    | head -2   # 301 + Location
-curl -sSI https://pet-oasis.maiahub.com.br/openapi.json | head -2   # 301 + Location
-
-# Uma imagem do catálogo pelo host novo
+# Uma imagem do catálogo servida pelo host da API
 curl -sS -o /dev/null -w '%{http_code}\n' \
-  "$(curl -s 'https://api.pet-oasis.maiahub.com.br/api/v1/products?limit=1' \
+  "$(curl -s 'https://pet-oasis-api.maiahub.com.br/api/v1/products?limit=1' \
      | grep -o 'https://[^"]*\.webp' | head -1)"          # 200
+
+# A cadeia de IP pela Cloudflare: um login recusado, vindo de fora do servidor,
+# tem que gravar em audit_logs o IP de QUEM chamou — não 2606:4700::/104.x
+# (Cloudflare) nem 172.x (a rede docker do NPM).
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"nobody@example.com","password":"wrong"}' \
+  https://pet-oasis-api.maiahub.com.br/api/v1/auth/login    # 401
+docker exec -i pet-oasis-prod-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+select ip, created_at from audit_logs
+ where action = 'AUTH_LOGIN_FAILED' order by created_at desc limit 1;
+SQL
 ```
 
 ## Subir

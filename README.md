@@ -15,7 +15,7 @@
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](https://spec.openapis.org/oas/v3.1.0)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#licença)
 
-### [🚀 Explorar a API ao vivo](https://api.pet-oasis.maiahub.com.br/reference)
+### [🚀 Explorar a API ao vivo](https://pet-oasis-api.maiahub.com.br/reference)
 
 *Documentação interativa, com "try it" — sem instalar nada.*
 
@@ -40,13 +40,13 @@ O **Ciclo 1** — a fundação — está concluído: autenticação com refresh 
 
 ## 🚀 Experimente agora
 
-A API está no ar em **[api.pet-oasis.maiahub.com.br](https://api.pet-oasis.maiahub.com.br/reference)**. O apex (`pet-oasis.maiahub.com.br`) redireciona `/reference` e `/openapi.json` para cá com **301**, então link já publicado continua chegando.
+A API está no ar em **[pet-oasis-api.maiahub.com.br](https://pet-oasis-api.maiahub.com.br/reference)**.
 
 | Recurso | Link |
 |---|---|
-| 📖 Referência interativa ([Scalar](https://scalar.com), com "try it") | **[/reference](https://api.pet-oasis.maiahub.com.br/reference)** |
-| 📄 Spec OpenAPI 3.1 (gerada dos próprios schemas Zod) | [/openapi.json](https://api.pet-oasis.maiahub.com.br/openapi.json) |
-| ❤️ Health check | [/api/v1/status](https://api.pet-oasis.maiahub.com.br/api/v1/status) |
+| 📖 Referência interativa ([Scalar](https://scalar.com), com "try it") | **[/reference](https://pet-oasis-api.maiahub.com.br/reference)** |
+| 📄 Spec OpenAPI 3.1 (gerada dos próprios schemas Zod) | [/openapi.json](https://pet-oasis-api.maiahub.com.br/openapi.json) |
+| ❤️ Health check | [/api/v1/status](https://pet-oasis-api.maiahub.com.br/api/v1/status) |
 
 Ambas as rotas de documentação são públicas. Abaixo, três roteiros para ver o sistema funcionando de verdade — não só a lista de endpoints.
 
@@ -65,7 +65,7 @@ O ambiente demo é resetado diariamente às **04:00 UTC** (dados de teste voltam
 
 A conta demo é isenta do account lockout (a role `demo` a identifica): como a senha acima é pública, travar a conta por tentativas erradas travaria o acesso de **todo mundo**, não protegeria credencial nenhuma. O rate limit por IP continua valendo normalmente.
 
-1. Abra a **[referência interativa](https://api.pet-oasis.maiahub.com.br/reference)**.
+1. Abra a **[referência interativa](https://pet-oasis-api.maiahub.com.br/reference)**.
 2. Chame `POST /auth/login` com as credenciais acima e copie o `accessToken` da resposta.
 3. Cole o token no botão **Authorize** (canto superior) — a partir daí todas as chamadas vão autenticadas.
 4. Agora provoque a autorização:
@@ -79,7 +79,7 @@ O 403 não é um endpoint travado: é o mesmo motor de permissões calculando, e
 <summary><b>Prefere o terminal?</b></summary>
 
 ```bash
-BASE=https://api.pet-oasis.maiahub.com.br/api/v1
+BASE=https://pet-oasis-api.maiahub.com.br/api/v1
 
 TOKEN=$(curl -s -X POST $BASE/auth/login \
   -H 'Content-Type: application/json' \
@@ -120,7 +120,7 @@ Dali em diante dá para explorar o resto: `GET /auth/sessions` lista suas sessõ
 O catálogo responde **sem token**: um e-commerce vive de quem chega pelo Google antes de ter cadastro. Cole no terminal — não precisa de login:
 
 ```bash
-BASE=https://api.pet-oasis.maiahub.com.br/api/v1
+BASE=https://pet-oasis-api.maiahub.com.br/api/v1
 
 # 1. A vitrine, anônima
 curl -s "$BASE/products?limit=3" | head -c 600
@@ -206,7 +206,7 @@ A rota é a mesma e o corpo é outro: aparecem `status`, `stockQuantity` exato e
 </td></tr>
 </table>
 
-📋 O índice completo de rotas está em [`docs/reference/endpoints.md`](docs/reference/endpoints.md) — e o contrato formal, sempre atualizado, é o próprio [`/openapi.json`](https://api.pet-oasis.maiahub.com.br/openapi.json).
+📋 O índice completo de rotas está em [`docs/reference/endpoints.md`](docs/reference/endpoints.md) — e o contrato formal, sempre atualizado, é o próprio [`/openapi.json`](https://pet-oasis-api.maiahub.com.br/openapi.json).
 
 ---
 

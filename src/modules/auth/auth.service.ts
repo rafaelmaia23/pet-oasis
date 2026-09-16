@@ -100,7 +100,18 @@ export async function login(
         targetId: user.id,
         metadata: { reason: "LOCKED" },
       });
-      throw createTooManyRequestsError();
+      // 10.22: o mesmo `Retry-After` do rate limit — o guia de integração
+      // promete o header em todo 429, e o cliente renderiza "tente em N" a
+      // partir dele. A prosa continua genérica: o número mora só aqui.
+      const msUntilUnlock = lockoutState.lockedUntil - Date.now();
+      throw createTooManyRequestsError({
+        headers: {
+          "Retry-After": Math.max(
+            1,
+            Math.ceil(msUntilUnlock / 1000),
+          ).toString(),
+        },
+      });
     }
   }
 

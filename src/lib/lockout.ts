@@ -144,18 +144,30 @@ async function writeState(userId: string, state: LockoutState): Promise<void> {
   await redis.pexpire(key, env.LOCKOUT_MAX_MS);
 }
 
+/**
+ * `lockedUntil` só vem preenchido enquanto a trava vale (10.22): é o que o
+ * login transforma em `Retry-After`. Fora da janela, ou com o store fora do
+ * ar, é `null` — nunca um instante inventado para um 429 que não vai existir.
+ */
 export async function getLockoutState(
   userId: string,
-): Promise<{ isLocked: boolean }> {
+): Promise<
+  | { isLocked: true; lockedUntil: number }
+  | { isLocked: false; lockedUntil: null }
+> {
   try {
     const state = await readState(userId);
-    return { isLocked: isLocked(state, Date.now()) };
+    // `isLocked` já garante `lockedUntil !== null`; o tipo não sabe.
+    if (isLocked(state, Date.now()) && state.lockedUntil !== null) {
+      return { isLocked: true, lockedUntil: state.lockedUntil };
+    }
+    return { isLocked: false, lockedUntil: null };
   } catch (error) {
     log.error(
       { err: error, userId },
       "lockout store unavailable, failing open",
     );
-    return { isLocked: false };
+    return { isLocked: false, lockedUntil: null };
   }
 }
 

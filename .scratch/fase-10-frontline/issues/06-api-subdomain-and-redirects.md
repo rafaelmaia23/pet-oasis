@@ -9,11 +9,11 @@ e para uma receita de nginx/certbot/301 que não corresponde ao servidor real.
 **Blocked by:** nada. A 02 (rede `proxy`, porta despublicada) já está mergeada, e é o que o proxy
 host do NPM precisa.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-**Triagem:** ready-for-agent — as três decisões que esta issue precisava estão tomadas (abaixo);
-o que resta no repositório é reescrita de documentação e apontadores, sem regra de negócio nova.
-A parte do servidor está listada à parte, para o operador, e a verificação final fecha a issue.
+**Triagem:** ready-for-human — a parte de agente está mergeada (`5fcc244`); DNS, certificado e
+proxy host já foram refeitos para o nome novo. Falta só o que exige o `prod:up` da fase: a
+verificação manual de ponta a ponta, registrada aqui, e a confirmação do `.env.production`.
 
 ## Decisões (usuário, 2026-09-16)
 
@@ -106,21 +106,22 @@ já está no apex no servidor); `src/docs/openapi.ts` (`servers` relativo segue 
 
 ## Critérios
 
-- [ ] Nenhuma ocorrência de `api.pet-oasis.maiahub` fora de `.scratch/` (o histórico das issues
-      pode manter).
-- [ ] Nenhuma menção a 301 do apex, `certbot`, HTTP-01 ou server block cru fora de `.scratch/`
-      — `grep -rn -i "301\|certbot\|server block" docs/ README.md .env.example` limpo, exceto
-      onde "nginx" é o nome genérico do reverse proxy (essas ficam).
-- [ ] `docs/context/infrastructure.md` narra as três decisões acima como reescrita da 10.6
+- [x] Nenhuma ocorrência de `api.pet-oasis.maiahub` fora de `.scratch/` **como apontador** — as
+      duas que restam (`infrastructure.md`, `backlog.md`) são a narrativa da reversão, que o
+      `CLAUDE.md` manda manter. O critério original dizia "zero" e estava literal demais.
+- [x] Nenhuma menção a 301 do apex, `certbot`, HTTP-01 ou server block cru fora de `.scratch/`
+      **como instrução** — as três que restam (`context.md`, `infrastructure.md`, `backlog.md`)
+      dizem "planejado e descartado". Mesma ressalva do item anterior.
+- [x] `docs/context/infrastructure.md` narra as três decisões acima como reescrita da 10.6
       (não como decisão nova + errata), e a cadeia de IP com Cloudflare está ligada à 10.2.
-- [ ] `deploy.md` § "Domínio e reverse proxy" descreve o NPM + desafio DNS + `CF-Connecting-IP`,
+- [x] `deploy.md` § "Domínio e reverse proxy" descreve o NPM + desafio DNS + `CF-Connecting-IP`,
       com o roteiro *Verificar* apontando para o host novo e sem 301.
 - [x] **Sem migration:** o banco guarda a chave do arquivo, nunca a URL — trocar a variável
       basta. A decisão do ADR de armazenamento paga dividendo aqui.
 - [x] **Sem mudança na especificação:** o campo de servidores é relativo e segue o host que
       serve o documento.
-- [ ] `npm run docs:check`, `lint`, `typecheck` verdes (nenhuma linha de aplicação muda — a
-      suíte não é afetada).
+- [x] `npm run docs:check`, `lint`, `typecheck` verdes; suíte completa (**1288**) verde na
+      `fase-10` depois dos merges da 10 e da 06.
 - [ ] **Verificação manual (depois do deploy)**, registrada aqui no formato da 02: TLS válido no
       host novo (`curl -w '%{http_code} %{ssl_verify_result}'` → `200 0`), uma imagem do
       catálogo servida pelo host novo, e um login recusado de fora gravando em `audit_logs` o IP
@@ -130,11 +131,12 @@ já está no apex no servidor); `src/docs/openapi.ts` (`servers` relativo segue 
 
 Feito em 2026-09-16, ainda com o nome anterior — a ser **refeito para `pet-oasis-api.maiahub.com.br`**:
 
-- [ ] Registro `A` de `pet-oasis-api.maiahub.com.br` na Cloudflare (proxiado, como os demais).
-- [ ] Certificado Let's Encrypt por desafio DNS para o nome novo.
-- [ ] Proxy host no NPM: `pet-oasis-api.maiahub.com.br → pet-oasis-api:3000`, redirect da raiz
+- [x] Registro `A` de `pet-oasis-api.maiahub.com.br` na Cloudflare (proxiado, como os demais).
+      *(usuário, 2026-09-16)*
+- [x] Certificado Let's Encrypt por desafio DNS para o nome novo. *(usuário, 2026-09-16)*
+- [x] Proxy host no NPM: `pet-oasis-api.maiahub.com.br → pet-oasis-api:3000`, redirect da raiz
       para `/reference`, custom config `real_ip_header CF-Connecting-IP; real_ip_recursive off;`.
-      O NPM na rede docker `proxy`.
+      O NPM na rede docker `proxy`. *(usuário, 2026-09-16 — conferir a rede no deploy)*
 - [ ] `UPLOAD_PUBLIC_BASE_URL=https://pet-oasis-api.maiahub.com.br/uploads` no `.env.production`
       (hoje está com o host anterior).
 - [ ] O registro/proxy host de `api.pet-oasis.maiahub.com.br` pode ser removido — não há link
@@ -153,3 +155,25 @@ ponta a ponta da 04); até lá o proxy host aponta para um nome que não resolve
   NPM para o nome antigo; a verificação de fora achou o handshake TLS falhando por ser nome de
   segundo nível atrás do proxy da Cloudflare. Na mesma data: 301 descartados, nome trocado para
   `pet-oasis-api.maiahub.com.br`, e esta issue reescrita como retrabalho de agente.
+
+## Fecho da parte de agente (2026-09-16, merge `5fcc244`)
+
+Executada num worktree paralelo, revisada em duas trilhas (padrões + spec). O que a revisão e
+o agente devolveram, e o que se decidiu sobre cada ponto:
+
+- **Os greps "zero ocorrências" falhavam em 5 linhas**, todas narrativa da reversão
+  (`infrastructure.md`, `backlog.md`, `context.md`). Mantidas: a regra do `CLAUDE.md` é reescrever
+  narrando, não apagar. Os dois critérios foram reescritos acima para dizer o que queriam dizer.
+- **`docs/todo.md` não foi tocado na branch** — o bloco da fase que a issue mandava editar só
+  existia no working tree da sessão principal; foi commitado lá (`6b755f4`) e conciliado no
+  merge da 10.
+- **A lista "O que muda" cita números de linha**, que `docs/agents/issue-tracker.md` desaconselha
+  e que já envelheceram. Ficam como estão: é levantamento de trabalho já executado, não
+  instrução futura.
+- **Ressalva factual levantada pelo agente — e refutada na fonte:** ele supôs que o NPM de fábrica
+  traria `real_ip_header X-Forwarded-For; real_ip_recursive on;`, o que tornaria o override por
+  `CF-Connecting-IP` redundante. O `nginx.conf` do NPM (`docker/rootfs/etc/nginx/nginx.conf`,
+  branch `develop`) traz `real_ip_header X-Real-IP; real_ip_recursive on;` mais `set_real_ip_from`
+  das três faixas privadas e o `include` de `ip_ranges.conf`. A Cloudflare **não** manda
+  `X-Real-IP`, então sem o override o `$remote_addr` continua sendo a borda da Cloudflare — o
+  modo de falha descrito em `infrastructure.md` está correto como está.

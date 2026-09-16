@@ -143,10 +143,9 @@
   issues 15 a 20; a 21 é o fecho). Fechadas: 01, 02, 03, 05, 07, 08, 09, 10, 11, 12, 13, 14,
   15, 16, 17, 18, 19.
 - Abertas, e o que cada uma espera:
-  - **06** (subdomínio da API): **retrabalho** — o nome virou `pet-oasis-api.maiahub.com.br`
-    (segundo nível não fecha TLS atrás do proxy da Cloudflare), sem 301 no apex, e o reverse
-    proxy real é o NPM com desafio DNS; reescrever README, `deploy.md`, `infrastructure.md`,
-    backlog e apontadores. O operador refaz DNS/certificado/proxy host para o nome novo.
+  - **06** (subdomínio da API): a parte de agente está mergeada — nome `pet-oasis-api.maiahub.com.br`,
+    sem 301 no apex, NPM + desafio DNS documentados; DNS, certificado e proxy host já refeitos no
+    servidor. Falta a verificação de ponta a ponta depois do `prod:up`.
   - **04** (uploads fora do working tree) e **20** (rede `pet-oasis`): só a verificação no
     servidor, no primeiro `prod:up` depois do merge.
   - **21** (fecho): aviso do guia de integração, backlog, tabela de rastreio, spec, este bloco.

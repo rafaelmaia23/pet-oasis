@@ -1,14 +1,13 @@
 # pet-oasis — TODO
 
-> Estado e ordem das tarefas. Consulte antes de começar; atualize ao concluir.
+> O **índice** das fases: estado de cada uma, ponteiro para a fase aberta, resumo destilado
+> das fechadas. O caderno de trabalho — spec e issues — vive em `.scratch/<slug>/`.
 > Detalhes de decisões em `docs/context.md`. Regras de negócio firmadas no `CLAUDE.md`.
 >
-> **Forma de registro:** fase fechada fica **resumida** (o que entregou, em bullets); fase em
-> execução fica **expandida** (passo-a-passo, decisões de kickoff, pendências). Ao fechar uma
-> fase, o expandido é destilado — o *porquê* migra para `docs/context.md`/ADRs e o detalhe de
-> execução permanece no histórico do git. O molde das duas formas e as regras da transição
-> estão em [`guides/todo-phases.md`](guides/todo-phases.md); o mapa da documentação inteira,
-> em [`README.md`](README.md).
+> **Forma de registro:** fase aberta fica em poucas linhas, com o ponteiro para a pasta do
+> esforço; fase fechada é **destilada** em bullets de resultado. O molde das duas formas e as
+> regras da transição estão em [`guides/todo-phases.md`](guides/todo-phases.md); o mapa da
+> documentação inteira, em [`README.md`](README.md).
 
 ## Legenda
 ✅ feito · 🔄 em andamento · ⬜ a fazer · 🔸 polimento (não bloqueia)
@@ -112,16 +111,16 @@
 
 ---
 
-# Ciclo 2 — Domínio pet shop (Fases 9–10)
+# Ciclo 2 — Domínio pet shop (Fases 9–11)
 
 > Abre o domínio do pet shop em si. A numeração das fases **continua global** (9, 10, …): o
 > ciclo é agrupamento de leitura, não reinício de contagem — a convenção de branch do
-> `CLAUDE.md` (`fase-<n>`, `feat/fase-<n>-<m>-<slug>`) depende de um número único por fase.
-> A Fase 9 (fechada) trouxe pets e catálogo, ainda **sem checkout**; a Fase 10 traz carrinho,
-> pedido e pagamento.
+> `CLAUDE.md` (`fase-<n>`, `feat/fase-<n>-<NN>-<slug>`) depende de um número único por fase.
+> A Fase 9 (fechada) trouxe pets e catálogo, ainda **sem checkout**. A Fase 10 desbloqueia o
+> front web e paga a dívida de deploy; a Fase 11 traz carrinho, pedido e pagamento.
 
 ## Fase 9 — Domínio pet shop: pets e catálogo ✅
-> Abriu o Ciclo 2 com duas agregações quase independentes — pets (ligados a `Customer`) e catálogo (marca, categoria, tag, produto, variante) —, que só se tocam na faceta "para qual espécie este produto serve". **Sem checkout**: carrinho, pedido e pagamento são a Fase 10. 12 sessões (9.1–9.12), cada uma 1:1 com sua sub-fase e em feat-branch própria; as três últimas de kickoff em grelha (17, 19 e 13 decisões fechadas antes de qualquer linha). Racional em `docs/context/pet-domain.md` (índice) e nos ADRs `pet-domain-modeling.md`, `product-catalog-modeling.md`, `product-vs-service.md`, `text-search.md`, `file-storage-and-uploads.md` e no adendo de `pagination.md`; o que ficou de fora, com o motivo, em `docs/reference/backlog.md`.
+> Abriu o Ciclo 2 com duas agregações quase independentes — pets (ligados a `Customer`) e catálogo (marca, categoria, tag, produto, variante) —, que só se tocam na faceta "para qual espécie este produto serve". **Sem checkout**: carrinho, pedido e pagamento são a Fase 11. 12 sessões (9.1–9.12), cada uma 1:1 com sua sub-fase e em feat-branch própria; as três últimas de kickoff em grelha (17, 19 e 13 decisões fechadas antes de qualquer linha). Racional em `docs/context/pet-domain.md` (índice) e nos ADRs `pet-domain-modeling.md`, `product-catalog-modeling.md`, `product-vs-service.md`, `text-search.md`, `file-storage-and-uploads.md` e no adendo de `pagination.md`; o que ficou de fora, com o motivo, em `docs/reference/backlog.md`.
 - **RBAC do domínio e a decisão que moldou a fase (9.1):** 9 features novas pelo critério "existe cargo real que tem esta e não a vizinha", nenhuma privilegiada (custo/margem fica fora de `PRIVILEGED_FEATURES` — o guard existe contra escalação do próprio RBAC, e quem delega visibilidade de custo é o gerente), e duas roles de funcionário (`stockist`, `catalog-manager`, com `manager` provado superconjunto por teste). Junto veio a decisão estruturante: **a vitrine do catálogo responde sem token**, porque e-commerce vive de quem chega pelo Google sem conta — o que exigiu, na 9.6, um terceiro modo de autenticação (`optionalAuthenticate`, que segue anônimo até com token ruim, sem nunca responder 401).
 - **Ordenação configurável (9.2), dívida do backlog paga antes de gerar retrabalho:** `?sort=&order=` só no offset (no cursor a chave teria que codificar o campo), allowlist como **mapa** campo → direção natural, `?order=` sem `?sort=` é 422, e tiebreaker por `id` também no offset — que fechou um furo pré-existente em `GET /users`.
 - **Pets (9.3–9.5):** `PetSpecies` é enum fechado **sem `OUTRO`** (buraco permanente de qualidade de dado; espécie nova é migration barata), `Breed` é catálogo curado de 142 raças semeado uma vez e **nunca consultado em runtime**, e `SPECIES_WITH_BREED` é constante explícita (só cão e gato) em vez de derivada de "existe raça para esta espécie". `microchipId` é unique **global**, valendo para a linha excluída. `deceasedAt` ≠ `deletedAt`: o pet falecido continua na lista do dono. O escopo é decidido em duas etapas (rota admite dono e staff, service separa) e o alvo inexistente **falha fechado** em 403, senão a rota vira oráculo de existência. `Pet` virou o primeiro filho de **domínio** da cascata da Fase 8 — desce na deleção, volta por correlação de data.
@@ -131,14 +130,33 @@
 - **Busca textual (9.9), o maior risco técnico da fase:** Postgres nativo (`tsvector` + `unaccent` + `pg_trgm`) por escolha explícita do usuário contra a recomendação inicial de `ILIKE`, com motivação didática. A decisão estruturante foi tratar erro de digitação **reescrevendo a query** contra um dicionário de lexemas — não por fallback no vazio nem por pontuação combinada, que falham justamente no caso "uma palavra certa e uma errada". O SQL cru **só ranqueia**: a visibilidade continua saindo do `buildProductWhere`, e é isso que impede rascunho e linha excluída de vazarem pela busca.
 - **Upload (9.10):** três donos pela mesma tubulação, adaptador de storage com o banco guardando a **chave** e nunca a URL, dois derivados WebP por imagem com dimensões por dono, formato conferido pelos **bytes**. A promessa do ADR ("servido pelo reverse proxy, sem passar por Node") caiu por verificação: o proxy existe no servidor, não neste repositório — quem serve é `express.static`, com bind mount para que a troca futura seja config e não código. A linha de imagem é o **único hard delete de domínio** do projeto (imagem é asset, não fato de negócio), e o rate limit por **usuário** foi o primeiro do projeto com chave que não é IP nem email.
 - **Seed fake e `demo-reset` (9.11):** 9 marcas, 20 categorias em 3 níveis, 8 tags, 35 produtos (51 variantes) e 15 pets em 12 donos, sob `SEED_FAKE_DATA`. O dataset é **cobertura de cenário, não volume**: cada rascunho, descontinuado e esgotado existe porque torna um filtro ou uma view demonstrável. Os bytes das imagens viraram base64 num `.ts` depois que a verificação derrubou o plano herdado — o estágio `runtime` do Dockerfile não copia `src/`, e o seed de produção não acharia arquivo nenhum. O `demo-reset` passou a limpar o upload **por prefixo de dono**, nunca a raiz.
-- **Fechos (9.12):** a revisão da fase inteira rodou **antes** da documentação e achou cinco defeitos — o pior deles `?inStock=` apagando a faixa de preço em silêncio, que o `endpoints.md` descrevia como cumulativa; documentar primeiro teria sido documentar mentira. Junto, consertou-se uma regra de processo: um ADR citava um documento de `docs/planning/` escrito para ser descartável, o que separou `.scratch/` (rascunho fora do git) de `docs/specs/` (spec em negociação), virou verificação no `docs:check` e produziu `docs/README.md` e `docs/guides/todo-phases.md`. O rastreio decisão → destino, feito antes de encolher esta seção, achou cinco decisões sem dono permanente e escreveu os donos — inclusive a seção de Fase 9 que faltava em `docs/context/schema.md`. Suíte (**1193**) + `typecheck` + `lint` + `docs:check` verdes.
+- **Fechos (9.12):** a revisão da fase inteira rodou **antes** da documentação e achou cinco defeitos — o pior deles `?inStock=` apagando a faixa de preço em silêncio, que o `endpoints.md` descrevia como cumulativa; documentar primeiro teria sido documentar mentira. Junto, consertou-se uma regra de processo: um ADR citava um documento de `docs/planning/` escrito para ser descartável, o que separou rascunho de spec, virou verificação no `docs:check` e produziu `docs/README.md` e `docs/guides/todo-phases.md` — geografia depois revertida na Fase 10, regra mantida. O rastreio decisão → destino, feito antes de encolher esta seção, achou cinco decisões sem dono permanente e escreveu os donos — inclusive a seção de Fase 9 que faltava em `docs/context/schema.md`. Suíte (**1193**) + `typecheck` + `lint` + `docs:check` verdes.
 
 ---
 
-## ⬜ Fase 10 — Carrinho, pedido e pagamento
+## 🔄 Fase 10 — Desbloqueio do front web e dívida de deploy
+
+> Tudo que o `pet-oasis-web` precisa da API para sair do lugar, mais a dívida de deploy que já
+> derrubou a produção uma vez. Nenhum domínio novo. Spec e issues em
+> `.scratch/fase-10-frontline/`.
+- Progresso: 17 de 21 issues fechadas (as revisões da 07, da 15 e da 17 acrescentaram as
+  issues 15 a 20; a 21 é o fecho). Fechadas: 01, 02, 03, 05, 07, 08, 09, 10, 11, 12, 13, 14,
+  15, 16, 17, 18, 19.
+- Abertas, e o que cada uma espera:
+  - **06** (subdomínio da API): a parte de agente está mergeada — nome `pet-oasis-api.maiahub.com.br`,
+    sem 301 no apex, NPM + desafio DNS documentados; DNS, certificado e proxy host já refeitos no
+    servidor. Falta a verificação de ponta a ponta depois do `prod:up`.
+  - **04** (uploads fora do working tree) e **20** (rede `pet-oasis`): só a verificação no
+    servidor, no primeiro `prod:up` depois do merge.
+  - **21** (fecho): aviso do guia de integração, backlog, tabela de rastreio, spec, este bloco.
+
+---
+
+## ⬜ Fase 11 — Carrinho, pedido e pagamento
 
 Ainda **não planejada**. O caminho está em [`docs/README.md`](README.md): a ideia crua nasce em
-`.scratch/`, é grelhada, vira spec em `docs/specs/` e só então desce para cá como
-sessões. O que já se sabe, decidido na Fase 9 e herdado por esta: `OrderItem` é **polimórfico**
-com CHECK constraint escrito à mão (ADR `docs/adr/product-vs-service.md`), e o item do pedido
-**grava** o preço em vez de lê-lo do produto.
+`.scratch/`, é grelhada, vira spec e issues na pasta do esforço, e só então desce para cá como
+resultado. O que já se sabe, decidido na Fase 9 e herdado por esta: `OrderItem` é
+**polimórfico** com CHECK constraint escrito à mão (ADR `docs/adr/product-vs-service.md`), e o
+item do pedido **grava** o preço em vez de lê-lo do produto. Do backlog, `StockMovement` é
+desta fase por definição — é onde a movimentação de estoque passa a ter causa.

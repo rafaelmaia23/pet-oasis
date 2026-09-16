@@ -1,7 +1,26 @@
+import { buildCustomer } from "@tests/factories/user.factory";
+import { forgeAccessToken, loginAs } from "@tests/helpers/auth";
+import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
+import jwt from "jsonwebtoken";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import app from "@/app";
 import { env } from "@/config/env";
+import { ACCESS_TOKEN_ALGORITHM } from "@/lib/accessToken";
+
+// A allowlist de CORS sai **só** de `CORS_ALLOWED_ORIGINS` (10.11) — nada entra
+// por inércia, nem a `APP_URL`. `vi.hoisted` roda antes dos imports, então as
+// duas variáveis já estão fixadas quando `@/config/env` é lido — o teste não
+// depende do `.env.test` de cada máquina, e as duas origens são distintas por
+// construção.
+const { allowedOrigin, appUrl } = vi.hoisted(() => {
+  const allowedOrigin = "https://browser-client.example";
+  const appUrl = "https://front.example";
+  process.env.CORS_ALLOWED_ORIGINS = allowedOrigin;
+  process.env.APP_URL = appUrl;
+  return { allowedOrigin, appUrl };
+});
 
 describe("Bordas HTTP — helmet", () => {
   it("should send the security headers on an API response", async () => {
@@ -72,11 +91,23 @@ describe("Bordas HTTP — CORS", () => {
   it("should answer a preflight from an allowed origin with credentials", async () => {
     const response = await request(app)
       .options("/api/v1/auth/login")
-      .set("Origin", env.APP_URL)
+      .set("Origin", allowedOrigin)
       .set("Access-Control-Request-Method", "POST");
 
-    expect(response.headers["access-control-allow-origin"]).toBe(env.APP_URL);
+    expect(response.headers["access-control-allow-origin"]).toBe(allowedOrigin);
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
+  });
+
+  // A URL pública do cliente (`APP_URL`) é o front, e o front fala com a API
+  // pelo servidor (BFF) — nunca pelo navegador. Entrar na allowlist por ser
+  // "quem chama" seria permissão concedida a um consumidor que não existe.
+  it("should not grant APP_URL an origin by inertia", async () => {
+    const response = await request(app)
+      .get("/api/v1/status")
+      .set("Origin", appUrl);
+
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(response.status).toBe(200);
   });
 
   it("should not send CORS headers to an origin outside the allowlist", async () => {
@@ -142,5 +173,69 @@ describe("Bordas HTTP — limite de corpo", () => {
     // 422 e não 413: o corpo atravessou o body-parser intacto e morreu na
     // validação do schema, que é o que se queria provar.
     expect(response.status).toBe(422);
+  });
+});
+
+// Endurecimento do JWT (10.10) visto de fora: um token forjado com o **mesmo
+// segredo** e uma só claim fora do lugar morre no `authenticate` com o mesmo
+// 401 genérico de token inválido — o cliente não fica sabendo qual claim foi.
+// Cada peça do contrato tem o caso próprio na lib; aqui o que se prova é que a
+// fronteira HTTP honra o contrato, e que o caminho feliz sobreviveu a ele.
+describe("Bordas HTTP — JWT", () => {
+  afterEach(async () => {
+    await clearDatabase();
+    await flushRedis();
+  });
+
+  async function whoAmI(token: string) {
+    return request(app)
+      .get("/api/v1/me")
+      .set("Authorization", `Bearer ${token}`);
+  }
+
+  it("should accept the token the login issued", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await whoAmI(token);
+
+    expect(response.status).toBe(200);
+    expect(response.body.id).toBe(user.id);
+  });
+
+  it.each([
+    ["another algorithm", { algorithm: "HS512" as const }],
+    ["another issuer", { issuer: "someone-else" }],
+    ["another audience", { audience: "some-other-service" }],
+  ])(
+    "should refuse a token signed with our secret but for %s",
+    async (_label, options) => {
+      const user = await buildCustomer();
+
+      const response = await whoAmI(
+        forgeAccessToken({ sub: user.id }, options),
+      );
+
+      expect(response.status).toBe(401);
+      expect(response.body).toMatchObject({
+        message: "Token de autenticação inválido ou expirado",
+        code: "UNAUTHORIZED",
+      });
+    },
+  );
+
+  // A consequência de implantar a 10.10: o token emitido pela versão anterior
+  // não carrega `iss`/`aud`, então morre no deploy. Com 15 minutos de vida a
+  // janela é curta, e o `refresh` recompõe o par — mas é preciso dizê-lo.
+  it("should refuse a token issued before the hardening (no iss/aud)", async () => {
+    const user = await buildCustomer();
+    const legacyToken = jwt.sign({ sub: user.id }, env.JWT_SECRET, {
+      algorithm: ACCESS_TOKEN_ALGORITHM,
+      expiresIn: "15m",
+    });
+
+    const response = await whoAmI(legacyToken);
+
+    expect(response.status).toBe(401);
   });
 });

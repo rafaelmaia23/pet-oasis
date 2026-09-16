@@ -145,13 +145,44 @@ erro de `enableOfflineQueue`. Escopado por arquivo, fica no mesmo idioma explíc
 
 ## Hardening HTTP
 
-### `app.set("trust proxy", 1)` (D7)
+### `trust proxy` é por endereço de origem, não por contagem de saltos (D7, revisto na 10.2)
 
-O deploy tem proxy reverso na frente, então `req.ip` sem isso é o IP do proxy — o mesmo para todo
-mundo. Rate limit por IP, `Session.ipAddress` e o `ip` do audit log passariam a registrar (e
-limitar) uma origem só, quebrando os três de uma vez, em silêncio. O `1` é literal e não `true`:
-confia em **um** salto, o proxy que sabemos existir; `true` confiaria na cadeia inteira de
-`X-Forwarded-For`, que o cliente pode forjar.
+O deploy tem proxy reverso na frente, então `req.ip` sem `trust proxy` é o IP do proxy — o mesmo
+para todo mundo. Rate limit por IP, `Session.ipAddress` e o `ip` do audit log passariam a
+registrar (e limitar) uma origem só, quebrando os três de uma vez, em silêncio.
+
+A primeira forma disso foi `app.set("trust proxy", 1)`: um salto, o proxy que sabemos existir.
+**Ela deixou de servir na 10.2**, quando um cliente que renderiza no servidor (o front web) passou
+a chamar a API em nome do visitante. A partir daí duas cadeias vivem ao mesmo tempo —
+`visitante → nginx → api`, com um salto, e `visitante → nginx → front → api`, com dois — e
+**nenhuma contagem única acerta as duas**: `1` grava o container do front, `2` grava o nginx
+quando a chamada não passou pelo front. Contar saltos pressupõe uma topologia só. (Na prática há
+ainda a borda da Cloudflare na frente do nginx; ela não entra na conta porque o **proxy** resolve
+o IP real do visitante a partir de `CF-Connecting-IP` antes de encaminhar — decisão da 10.6, em
+[`infrastructure.md`](infrastructure.md) § "A API atende num subdomínio, e o apex fica limpo".)
+
+A forma que serve as duas é confiar por **endereço**:
+
+```ts
+app.set("trust proxy", ["loopback", "uniquelocal"]);
+```
+
+O Express caminha o `X-Forwarded-For` da direita para a esquerda pulando endereços confiáveis e
+para no primeiro que não é. Consequência de contrato, deliberada: o cliente pode **copiar** o
+header que recebeu ou **acrescentar** o próprio salto, tanto faz — transformar um detalhe de
+implementação do cliente em pré-requisito de segurança da API seria acoplamento gratuito. O
+contrato do lado do cliente está em
+[`guides/integrating-with-the-api.md`](../guides/integrating-with-the-api.md).
+
+**O que torna isso seguro é a porta 3000 não ser publicada no host em produção** (10.2, no
+`infra/docker-compose.prod.yml`). Confiar em endereço privado com a porta publicada seria o furo
+que `true` sempre foi: qualquer um forjaria o próprio IP e furaria rate limit, lockout e audit log
+de uma vez. Sem publicação, uma conexão vinda da internet direto na API não existe — quem alcança
+a API por endereço privado é só o nginx e os containers das redes declaradas. As duas mudanças são
+**uma decisão só**, e é por isso que republicar a porta "só para depurar" reabre o buraco.
+
+Chamada que **não** é em nome de um visitante (job, health check, script) não manda o header, e aí
+o IP registrado é o do próprio cliente — que é o correto.
 
 ### Corpo grande demais é 413
 
@@ -167,6 +198,127 @@ Quem bloqueia uma origem estranha é o **navegador**, que só precisa da ausênc
 `Access-Control-Allow-Origin`; lançar ali viraria 500 numa requisição que a API atendeu
 corretamente. Request sem `Origin` (curl, Bruno, a própria suíte) passa — CORS não é autenticação
 e não deve virar uma.
+
+### A allowlist de CORS sai só da variável explícita — a `APP_URL` não entra por inércia (10.11)
+
+Na Fase 7 a allowlist nasceu como `[APP_URL, ...CORS_ALLOWED_ORIGINS]`: a URL pública do cliente
+entrava sozinha, por ser presumidamente quem chama por navegador. A Fase 10 desfez isso. Depois
+da migração de domínio a `APP_URL` é o front, e o front adota BFF — quem fala com a API é o
+servidor dele, e a requisição chega **sem `Origin`**. A entrada automática viraria permissão
+concedida a um consumidor que não existe, e permissão que ninguém pediu é permissão que ninguém
+revisa. Hoje `src/config/cors.ts` monta a lista **só** de `CORS_ALLOWED_ORIGINS`, e a lista vazia é o
+estado esperado enquanto o único cliente for o front com BFF. O middleware e a variável ficam para o dia em que houver uma página web de outra
+origem chamando a API direto do JavaScript — esse é o único cliente que precisa de CORS. App
+mobile nativo **não** é motivo para reabrir a allowlist: não há navegador, não há preflight. A
+tabela de quem precisa e quem não precisa está em
+[`guides/integrating-with-the-api.md`](../guides/integrating-with-the-api.md#3-cors-quando-se-aplica-e-quando-não).
+A `APP_URL` continua existindo, mas só para o que sempre foi dela: os links dos emails.
+
+### Mass assignment: schema de update é `.strict()`, e a proteção tem teste próprio (10.12)
+
+O que só o sistema escreve — estado da conta, marca de banimento, `mustChangePassword`,
+`passwordHash`, vínculo de papel, `deletedAt`, dono de um recurso — nunca pode chegar pelo corpo
+da requisição. A defesa está no schema, não no service: todo schema de **update** é `.strict()`
+(chave desconhecida → 422 nomeando a chave em `errors.body`, e a requisição inteira é recusada,
+inclusive o campo legítimo que veio junto), e o que o endpoint recusa de propósito tem `z.never`
+com mensagem própria (`cpf`, `email`, `roleNames` no user; `customerId`, `deceasedAt` no pet;
+`logoPath` na marca). Os schemas de **create** e o `PUT` do override ficam no modo padrão do Zod,
+que *descarta* a chave desconhecida — e é o corpo parseado, não `req.body`, que segue para o
+service, então a chave descartada não existe mais quando o Prisma monta o `data`.
+
+O levantamento da Fase 10 não achou schema permissivo. O que faltava era o teste: essa é a
+classe de proteção que se perde em silêncio num refactor (um `.strict()` que vira `.strip()`, um
+`.extend()` na ordem errada, um `data: req.body` num controller novo) e que ninguém nota até virar
+incidente. `tests/integration/v1/mass-assignment.test.ts` cobre cada endpoint de escrita que
+recebe corpo — os sete `PATCH`, o `PUT` do override, e os `POST` que criam conta ou perfil ou
+alteram estado (`signup`, `users`, `ban`, `reactivate`, `change-password`, `change-email`,
+perfil de cliente) — com um caso que prova as duas metades. Nos `.strict()`, a chave privilegiada
+é recusada **por nome** e a linha é idêntica à de antes (a recusa é da requisição inteira, o campo
+legítimo que veio junto também não entra). Nos strip, a resposta é de sucesso e a coluna carrega o
+valor **do sistema** — `PENDING` no signup, o relógio e o ator no ban, `pendingEmail` e não
+`email` na troca de endereço —, nunca o do corpo; por isso cada probe manda um valor distinto do
+default, senão a asserção seria vácua. O vermelho foi verificado trocando `.strict()` por
+`.strip()` em dois schemas: os dois casos falharam apontando a chave que passou a entrar. Schema
+de escrita novo entra nesse arquivo no mesmo commit em que nasce — regra apontada em `CLAUDE.md`,
+que é onde quem cria schema lê.
+
+### Todo campo de texto tem teto, e o teto é contrato (10.13)
+
+O limite total de corpo (`JSON_BODY_LIMIT`, 100kb) protege o agregado, mas nada impedia quase
+todo ele dentro de um único campo: 99KB num `email` de login passavam pelo `z.email()` (o regex
+não tem tamanho), iam ao banco, inchavam o índice único e, agora que existe log estruturado,
+viravam uma linha de log de 99KB. A defesa é a mesma do mass assignment — no **schema**, não no
+service: todo campo de texto tem `.max()`, e acima dele a resposta é 422 nomeando o campo, o
+mesmo shape de toda validação sintática.
+
+Nenhuma coluna do Prisma declara tamanho (`String`, nunca `@db.VarChar`), então "coerente com a
+coluna" virou "coerente com o que o campo representa", e o motivo de cada teto está gravado ao
+lado da constante. Os do catálogo e do pet já nasceram com teto (9.4–9.9); o que faltava era
+identidade e sessão, e cada um tem um número que se **deriva**, não que se escolhe: email 254 é o
+caminho máximo do RFC 5321; senha 100 é o teto do `passwordSchema` reaplicado onde ela é só
+conferida — senha maior nunca foi gravada, então nunca vai bater, e recusar antes do bcrypt não
+muda o resultado, só o custo; token 64 é o hex dos 32 bytes que `generateOpaqueToken` emite, e a
+constante mora ao lado do gerador para que mudar um mude o outro; `targetId` 36 é o uuid que todo
+audit grava; `cursor` 128 é folga sobre os 100 do base64url de `{ c, i }`. CPF 14 e telefone 20
+são as **máscaras** (`000.000.000-00`, `+55 (11) 9 8765-4321`), e o `.max()` fica **antes** do
+`transform` que tira os separadores — de propósito: o teto é sobre o que o cliente digita, senão
+onze dígitos afogados em 99KB de hífen passariam pelo `length(11)` de depois.
+
+As peças ficaram **uma por conceito** (`emailSchema`, `cpfSchema`, `phoneSchema` em
+`user.schema.ts`; o teto de senha conferida e o de token em `auth.schema.ts`): o telefone estava
+copiado três vezes (signup, perfil de cliente, reativação), e três cópias com teto seriam três
+lugares para o teto divergir. O teto sai no `/openapi.json` como `maxLength` de graça, porque a
+spec é gerada dos schemas — e é contrato: `openapi.test.ts` afirma uma amostra de cada classe
+(corpo, texto cru com máscara, query), para que um teto removido num refactor fique vermelho na
+spec, e não só num teste de módulo. Cada schema tocado tem o próprio teste, no arquivo do módulo,
+com o valor **acima** do teto: nada de teste-monólito varrendo schemas — a varredura foi o
+trabalho, o teste é a regressão. Campo de texto novo nasce com `.max()`, e a regra vive em
+`CLAUDE.md`, ao lado da do `.strict()`.
+
+O que **não** entrou, de propósito: `User-Agent` e `X-Forwarded-For` vão para `Session` e
+`AuditLog` sem teto próprio — são header, não campo de schema, e o único teto hoje é o do Node
+(`--max-http-header-size`, 16KB). E os inteiros sem `.max()` (`stockQuantity`, `weightGrams`,
+`volumeMl` da variante) não são texto, mas um valor acima de 2³¹ estoura o `Int` do Postgres
+antes de virar 422. Os dois estão no backlog.
+
+### O access token tem algoritmo pinado, `iss`/`aud` obrigatórios e folga de relógio explícita (10.10)
+
+`jwt.verify(token, segredo)` sem `algorithms` aceita o algoritmo que o **header do token**
+declarar — é a *algorithm confusion* de manual: com segredo simétrico, um `HS512` assinado pelo
+mesmo segredo passava; e, se um dia a verificação ganhasse chave pública, um `HS256` assinado com
+a própria chave pública como segredo passaria também. Sem `issuer`/`audience`, qualquer token que
+o segredo assine serve — venha ele de outro deploy que compartilhe o segredo por engano ou de
+outro uso futuro do mesmo segredo. O endurecimento é o de sempre: `algorithms: ["HS256"]`,
+`issuer` e `audience` exigidos, `clockTolerance` explícita.
+
+O que a issue chamou de "poucas linhas" ganhou um módulo, `src/lib/accessToken.ts`, por uma razão
+só: **quem assina e quem verifica leem as mesmas constantes.** Emissão no `auth.service` e
+verificação no `authenticate` liam cada uma o próprio `jwt.*` cru, e o contrato do token estava
+implícito na coincidência entre os dois — pinar o algoritmo num lado e esquecer o outro seria
+exatamente o tipo de deriva silenciosa que o hardening quer impedir. `signAccessToken` e
+`verifyAccessToken` são a fronteira: o middleware só sabe "passou" ou "não passou", e o motivo da
+recusa (assinatura, algoritmo, claim, validade) fica de fora de propósito, porque o 401 é o mesmo
+genérico para todos. `iss` e `aud` são **constantes, não env vars**, pelo mesmo motivo da janela
+de graça: não são botão de produção. Coincidem (`pet-oasis-api`) porque a API é as duas coisas —
+quem cunha e quem consome; o ganho está em **exigi-los**, não em distingui-los. A folga de relógio
+é de **5 segundos**: quem assina e quem verifica é o mesmo serviço sob NTP, a folga cobre desvio
+entre réplicas e não relógio de cliente, e toda folga estende a vida útil do token na mesma
+medida.
+
+**Consequência de implantação, dita em vez de descoberta:** o token emitido pela versão anterior
+não carrega `iss` nem `aud`, então o deploy desta mudança **invalida todo access token em voo**.
+Com 15 minutos de vida a janela é curta, e o cliente que já trata o 401 com `refresh` (o fluxo
+normal de expiração) recompõe o par sem que o usuário perceba — o refresh token é opaco e não
+muda. Um cliente que só trate expiração por relógio, sem reagir ao 401, vê uma sessão "expirar"
+antes da hora, uma vez. Há teste para o token no formato antigo, para que a consequência fique
+escrita onde se lê o comportamento.
+
+Os testes ficaram em dois seams: a lib (`tests/unit/lib/accessToken.test.ts`) prova cada peça do
+contrato isolada — forjando com o **mesmo segredo** e uma só coisa fora do lugar, para que a
+recusa venha da claim e não da assinatura —, e a fronteira HTTP (`security.test.ts`) prova que o
+`authenticate` honra o contrato e que o token do login continua entrando. O middleware tem um
+caso de regressão (audiência errada → 401) para o dia em que alguém religar um `jwt.verify` cru
+ali.
 
 ### Auto-hospedar o bundle do Scalar em vez de allowlistar o CDN
 

@@ -166,6 +166,10 @@ model Session {
   userId           String    @map("user_id")
   refreshTokenHash String    @unique @map("refresh_token_hash")
   usedAt           DateTime? @map("used_at")
+  /// Quando este elo já respondeu 503 dentro da janela de graça (10.18): a
+  /// retentativa que chegar depois de `usedAt + 10s` mas antes de
+  /// `graceDeferredAt + 30s` ainda é lida como concorrência, não como roubo.
+  graceDeferredAt  DateTime? @map("grace_deferred_at")
   userAgent        String?   @map("user_agent")
   ipAddress        String?   @map("ip_address")
   expiresAt        DateTime  @map("expires_at")

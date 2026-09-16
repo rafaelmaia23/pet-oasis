@@ -5,6 +5,15 @@
 # One install (not two parallel ones) keeps peak memory low enough for small VPSes.
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
+# OpenSSL antes do `npm ci`: é no install que o @prisma/engines escolhe qual
+# build do schema-engine baixar, detectando a versão do libssl. A bookworm-slim
+# não traz nem o binário `openssl` nem o libssl (o Node linka o seu
+# estaticamente), então a detecção falha e o Prisma cai no default silencioso
+# `debian-openssl-1.1.x` — que hoje roda, mas é a engine errada escolhida por
+# acidente, e o acidente muda de resultado em ARM64 ou num bump da imagem base.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 COPY prisma ./prisma
@@ -24,6 +33,14 @@ RUN npm prune --omit=dev
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# O mesmo OpenSSL do estágio de build, pelo outro lado da mesma detecção: o
+# entrypoint roda `prisma migrate deploy` a cada boot, e o CLI redetecta o
+# libssl ali. Sem isto, a detecção falha de novo e o log de inicialização abre
+# com dois blocos de warning; com isto, o que o boot detecta é o mesmo que o
+# build baixou. Precisa vir antes do `USER node` (apt exige root).
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 # prisma migrate deploy needs the schema + migrations + config; the prisma CLI is
@@ -38,12 +55,22 @@ ENTRYPOINT ["./docker-entrypoint.sh"]
 
 # ─── dev ──────────────────────────────────────────────────────────────────────
 # Full install (with devDeps), no bundle, no prune. Runs `tsx watch` against a
-# bind-mounted src/. Stays root (no `USER node`) so writes to the bind-mount and
-# to the anonymous src/generated volume don't hit host-uid mismatches. The
-# Prisma client is generated at container start into that anon volume
+# bind-mounted src/. No `USER node` here: the container *starts* as root so the
+# entrypoint can generate the Prisma client into the root-owned anonymous
+# src/generated volume, then drops to the host's uid/gid (HOST_UID/HOST_GID,
+# via `setpriv`) before anything writes to a bind mount — otherwise the files
+# the seed leaves in ../uploads belong to root on the host (10.16). The Prisma
+# client is generated at container start into that anon volume
 # (see infra/docker-compose.dev.yml + infra/docker-entrypoint.dev.sh) — not baked here.
 FROM node:22-bookworm-slim AS dev
 WORKDIR /app
+# O mesmo OpenSSL dos outros dois estágios, pelo mesmo motivo: o
+# docker-entrypoint.dev.sh roda `prisma generate` e `migrate deploy`, então o
+# `npm run dev` detecta o libssl igual ao boot de produção. Antes do `npm ci`,
+# que é onde o @prisma/engines escolhe qual schema-engine baixar.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 COPY prisma ./prisma

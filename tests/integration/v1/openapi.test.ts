@@ -128,4 +128,48 @@ describe("GET /openapi.json", () => {
       expect(operation?.security).toBeUndefined();
     }
   });
+
+  it("should name the per-condition codes of the login 403 (10.8)", async () => {
+    const { body } = await request(app).get("/openapi.json");
+
+    // A resposta 403 do login é uma por condição, e o cliente ramifica pelo
+    // `code`: a spec precisa nomeá-los, senão ficam só na prosa da API.
+    const forbidden = body.paths["/auth/login"].post.responses["403"];
+    expect(forbidden.description).toContain("ACCOUNT_BANNED");
+    expect(forbidden.description).toContain("PASSWORD_RESET_REQUIRED");
+    expect(forbidden.description).toContain("EMAIL_NOT_VERIFIED");
+  });
+
+  it("should publish the length limits as maxLength — they are contract (10.13)", async () => {
+    const { body } = await request(app).get("/openapi.json");
+
+    // Uma amostra de cada classe de campo: corpo JSON (email, senha, token),
+    // texto cru antes da normalização (phone, cpf) e query (cursor, targetId).
+    const login =
+      body.paths["/auth/login"].post.requestBody.content["application/json"]
+        .schema.properties;
+    expect(login.email.maxLength).toBe(254);
+    expect(login.password.maxLength).toBe(100);
+
+    const verify =
+      body.paths["/auth/verify-email"].post.requestBody.content[
+        "application/json"
+      ].schema.properties;
+    expect(verify.token.maxLength).toBe(64);
+
+    const signup =
+      body.paths["/auth/signup"].post.requestBody.content["application/json"]
+        .schema.properties;
+    expect(signup.phone.maxLength).toBe(20);
+    expect(signup.cpf.maxLength).toBe(14);
+
+    const params = body.paths["/audit-logs"].get.parameters as {
+      name: string;
+      schema: { maxLength?: number };
+    }[];
+    expect(params.find((p) => p.name === "cursor")?.schema.maxLength).toBe(128);
+    expect(params.find((p) => p.name === "targetId")?.schema.maxLength).toBe(
+      36,
+    );
+  });
 });

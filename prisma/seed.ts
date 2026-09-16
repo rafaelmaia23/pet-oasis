@@ -36,6 +36,17 @@ async function main() {
     );
   }
 
+  // Um passo de demonstração que falhou já foi logado em nível de erro lá
+  // dentro (10.3) — mas o entrypoint segue e o boot continua, então a última
+  // linha do seed é a que o operador lê no `prod:logs`: ela não pode dizer
+  // "COMPLETED" limpo quando faltou dado.
+  if (result.failedOptionalSteps.length > 0) {
+    console.error(
+      `SEEDING COMPLETED WITH FAILURES: ${result.failedOptionalSteps.join(", ")} — dado de demonstração faltando; a API sobe assim mesmo.`,
+    );
+    return;
+  }
+
   console.log("SEEDING COMPLETED!");
 }
 

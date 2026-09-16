@@ -49,9 +49,12 @@ bytes das imagens em base64 num `.ts` — o estágio `runtime` do Dockerfile nã
 plano herdado de versionar `.webp` teria falhado silenciosamente no boot. **Fecho (9.12):** a
 revisão da fase inteira **antes** da documentação achou cinco defeitos (o mais grave: `?inStock=`
 apagando a faixa de preço em silêncio), e o fecho também consertou uma regra de processo — um ADR
-citava um documento de planejamento escrito para ser descartável, o que separou `.scratch/`
-(rascunho fora do git) de `docs/specs/` (spec em negociação) e virou verificação no
-`npm run docs:check`. Racional em [`pet-domain.md`](pet-domain.md) e nos ADRs
+citava um documento de planejamento escrito para ser descartável, o que separou rascunho de
+spec e virou verificação no `npm run docs:check`. **A separação em duas pastas foi revertida na
+Fase 10**: `.scratch/` passou a ser versionado e a guardar spec *e* issues, `docs/specs/` deixou
+de existir, e o `todo.md` encolheu para índice de fases — o que a Fase 9 acertou foi a *regra*
+(permanente não cita efêmero), não a geografia dela, e a regra sobreviveu apontando para o novo
+alvo. Racional em [`pet-domain.md`](pet-domain.md) e nos ADRs
 [`pet-domain-modeling.md`](../adr/pet-domain-modeling.md),
 [`product-catalog-modeling.md`](../adr/product-catalog-modeling.md),
 [`product-vs-service.md`](../adr/product-vs-service.md), [`text-search.md`](../adr/text-search.md) e

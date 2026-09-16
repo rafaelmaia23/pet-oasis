@@ -2,6 +2,7 @@ import { env } from "@/config/env";
 import { UserStatus } from "@/generated/prisma/enums";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { runOptionalSeedStep } from "@/lib/seed/optionalSeedStep";
 import { seedAdminUser } from "@/lib/seed/seedAdminUser";
 import { seedBreeds } from "@/lib/seed/seedBreeds";
 import { seedFakeCatalog } from "@/lib/seed/seedFakeCatalog";
@@ -26,6 +27,12 @@ export type SeedResult = {
   fakeUsersCreated: number;
   fakePetsCreated: number;
   fakeProductsCreated: number;
+  /**
+   * Os passos de demonstração que falharam e foram engolidos (10.3). Vazio é o
+   * caso normal; não-vazio é o que faz o `db:seed` terminar dizendo que
+   * terminou **com** falha, em vez de um "COMPLETED" que mente.
+   */
+  failedOptionalSteps: string[];
 };
 
 /**
@@ -95,45 +102,56 @@ export async function runSeed(): Promise<SeedResult> {
     breedsCreated = await seedBreeds(tx);
   });
 
+  // Daqui para baixo, tudo é dado de **demonstração** e roda fail-open (10.3):
+  // cada passo que falha vira log de erro e o seguinte roda mesmo assim. O
+  // bloco de referência acima — e o `refreshSearchLexemes()` no fim — continuam
+  // fatais de propósito; a fronteira está documentada em `optionalSeedStep.ts`.
+  const failedOptionalSteps: string[] = [];
+
   let demoUserSeeded = false;
 
   // Usuário demo público read-only — só quando explicitamente habilitado
   // (ligado no Docker/prod; desligado em dev/test para não sujar a suíte).
   if (env.SEED_DEMO_USER) {
-    const passwordHash = await hashPassword(env.DEMO_PASSWORD);
+    const outcome = await runOptionalSeedStep("demo-user", async () => {
+      const passwordHash = await hashPassword(env.DEMO_PASSWORD);
 
-    await prisma.user.upsert({
-      where: { email: env.DEMO_EMAIL },
-      update: {
-        name: DEMO_NAME,
-        passwordHash,
-        status: UserStatus.ACTIVE,
-        bannedAt: null,
-        bannedBy: null,
-        banReason: null,
-      },
-      create: {
-        name: DEMO_NAME,
-        email: env.DEMO_EMAIL,
-        cpf: DEMO_CPF,
-        passwordHash,
-        status: UserStatus.ACTIVE,
-        employee: { create: {} },
-        roles: {
-          create: [{ role: { connect: { name: "demo" } } }],
+      await prisma.user.upsert({
+        where: { email: env.DEMO_EMAIL },
+        update: {
+          name: DEMO_NAME,
+          passwordHash,
+          status: UserStatus.ACTIVE,
+          bannedAt: null,
+          bannedBy: null,
+          banReason: null,
         },
-      },
+        create: {
+          name: DEMO_NAME,
+          email: env.DEMO_EMAIL,
+          cpf: DEMO_CPF,
+          passwordHash,
+          status: UserStatus.ACTIVE,
+          employee: { create: {} },
+          roles: {
+            create: [{ role: { connect: { name: "demo" } } }],
+          },
+        },
+      });
     });
 
-    demoUserSeeded = true;
+    demoUserSeeded = outcome.ok;
+    if (!outcome.ok) failedOptionalSteps.push("demo-user");
   }
 
   // Usuário admin de teste, acesso total — NUNCA true em produção/demo
   // (diferente do demo, que é só leitura). Só dev/local.
   let adminUserSeeded = false;
   if (env.SEED_ADMIN_USER) {
-    await seedAdminUser();
-    adminUserSeeded = true;
+    const outcome = await runOptionalSeedStep("admin-user", seedAdminUser);
+
+    adminUserSeeded = outcome.ok;
+    if (!outcome.ok) failedOptionalSteps.push("admin-user");
   }
 
   // Dataset fake — usuários, pets e catálogo, sob a **mesma** flag (9.11/AB4).
@@ -145,14 +163,39 @@ export async function runSeed(): Promise<SeedResult> {
   let fakeProductsCreated = 0;
 
   if (env.SEED_FAKE_DATA) {
-    const fakeUsersResult = await seedFakeUsers();
-    fakeUsersCreated = fakeUsersResult.createdCount;
+    // Usuários e pets são **um** passo porque os pets se amarram aos customers
+    // fake por email: users caindo torna os pets impossíveis, e insistir neles
+    // só produziria um segundo erro derivado do primeiro. O catálogo é
+    // independente dos dois — e é onde a falha de permissão de imagem que
+    // originou esta issue acontece —, então tem passo próprio e roda mesmo com
+    // os usuários no chão.
+    const peopleOutcome = await runOptionalSeedStep(
+      "fake-users-and-pets",
+      async () => {
+        // Uma falha no meio do roster deixa estes contadores em 0 mesmo com
+        // linhas já commitadas: o número é o que **esta** passada confirmou, não
+        // o que existe no banco. Não vale corrigir com contagem incremental — o
+        // passo aparece nomeado em `failedOptionalSteps`, e a re-execução é
+        // idempotente por email/slug, então quem re-roda vê o total certo.
+        const fakeUsersResult = await seedFakeUsers();
+        fakeUsersCreated = fakeUsersResult.createdCount;
 
-    const fakePetsResult = await seedFakePets();
-    fakePetsCreated = fakePetsResult.createdCount;
+        const fakePetsResult = await seedFakePets();
+        fakePetsCreated = fakePetsResult.createdCount;
+      },
+    );
 
-    const fakeCatalogResult = await seedFakeCatalog();
-    fakeProductsCreated = fakeCatalogResult.productsCreated;
+    if (!peopleOutcome.ok) failedOptionalSteps.push("fake-users-and-pets");
+
+    const catalogOutcome = await runOptionalSeedStep(
+      "fake-catalog",
+      async () => {
+        const fakeCatalogResult = await seedFakeCatalog();
+        fakeProductsCreated = fakeCatalogResult.productsCreated;
+      },
+    );
+
+    if (!catalogOutcome.ok) failedOptionalSteps.push("fake-catalog");
   }
 
   // Por último, e sempre: o dicionário da busca (9.9/Z14) é derivado do
@@ -172,5 +215,6 @@ export async function runSeed(): Promise<SeedResult> {
     fakeUsersCreated,
     fakePetsCreated,
     fakeProductsCreated,
+    failedOptionalSteps,
   };
 }

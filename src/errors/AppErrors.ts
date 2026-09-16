@@ -2,7 +2,11 @@ import { AppError, type AppErrorParams } from "./AppError";
 
 // ─── Tipos auxiliares ────────────────────────────────────────────────────────
 
-type OmitFixed<T> = Omit<T, "statusCode" | "code">;
+// O status é fixo por subclasse — é a identidade HTTP dela. O `code` tem
+// default por subclasse mas é parametrizável: uma mesma resposta 403 pode
+// precisar de identificadores distintos por condição (10.8), e é no `code`,
+// nunca na prosa de `message`, que o cliente ramifica.
+export type OmitFixed<T> = Omit<T, "statusCode">;
 
 export type ValidationErrorFields = Record<string, string[]>;
 
@@ -13,9 +17,9 @@ export class BadRequestError extends AppError {
     super({
       message: "Requisição inválida",
       action: "Verifique os dados enviados e tente novamente",
+      code: "BAD_REQUEST",
       ...params,
       statusCode: 400,
-      code: "BAD_REQUEST",
     });
   }
 }
@@ -27,9 +31,9 @@ export class UnauthorizedError extends AppError {
     super({
       message: "Não autenticado",
       action: "Faça login e tente novamente",
+      code: "UNAUTHORIZED",
       ...params,
       statusCode: 401,
-      code: "UNAUTHORIZED",
     });
   }
 }
@@ -42,9 +46,9 @@ export class ForbiddenError extends AppError {
       message: "Acesso negado",
       action:
         "Você não tem permissão para realizar esta ação. Entre em contato com o suporte caso acredite que isso é um erro",
+      code: "FORBIDDEN",
       ...params,
       statusCode: 403,
-      code: "FORBIDDEN",
     });
   }
 }
@@ -56,9 +60,9 @@ export class NotFoundError extends AppError {
     super({
       message: "Recurso não encontrado",
       action: "Verifique o endereço e tente novamente",
+      code: "NOT_FOUND",
       ...params,
       statusCode: 404,
-      code: "NOT_FOUND",
     });
   }
 }
@@ -70,9 +74,9 @@ export class MethodNotAllowedError extends AppError {
     super({
       message: "Método HTTP não permitido",
       action: "Verifique o método utilizado na requisição",
+      code: "METHOD_NOT_ALLOWED",
       ...params,
       statusCode: 405,
-      code: "METHOD_NOT_ALLOWED",
     });
   }
 }
@@ -84,9 +88,9 @@ export class ConflictError extends AppError {
     super({
       message: "Conflito com o estado atual do recurso",
       action: "Verifique os dados e tente novamente",
+      code: "CONFLICT",
       ...params,
       statusCode: 409,
-      code: "CONFLICT",
     });
   }
 }
@@ -98,9 +102,9 @@ export class PayloadTooLargeError extends AppError {
     super({
       message: "Corpo da requisição excede o tamanho máximo permitido",
       action: "Reduza o tamanho dos dados enviados e tente novamente",
+      code: "PAYLOAD_TOO_LARGE",
       ...params,
       statusCode: 413,
-      code: "PAYLOAD_TOO_LARGE",
     });
   }
 }
@@ -112,9 +116,9 @@ export class TooManyRequestsError extends AppError {
     super({
       message: "Muitas tentativas. Tente novamente mais tarde.",
       action: "Aguarde antes de tentar novamente",
+      code: "TOO_MANY_REQUESTS",
       ...params,
       statusCode: 429,
-      code: "TOO_MANY_REQUESTS",
     });
   }
 }
@@ -132,9 +136,9 @@ export class ValidationError extends AppError {
     super({
       message: "Houve um erro de validação",
       action: "Verifique os dados enviados e tente novamente",
+      code: "VALIDATION_ERROR",
       ...params,
       statusCode: 422,
-      code: "VALIDATION_ERROR",
     });
     this.errors = errors;
   }
@@ -155,9 +159,9 @@ export class InternalServerError extends AppError {
       message: "Erro interno do servidor",
       action:
         "Tente novamente mais tarde. Se o problema persistir, entre em contato com o suporte",
+      code: "INTERNAL_SERVER_ERROR",
       ...params,
       statusCode: 500,
-      code: "INTERNAL_SERVER_ERROR",
     });
   }
 }
@@ -169,9 +173,9 @@ export class ServiceUnavailableError extends AppError {
     super({
       message: "Serviço temporariamente indisponível",
       action: "Tente novamente mais tarde",
+      code: "SERVICE_UNAVAILABLE",
       ...params,
       statusCode: 503,
-      code: "SERVICE_UNAVAILABLE",
     });
   }
 }
@@ -190,9 +194,9 @@ export class PresentationError extends AppError {
       message: "Erro ao processar resposta do servidor",
       action:
         "Tente novamente mais tarde. Se o problema persistir, entre em contato com o suporte",
+      code: "PRESENTATION_ERROR",
       ...rest,
       statusCode: 500,
-      code: "PRESENTATION_ERROR",
     });
     this.context = context;
   }

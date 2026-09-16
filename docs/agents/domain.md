@@ -35,8 +35,9 @@ código. O layout é **single-context** (um contexto só, sem monorepo), mas **n
 │   ├── adr/                  ← decisões estruturais
 │   │   ├── product-catalog-modeling.md
 │   │   └── …
-│   ├── todo.md               ← estado das tarefas (ver docs/agents/issue-tracker.md)
+│   ├── todo.md               ← índice das fases (ver docs/agents/issue-tracker.md)
 │   └── reference/            ← endpoints, política de log, backlog
+├── .scratch/                 ← o tracker: specs e issues, versionado
 └── src/
 ```
 

@@ -8,8 +8,9 @@ src/generated
 # Uploads: nem o conteúdo nem o diretório são versionados (10.4). Versionar o
 # diretório punha o git como dono de um caminho que o container escreve com
 # outro uid, e foi isso que abortou um `pull` no servidor. Em produção o
-# diretório vive fora do working tree (UPLOAD_HOST_DIR); em dev o `put` do
-# storage o cria sozinho na primeira gravação.
+# diretório vive fora do working tree (UPLOAD_HOST_DIR). Em dev, num clone
+# novo, quem cria `uploads/` é o Docker ao montar o bind mount — como root —,
+# e é o entrypoint de dev que o entrega ao uid do host antes de gravar (10.16).
 uploads/
 
 # Originais das imagens do seed fake (9.11/AB1) — só o base64 derivado é versionado.

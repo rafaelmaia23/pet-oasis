@@ -14,7 +14,7 @@ e um terceiro lugar é um terceiro lugar para envelhecer.
 **Blocked by:** 22 — o guia afirma `Retry-After` no 429 de lockout, e a frase só é verdade
 depois da 22. Escrever antes seria documentar promessa.
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-16
 
 **Decisões (usuário, 2026-09-16):**
 
@@ -60,17 +60,42 @@ depois da 22. Escrever antes seria documentar promessa.
 
 ## Critérios
 
-- [ ] Os três erros reescritos: alias `api` só nas redes do projeto (com o porquê da omissão na
+- [x] Os três erros reescritos: alias `api` só nas redes do projeto (com o porquê da omissão na
       `proxy`); assinatura local **e** releitura do usuário a cada request, com a consequência
       para o cliente nomeada; "email desconhecido e senha errada" no lugar de "as duas
       primeiras".
-- [ ] Seção de sessão ganha o bloco do cookie com o contrato completo e o parágrafo das duas
+- [x] Seção de sessão ganha o bloco do cookie com o contrato completo e o parágrafo das duas
       saídas do BFF com o modo de falha silencioso do path.
-- [ ] Seção de descoberta diz onde cada rota mora (raiz do host vs `/api/v1`). Tabela de status
+- [x] Seção de descoberta diz onde cada rota mora (raiz do host vs `/api/v1`). Tabela de status
       ganha a linha do 413.
-- [ ] "nginx (Nginx Proxy Manager)" na primeira menção.
-- [ ] Nenhuma seção por-endpoint entra; nenhuma frase do que já confere é reescrita sem motivo.
-- [ ] Cada afirmação nova do guia foi conferida contra o código antes de escrita — o padrão desta
+- [x] "nginx (Nginx Proxy Manager)" na primeira menção.
+- [x] Nenhuma seção por-endpoint entra; nenhuma frase do que já confere é reescrita sem motivo.
+- [x] Cada afirmação nova do guia foi conferida contra o código antes de escrita — o padrão desta
       revisão, não o da 10.6 (que escreveu o estado-alvo).
-- [ ] `docs:check` verde (o guia é citado de `src/` e do `deploy.md`; nenhuma âncora pode mudar
+- [x] `docs:check` verde (o guia é citado de `src/` e do `deploy.md`; nenhuma âncora pode mudar
       sem os apontadores).
+
+## O que foi feito
+
+Um arquivo, `docs/guides/integrating-with-the-api.md`; nenhuma seção nova, nenhuma âncora
+mudada (a única citada de fora é a de CORS, em `docs/context/security.md`, e ficou intacta).
+
+- **§1** — o alias `api` passou a ser descrito como das redes do projeto, com a omissão na `proxy`
+  e o porquê (round-robin no DNS do Docker); "nginx (Nginx Proxy Manager)" na primeira menção.
+- **§4** — linha do **413** na tabela de status (JSON acima do limite sem revelar o teto; imagem
+  acima do máximo com o teto em MB no `action`). "As duas primeiras" virou "email desconhecido e
+  senha errada", e a frase ganhou o 429 de lockout como mais um que só dispara com a senha certa —
+  agora com `Retry-After`, verdadeiro desde a 22.
+- **§5** — "sem consulta ao banco" virou "assinatura local, usuário relido a cada request", com a
+  consequência nomeada (deleção mata o token na hora; perder role vale no request seguinte) e o
+  aviso de não decodificar o JWT no cliente. Bloco do cookie em tabela: nome, `Path`, `HttpOnly`,
+  `SameSite=Lax`, `Secure` só em produção, `Max-Age` de 7 dias deslizantes — cada atributo com a
+  consequência para o cliente. Teto de sessões vivas (5 por padrão; o sexto login derruba a mais
+  antiga, conferido em `createSessionAndEvictOldest`). Parágrafo do BFF com as duas saídas e o modo
+  de falha do path.
+- **§8** — `/openapi.json` e `/reference` marcados como raiz do host; `/me` grafado `/api/v1/me`.
+
+Cada fato novo foi conferido no código antes de escrito: compose de produção (aliases), controller
+e constantes de auth (cookie), middleware de autenticação (releitura), repository de auth
+(eviction e `expiresAt` deslizante), error handler e middleware de upload (413), `routes/index.ts`
+(montagem). `docs:check` verde.

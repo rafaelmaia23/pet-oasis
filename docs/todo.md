@@ -139,14 +139,15 @@
 > Tudo que o `pet-oasis-web` precisa da API para sair do lugar, mais a dívida de deploy que já
 > derrubou a produção uma vez. Nenhum domínio novo. Spec e issues em
 > `.scratch/fase-10-frontline/`.
-- Progresso: 12 de 20 issues fechadas (as revisões da 07, da 15 e da 17 acrescentaram as issues 15 a 20).
+- Progresso: 13 de 20 issues fechadas (as revisões da 07, da 15 e da 17 acrescentaram as issues 15 a 20).
 - Pendente de verificação no servidor: a 04 (uploads fora do working tree) espera o teste de
   ponta a ponta com a stack de produção real — o resto dela está feito e verificado localmente.
 - A 15 (a ponta viva da corrente na janela de graça) foi decidida e fechada; a 16 (`uploads/`
   sem dono num clone novo) também — o container de dev passou a escrever como o uid do host.
-  A 17 (a rede `pet-oasis` morria no `prod:down`) virou `external:` como a `proxy`. Seguem
-  abertas: a 18 (decisão em aberto — os dois caminhos em que a cascata ainda dispara sem roubo),
-  a 19 (defeito no que a 04 já mergeou) e a 20 (passo de operador no servidor que a 17 exige).
+  A 17 (a rede `pet-oasis` morria no `prod:down`) virou `external:` como a `proxy`. A 18
+  (a retentativa tardia de um 503 cascateava sem roubo) ganhou a marca `graceDeferredAt` no
+  banco; o teto de saltos ficou em 5 como exposição aceita. Seguem abertas: a 19 (defeito no
+  que a 04 já mergeou) e a 20 (passo de operador no servidor que a 17 exige).
 
 ---
 

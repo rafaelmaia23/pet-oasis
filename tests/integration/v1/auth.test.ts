@@ -33,6 +33,7 @@ import { redis } from "@/lib/redis";
 import { refreshGraceKey } from "@/lib/refreshGrace";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import {
+  REFRESH_GRACE_DEFERRED_WINDOW_MS,
   REFRESH_GRACE_WINDOW_MS,
   REFRESH_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_PATH,
@@ -91,13 +92,24 @@ function rawRefreshTokenFromCookie(refreshCookie: string): string {
   return refreshCookie.split("=")[1] as string;
 }
 
-async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
-  const session = await prisma.session.findUniqueOrThrow({
-    where: {
-      refreshTokenHash: hashToken(rawRefreshTokenFromCookie(refreshCookie)),
-    },
+async function sessionByRawToken(rawRefreshToken: string) {
+  return prisma.session.findUniqueOrThrow({
+    where: { refreshTokenHash: hashToken(rawRefreshToken) },
   });
-  return session.id;
+}
+
+async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
+  return (await sessionByRawToken(rawRefreshTokenFromCookie(refreshCookie))).id;
+}
+
+/** Envelhece o `usedAt` da linha para além dos 10s da janela, sem injetar relógio. */
+async function ageUsedAtPastGraceWindow(
+  rawRefreshToken: string,
+): Promise<void> {
+  await prisma.session.update({
+    where: { refreshTokenHash: hashToken(rawRefreshToken) },
+    data: { usedAt: new Date(Date.now() - REFRESH_GRACE_WINDOW_MS - 1_000) },
+  });
 }
 
 /**
@@ -106,12 +118,25 @@ async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
  * já passou (o TTL do Redis teria expirado sozinho).
  */
 async function ageOutOfGraceWindow(rawRefreshToken: string): Promise<void> {
-  const refreshTokenHash = hashToken(rawRefreshToken);
+  await ageUsedAtPastGraceWindow(rawRefreshToken);
+  await redis.del(refreshGraceKey(hashToken(rawRefreshToken)));
+}
+
+/**
+ * Posiciona a marca de 503 (10.18) direto na linha, sem injetar relógio: `age` é há
+ * quanto tempo o primeiro 503 foi respondido. Um valor abaixo de
+ * `REFRESH_GRACE_DEFERRED_WINDOW_MS` está dentro da marca; acima, fora.
+ */
+async function markGraceDeferred(
+  rawRefreshToken: string,
+  ageMs: number,
+): Promise<Date> {
+  const graceDeferredAt = new Date(Date.now() - ageMs);
   await prisma.session.update({
-    where: { refreshTokenHash },
-    data: { usedAt: new Date(Date.now() - REFRESH_GRACE_WINDOW_MS - 1_000) },
+    where: { refreshTokenHash: hashToken(rawRefreshToken) },
+    data: { graceDeferredAt },
   });
-  await redis.del(refreshGraceKey(refreshTokenHash));
+  return graceDeferredAt;
 }
 
 afterEach(async () => {
@@ -886,6 +911,196 @@ describe("POST /api/v1/auth/refresh", () => {
     for (const session of sessions) {
       expect(session.invalidatedAt).toBeNull();
     }
+  });
+
+  it("should stamp graceDeferredAt on the presented link when answering 503 for a missing pair (10.18)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+    expect((await sessionByRawToken(rawToken)).graceDeferredAt).toBeNull();
+
+    await redis.del(refreshGraceKey(hashToken(rawToken)));
+
+    const before = Date.now();
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(503);
+    // A mensagem manda tentar **agora**: "em alguns instantes" contradizia o guia
+    // e empurrava o cliente para fora da janela.
+    expect(replayResponse.body.action).toBe("Tente novamente agora");
+
+    const marked = await sessionByRawToken(rawToken);
+    expect(marked.graceDeferredAt).not.toBeNull();
+    expect(marked.graceDeferredAt?.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it("should stamp graceDeferredAt when the grace store itself is unreachable (10.18)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+
+    // A variante realista do caminho 1: Redis fora do ar. O `get` da janela
+    // falha, e é a única chamada que este teste derruba.
+    const getSpy = vi
+      .spyOn(redis, "get")
+      .mockRejectedValueOnce(new Error("redis down"));
+
+    try {
+      const replayResponse = await request(app)
+        .post("/api/v1/auth/refresh")
+        .set("Cookie", refreshCookie);
+
+      expect(replayResponse.status).toBe(503);
+    } finally {
+      getSpy.mockRestore();
+    }
+
+    expect((await sessionByRawToken(rawToken)).graceDeferredAt).not.toBeNull();
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+  });
+
+  it("should serve the live pair when the 10s window closed but the 503 mark is still open (10.18)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+
+    // A retentativa tardia do 503: `usedAt` já passou dos 10s, mas o primeiro
+    // 503 foi há menos de 30s — e o par ainda está no cache (o Redis voltou).
+    await ageUsedAtPastGraceWindow(rawToken);
+    await markGraceDeferred(rawToken, REFRESH_GRACE_DEFERRED_WINDOW_MS / 2);
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(200);
+    expect(extractRefreshCookie(replayResponse)).toBe(
+      extractRefreshCookie(rotateResponse),
+    );
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    expect(sessions).toHaveLength(2);
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+  });
+
+  it("should answer 503 again, kill nothing and keep the mark fixed when the pair is still gone inside the 503 mark (10.18, rule a)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    await loginWithSession(user.email, user.password); // sessão B, dispositivo independente
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+
+    await ageOutOfGraceWindow(rawToken);
+    const firstMark = await markGraceDeferred(
+      rawToken,
+      REFRESH_GRACE_DEFERRED_WINDOW_MS / 2,
+    );
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(503);
+
+    // Marca fixa (regra a): o segundo 503 não a renova — senão quem controla o
+    // ritmo adiaria a detecção para sempre.
+    expect((await sessionByRawToken(rawToken)).graceDeferredAt).toEqual(
+      firstMark,
+    );
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    expect(sessions.length).toBeGreaterThanOrEqual(3);
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+  });
+
+  it("should cascade as always once both the 10s window and the 503 mark are closed (10.18)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    await loginWithSession(user.email, user.password); // sessão B, dispositivo independente
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+
+    await ageOutOfGraceWindow(rawToken);
+    await markGraceDeferred(rawToken, REFRESH_GRACE_DEFERRED_WINDOW_MS + 1_000);
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(401);
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    expect(sessions.length).toBeGreaterThanOrEqual(3);
+    for (const session of sessions) {
+      expect(session.invalidatedAt).not.toBeNull();
+    }
+  });
+
+  it("should not let the 503 mark reopen a link that was explicitly killed (10.18)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+
+    // Marca aberta, par no cache — e o elo morto no intervalo (ban, reset de
+    // senha, cascata anterior). A guarda de `invalidatedAt` continua na frente.
+    await markGraceDeferred(rawToken, REFRESH_GRACE_DEFERRED_WINDOW_MS / 2);
+    await prisma.session.updateMany({
+      where: { userId: user.id },
+      data: { invalidatedAt: new Date() },
+    });
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(401);
+    expect(replayResponse.headers["set-cookie"]).toBeUndefined();
   });
 
   it("should return 401 when the refresh token is tampered with (D1 regression)", async () => {

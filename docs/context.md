@@ -126,6 +126,7 @@ completo, os contra-argumentos e os gotchas.
 - Ordem de checagem no `refresh`: reuso → invalidada → expirada
 - A janela de graça de 10s na rotação (10.7) — o mesmo par de volta, e o 503 que recusa decidir
 - A janela devolve o par **atual** da corrente, não o que o elo emitiu (10.15)
+- Um 503 já respondido abre uma segunda janela, gravada no banco (10.18) — e o teto de saltos em 5 como exposição aceita
 - Refresh token hasheado em repouso — item que virou teste, não código
 - Teto de sessões vivas
 

@@ -200,10 +200,13 @@ O que o cliente precisa saber:
   rotacionou duas vezes dentro dos dez segundos, quem chega atrasado com o token mais antigo
   recebe o par **mais recente** — não um par intermediário já gasto. Trate a resposta como a
   verdade e sobrescreva o que tiver em mão.
-- **Um 503 no `/auth/refresh` é retentável, e a retentativa é para agora.** Dentro da janela, se
-  a API não conseguir reproduzir o par, ela responde 503 em vez de decidir entre "concorrência" e
-  "roubo" — nenhuma sessão morre. Tente de novo **imediatamente**: uma retentativa que só chegue
-  depois de a janela fechar é indistinguível de roubo, e aí a proteção dispara.
+- **Um 503 no `/auth/refresh` é retentável, e a retentativa tem janela própria.** Dentro da
+  janela, se a API não conseguir reproduzir o par, ela responde 503 em vez de decidir entre
+  "concorrência" e "roubo" — nenhuma sessão morre. O primeiro 503 abre uma janela de **30
+  segundos** para a retentativa daquele mesmo token, mesmo que os 10 segundos da rotação já
+  tenham passado. Tente de novo **imediatamente**, com backoff curto se precisar: uma
+  reapresentação que só chegue depois desses 30 segundos é indistinguível de roubo, e aí a
+  proteção dispara.
 - **O `id` de uma sessão muda a cada renovação.** Uma linha de `Session` no banco é um **elo**
   de uma corrente de rotação, não a sessão de um dispositivo: `GET /auth/sessions` mostra um
   por dispositivo porque filtra os elos já usados. Não guarde o `id` de uma sessão entre

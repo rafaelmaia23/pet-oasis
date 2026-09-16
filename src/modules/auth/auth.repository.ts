@@ -82,6 +82,20 @@ export async function rotateSession(
   });
 }
 
+/**
+ * Marca que o elo já respondeu 503 dentro da janela de graça (10.18). **Só o
+ * primeiro** 503 grava: a marca é fixa, não renova a cada retentativa — senão
+ * quem controla o ritmo adiaria a detecção de roubo para sempre. O `where`
+ * carrega a condição para que a decisão seja do banco, não de uma leitura
+ * anterior que pode já estar velha.
+ */
+export async function markSessionGraceDeferred(sessionId: string) {
+  return prisma.session.updateMany({
+    where: { id: sessionId, graceDeferredAt: null },
+    data: { graceDeferredAt: new Date() },
+  });
+}
+
 export async function invalidateSession(sessionId: string) {
   return prisma.session.update({
     where: { id: sessionId },

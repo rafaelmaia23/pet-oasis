@@ -104,12 +104,9 @@ networks:
   # nem Redis, de propósito.
   #
   # `external: true`, como a `proxy` e pelo mesmo motivo: rede compartilhada
-  # entre stacks vive mais que qualquer uma delas. Se fosse gerenciada por este
-  # compose, o `prod:down` a apagaria sempre que o front também estivesse fora,
-  # e o `up` do front — que a declara externa — passaria a recusar subir até a
-  # API voltar. Criada uma vez no host, junto da `proxy` (ver
-  # docs/guides/deploy.md). O `name:` é contrato: é o que o compose do cliente
-  # escreve, e é ele que o `up` procura.
+  # entre stacks vive mais que qualquer uma delas, então nenhuma delas a cria
+  # nem a apaga (ver docs/context/infrastructure.md). Criada uma vez no host,
+  # junto da `proxy`. O `name:` é contrato: é o que o compose do cliente escreve.
   pet-oasis:
     external: true
     name: pet-oasis

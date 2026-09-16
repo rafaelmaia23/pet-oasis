@@ -42,7 +42,8 @@ A rede é do **host**, não da API: criada uma vez, fora dos dois repositórios 
 O cliente sobe com a API fora e vice-versa — o que falha, nesse caso, é a chamada, não o `up`.
 Se o `up` do cliente disser que a rede não existe, é o host que ainda não a criou.
 
-Há três redes, e só uma é compartilhada:
+Há três redes; duas são compartilhadas com outras stacks, e só uma delas é a que o cliente
+precisa:
 
 | Rede | Quem entra | Alcança |
 |---|---|---|

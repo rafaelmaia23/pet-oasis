@@ -108,7 +108,7 @@ a apagaria sempre que o front também estivesse fora — e o front, que a declar
 a recusar subir até a API voltar. Em host novo, antes do primeiro `prod:up`:
 
 ```bash
-docker network create proxy       # idempotente na prática: erra se já existir
+docker network create proxy       # inofensivo se já existir: erra dizendo que existe
 docker network create pet-oasis   # idem
 ```
 

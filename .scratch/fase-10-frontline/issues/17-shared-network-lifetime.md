@@ -18,7 +18,7 @@ vida mais longa que qualquer uma delas.
 **Blocked by:** None. Nada quebra hoje porque o front ainda não subiu ao lado da API — o custo é
 zero **antes** do primeiro deploy conjunto, e é um incidente depois.
 
-**Status:** done (2026-09-16)
+**Status:** fechada em 2026-09-16
 
 **Triagem:** ready-for-agent — decidido em 2026-09-16: a `pet-oasis` vira `external: true`, criada
 uma vez no host ao lado da `proxy`, pelo mesmo motivo. As alternativas descartadas: manter a API
@@ -54,8 +54,8 @@ quem escrever o guia:
 4. `docs/context/infrastructure.md`, decisão 10.2: reescrever narrando a mudança (não decisão +
    errata), incluindo o comportamento do `down` com endpoints ativos, que é o que estreita a
    janela do incidente e o que tornaria a alternativa "só documentar" tentadora.
-5. No host de produção, antes do primeiro `prod:up` com esta mudança: `docker network create
-   pet-oasis` (se já existir criada pelo Compose, `external:` só checa existência — reutiliza).
+5. No host de produção, antes do primeiro `prod:up` com esta mudança, criar a rede — passo de
+   operador, aberto como issue 20 (`20-create-pet-oasis-network-on-host.md`).
 6. `npm run docs:check` verde.
 
 - [x] Compose e guia dizem a mesma coisa sobre quem cria e quem apaga a `pet-oasis`.

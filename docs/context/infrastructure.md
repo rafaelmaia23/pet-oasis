@@ -62,7 +62,7 @@ O nome do container de produção está **gravado nos três systemd units** de `
 renomeia — procedimento e verificação manual em [`infra/cron/README.md`](../../infra/cron/README.md).
 Unit apontando para container inexistente falha de um jeito que não acorda ninguém.
 
-### Três redes com papéis distintos, e a porta da API despublicada (10.2)
+### Três redes com papéis distintos, e a porta da API despublicada (10.2, revisto na 10.17)
 
 Produção declara **três** redes, e a API é o único serviço nas três — é ela que atravessa a
 fronteira entre os dados e quem os pede:

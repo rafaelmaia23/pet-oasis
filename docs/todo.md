@@ -139,18 +139,18 @@
 > Tudo que o `pet-oasis-web` precisa da API para sair do lugar, mais a dívida de deploy que já
 > derrubou a produção uma vez. Nenhum domínio novo. Spec e issues em
 > `.scratch/fase-10-frontline/`.
-- Progresso: 14 de 20 issues fechadas (as revisões da 07, da 15 e da 17 acrescentaram as issues 15 a 20).
-- Pendente de verificação no servidor: a 04 (uploads fora do working tree) espera o teste de
-  ponta a ponta com a stack de produção real — o resto dela está feito e verificado localmente.
-- A 15 (a ponta viva da corrente na janela de graça) foi decidida e fechada; a 16 (`uploads/`
-  sem dono num clone novo) também — o container de dev passou a escrever como o uid do host.
-  A 17 (a rede `pet-oasis` morria no `prod:down`) virou `external:` como a `proxy`. A 18
-  (a retentativa tardia de um 503 cascateava sem roubo) ganhou a marca `graceDeferredAt` no
-  banco; o teto de saltos ficou em 5 como exposição aceita. A 19 (a receita de migração do
-  `uploads/` apontava para a raiz, mas o Compose resolvia `./uploads` contra `infra/`) foi
-  removida em vez de corrigida — não há deploy com dados para migrar; ficou registrado o porquê
-  de `UPLOAD_HOST_DIR` ser absoluta. Segue aberta: a 20 (passo de operador no servidor que a 17
-  exige).
+- Progresso: 16 de 21 issues fechadas (as revisões da 07, da 15 e da 17 acrescentaram as
+  issues 15 a 20; a 21 é o fecho). Fechadas: 01, 02, 03, 05, 07, 08, 09, 11, 12, 13, 14, 15,
+  16, 17, 18, 19.
+- Abertas, e o que cada uma espera:
+  - **10** (endurecer o JWT): em execução num worktree paralelo; merge na `fase-10` ao terminar.
+  - **06** (subdomínio da API): **retrabalho** — o nome virou `pet-oasis-api.maiahub.com.br`
+    (segundo nível não fecha TLS atrás do proxy da Cloudflare), sem 301 no apex, e o reverse
+    proxy real é o NPM com desafio DNS; reescrever README, `deploy.md`, `infrastructure.md`,
+    backlog e apontadores. O operador refaz DNS/certificado/proxy host para o nome novo.
+  - **04** (uploads fora do working tree) e **20** (rede `pet-oasis`): só a verificação no
+    servidor, no primeiro `prod:up` depois do merge.
+  - **21** (fecho): aviso do guia de integração, backlog, tabela de rastreio, spec, este bloco.
 
 ---
 

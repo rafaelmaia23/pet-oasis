@@ -236,7 +236,7 @@ completo, os contra-argumentos e os gotchas.
 - Lockout híbrido — janela fixa → backoff exponencial
 - A checagem de lockout entra no ramo da senha CORRETA
 - Configuração: duas env vars por regra, não uma string composta
-- Conta travada responde 429 genérico
+- Conta travada responde 429 genérico — e, desde a 10.22, com `Retry-After` como o rate limit
 - Desbloqueio manual pelo admin, e reset completo
 - Destravar alvo privilegiado exige ator admin
 - Conta demo isenta do lockout (8.8)

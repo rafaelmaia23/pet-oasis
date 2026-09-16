@@ -2867,6 +2867,33 @@ describe("Account lockout (7.10)", () => {
     expect(response.status).toBe(429);
   });
 
+  // 10.22: o 429 de lockout carrega `Retry-After` como o de rate limit — é o
+  // contrato que o guia de integração descreve para todo 429. Afirma-se que o
+  // valor cabe na janela configurada, não o segundo exato.
+  it("carries Retry-After within the lockout window on the 429 for the correct password", async () => {
+    const user = await buildCustomer();
+
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.body.code).toBe("TOO_MANY_REQUESTS");
+
+    const retryAfter = Number(response.headers["retry-after"]);
+    expect(Number.isInteger(retryAfter)).toBe(true);
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(env.LOCKOUT_WINDOW_MS / 1000);
+  });
+
   it("keeps returning 401 (not 429) for wrong attempts made while locked", async () => {
     const user = await buildCustomer();
 

@@ -92,20 +92,29 @@ apagar a origem.
 
 ## Redes
 
-O Compose de produção declara **três** redes, e o `up` falha se a do proxy não existir — o que é
-a mensagem certa, e o motivo de ela ser declarada em vez de conectada à mão depois do deploy:
+O Compose de produção declara **três** redes, e o `up` falha se qualquer das duas compartilhadas
+não existir — o que é a mensagem certa, e o motivo de elas serem declaradas em vez de conectadas à
+mão depois do deploy:
 
 | Rede | Quem entra | Criada por |
 |---|---|---|
 | `backend` (`internal: true`) | `db`, `redis`, `api` | o próprio `prod:up` |
-| `pet-oasis` | `api` + clientes internos (o front) | o próprio `prod:up` |
+| `pet-oasis` | `api` + clientes internos (o front) | **fora deste repo**, uma vez |
 | `proxy` | `api` + nginx + clientes internos que o nginx serve | **fora deste repo**, uma vez |
 
-A `proxy` é a única com pré-requisito. Se ainda não existir no host:
+As duas compartilhadas são `external:` pelo mesmo motivo: rede que liga stacks diferentes vive
+mais que qualquer uma delas. Se a `pet-oasis` fosse gerenciada por este compose, o `prod:down`
+a apagaria sempre que o front também estivesse fora — e o front, que a declara externa, passaria
+a recusar subir até a API voltar. Em host novo, antes do primeiro `prod:up`:
 
 ```bash
-docker network create proxy   # idempotente na prática: erra se já existir
+docker network create proxy       # inofensivo se já existir: erra dizendo que existe
+docker network create pet-oasis   # idem
 ```
+
+> Host que já rodou uma versão anterior deste compose pode ter a `pet-oasis` criada pelo próprio
+> Compose. Não faz diferença: `external:` só exige que ela exista, e o `create` erra dizendo que
+> já existe — siga em frente.
 
 O nginx precisa estar nela (`docker network inspect proxy`) e passa a alcançar a API por
 `http://api:3000` — **não** por `127.0.0.1:3000`. A porta 3000 não é mais publicada no host:

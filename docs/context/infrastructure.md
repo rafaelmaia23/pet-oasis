@@ -62,7 +62,7 @@ O nome do container de produção está **gravado nos três systemd units** de `
 renomeia — procedimento e verificação manual em [`infra/cron/README.md`](../../infra/cron/README.md).
 Unit apontando para container inexistente falha de um jeito que não acorda ninguém.
 
-### Três redes com papéis distintos, e a porta da API despublicada (10.2)
+### Três redes com papéis distintos, e a porta da API despublicada (10.2, revisto na 10.17)
 
 Produção declara **três** redes, e a API é o único serviço nas três — é ela que atravessa a
 fronteira entre os dados e quem os pede:
@@ -70,20 +70,34 @@ fronteira entre os dados e quem os pede:
 | Rede | Quem entra | Para quê |
 |---|---|---|
 | `backend` (`internal: true`) | `db`, `redis`, `api` | onde os dados vivem, sem rota para a internet |
-| `pet-oasis` (`name:` explícito) | `api` + clientes internos | o endereço que um cliente no mesmo VPS usa |
+| `pet-oasis` (`external: true`, `name:` explícito) | `api` + clientes internos | o endereço que um cliente no mesmo VPS usa |
 | `proxy` (`external: true`) | `api` + nginx + clientes internos que o nginx serve | por onde o público entra |
 
 O `internal: true` é o que faz um cliente na rede compartilhada **não** alcançar Postgres nem
 Redis: estar na `pet-oasis` dá acesso à API, e só. A API mantém saída para a internet (SMTP) pelas
-outras duas, que não são internas. O `name: pet-oasis` derruba o prefixo do projeto compose
-(`pet-oasis-prod_`) porque esse nome é **contrato**: é o que o compose do cliente escreve como
-`external: true`, e um prefixo vazado ali quebraria o `up` dele.
+outras duas, que não são internas. O `name: pet-oasis` é **contrato**: é o que o compose do
+cliente escreve como `external: true`, e é esse nome que o `up` dele procura.
 
 A rede do nginx é **declarada** em vez de conectada à mão. O passo manual que existia
 (`docker network connect` depois de cada deploy) falhava do pior jeito possível: esquecê-lo deixa
 a API inalcançável pelo público com o container de pé e o healthcheck verde, ou seja, sem nenhum
 sinal apontando para a causa. Declarada, ou o `up` sobe conectado ou falha dizendo que a rede não
 existe.
+
+**As duas redes compartilhadas são `external:`, criadas uma vez no host.** A `pet-oasis` nasceu
+gerenciada por este compose (o `name:` só derrubava o prefixo `pet-oasis-prod_`), e a 10.17
+corrigiu isso: rede que liga stacks diferentes vive mais que qualquer uma delas, e uma rede que o
+`prod:down` apaga é uma rede que o cliente não pode declarar externa sem herdar o ciclo de vida
+da API. O incidente tinha uma janela precisa, medida com duas stacks reais: com o front plugado,
+o `down` tenta remover a rede, recebe "Resource is still in use" e desiste — nada acontece. Com
+as **duas** stacks fora, a rede vai junto, e o front passa a recusar subir (`declared as
+external, but could not be found`) até a API voltar — que é exatamente o cenário de um redeploy
+conjunto ou de reconstruir o host. Havia um atalho tentador: o Compose só remove rede que ele
+próprio criou, então bastaria criá-la à mão antes do primeiro `up` e não mexer no YAML. Foi
+descartado por ser regra invisível — o primeiro `prod:up` que rodasse antes do `create` em algum
+host a rotularia, e ela voltaria a ser apagável sem nenhum sinal. Declará-la `external:` torna o
+contrato legível no próprio compose e faz o `up` falhar nomeando a causa, a mesma política da
+`proxy`. Passo de criação e transição de host antigo no [guia de deploy](../guides/deploy.md#redes).
 
 **A porta 3000 deixou de ser publicada no host em produção** — o nginx alcança a API por DNS de
 container, então a publicação não tinha mais função. Isso não é higiene: é a metade que torna

@@ -139,7 +139,7 @@
 > Tudo que o `pet-oasis-web` precisa da API para sair do lugar, mais a dívida de deploy que já
 > derrubou a produção uma vez. Nenhum domínio novo. Spec e issues em
 > `.scratch/fase-10-frontline/`.
-- Progresso: 14 de 20 issues fechadas (as revisões da 07, da 15 e da 17 acrescentaram as issues 15 a 20).
+- Progresso: 15 de 20 issues fechadas (as revisões da 07, da 15 e da 17 acrescentaram as issues 15 a 20).
 - Pendente de verificação no servidor: a 04 (uploads fora do working tree) espera o teste de
   ponta a ponta com a stack de produção real — o resto dela está feito e verificado localmente.
 - A 15 (a ponta viva da corrente na janela de graça) foi decidida e fechada; a 16 (`uploads/`
@@ -149,8 +149,10 @@
   banco; o teto de saltos ficou em 5 como exposição aceita. A 19 (a receita de migração do
   `uploads/` apontava para a raiz, mas o Compose resolvia `./uploads` contra `infra/`) foi
   removida em vez de corrigida — não há deploy com dados para migrar; ficou registrado o porquê
-  de `UPLOAD_HOST_DIR` ser absoluta. Segue aberta: a 20 (passo de operador no servidor que a 17
-  exige).
+  de `UPLOAD_HOST_DIR` ser absoluta. A 10 (JWT) pinou o algoritmo, exigiu `iss`/`aud` e fixou a
+  folga de relógio, com emissão e verificação lendo o mesmo contrato em `src/lib/accessToken.ts`
+  — o deploy invalida os access tokens em voo, e o `refresh` recompõe o par. Segue aberta: a 20
+  (passo de operador no servidor que a 17 exige).
 
 ---
 

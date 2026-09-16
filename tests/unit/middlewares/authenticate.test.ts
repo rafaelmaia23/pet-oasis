@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "@/config/env";
 import { UnauthorizedError } from "@/errors";
 import {
+  ACCESS_TOKEN_ALGORITHM,
+  ACCESS_TOKEN_AUDIENCE,
+  ACCESS_TOKEN_ISSUER,
+} from "@/lib/accessToken";
+import {
   authenticate,
   optionalAuthenticate,
 } from "@/middlewares/authenticate.middleware";
@@ -19,8 +24,16 @@ function makeReq(authHeader?: string): Request {
   return { headers: { authorization: authHeader } } as Request;
 }
 
+// O contrato inteiro do access token (10.10) — o que `signAccessToken` emite.
+// Os casos de recusa abaixo tiram uma peça de cada vez.
 function signToken(payload: object, options?: jwt.SignOptions): string {
-  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: "15m", ...options });
+  return jwt.sign(payload, env.JWT_SECRET, {
+    algorithm: ACCESS_TOKEN_ALGORITHM,
+    issuer: ACCESS_TOKEN_ISSUER,
+    audience: ACCESS_TOKEN_AUDIENCE,
+    expiresIn: "15m",
+    ...options,
+  });
 }
 
 describe("authenticate middleware", () => {
@@ -73,6 +86,18 @@ describe("authenticate middleware", () => {
     await expect(
       authenticate(req, {} as Response, vi.fn()),
     ).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  // Regressão da 10.10: a resolução token→ator passa por `verifyAccessToken`,
+  // não por um `jwt.verify` cru. Uma claim errada basta para provar isso — os
+  // outros casos (algoritmo, emissor, tolerância) vivem no teste da lib.
+  it("well-signed JWT for another audience -> rejects with 401", async () => {
+    const token = signToken({ sub: "user-id" }, { audience: "someone-else" });
+    const req = makeReq(`Bearer ${token}`);
+    await expect(
+      authenticate(req, {} as Response, vi.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(mockedGetUserForFeatureComputation).not.toHaveBeenCalled();
   });
 
   it("valid JWT, user not found -> rejects with 401", async () => {
@@ -172,6 +197,17 @@ describe("optionalAuthenticate middleware", () => {
 
   it("expired JWT -> next() anonymous, never 401", async () => {
     const token = signToken({ sub: "user-id" }, { expiresIn: -10 });
+    const req = makeReq(`Bearer ${token}`);
+    const next = vi.fn() as NextFunction;
+
+    await optionalAuthenticate(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(req.user).toBeUndefined();
+  });
+
+  it("well-signed JWT for another audience -> next() anonymous, never 401", async () => {
+    const token = signToken({ sub: "user-id" }, { audience: "someone-else" });
     const req = makeReq(`Bearer ${token}`);
     const next = vi.fn() as NextFunction;
 

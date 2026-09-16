@@ -26,8 +26,8 @@ A varredura da 10.13 cobriu campo de schema; os dois headers vão para o banco (
 ### ~~Auditar mass assignment nos schemas de update~~ — ✅ resolvido (Fase 10.12)
 Nenhum schema estava permissivo: todo update é `.strict()`, create e upsert descartam a chave desconhecida. O resultado foi só a suíte de regressão (`tests/integration/v1/mass-assignment.test.ts`, um caso por endpoint de escrita) e a regra de que schema de escrita novo entra nela no mesmo commit. Racional em `docs/context/security.md` § "Mass assignment".
 
-### Endurecer a verificação do JWT — **P**
-Fixar `algorithms: ["HS256"]` na verificação (sem pinar, o token fica exposto a *algorithm confusion*), validar `iss` e `aud`, e definir tolerância de clock skew. Poucas linhas, vulnerabilidade de manual.
+### ~~Endurecer a verificação do JWT~~ — ✅ resolvido (Fase 10.10)
+`algorithms: ["HS256"]`, `iss`/`aud` exigidos e `clockTolerance` de 5s, com emissão e verificação lendo as mesmas constantes em `src/lib/accessToken.ts`. O deploy invalida os access tokens em voo (não carregam `iss`/`aud`); o `refresh` recompõe o par. Racional em `docs/context/security.md` § "O access token tem algoritmo pinado".
 
 ### Bloquear senhas vazadas via HIBP — **M**
 No signup e no change-password, consultar a API de range do Have I Been Pwned por *k-anonymity*: envia-se apenas os 5 primeiros caracteres do SHA-1 da senha, nunca a senha nem o hash completo. Gratuito e sem chave para esse endpoint. Puro polimento, mas é o tipo de detalhe que se nota numa revisão de código.

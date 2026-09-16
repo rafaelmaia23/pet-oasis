@@ -55,9 +55,12 @@ ENTRYPOINT ["./docker-entrypoint.sh"]
 
 # ─── dev ──────────────────────────────────────────────────────────────────────
 # Full install (with devDeps), no bundle, no prune. Runs `tsx watch` against a
-# bind-mounted src/. Stays root (no `USER node`) so writes to the bind-mount and
-# to the anonymous src/generated volume don't hit host-uid mismatches. The
-# Prisma client is generated at container start into that anon volume
+# bind-mounted src/. No `USER node` here: the container *starts* as root so the
+# entrypoint can generate the Prisma client into the root-owned anonymous
+# src/generated volume, then drops to the host's uid/gid (HOST_UID/HOST_GID,
+# via `setpriv`) before anything writes to a bind mount — otherwise the files
+# the seed leaves in ../uploads belong to root on the host (10.16). The Prisma
+# client is generated at container start into that anon volume
 # (see infra/docker-compose.dev.yml + infra/docker-entrypoint.dev.sh) — not baked here.
 FROM node:22-bookworm-slim AS dev
 WORKDIR /app

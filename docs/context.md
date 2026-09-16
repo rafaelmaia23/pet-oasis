@@ -321,6 +321,8 @@ completo, os contra-argumentos e os gotchas.
   o Node, e o bind mount é o que deixa a troca por nginx ser configuração
 - O diretório de uploads mora fora do working tree, e o uid é fixado no serviço (10.4) — git e
   container não têm dono em comum; `UPLOAD_HOST_DIR` é obrigatória, sem fallback para dentro da árvore
+- O container de dev escreve como o uid do host, não como root (10.16) — num clone novo o Docker
+  cria `uploads/` como root ao montar; o entrypoint entrega a raiz ao host e cai de uid antes de gravar
 - `sharp` no ARM64 exige build no próprio servidor (9.10)
 
 *Documentação da API*

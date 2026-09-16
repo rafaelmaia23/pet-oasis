@@ -293,9 +293,10 @@ Então `uploads/` saiu do git por inteiro (o `.gitkeep` foi removido, o `.gitign
 diretório) e `UPLOAD_HOST_DIR` virou **obrigatória** em produção: o `:-./uploads` que ela tinha
 era o caminho silencioso de volta para dentro da árvore, e um fallback que reintroduz o bug que
 se acabou de corrigir não é conveniência. Faltando a variável, o `prod:up` falha nomeando-a — a
-mesma política da rede `proxy` declarada como `external:`. Em dev nada disso morde (o estágio
-`dev` da imagem roda como root, e o `put` do storage cria o diretório sozinho), então o mount de
-dev continua em `../uploads`, sem variável nova para quem clona.
+mesma política da rede `proxy` declarada como `external:`. O mount de dev continua em
+`../uploads`, sem variável nova para quem clona. Esta decisão acreditou que em dev "nada disso
+morde", porque o estágio `dev` rodava como root e o git não é mais dono de nada ali; a 10.16
+mostrou que o **host** era o outro dono em disputa, e resolveu a parte de dev (seção abaixo).
 
 O uid ficou **fixado no serviço** (`user: "1000:1000"`) em vez de herdado do `USER node` da
 imagem base. Herdar amarra a permissão do diretório do host a uma escolha da base: um bump que
@@ -305,6 +306,38 @@ não aponta para a causa. Fixado, o número está escrito nos dois lugares que p
 
 Nada gravado no banco mudou, e essa é a propriedade que tornou a migração um `mv`: o banco guarda
 a **chave** do arquivo, nunca a URL — que nasce de `UPLOAD_PUBLIC_BASE_URL` a cada resposta.
+
+### O container de dev escreve como o uid do host, não como root (10.16)
+
+A 10.4 tirou `uploads/.gitkeep` do git e deixou o mount de dev dentro da árvore com a
+justificativa de que em dev a disputa de dono não existia: o estágio `dev` roda como root, e root
+escreve em qualquer lugar. Faltava o outro lado da mesma disputa. Num clone novo `uploads/` **não
+existe**, e quem o cria é o Docker ao montar o bind mount — como `root`, antes de qualquer
+processo do container rodar. Daí em diante tudo que o seed dentro do container gravava
+(`products/<id>/…`) era de `root`, e o que roda **no host** com o usuário do host — `npm run
+db:seed` com `SEED_FAKE_DATA=true`, `db:cleanup-uploads`, um `rm -rf uploads` — batia em
+`EACCES`. O segundo incidente que a 10.4 foi escrita para matar, reproduzido do outro lado.
+
+Pré-criar o diretório (no script `dev` ou por um arquivo versionado) decidiria só o dono da
+raiz: os subdiretórios que o container gravasse depois continuariam de `root`, e o `cleanup` do
+host tropeçaria neles. O conserto foi na **causa**: o container de dev passou a escrever como o
+uid do host. O script `dev` exporta `HOST_UID`/`HOST_GID` a partir de `id -u`/`id -g` (nenhum
+passo de setup; o Compose tem default `1000` para quem o invocar por fora do npm), e o
+[entrypoint de dev](../../infra/docker-entrypoint.dev.sh) roda em **duas passadas**: ainda como
+root, gera o client Prisma no volume anônimo `src/generated` (que é de root e não tem por que
+deixar de ser) e entrega `/app/uploads` ao uid do host com um `chown -R` — recursivo de
+propósito, para curar no `up` seguinte a árvore que um clone anterior a esta decisão já tenha
+deixado como `root`; depois se re-executa via `setpriv` (util-linux, já na imagem base — nenhum
+pacote novo) com o uid do host, e é essa segunda passada que roda `migrate`, o seed e o `tsx
+watch`. `HOME` vai para `/tmp` porque o uid do host não tem entrada no `/etc/passwd` do container
+e o CLI do Prisma escreve o cache de checkpoint sob `$HOME`. O `Dockerfile` continua sem `USER
+node` no estágio `dev`, mas o comentário lá deixou de dizer "fica root": fica root **para o
+`generate`**, e só até ali.
+
+A assimetria com produção é deliberada: lá o uid é **fixado** em `1000` (10.4) porque o servidor é
+um só e o `chown` do guia de deploy precisa concordar com um número escrito; em dev o uid é o de
+**quem clonou**, porque cada máquina tem o seu, e escrever um número faria o conserto valer só
+para quem por acaso for `1000`.
 
 ### `sharp` no ARM64 exige build no próprio servidor (9.10)
 

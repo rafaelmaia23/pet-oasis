@@ -53,6 +53,12 @@ services:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
       REDIS_URL: "redis://redis:6379"
       SMTP_HOST: mailpit
+      # Uid/gid que o entrypoint assume depois do `prisma generate` (10.16). O
+      # script `dev` exporta os dois a partir de `id -u`/`id -g`, então quem
+      # clona não configura nada; o default 1000 cobre o caso de alguém invocar
+      # o Compose por fora do npm. Ver o comentário do mount de ../uploads.
+      HOST_UID: ${HOST_UID:-1000}
+      HOST_GID: ${HOST_GID:-1000}
     depends_on:
       db:
         condition: service_healthy
@@ -83,11 +89,17 @@ services:
       # arqueologia em /var/lib/docker/volumes.
       #
       # Aqui — e só aqui — o caminho fica dentro da árvore. O que obriga produção
-      # a sair dela (10.4) é o git e o container disputarem o dono do diretório,
-      # e em dev essa disputa não existe: o estágio `dev` da imagem roda como
-      # root, e `uploads/` não é mais versionado (o `.gitkeep` saiu). Trocar isto
-      # por uma variável custaria um passo de setup a quem clona, sem resolver
-      # problema que dev tenha.
+      # a sair dela (10.4) é o git e o container disputarem o dono do diretório;
+      # em dev o git não disputa (`uploads/` não é versionado, o `.gitkeep`
+      # saiu), mas o **host** disputa: `npm run db:seed` e `db:cleanup-uploads`
+      # rodam no host e escrevem aqui. Num clone novo o diretório não existe, e
+      # quem o cria é o Docker ao montar — como root. Foi isso que a 10.4 leu
+      # como "disputa que não existe" e a 10.16 corrigiu por outro lado: o
+      # entrypoint, ainda root, entrega esta raiz ao host (`chown`) e cai para
+      # HOST_UID/HOST_GID antes de qualquer escrita no bind mount, então tudo
+      # que nasce aqui tem o dono do host. Trocar o caminho por uma variável
+      # custaria um passo de setup a quem clona, sem resolver problema que dev
+      # tenha.
       - ../uploads:/app/uploads
       # Anonymous volume: keeps the container's generated Prisma client from being
       # masked by the host's src/ bind-mount (entrypoint runs `prisma generate`).

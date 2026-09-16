@@ -6,7 +6,7 @@
   "author": "Rafael Maia da Fonseca",
   "type": "module",
   "scripts": {
-    "dev": "docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up --build --remove-orphans",
+    "dev": "HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up --build --remove-orphans",
     "dev:down": "docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down --remove-orphans",
     "dev:reset": "docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down -v --remove-orphans && npm run dev",
     "dev:mail": "docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d mailpit",

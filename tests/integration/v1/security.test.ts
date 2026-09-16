@@ -1,5 +1,5 @@
 import { buildCustomer } from "@tests/factories/user.factory";
-import { loginAs } from "@tests/helpers/auth";
+import { forgeAccessToken, loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
 import { flushRedis } from "@tests/helpers/redis";
 import jwt from "jsonwebtoken";
@@ -7,11 +7,7 @@ import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import app from "@/app";
 import { env } from "@/config/env";
-import {
-  ACCESS_TOKEN_ALGORITHM,
-  ACCESS_TOKEN_AUDIENCE,
-  ACCESS_TOKEN_ISSUER,
-} from "@/lib/accessToken";
+import { ACCESS_TOKEN_ALGORITHM } from "@/lib/accessToken";
 
 // A allowlist de CORS sai **só** de `CORS_ALLOWED_ORIGINS` (10.11) — nada entra
 // por inércia, nem a `APP_URL`. `vi.hoisted` roda antes dos imports, então as
@@ -191,16 +187,6 @@ describe("Bordas HTTP — JWT", () => {
     await flushRedis();
   });
 
-  function forge(userId: string, options: jwt.SignOptions): string {
-    return jwt.sign({ sub: userId }, env.JWT_SECRET, {
-      algorithm: ACCESS_TOKEN_ALGORITHM,
-      issuer: ACCESS_TOKEN_ISSUER,
-      audience: ACCESS_TOKEN_AUDIENCE,
-      expiresIn: "15m",
-      ...options,
-    });
-  }
-
   async function whoAmI(token: string) {
     return request(app)
       .get("/api/v1/me")
@@ -226,7 +212,9 @@ describe("Bordas HTTP — JWT", () => {
     async (_label, options) => {
       const user = await buildCustomer();
 
-      const response = await whoAmI(forge(user.id, options));
+      const response = await whoAmI(
+        forgeAccessToken({ sub: user.id }, options),
+      );
 
       expect(response.status).toBe(401);
       expect(response.body).toMatchObject({

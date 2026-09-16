@@ -1,3 +1,4 @@
+import { forgeAccessToken } from "@tests/helpers/auth";
 import jwt from "jsonwebtoken";
 import { describe, expect, it } from "vitest";
 import { env } from "@/config/env";
@@ -13,8 +14,8 @@ import {
 /**
  * Endurecimento da verificação do JWT (10.10): algoritmo pinado, `iss`/`aud`
  * exigidos, tolerância de relógio explícita. Cada caso de recusa forja um token
- * com o **mesmo segredo** e só uma coisa fora do lugar — é o que prova que a
- * recusa vem da claim, não da assinatura.
+ * com o **mesmo segredo** e só uma coisa fora do lugar (`forgeAccessToken`) —
+ * é o que prova que a recusa vem da claim, não da assinatura.
  */
 
 const userId = "user-id-123";
@@ -23,15 +24,8 @@ function base64url(value: object): string {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
 
-// O mesmo contrato do token legítimo, menos o que cada caso quer quebrar.
 function forge(options: jwt.SignOptions = {}): string {
-  return jwt.sign({ sub: userId }, env.JWT_SECRET, {
-    algorithm: ACCESS_TOKEN_ALGORITHM,
-    issuer: ACCESS_TOKEN_ISSUER,
-    audience: ACCESS_TOKEN_AUDIENCE,
-    expiresIn: "15m",
-    ...options,
-  });
+  return forgeAccessToken({ sub: userId }, options);
 }
 
 describe("accessToken", () => {
@@ -102,9 +96,9 @@ describe("accessToken", () => {
 
   describe("clock tolerance is explicit", () => {
     it("accepts a token that expired within the tolerance", () => {
-      const token = forge({
-        expiresIn: -(ACCESS_TOKEN_CLOCK_TOLERANCE_SECONDS - 1),
-      });
+      // Um segundo dentro, não um segundo antes da borda: a assinatura e a
+      // verificação podem cair em segundos diferentes do relógio.
+      const token = forge({ expiresIn: -1 });
 
       expect(verifyAccessToken(token)).toBe(userId);
     });
@@ -120,12 +114,7 @@ describe("accessToken", () => {
 
   describe("subject is mandatory", () => {
     it("rejects a well-formed token without sub", () => {
-      const token = jwt.sign({}, env.JWT_SECRET, {
-        algorithm: ACCESS_TOKEN_ALGORITHM,
-        issuer: ACCESS_TOKEN_ISSUER,
-        audience: ACCESS_TOKEN_AUDIENCE,
-        expiresIn: "15m",
-      });
+      const token = forgeAccessToken({});
 
       expect(verifyAccessToken(token)).toBeNull();
     });

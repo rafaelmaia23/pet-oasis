@@ -1,13 +1,9 @@
+import { forgeAccessToken } from "@tests/helpers/auth";
 import type { NextFunction, Request, Response } from "express";
-import jwt from "jsonwebtoken";
+import type jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { env } from "@/config/env";
 import { UnauthorizedError } from "@/errors";
-import {
-  ACCESS_TOKEN_ALGORITHM,
-  ACCESS_TOKEN_AUDIENCE,
-  ACCESS_TOKEN_ISSUER,
-} from "@/lib/accessToken";
+import { ACCESS_TOKEN_CLOCK_TOLERANCE_SECONDS } from "@/lib/accessToken";
 import {
   authenticate,
   optionalAuthenticate,
@@ -27,14 +23,11 @@ function makeReq(authHeader?: string): Request {
 // O contrato inteiro do access token (10.10) — o que `signAccessToken` emite.
 // Os casos de recusa abaixo tiram uma peça de cada vez.
 function signToken(payload: object, options?: jwt.SignOptions): string {
-  return jwt.sign(payload, env.JWT_SECRET, {
-    algorithm: ACCESS_TOKEN_ALGORITHM,
-    issuer: ACCESS_TOKEN_ISSUER,
-    audience: ACCESS_TOKEN_AUDIENCE,
-    expiresIn: "15m",
-    ...options,
-  });
+  return forgeAccessToken(payload, options);
 }
+
+// Expirado **além** da folga de relógio — senão a tolerância o aceitaria.
+const pastTolerance = -(ACCESS_TOKEN_CLOCK_TOLERANCE_SECONDS + 5);
 
 describe("authenticate middleware", () => {
   beforeEach(() => {
@@ -73,7 +66,7 @@ describe("authenticate middleware", () => {
   });
 
   it("expired JWT -> rejects with 401", async () => {
-    const token = signToken({ sub: "user-id" }, { expiresIn: -10 });
+    const token = signToken({ sub: "user-id" }, { expiresIn: pastTolerance });
     const req = makeReq(`Bearer ${token}`);
     await expect(
       authenticate(req, {} as Response, vi.fn()),
@@ -196,7 +189,7 @@ describe("optionalAuthenticate middleware", () => {
   });
 
   it("expired JWT -> next() anonymous, never 401", async () => {
-    const token = signToken({ sub: "user-id" }, { expiresIn: -10 });
+    const token = signToken({ sub: "user-id" }, { expiresIn: pastTolerance });
     const req = makeReq(`Bearer ${token}`);
     const next = vi.fn() as NextFunction;
 

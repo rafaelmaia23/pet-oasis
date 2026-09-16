@@ -16,7 +16,7 @@ import { env } from "@/config/env";
  * a porta para um header que peça outra coisa (`none`, `HS512`, ou `RS256`
  * com a chave pública no lugar do segredo).
  */
-export const ACCESS_TOKEN_ALGORITHM = "HS256" as const;
+export const ACCESS_TOKEN_ALGORITHM = "HS256";
 
 /**
  * Emissor e audiência coincidem porque a API é as duas coisas: quem cunha o

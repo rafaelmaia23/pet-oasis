@@ -9,11 +9,7 @@ e para uma receita de nginx/certbot/301 que não corresponde ao servidor real.
 **Blocked by:** nada. A 02 (rede `proxy`, porta despublicada) já está mergeada, e é o que o proxy
 host do NPM precisa.
 
-**Status:** ready-for-human
-
-**Triagem:** ready-for-human — a parte de agente está mergeada (`5fcc244`); DNS, certificado e
-proxy host já foram refeitos para o nome novo. Falta só o que exige o `prod:up` da fase: a
-verificação manual de ponta a ponta, registrada aqui, e a confirmação do `.env.production`.
+**Status:** fechada em 2026-09-16
 
 ## Decisões (usuário, 2026-09-16)
 
@@ -122,7 +118,7 @@ já está no apex no servidor); `src/docs/openapi.ts` (`servers` relativo segue 
       serve o documento.
 - [x] `npm run docs:check`, `lint`, `typecheck` verdes; suíte completa (**1288**) verde na
       `fase-10` depois dos merges da 10 e da 06.
-- [ ] **Verificação manual (depois do deploy)**, registrada aqui no formato da 02: TLS válido no
+- [x] **Verificação manual (depois do deploy)**, registrada aqui no formato da 02: TLS válido no
       host novo (`curl -w '%{http_code} %{ssl_verify_result}'` → `200 0`), uma imagem do
       catálogo servida pelo host novo, e um login recusado de fora gravando em `audit_logs` o IP
       do visitante (prova da cadeia pela Cloudflare).
@@ -177,3 +173,25 @@ o agente devolveram, e o que se decidiu sobre cada ponto:
   das três faixas privadas e o `include` de `ip_ranges.conf`. A Cloudflare **não** manda
   `X-Real-IP`, então sem o override o `$remote_addr` continua sendo a borda da Cloudflare — o
   modo de falha descrito em `infrastructure.md` está correto como está.
+
+## Verificação manual (2026-09-16, depois do primeiro `prod:up` da fase)
+
+Roteiro do `deploy.md` § "Domínio e reverse proxy" → *Verificar*, metade de fora (máquina de
+desenvolvimento, saindo por IPv6) e metade no servidor:
+
+- **TLS e API no host novo:** `curl -w '%{http_code} %{ssl_verify_result}'
+  https://pet-oasis-api.maiahub.com.br/api/v1/status` → **`200 0`**. `/reference` → 200; a raiz
+  → `302 → /reference` (redirect do NPM, não da aplicação). A conexão de fora chega à borda da
+  Cloudflare (`remote_ip 2606:4700:3033::ac43:9aed`) — o proxy está ligado, e o nome de primeiro
+  nível tem certificado nela.
+- **Imagem do catálogo pelo host novo:** primeiro **404** em todas — não era o host, era o
+  diretório vazio (ver o achado registrado na 04: os bytes da Fase 9 morreram com o container
+  antigo). Depois do `demo-reset`: **200**.
+- **A cadeia de IP pela Cloudflare:** um login recusado disparado de fora (`401`) gravou em
+  `audit_logs` `ip = 2804:13c:a27:500:748d:48f1:84ad:9e1e` — o IPv6 público da máquina que
+  chamou (`curl -6 https://api64.ipify.org` bate), **não** `2606:4700::` (Cloudflare) nem `172.x`
+  (bridge do NPM). O `real_ip_header CF-Connecting-IP` no proxy host está fazendo o que a
+  decisão descreve.
+
+Os três `curl` de fora foram executados pelo agente; a consulta ao banco e o `demo-reset`, pelo
+operador no host.

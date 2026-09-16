@@ -320,13 +320,15 @@ completo, os contra-argumentos e os gotchas.
 - A API atende num subdomínio, e o apex fica limpo (10.6) — `pet-oasis-api.maiahub.com.br`, de
   primeiro nível porque segundo nível não fecha TLS atrás do proxy da Cloudflare; os 301 do apex
   foram planejados e descartados; a cadeia de IP ganha a Cloudflare e o proxy resolve o visitante
-  por `CF-Connecting-IP`; a base das imagens segue a API sem migration (o banco guarda a chave), e
-  `APP_URL` só vira depois de o front ter as quatro rotas de email
+  por `CF-Connecting-IP`; a base das imagens segue a API sem migration (o banco guarda a chave);
+  a regra "`APP_URL` só depois de o front ter as quatro rotas" foi relaxada na demo por decisão
+  do dono — demo efêmera não é deploy com usuários (10.14)
 - O reverse proxy do upload existe, mas não neste repositório (9.10) — quem serve `/uploads/*` é
   o Node, e o bind mount é o que deixa a troca por nginx ser configuração
 - O diretório de uploads mora fora do working tree, e o uid é fixado no serviço (10.4) — git e
   container não têm dono em comum; `UPLOAD_HOST_DIR` é obrigatória, sem fallback para dentro da árvore,
-  e absoluta — fonte relativa resolve contra `infra/`, o diretório do projeto, não contra a raiz (10.19)
+  e absoluta — fonte relativa resolve contra `infra/`, o diretório do projeto, não contra a raiz (10.19);
+  trocar onde os bytes moram exige regravá-los — o banco guarda a chave e não avisa (10.21)
 - O container de dev escreve como o uid do host, não como root (10.16) — num clone novo o Docker
   cria `uploads/` como root ao montar; o entrypoint entrega a raiz ao host e cai de uid antes de gravar
 - `sharp` no ARM64 exige build no próprio servidor (9.10)

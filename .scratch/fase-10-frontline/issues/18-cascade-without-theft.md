@@ -99,7 +99,7 @@ teto precisa existir para limitar o trabalho por requisição — duas idas por 
 ## Critérios
 
 - [x] `Session` ganha `graceDeferredAt DateTime? @map("grace_deferred_at")`, com migration via
-      `npm run db:migrate`.
+      `npm run db:migrate` (gerada pelo script e **editada à mão** — ver o fecho).
 - [x] A duração da marca é constante nomeada em `auth.constants.ts`
       (`REFRESH_GRACE_DEFERRED_WINDOW_MS = 30 * 1000`), **não** env var, pelo mesmo racional dos
       10 s: número que ninguém deve ajustar em produção sem pensar não merece um botão. O

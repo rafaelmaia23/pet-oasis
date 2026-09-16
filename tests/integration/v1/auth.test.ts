@@ -92,13 +92,24 @@ function rawRefreshTokenFromCookie(refreshCookie: string): string {
   return refreshCookie.split("=")[1] as string;
 }
 
-async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
-  const session = await prisma.session.findUniqueOrThrow({
-    where: {
-      refreshTokenHash: hashToken(rawRefreshTokenFromCookie(refreshCookie)),
-    },
+async function sessionByRawToken(rawRefreshToken: string) {
+  return prisma.session.findUniqueOrThrow({
+    where: { refreshTokenHash: hashToken(rawRefreshToken) },
   });
-  return session.id;
+}
+
+async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
+  return (await sessionByRawToken(rawRefreshTokenFromCookie(refreshCookie))).id;
+}
+
+/** Envelhece o `usedAt` da linha para além dos 10s da janela, sem injetar relógio. */
+async function ageUsedAtPastGraceWindow(
+  rawRefreshToken: string,
+): Promise<void> {
+  await prisma.session.update({
+    where: { refreshTokenHash: hashToken(rawRefreshToken) },
+    data: { usedAt: new Date(Date.now() - REFRESH_GRACE_WINDOW_MS - 1_000) },
+  });
 }
 
 /**
@@ -107,12 +118,8 @@ async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
  * já passou (o TTL do Redis teria expirado sozinho).
  */
 async function ageOutOfGraceWindow(rawRefreshToken: string): Promise<void> {
-  const refreshTokenHash = hashToken(rawRefreshToken);
-  await prisma.session.update({
-    where: { refreshTokenHash },
-    data: { usedAt: new Date(Date.now() - REFRESH_GRACE_WINDOW_MS - 1_000) },
-  });
-  await redis.del(refreshGraceKey(refreshTokenHash));
+  await ageUsedAtPastGraceWindow(rawRefreshToken);
+  await redis.del(refreshGraceKey(hashToken(rawRefreshToken)));
 }
 
 /**
@@ -130,12 +137,6 @@ async function markGraceDeferred(
     data: { graceDeferredAt },
   });
   return graceDeferredAt;
-}
-
-async function sessionByRawToken(rawRefreshToken: string) {
-  return prisma.session.findUniqueOrThrow({
-    where: { refreshTokenHash: hashToken(rawRefreshToken) },
-  });
 }
 
 afterEach(async () => {
@@ -933,7 +934,7 @@ describe("POST /api/v1/auth/refresh", () => {
     expect(replayResponse.status).toBe(503);
     // A mensagem manda tentar **agora**: "em alguns instantes" contradizia o guia
     // e empurrava o cliente para fora da janela.
-    expect(replayResponse.body.action).not.toMatch(/instantes/i);
+    expect(replayResponse.body.action).toBe("Tente novamente agora");
 
     const marked = await sessionByRawToken(rawToken);
     expect(marked.graceDeferredAt).not.toBeNull();
@@ -987,11 +988,8 @@ describe("POST /api/v1/auth/refresh", () => {
     expect(rotateResponse.status).toBe(200);
 
     // A retentativa tardia do 503: `usedAt` já passou dos 10s, mas o primeiro
-    // 503 foi há menos de 30s — e o par voltou a existir no cache.
-    await prisma.session.update({
-      where: { refreshTokenHash: hashToken(rawToken) },
-      data: { usedAt: new Date(Date.now() - REFRESH_GRACE_WINDOW_MS - 1_000) },
-    });
+    // 503 foi há menos de 30s — e o par ainda está no cache (o Redis voltou).
+    await ageUsedAtPastGraceWindow(rawToken);
     await markGraceDeferred(rawToken, REFRESH_GRACE_DEFERRED_WINDOW_MS / 2);
 
     const replayResponse = await request(app)

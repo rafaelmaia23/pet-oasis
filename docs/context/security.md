@@ -156,7 +156,10 @@ A primeira forma disso foi `app.set("trust proxy", 1)`: um salto, o proxy que sa
 a chamar a API em nome do visitante. A partir daí duas cadeias vivem ao mesmo tempo —
 `visitante → nginx → api`, com um salto, e `visitante → nginx → front → api`, com dois — e
 **nenhuma contagem única acerta as duas**: `1` grava o container do front, `2` grava o nginx
-quando a chamada não passou pelo front. Contar saltos pressupõe uma topologia só.
+quando a chamada não passou pelo front. Contar saltos pressupõe uma topologia só. (Na prática há
+ainda a borda da Cloudflare na frente do nginx; ela não entra na conta porque o **proxy** resolve
+o IP real do visitante a partir de `CF-Connecting-IP` antes de encaminhar — decisão da 10.6, em
+[`infrastructure.md`](infrastructure.md) § "A API atende num subdomínio, e o apex fica limpo".)
 
 A forma que serve as duas é confiar por **endereço**:
 

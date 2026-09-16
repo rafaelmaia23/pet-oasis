@@ -56,7 +56,7 @@ Um cliente na `pet-oasis` **não** alcança Postgres nem Redis. É de propósito
 ### Pela URL pública
 
 ```
-https://api.pet-oasis.maiahub.com.br/api/v1
+https://pet-oasis-api.maiahub.com.br/api/v1
 ```
 
 Para o que roda no navegador de alguém ou fora do VPS. A porta 3000 **não é publicada no
@@ -88,7 +88,9 @@ app.set("trust proxy", ["loopback", "uniquelocal"]);
 O Express caminha o `X-Forwarded-For` da direita para a esquerda pulando endereços confiáveis
 e para no primeiro que não é — o que acerta tanto a cadeia `visitante → nginx → api` quanto
 `visitante → nginx → cliente → api`, sem que nenhum dos dois lados precise saber o formato do
-outro.
+outro. A borda da Cloudflare, que fica na frente do nginx, não aparece nessas cadeias porque o
+próprio proxy resolve o IP do visitante a partir de `CF-Connecting-IP` antes de encaminhar: o
+que chega ao cliente como `X-Forwarded-For` já é o visitante, e copiar o header basta.
 
 **O que torna isso seguro** é a porta 3000 não ser publicada: os únicos que alcançam a API por
 endereço privado são o nginx e os containers das redes `proxy` e `pet-oasis`. Um

@@ -237,27 +237,34 @@ tanto faz. Três cadeias cobertas por teste em `tests/integration/v1/visitor-ip.
 `docs/context/security.md` § "`trust proxy` é por endereço de origem" e `docs/context/infrastructure.md`
 § "Três redes com papéis distintos".
 
-### Apex passa a ser o front; API migra para `api.pet-oasis.maiahub.com.br` — **M**
+### Apex passa a ser o front; API migra para `pet-oasis-api.maiahub.com.br` — **M**
 
 **Motivo:** o front web (repo `pet-oasis-web`) tem mais valor de portfólio no apex do que a
 referência Scalar — peça visual chama mais atenção que UI de documentação. A API não perde
-nada indo para um subdomínio, desde que link já publicado não quebre.
+nada indo para um subdomínio.
 
 **O que muda:**
 
-- **nginx**: server block novo para `api.pet-oasis.maiahub.com.br` e certificado com o SAN
-  novo. O apex passa a servir o container do front.
+- **Nome**: `pet-oasis-api.maiahub.com.br`, de **primeiro** nível sob o domínio. A primeira
+  versão escolheu `api.pet-oasis.maiahub.com.br`, e o handshake TLS falhou de fora: o DNS é
+  proxiado pela Cloudflare, e o Universal SSL dela só cobre o apex e `*.maiahub.com.br`.
+- **Reverse proxy**: proxy host no Nginx Proxy Manager para o nome novo, apontando ao container
+  da API por DNS da rede `proxy`, com certificado Let's Encrypt por desafio DNS na Cloudflare e
+  `real_ip_header CF-Connecting-IP; real_ip_recursive off;` na custom config (sem isso a borda
+  da Cloudflare vira o IP de todo visitante). O apex passa a servir o container do front.
 - **`.env.production`**: `APP_URL` → `https://pet-oasis.maiahub.com.br` (que agora é o front,
   que é o que essa variável sempre quis dizer) e `UPLOAD_PUBLIC_BASE_URL` →
-  `https://api.pet-oasis.maiahub.com.br/uploads`.
+  `https://pet-oasis-api.maiahub.com.br/uploads`.
 - **Sem migration**: o banco guarda a chave do arquivo, nunca a URL (ADR
   `file-storage-and-uploads.md`), então trocar a env var basta. A decisão daquele ADR paga
-  dividendo aqui.
+  dividendo aqui — e pagou duas vezes, porque a troca de nome também custou só a variável.
 - **Sem mudança na spec**: `servers: [{ url: "/api/v1" }]` (`src/docs/openapi.ts:85`) é
   relativo e segue o host que serve o documento.
-- **301 no apex** para `/reference` e `/openapi.json` apontando ao subdomínio: o README, os
-  badges e o GIF da demo divulgam o apex, e link publicado não deve morrer.
-- **Documentação**: README, badges e `docs/guides/deploy.md`.
+- **301 no apex — planejado e descartado**: a primeira versão previa `301` de `/reference` e
+  `/openapi.json` para o subdomínio, para link publicado não morrer. A demo era quase não
+  divulgada, e manter dois `location` para sempre num host que não é da API era resíduo sem
+  dono. O apex fica limpo; quem tinha o link antigo troca a base.
+- **Documentação**: README, badges, `docs/guides/deploy.md` e `docs/context/infrastructure.md`.
 
 **Contrato de rotas com o front (a parte que não é infraestrutura):** quatro caminhos são
 montados a partir de `APP_URL` e passam a ser obrigação do front, com estes nomes exatos —
@@ -265,7 +272,7 @@ montados a partir de `APP_URL` e passam a ser obrigação do front, com estes no
 `/confirm-account-reactivation`, todos com `?token=`. Renomear qualquer um deles no front
 quebra o email correspondente sem erro visível em lugar nenhum.
 
-**Ordem de execução (importa):** subir o subdomínio e os redirects **antes**, mas só virar
+**Ordem de execução (importa):** subir o subdomínio e o certificado **antes**, mas só virar
 `APP_URL` para o apex quando o front tiver as quatro rotas no ar. Virar antes transforma
 todo email de verificação e de reset em 404 — e são justamente os fluxos que travam conta
 nova.

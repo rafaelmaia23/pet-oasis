@@ -292,12 +292,18 @@ Duas coisas que a migração **não** custou, e as duas são dividendo de decis�
   host que o serviu. Um `servers` absoluto teria feito o Scalar do subdomínio disparar "try it"
   contra o host velho.
 
-**A ordem é parte da decisão.** Subdomínio e certificado vêm primeiro; `APP_URL` — que sempre
-quis dizer *o app que a pessoa vê*, e passa a apontar para o front — só vira depois de o front
-ter no ar as quatro rotas de email (verificação, redefinição de senha, confirmação de troca de
-email, confirmação de reativação). Virar antes transforma verificação de conta e reset de senha
-em 404, que são justamente os fluxos que destravam conta nova, e a falha é silenciosa em todo
-lugar menos na caixa de entrada de quem se cadastrou.
+**A ordem era parte da decisão, e foi relaxada na execução (10.14).** A regra escrita: subdomínio
+e certificado primeiro; `APP_URL` — que sempre quis dizer *o app que a pessoa vê*, e passa a
+apontar para o front — só depois de o front ter no ar as quatro rotas de email (verificação,
+redefinição de senha, confirmação de troca de email, confirmação de reativação), porque virar
+antes transforma verificação de conta e reset de senha em 404, justamente os fluxos que destravam
+conta nova, com a falha silenciosa em todo lugar menos na caixa de entrada de quem se cadastrou.
+Na execução o dono do projeto virou `APP_URL` **antes** de o front subir, e por decisão: o único
+ambiente de pé é uma demo efêmera, sem conta real, então o link 404 num email de demonstração não
+custa nada — e amarrar o fecho da API ao calendário do front custava. A regra continua sendo a
+regra para qualquer deploy com usuários; o que mudou foi o julgamento de que a demo não é um.
+Do lado da API a migração está completa; subir o front no apex, apontar o proxy host do apex para
+o container dele e provar os quatro fluxos ponta a ponta é trabalho do `pet-oasis-web`.
 
 A configuração do reverse proxy (Nginx Proxy Manager, certificado por desafio DNS na
 Cloudflare) continua **fora deste repositório** (mesmo motivo da seção seguinte); a forma que o
@@ -360,6 +366,20 @@ moveria um diretório vazio com a conferência de contagem fechando em `0 == 0`.
 nenhum deploy carrega dados, e o demo é recriado do zero. O que ficou é o fato que a derrubou,
 no [guia de deploy](../guides/deploy.md) (bullet de `UPLOAD_HOST_DIR`) e no comentário do mount —
 para que "absoluto" deixe de parecer preciosismo.
+
+**O que o primeiro deploy com este layout ensinou (10.21).** A 10.19 estava certa em que não
+havia diretório a migrar — e errada em supor que por isso não havia nada a fazer. O `prod:up`
+da Fase 10 trocou o container mas **preservou o volume do banco**, e o banco da Fase 9 tinha as
+linhas de imagem do seed; os bytes delas viviam **dentro do container antigo** (a Fase 9 não
+tinha bind mount) e morreram com ele. O seed do boot é idempotente — não regrava o que o banco
+já tem —, então subiu limpo (`SEEDING COMPLETED!`) com a vitrine respondendo **404 em toda
+imagem**: linha sem byte é o único estado que nem o seed nem o healthcheck enxergam. Regra
+geral: **toda troca de onde os bytes moram exige regravá-los ou movê-los; o banco não avisa.**
+Numa demo, o conserto é o `demo-reset` (trunca e repovoa, gravando no mount novo); num deploy
+com dados seria um `mv` — e é para esse dia que a propriedade "o banco guarda a chave" continua
+valendo. Ficou também o detalhe do `chown`: o par que importa é o **número** `1000:1000`, o do
+`user:` do serviço, não o nome de usuário do host que por acaso o carrega (`opc` no servidor
+atual, `node` na imagem) — nomes divergem entre máquinas, o uid é o contrato.
 
 ### O container de dev escreve como o uid do host, não como root (10.16)
 

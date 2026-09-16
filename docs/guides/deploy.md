@@ -54,11 +54,23 @@ sudo mkdir -p /srv/pet-oasis-data/uploads
 sudo chown -R 1000:1000 /srv/pet-oasis-data/uploads
 ```
 
-### Não há deploy para migrar
+É o **número** que importa, não o nome: `1000:1000` é o `user:` do serviço, e um `ls -la` vai
+mostrá-lo com o nome que o host der a esse uid (`opc`, `ubuntu`, o que for). Conferir com
+`id -u <nome>` antes de confiar no nome.
 
-Nenhum deploy com dados antecede este layout: quando ele entrou, não havia produção, e o demo
-(ainda sem `uploads/`) foi recriado do zero — `npm run prod:down`, `UPLOAD_HOST_DIR` absoluto no
-`.env.production`, `npm run prod:up`. Não há diretório a mover nem contagem a conferir.
+### Não há deploy para migrar — mas há bytes a regravar
+
+Nenhum deploy com dados antecede este layout, então não há diretório a mover. Mas o volume do
+banco sobrevive ao redeploy e o seed não regrava o que o banco já tem — se as linhas de imagem
+apontam para bytes que ficaram para trás, a API sobe limpa e toda imagem responde 404. No demo,
+o conserto é repovoar:
+
+```bash
+sudo systemctl start pet-oasis-demo-reset.service     # trunca e repovoa, gravando no mount novo
+ls /srv/pet-oasis-data/uploads                          # brands  pets  products
+```
+
+Racional em `docs/context/infrastructure.md` § "O diretório de uploads mora fora do working tree".
 
 ## Redes
 

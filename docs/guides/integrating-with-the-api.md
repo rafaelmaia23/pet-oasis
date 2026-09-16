@@ -7,13 +7,6 @@ o que ela devolve quando algo dá errado.
 A API é a **autoridade do domínio**: nenhuma regra de negócio dela é reimplementada no
 cliente. O que o cliente decide é apresentação e navegação.
 
-> ⚠️ **Este guia descreve o estado-alvo da Fase 10**, que está em execução. As seções 1, 2, 3
-> e a tabela de recusas de login (§4) e a janela de graça (§5) descrevem comportamento que
-> ainda está sendo implementado — construa contra elas, mas confirme em `docs/todo.md` se a
-> issue correspondente já fechou antes de depender de uma em produção. Este aviso sai no
-> fecho da fase.
-
----
 
 ## 1. Como alcançar a API
 

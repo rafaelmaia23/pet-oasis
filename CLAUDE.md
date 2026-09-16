@@ -160,7 +160,7 @@ Quando terminar um trabalho e sobrar algo pendente para uma etapa **futura**, a 
 
 O **Ciclo 1 (fundação) está fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de conta, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação.
 
-O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por capability), ainda **sem checkout**. A **Fase 10** não traz domínio novo: desbloqueia o front web (`pet-oasis-web`, repo irmão) e paga a dívida de deploy. A **Fase 11** traz carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro).
+O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por capability), ainda **sem checkout**. A **Fase 10 está fechada** e não trouxe domínio novo: desbloqueou o front web (`pet-oasis-web`, repo irmão — `code`s de login, janela de graça no refresh, redes e IP do visitante, guia de integração) e pagou a dívida de deploy (seed fail-open, uploads fora da árvore, OpenSSL, API em `pet-oasis-api.maiahub.com.br`). A **Fase 11** traz carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro).
 
 ---
 

@@ -137,10 +137,10 @@ Feito em 2026-09-16, ainda com o nome anterior — a ser **refeito para `pet-oas
 - [x] Proxy host no NPM: `pet-oasis-api.maiahub.com.br → pet-oasis-api:3000`, redirect da raiz
       para `/reference`, custom config `real_ip_header CF-Connecting-IP; real_ip_recursive off;`.
       O NPM na rede docker `proxy`. *(usuário, 2026-09-16 — conferir a rede no deploy)*
-- [ ] `UPLOAD_PUBLIC_BASE_URL=https://pet-oasis-api.maiahub.com.br/uploads` no `.env.production`
-      (hoje está com o host anterior).
-- [ ] O registro/proxy host de `api.pet-oasis.maiahub.com.br` pode ser removido — não há link
-      publicado para ele; nunca chegou a responder.
+- [x] `UPLOAD_PUBLIC_BASE_URL=https://pet-oasis-api.maiahub.com.br/uploads` no `.env.production`.
+      *(usuário, 2026-09-16)*
+- [x] O registro/proxy host de `api.pet-oasis.maiahub.com.br` removido do NPM — não há link
+      publicado para ele; nunca chegou a responder. *(usuário, 2026-09-16)*
 
 O `prod:up` que faz o container `pet-oasis-api` existir vem com o merge da fase (junto da 20 e da
 ponta a ponta da 04); até lá o proxy host aponta para um nome que não resolve, o que é esperado.

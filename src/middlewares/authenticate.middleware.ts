@@ -1,14 +1,13 @@
 import type { NextFunction, Request, Response } from "express";
-import jwt from "jsonwebtoken";
-import { env } from "@/config/env";
 import { createUnauthorizedError } from "@/errors";
+import { verifyAccessToken } from "@/lib/accessToken";
 import { computeEffectiveFeatures } from "@/lib/authorization";
 import { setActorId } from "@/lib/requestContext";
 import { getUserForFeatureComputation } from "@/modules/user/user.repository";
 
 /**
  * Dois modos do mesmo mecanismo, no mesmo arquivo de propósito: a resolução
- * token→ator é uma só, e duplicá-la seria duplicar `jwt.verify` +
+ * token→ator é uma só, e duplicá-la seria duplicar `verifyAccessToken` +
  * `computeEffectiveFeatures` + `setActorId`. O que muda entre os dois é
  * exclusivamente o que se faz com a falha.
  *
@@ -49,40 +48,31 @@ async function resolveActor(req: Request): Promise<AuthResolution> {
     };
   }
 
-  let payload: jwt.JwtPayload;
+  // Assinatura, algoritmo, emissor, audiência e validade, tudo em
+  // `verifyAccessToken` (10.10) — aqui só existe "passou" ou "não passou".
+  const userId = verifyAccessToken(token);
 
-  try {
-    payload = jwt.verify(token, env.JWT_SECRET) as jwt.JwtPayload;
-  } catch {
+  if (!userId) {
     return {
       status: "invalid",
       message: "Token de autenticação inválido ou expirado",
     };
   }
 
-  if (!payload.sub) {
-    return {
-      status: "invalid",
-      message: "Token de autenticação inválido ou expirado",
-    };
-  }
-
-  const userForFeatureComputation = await getUserForFeatureComputation(
-    payload.sub,
-  );
+  const userForFeatureComputation = await getUserForFeatureComputation(userId);
 
   if (!userForFeatureComputation) {
     return { status: "invalid", message: "Usuário não encontrado" };
   }
 
   req.user = {
-    id: payload.sub,
+    id: userId,
     features: computeEffectiveFeatures(userForFeatureComputation),
   };
 
   // Identidade estabelecida: o contexto de observabilidade passa a saber quem
   // é o ator, para o access log, o application log e o audit log (7.6).
-  setActorId(payload.sub);
+  setActorId(userId);
 
   return { status: "authenticated" };
 }

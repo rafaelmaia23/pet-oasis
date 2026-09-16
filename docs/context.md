@@ -258,6 +258,7 @@ completo, os contra-argumentos e os gotchas.
 - A allowlist de CORS sai só da variável explícita — a `APP_URL` não entra por inércia (10.11)
 - Mass assignment: schema de update é `.strict()`, e a proteção tem teste próprio (10.12)
 - Todo campo de texto tem teto, e o teto é contrato (10.13)
+- O access token tem algoritmo pinado, `iss`/`aud` obrigatórios e folga de relógio explícita (10.10)
 - Auto-hospedar o bundle do Scalar em vez de allowlistar o CDN
 - A auto-hospedagem sozinha não bastou — o nonce é a segunda peça (7.1)
 - Sobram violações de CSP no console de `/reference`, e elas ficam

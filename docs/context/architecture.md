@@ -32,7 +32,7 @@ listagem de marcas em erro.
 `optionalAuthenticate` (mesmo arquivo, `authenticate.middleware.ts`) resolve o ator quando dá e
 **segue anônimo quando não dá**, nunca lançando. Os dois modos dividem uma única função de resolução
 token→ator: o que muda entre eles é exclusivamente o que se faz com a falha. Duplicar seria duplicar
-`jwt.verify` + `computeEffectiveFeatures` + `setActorId`, e é justamente `setActorId` que faz o
+`verifyAccessToken` + `computeEffectiveFeatures` + `setActorId`, e é justamente `setActorId` que faz o
 visitante identificado aparecer no access log e no audit.
 
 Consequência para quem escreve rota: **rota montada com `optionalAuthenticate` lê `req.user` direto,

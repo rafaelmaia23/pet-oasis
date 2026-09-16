@@ -139,11 +139,10 @@
 > Tudo que o `pet-oasis-web` precisa da API para sair do lugar, mais a dívida de deploy que já
 > derrubou a produção uma vez. Nenhum domínio novo. Spec e issues em
 > `.scratch/fase-10-frontline/`.
-- Progresso: 16 de 21 issues fechadas (as revisões da 07, da 15 e da 17 acrescentaram as
-  issues 15 a 20; a 21 é o fecho). Fechadas: 01, 02, 03, 05, 07, 08, 09, 11, 12, 13, 14, 15,
-  16, 17, 18, 19.
+- Progresso: 17 de 21 issues fechadas (as revisões da 07, da 15 e da 17 acrescentaram as
+  issues 15 a 20; a 21 é o fecho). Fechadas: 01, 02, 03, 05, 07, 08, 09, 10, 11, 12, 13, 14,
+  15, 16, 17, 18, 19.
 - Abertas, e o que cada uma espera:
-  - **10** (endurecer o JWT): em execução num worktree paralelo; merge na `fase-10` ao terminar.
   - **06** (subdomínio da API): **retrabalho** — o nome virou `pet-oasis-api.maiahub.com.br`
     (segundo nível não fecha TLS atrás do proxy da Cloudflare), sem 301 no apex, e o reverse
     proxy real é o NPM com desafio DNS; reescrever README, `deploy.md`, `infrastructure.md`,

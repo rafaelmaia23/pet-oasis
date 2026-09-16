@@ -1,5 +1,3 @@
-import jwt from "jsonwebtoken";
-import type { StringValue } from "ms";
 import { env } from "@/config/env";
 import {
   createForbiddenError,
@@ -8,6 +6,7 @@ import {
   createTooManyRequestsError,
   createUnauthorizedError,
 } from "@/errors";
+import { signAccessToken } from "@/lib/accessToken";
 import { record } from "@/lib/auditLog";
 import * as lockout from "@/lib/lockout";
 import { logger } from "@/lib/logger";
@@ -31,12 +30,6 @@ import * as authRepository from "./auth.repository";
 import type { LoginInput } from "./auth.schema";
 
 const log = logger.child({ module: "auth" });
-
-function generateToken(userId: string): string {
-  return jwt.sign({ sub: userId }, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRES_IN as StringValue,
-  });
-}
 
 export async function signup(data: CreateCustomerInput) {
   const user = await userService.createCustomer(data);
@@ -154,7 +147,7 @@ export async function login(
   // Login limpo de uma conta que nunca falhou não grava nada (no-op).
   await lockout.clearLockout(user.id, "SUCCESSFUL_LOGIN");
 
-  const accessToken = generateToken(user.id);
+  const accessToken = signAccessToken(user.id);
   const refreshToken = generateOpaqueToken();
 
   const { evictedCount } = await authRepository.createSessionAndEvictOldest(
@@ -338,7 +331,7 @@ export async function refresh(
 
   const newRefreshToken = generateOpaqueToken();
   const pair = {
-    accessToken: generateToken(session.userId),
+    accessToken: signAccessToken(session.userId),
     refreshToken: newRefreshToken,
   };
 

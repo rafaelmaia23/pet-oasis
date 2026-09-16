@@ -23,6 +23,7 @@ import * as userService from "@/modules/user/user.service";
 import * as userRepository from "../user/user.repository";
 import type { CreateCustomerInput } from "../user/user.schema";
 import {
+  REFRESH_GRACE_DEFERRED_WINDOW_MS,
   REFRESH_GRACE_WINDOW_MS,
   REFRESH_TOKEN_TTL_MS,
 } from "./auth.constants";
@@ -227,10 +228,22 @@ export async function refresh(
     // reset de senha, ou a cascata de um roubo anterior — cai no caminho de
     // sempre: devolver 200 ali reabriria uma sessão que a API acabou de
     // fechar, e por dez segundos depois do fato.
+    //
+    // Duas janelas abrem a graça (10.18): a dos dez segundos desde `usedAt`, e
+    // a marca de 503 — este elo já respondeu "tente de novo", e a retentativa
+    // que obedece não pode ser lida como roubo só porque chegou depois dos
+    // dez segundos. Fora das duas, cascata como sempre.
+    const now = Date.now();
+    const insideGraceWindow =
+      session.usedAt.getTime() + REFRESH_GRACE_WINDOW_MS > now;
+    const insideDeferredWindow =
+      session.graceDeferredAt !== null &&
+      session.graceDeferredAt.getTime() + REFRESH_GRACE_DEFERRED_WINDOW_MS >
+        now;
     const graceApplies =
       !session.invalidatedAt &&
-      session.expiresAt > new Date() &&
-      session.usedAt.getTime() + REFRESH_GRACE_WINDOW_MS > Date.now();
+      session.expiresAt.getTime() > now &&
+      (insideGraceWindow || insideDeferredWindow);
 
     if (graceApplies) {
       // O par da **ponta viva** da corrente, não o que este elo emitiu. Um par
@@ -287,9 +300,14 @@ export async function refresh(
           },
           "refresh replayed inside the grace window but the pair is gone",
         );
+        // A marca vai no banco, não no Redis, porque o ramo realista deste 503
+        // é o Redis fora do ar — e é justamente aí que não haveria onde gravar.
+        // Antes do `throw`, para que a retentativa a encontre; só o primeiro
+        // 503 grava (regra fixa: a marca não renova).
+        await authRepository.markSessionGraceDeferred(session.id);
         throw createServiceUnavailableError({
           message: "Não foi possível renovar a sessão agora",
-          action: "Tente novamente em alguns instantes",
+          action: "Tente novamente agora",
         });
       }
     }

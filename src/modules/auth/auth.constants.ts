@@ -13,6 +13,18 @@ export const REFRESH_TOKEN_COOKIE_PATH = "/api/v1/auth";
  */
 export const REFRESH_GRACE_WINDOW_MS = 10 * 1000;
 
+/**
+ * Janela da marca de 503 (10.18): por quanto tempo, a partir do **primeiro**
+ * 503 que um elo respondeu, a reapresentação dele ainda é lida como
+ * concorrência — mesmo depois de `usedAt + 10s`.
+ *
+ * Cobre a retentativa imediata que o guia de integração pede mais uns poucos
+ * passos de backoff (1s, 2s, 4s, 8s…). Não cobre uma réplica presa que insista
+ * por meio minuto: passado isso, a cascata volta a ser a resposta, como sempre.
+ * Mesma constante nomeada, sem env var, e pelo mesmo motivo dos 10s acima.
+ */
+export const REFRESH_GRACE_DEFERRED_WINDOW_MS = 30 * 1000;
+
 export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
 
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hora

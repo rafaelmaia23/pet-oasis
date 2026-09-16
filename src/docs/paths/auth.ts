@@ -94,7 +94,9 @@ export const authPaths: ZodOpenApiPathsObject = {
         "**o mesmo par** já emitido, em vez de rotacionar de novo; fora da " +
         "janela, é tratado como roubo e invalida todas as sessões. O 503 é " +
         "retentável: dentro da janela, a API não conseguiu reproduzir o par " +
-        "emitido e prefere não decidir entre concorrência e roubo.",
+        "emitido e prefere não decidir entre concorrência e roubo. O primeiro " +
+        "503 abre uma janela própria de 30s para a retentativa do mesmo token, " +
+        "mesmo depois de os 10s terem passado; fora dela, reuso é roubo.",
       security: [],
       responses: {
         200: jsonResponse("Token renovado", accessTokenSchema),

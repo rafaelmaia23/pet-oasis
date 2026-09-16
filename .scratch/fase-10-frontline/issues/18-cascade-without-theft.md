@@ -35,7 +35,7 @@ subir o teto move a fronteira em vez de removê-la.
 **Blocked by:** None. Nada aqui é regressão: os dois caminhos são estritamente melhores do que o
 que existia antes da 10.7, quando **toda** reapresentação cascateava.
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-16
 
 **Triagem:** ready-for-agent — decidido pelo usuário em 2026-09-16: caminho **(2b)** para o
 caminho 1, com a sub-regra **(a)**; teto de saltos **mantido em 5** e o caminho 2 registrado
@@ -98,22 +98,22 @@ teto precisa existir para limitar o trabalho por requisição — duas idas por 
 
 ## Critérios
 
-- [ ] `Session` ganha `graceDeferredAt DateTime? @map("grace_deferred_at")`, com migration via
+- [x] `Session` ganha `graceDeferredAt DateTime? @map("grace_deferred_at")`, com migration via
       `npm run db:migrate`.
-- [ ] A duração da marca é constante nomeada em `auth.constants.ts`
+- [x] A duração da marca é constante nomeada em `auth.constants.ts`
       (`REFRESH_GRACE_DEFERRED_WINDOW_MS = 30 * 1000`), **não** env var, pelo mesmo racional dos
       10 s: número que ninguém deve ajustar em produção sem pensar não merece um botão. O
       comentário diz o que ela cobre: a retentativa imediata do guia mais uns poucos passos de
       backoff.
-- [ ] No ramo de 503 do `refresh` (`MISS` e `UNAVAILABLE`), a marca é gravada **antes** do
+- [x] No ramo de 503 do `refresh` (`MISS` e `UNAVAILABLE`), a marca é gravada **antes** do
       `throw`, **só se ainda não existir** (regra (a): marca fixa, não renova). A escrita passa
       pelo repository, como toda ida ao Prisma.
-- [ ] `graceApplies` passa a ser: elo não invalidado, não expirado, **e** (`usedAt + 10s > agora`
+- [x] `graceApplies` passa a ser: elo não invalidado, não expirado, **e** (`usedAt + 10s > agora`
       **ou** `graceDeferredAt + 30s > agora`). Fora das duas janelas, cascata como sempre.
-- [ ] A marca **não** abre a graça para elo explicitamente morto — logout, ban, reset de senha,
+- [x] A marca **não** abre a graça para elo explicitamente morto — logout, ban, reset de senha,
       cascata anterior — exatamente como a janela de 10 s já não abre. A guarda de
       `invalidatedAt`/`expiresAt` continua na frente.
-- [ ] Testes na fronteira HTTP, sem injeção de relógio, posicionando `usedAt`/`graceDeferredAt`
+- [x] Testes na fronteira HTTP, sem injeção de relógio, posicionando `usedAt`/`graceDeferredAt`
       direto do teste, no padrão dos da 10.7/10.15:
       - 503 dentro da janela grava a marca;
       - reapresentação com `usedAt` fora dos 10 s **e** marca dentro dos 30 s: com par no cache,
@@ -121,16 +121,41 @@ teto precisa existir para limitar o trabalho por requisição — duas idas por 
         renovada;
       - reapresentação com `usedAt` fora dos 10 s e marca fora dos 30 s: cascata;
       - elo invalidado com marca dentro dos 30 s: 401, sem servir nada.
-- [ ] A mensagem do 503 (`action`) para de dizer "em alguns instantes" e passa a dizer para
+- [x] A mensagem do 503 (`action`) para de dizer "em alguns instantes" e passa a dizer para
       tentar de novo **agora** — hoje ela contradiz o guia, e quem obedece à mensagem provoca o
       caminho 1.
-- [ ] `docs/context/identity-and-sessions.md`, na seção da janela de graça: a marca, a sub-regra
+- [x] `docs/context/identity-and-sessions.md`, na seção da janela de graça: a marca, a sub-regra
       (a) e os dois caminhos recusados; o teto em 5 e o caminho 2 como **exposição aceita**, com
       o parágrafo do "para quem perguntar de novo" destilado.
-- [ ] `docs/guides/integrating-with-the-api.md`: o bullet do 503 passa a dizer que a retentativa
+- [x] `docs/guides/integrating-with-the-api.md`: o bullet do 503 passa a dizer que a retentativa
       tem uma janela própria (30 s a partir do primeiro 503) e que, passada ela, a reapresentação
       é indistinguível de roubo. O OpenAPI do `/auth/refresh` não muda de status — só de texto,
       se a descrição do 503 citar os 10 s.
-- [ ] Caso novo em `tests/integration/v1/mass-assignment.test.ts` **não** se aplica: nenhum
+- [x] Caso novo em `tests/integration/v1/mass-assignment.test.ts` **não** se aplica: nenhum
       schema de escrita novo.
-- [ ] Suíte completa, `typecheck`, `lint` e `docs:check` verdes.
+- [x] Suíte completa, `typecheck`, `lint` e `docs:check` verdes.
+
+---
+
+## Fecho (2026-09-16)
+
+- `Session.graceDeferredAt` (`grace_deferred_at`), migration `20260916171539_session_grace_deferred_at`
+  **escrita à mão** como a das imagens (9.10): o `migrate dev` gera junto o `DROP DEFAULT` e o
+  drop dos índices GIN das colunas `search_vector` (drift falso das `Unsupported`); só a parte
+  nova ficou. O banco de dev estava sem os dois índices GIN — a tentativa falha da migration das
+  imagens já tinha rodado o `DROP INDEX` antes de quebrar; recriados à mão, e a linha de
+  bookkeeping da tentativa rolled-back foi apagada para o `migrate dev` parar de acusar
+  "modified after applied".
+- `REFRESH_GRACE_DEFERRED_WINDOW_MS = 30 * 1000` em `auth.constants.ts`.
+- `markSessionGraceDeferred` no repository: `updateMany` com `graceDeferredAt: null` no `where`,
+  para que "só o primeiro 503 grava" seja decisão do banco, não de uma leitura anterior.
+- `graceApplies` = elo não invalidado, não expirado, e (`usedAt + 10s > agora` ou
+  `graceDeferredAt + 30s > agora`).
+- `action` do 503: "Tente novamente agora".
+- Seis testes novos na fronteira HTTP (`auth.test.ts`): o 503 grava a marca (`MISS` e, via
+  `vi.spyOn(redis, "get")`, `UNAVAILABLE`); marca aberta + par no cache serve a ponta viva; marca
+  aberta sem par é 503 de novo, nada morre, marca não renova; marca fechada cascateia; elo
+  invalidado com marca aberta é 401 sem cookie.
+- Docs: `docs/context/identity-and-sessions.md` (dois parágrafos em negrito na seção da janela),
+  índice em `docs/context.md`, bullet do 503 no guia de integração, descrição do
+  `/auth/refresh` no OpenAPI.

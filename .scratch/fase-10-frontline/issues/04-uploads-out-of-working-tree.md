@@ -8,17 +8,14 @@ uma falha de permissão no seed.
 
 **Blocked by:** 01 (sequenciamento: edita o mesmo bloco de serviço).
 
-**Status:** ready-for-human
-
-**Triagem:** ready-for-human — tudo que o repositório podia entregar está mergeado; falta só a
-verificação de ponta a ponta no servidor (último critério).
+**Status:** fechada em 2026-09-16
 
 - [x] O diretório de dados fica fora do working tree, e entra por bind mount declarado.
 - [x] O uid esperado está documentado no guia de deploy, ou é fixado no serviço para não
       depender do usuário da imagem base.
 - [x] Nenhum caminho gravado no banco muda: ele guarda a chave do arquivo, nunca a URL.
 - [x] O guia de deploy descreve a migração do diretório existente, sem perder arquivo.
-- [ ] **Verificação manual:** com a stack de pé, enviar uma imagem, rodar `git clean -fd` e
+- [x] **Verificação manual:** com a stack de pé, enviar uma imagem, rodar `git clean -fd` e
       provar que o arquivo continua servido.
 
 ## O que foi feito
@@ -66,3 +63,27 @@ produção real e do `.env.production`: subir, enviar uma imagem pelo endpoint, 
 -fd` no repo clonado e conferir que a URL continua servindo o byte. O procedimento de migração
 do diretório existente (com a stack parada, `mv -T`, `chown`, conferência de contagem antes e
 depois) está em `docs/guides/deploy.md` § "Diretório de uploads".
+
+### Verificado no servidor (2026-09-16)
+
+Host `homelab-oracle`, clone em `/srv/pet-oasis-api`, primeiro `prod:up` da fase (`main` em
+`26632d2`), `UPLOAD_HOST_DIR=/srv/pet-oasis-data/uploads` no `.env.production`.
+
+- **Upload pela API:** login como `employee07@fake.petoasis.dev` (`catalog-manager`), `POST
+  /products/:id/images` com um PNG → **201** com `fullUrl`/`thumbUrl` no host da API; `GET` da
+  `fullUrl` → **200**.
+- **Fora da árvore, com o dono certo:** `ls -la /srv/pet-oasis-data/uploads/products/<id>/`
+  lista o par novo (`-full.webp`/`-thumb.webp`) e o do seed, todos `opc:opc` — e `id opc` é
+  `uid=1000 gid=1000`, o par que o compose fixa em `user: "1000:1000"`.
+- **O git não vê:** `git status --short` e `git clean -fdn` vazios no clone.
+- **Sobrevive:** `git clean -fd` de verdade, e `GET` da mesma `fullUrl` → **200**.
+
+Um achado no caminho, que não é desta issue mas nasceu dela: o diretório novo foi criado pelo
+operador como `opc:opc` (que **é** 1000:1000 nesse host — coincidência de uid, não decisão), e
+estava **vazio** depois do `prod:up`: o volume `prod_pgdata` sobreviveu ao redeploy com as linhas
+de imagem da Fase 9, mas os bytes viviam dentro do container antigo (a Fase 9 não tinha bind
+mount — ele nasceu em 2026-09-02, depois do fecho dela) e morreram com ele. O seed do boot é
+idempotente e não regrava o que o banco já tem, então a vitrine respondia 404 em toda imagem
+com `SEEDING COMPLETED!` limpo. Conserto para a demo: `systemctl start pet-oasis-demo-reset`
+(trunca e repovoa: `uploadFiles: 0` apagados, `brands pets products` gravados no mount novo,
+`failedOptionalSteps: []`). Registrado no fecho da 06 e no contexto de infraestrutura pela 21.

@@ -124,11 +124,15 @@ Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real 
 
 ## Bugs
 
-### Seed fatal derruba a aplicação no boot
-
-**Problema:** o entrypoint trata falha de seed como fatal. Um `EACCES` ao gravar imagem de catálogo em `uploads/` colocou o container em crash loop e a API inteira fora do ar (502 no proxy), por causa de dado de demonstração. Contraria o padrão de degradação fail-open já adotado para Axiom/Sentry.
-
-**Proposta:** separar o seed do boot — passo one-shot (`docker compose run --rm api npm run db:seed`) ou serviço dedicado com `restart: no`. Se mantido no entrypoint, tornar fail-open: logar em `error` e seguir para o start do servidor. Deploy da fase 9 (2026-09-03).
+### ~~Seed fatal derruba a aplicação no boot~~ — ✅ resolvido (Fase 10.3)
+O entrypoint tratava falha de seed como fatal, e um `EACCES` ao gravar imagem de catálogo pôs a
+API inteira em crash loop por causa de dado de demonstração. A proposta era "one-shot ou
+fail-open"; a decisão foi fail-open **por classe de dado**, não em bloco: referência (features,
+roles, raças, léxico da busca) continua fatal, porque é pré-requisito da API como a migration;
+demonstração é fail-open, com `SEEDING COMPLETED WITH FAILURES: <passos>` nomeando o que falhou.
+Fail-open no seed inteiro deixaria a API de pé com a tabela de autorização quebrada, escondida
+numa linha de log. Racional em `docs/context/infrastructure.md` § "O boot para no dado de
+referência e segue no de demonstração".
 
 ---
 
@@ -185,33 +189,22 @@ engine 3.0.x é menor que a 1.1.x o bastante para pagar a camada do apt e ainda 
 
 ## Necessidades do front web
 
-### Janela de graça na rotação do refresh token — **M**
-
-**Problema:** a detecção de reuso invalida *todas* as sessões do usuário quando um
-refresh já consumido reaparece (ADR `auth-token-revocation.md`). Contra um cliente que
-renova de forma concorrente isso vira falso positivo: duas requisições que cheguem ao
-`/auth/refresh` com o mesmo token — o que um front com prefetch produz sem o usuário
-clicar em nada — fazem a segunda ser lida como roubo, e o dono é deslogado de todos os
-dispositivos.
-
-**Motivo de existir agora:** o front web (repo `pet-oasis-web`) adotou BFF com rotação
-proativa em middleware. Ele se defende do lado dele — single-flight por sessão e nenhuma
-renovação em requisição de prefetch —, e isso basta **enquanto for um processo Node só**.
-Deixa de bastar no dia em que houver segunda réplica do front ou um segundo cliente
-(mobile): a trava em memória não é compartilhada entre processos, e o modo de falha é o
-pior possível — deslogar o usuário legítimo de tudo, sem erro visível de ninguém.
-
-**Proposta:** aceitar o refresh **imediatamente anterior** por uma janela curta (ex.: 10s
-a partir do `usedAt`), devolvendo o *mesmo* par já emitido naquela rotação em vez de
-emitir outro — a `Session` passaria a guardar, além do hash corrente, o hash anterior e o
-que foi emitido na troca. Reuso fora da janela continua sendo roubo e continua matando
-tudo. É o padrão recomendado pelo OAuth 2.1 para clientes públicos, e preserva a
-detecção: replay de token velho cai fora da janela.
-
-**Alternativa mais barata, rejeitada:** invalidar só a sessão envolvida em vez de todas.
-A cascata é justamente o que dá valor à detecção — enfraquecê-la para resolver
-concorrência troca segurança por conveniência, enquanto a janela resolve a concorrência
-sem tocar na segurança.
+### ~~Janela de graça na rotação do refresh token~~ — ✅ resolvido (Fase 10.7, 10.15, 10.18)
+Um refresh já consumido é aceito de novo por **10 segundos** a partir do `usedAt`, e a resposta é
+o par que aquela rotação emitiu — mas **não** do jeito que este item propunha. A proposta era a
+`Session` guardar "além do hash corrente, o hash anterior e o que foi emitido na troca", e isso
+descrevia um modelo que não é o nosso: cada rotação **cria uma linha nova** e marca a anterior
+como usada, então o hash anterior já está lá, numa linha própria. O que faltava era o **texto
+claro** do par emitido, descartado no fim da requisição — e ele foi para o **Redis**, chaveado
+pelo hash do token apresentado, com TTL igual à janela (`src/lib/refreshGrace.ts`). Sem migration,
+sem segredo em coluna (que iria para backup e dump), e a janela imposta pelo TTL da infraestrutura
+em vez de por comparação de timestamp, que erra sob clock skew. Cache sem resposta dentro da
+janela é **503** retentável, nunca cascata. A 10.15 fez a graça seguir a corrente até a ponta viva
+(o retardatário recebe o par **atual**, não um elo gasto), e a 10.18 acrescentou a marca
+`graceDeferredAt` na linha para que a retentativa tardia de um 503 não seja lida como roubo. A
+cascata fora das duas janelas continua intacta — a alternativa "invalidar só a sessão envolvida"
+segue rejeitada pelo motivo de sempre. Racional em `docs/context/identity-and-sessions.md` § "A
+janela de graça de 10s na rotação (10.7)".
 
 ### `enum` de `code` no schema do 403 do login — **P**
 
@@ -237,7 +230,7 @@ tanto faz. Três cadeias cobertas por teste em `tests/integration/v1/visitor-ip.
 `docs/context/security.md` § "`trust proxy` é por endereço de origem" e `docs/context/infrastructure.md`
 § "Três redes com papéis distintos".
 
-### Apex passa a ser o front; API migra para `pet-oasis-api.maiahub.com.br` — **M**
+### ~~Apex passa a ser o front; API migra para `pet-oasis-api.maiahub.com.br`~~ — ✅ resolvido (Fase 10.6, 10.14)
 
 **Motivo:** o front web (repo `pet-oasis-web`) tem mais valor de portfólio no apex do que a
 referência Scalar — peça visual chama mais atenção que UI de documentação. A API não perde
@@ -272,7 +265,7 @@ montados a partir de `APP_URL` e passam a ser obrigação do front, com estes no
 `/confirm-account-reactivation`, todos com `?token=`. Renomear qualquer um deles no front
 quebra o email correspondente sem erro visível em lugar nenhum.
 
-**Ordem de execução (importa):** subir o subdomínio e o certificado **antes**, mas só virar
-`APP_URL` para o apex quando o front tiver as quatro rotas no ar. Virar antes transforma
-todo email de verificação e de reset em 404 — e são justamente os fluxos que travam conta
-nova.
+**Ordem de execução, planejada e relaxada:** a regra era virar `APP_URL` para o apex só depois de
+o front ter as quatro rotas no ar; na demo ela foi virada antes, por decisão do dono do projeto
+(demo efêmera, sem conta real). O porquê, e por que a regra segue valendo para deploy com
+usuários, em `docs/context/infrastructure.md` § "A API atende num subdomínio".

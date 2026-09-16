@@ -19,12 +19,20 @@ com o front plugado.
 novo chegar ao servidor). Vai na mesma janela que a 19 e a verificação de ponta a ponta da 04,
 que também são passos no servidor.
 
-**Status:** ready-for-human
-
-**Triagem:** ready-for-human — acesso ao servidor; um comando, sem decisão. A rede já existe;
-sobra só confirmar no primeiro `prod:up` depois do merge que a API entra nela.
+**Status:** fechada em 2026-09-16
 
 - [x] `docker network inspect pet-oasis` responde no servidor *(rede criada pelo usuário em
       2026-09-16)*.
-- [ ] `prod:up` com o compose da 17 sobe com a API na rede (`docker network inspect pet-oasis`
+- [x] `prod:up` com o compose da 17 sobe com a API na rede (`docker network inspect pet-oasis`
       lista o container `pet-oasis-api`).
+
+## Verificação (servidor, 2026-09-16)
+
+Primeiro `prod:up` com o compose da fase, no host `homelab-oracle`, depois de `git pull` da
+`main` (`26632d2`). `docker network inspect pet-oasis`: rede `bbf7028e…`, criada à mão em
+2026-09-16T17:55Z, `"Labels": {}` (sem rótulo do Compose — é o que a torna imune ao `prod:down`,
+como a 17 previu), `"Internal": false`, subnet `172.21.0.0/16`, e em `Containers` o
+`pet-oasis-api` (`65ba9d10d315`, `172.21.0.2/16`). Na mesma janela: as units systemd novas
+instaladas e a execução manual do `pet-oasis-cleanup-sessions.service` rodou contra o container
+novo (`hostname: 65ba9d10d315`, `cleanup-sessions completed`) — o passo 5 do
+`infra/cron/README.md`, que a 01 dizia não ser opcional.

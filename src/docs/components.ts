@@ -81,6 +81,12 @@ export const errorResponses = {
   ),
   422: jsonResponse("Erro de validação", validationErrorSchema),
   429: jsonResponse("Muitas tentativas — limite excedido", errorResponseSchema),
+  // 10.7: dependência externa indisponível. É **retentável** — o cliente que
+  // recebe isso no refresh deve tentar de novo, não deslogar.
+  503: jsonResponse(
+    "Dependência externa indisponível — tente novamente",
+    errorResponseSchema,
+  ),
 } satisfies Record<number, ZodOpenApiResponseObject>;
 
 // Resposta de sucesso sem corpo (204).

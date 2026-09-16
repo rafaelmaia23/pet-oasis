@@ -100,7 +100,7 @@ alimente — aceitável, mas o adaptador vem primeiro sempre que possível.
 
 O ADR dizia "o reverse proxy serve `/uploads/*` como estático, sem passar por
 Node". A verificação mostrou que **não existe reverse proxy no repositório**:
-`infra/docker-compose.prod.yml` publica `app:3000` direto. O proxy existe — é o
+`infra/docker-compose.prod.yml` publica `api:3000` direto. O proxy existe — é o
 nginx do servidor pessoal onde a demo de portfólio é hospedada —, mas ele vive
 fora do git, e nenhuma configuração dele é versionada aqui.
 
@@ -115,12 +115,17 @@ para o nginx passar a servi-lo direto. No dia em que o tráfego justificar, a
 mudança inteira é
 
 ```nginx
-location /uploads/ { alias /srv/pet-oasis/uploads/; expires 30d; }
+location /uploads/ { alias /srv/pet-oasis-data/uploads/; expires 30d; }
 ```
 
 mais um `UPLOAD_PUBLIC_BASE_URL` novo. **Nada gravado no banco muda**, porque o
 banco guarda a chave e nunca a URL — que era o ponto do ADR original e continua
 valendo.
+
+O caminho do host acima não é o do repo clonado por acidente: o diretório de
+dados foi movido para **fora do working tree** na 10.4, porque lá dentro o git e
+o container escrevem com uids diferentes. É a mesma propriedade — o banco guarda
+a chave — que fez daquela mudança um `mv` e não uma migração de dados.
 
 ### `sharp` no ARM64: a condição que precisa ficar escrita
 

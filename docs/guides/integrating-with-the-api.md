@@ -37,10 +37,13 @@ networks:
     name: pet-oasis
 ```
 
-A rede é criada pelo compose de produção da API. Se a API não estiver de pé, o `up` do cliente
-falha dizendo que a rede não existe — que é a mensagem certa.
+A rede é do **host**, não da API: criada uma vez, fora dos dois repositórios (o passo está no
+[guia de deploy](deploy.md#redes), ao lado da `proxy`), e nenhuma das stacks a apaga ao descer.
+O cliente sobe com a API fora e vice-versa — o que falha, nesse caso, é a chamada, não o `up`.
+Se o `up` do cliente disser que a rede não existe, é o host que ainda não a criou.
 
-Há três redes, e só uma é compartilhada:
+Há três redes; duas são compartilhadas com outras stacks, e só uma delas é a que o cliente
+precisa:
 
 | Rede | Quem entra | Alcança |
 |---|---|---|
@@ -53,14 +56,16 @@ Um cliente na `pet-oasis` **não** alcança Postgres nem Redis. É de propósito
 ### Pela URL pública
 
 ```
-https://api.pet-oasis.maiahub.com.br/api/v1
+https://pet-oasis-api.maiahub.com.br/api/v1
 ```
 
 Para o que roda no navegador de alguém ou fora do VPS. A porta 3000 **não é publicada no
 host**: todo tráfego público entra pelo nginx.
 
-> Prefira a rede interna sempre que o cliente rodar no mesmo VPS. É mais rápido, não gasta
-> TLS, e — o que mais importa — mantém o tráfego de serviço fora do rate limit público.
+> Prefira a rede interna sempre que o cliente rodar no mesmo VPS: é mais rápido e não gasta TLS.
+> O que ela **não** faz é isentar de rate limit — os limitadores são chaveados por `req.ip`,
+> venha ele de onde vier. O que decide o balde é o `X-Forwarded-For` da seção seguinte: com ele,
+> cada visitante tem o seu; sem ele, a vitrine inteira divide o balde do container.
 
 ---
 
@@ -83,7 +88,9 @@ app.set("trust proxy", ["loopback", "uniquelocal"]);
 O Express caminha o `X-Forwarded-For` da direita para a esquerda pulando endereços confiáveis
 e para no primeiro que não é — o que acerta tanto a cadeia `visitante → nginx → api` quanto
 `visitante → nginx → cliente → api`, sem que nenhum dos dois lados precise saber o formato do
-outro.
+outro. A borda da Cloudflare, que fica na frente do nginx, não aparece nessas cadeias porque o
+próprio proxy resolve o IP do visitante a partir de `CF-Connecting-IP` antes de encaminhar: o
+que chega ao cliente como `X-Forwarded-For` já é o visitante, e copiar o header basta.
 
 **O que torna isso seguro** é a porta 3000 não ser publicada: os únicos que alcançam a API por
 endereço privado são o nginx e os containers das redes `proxy` e `pet-oasis`. Um
@@ -183,18 +190,25 @@ usuário. É a proteção mais importante do módulo, e ela é agressiva de prop
 
 **A janela de graça.** Um cliente que renove de forma concorrente — dois processos, ou uma
 requisição de prefetch — apresentaria o mesmo token duas vezes e cairia nessa proteção sem ter
-feito nada errado. Por isso, o refresh imediatamente anterior é aceito por **10 segundos** a
-partir do momento em que foi usado, e a API devolve **o mesmo par** que já emitiu naquela
-rotação, em vez de emitir outro. Fora da janela, reuso continua sendo roubo e continua
-derrubando tudo.
+feito nada errado. Por isso, um refresh já usado é aceito por **10 segundos** a partir do momento
+em que foi usado, e a API devolve **o par que já está valendo** naquela corrente de rotação, em vez
+de emitir outro. Fora da janela, reuso continua sendo roubo e continua derrubando tudo.
 
 O que o cliente precisa saber:
 
 - **Não é licença para renovar em paralelo.** Serialize a renovação por sessão (single-flight)
   se puder; a janela é rede de segurança para a corrida que sobra, não substituto da trava.
-- **Um 503 no `/auth/refresh` é retentável.** Dentro da janela, se a API não conseguir
-  reproduzir o par emitido, ela responde 503 em vez de decidir entre "concorrência" e "roubo" —
-  nenhuma sessão morre. Tente de novo.
+- **O par que volta é o atual, não necessariamente o que aquela rotação emitiu.** Se o cliente
+  rotacionou duas vezes dentro dos dez segundos, quem chega atrasado com o token mais antigo
+  recebe o par **mais recente** — não um par intermediário já gasto. Trate a resposta como a
+  verdade e sobrescreva o que tiver em mão.
+- **Um 503 no `/auth/refresh` é retentável, e a retentativa tem janela própria.** Dentro da
+  janela, se a API não conseguir reproduzir o par, ela responde 503 em vez de decidir entre
+  "concorrência" e "roubo" — nenhuma sessão morre. O primeiro 503 abre uma janela de **30
+  segundos** para a retentativa daquele mesmo token, mesmo que os 10 segundos da rotação já
+  tenham passado. Tente de novo **imediatamente**, com backoff curto se precisar: uma
+  reapresentação que só chegue depois desses 30 segundos é indistinguível de roubo, e aí a
+  proteção dispara.
 - **O `id` de uma sessão muda a cada renovação.** Uma linha de `Session` no banco é um **elo**
   de uma corrente de rotação, não a sessão de um dispositivo: `GET /auth/sessions` mostra um
   por dispositivo porque filtra os elos já usados. Não guarde o `id` de uma sessão entre

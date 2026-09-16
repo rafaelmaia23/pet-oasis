@@ -3,6 +3,12 @@
 > Decisão de infraestrutura registrada na Fase 6. Não altera regra de negócio.
 > Nasceu de dois bugs de deploy e de um débito estrutural (env único, sem
 > separação de ambientes, sem graceful shutdown).
+>
+> **Atualização (Fase 10, 10.1):** o serviço do Compose passou a se chamar `api` (container
+> de produção `pet-oasis-api`), com alias de rede explícito, porque o nome do serviço é o que
+> o DNS da rede publica — e portanto o endereço que o front escreve no código. Onde este
+> documento diz `app` (texto da Fase 6), leia `api`; a estrutura base+overrides não mudou.
+> Racional em [`context/infrastructure.md`](../context/infrastructure.md).
 
 ## O problema
 
@@ -56,10 +62,13 @@ ser **PID 1** e receber o sinal.
 ### Dockerfile
 Stages `build` → `runtime` (prod, intocado: bundle tsup, `npm prune --omit=dev`,
 `USER node`) + novo stage **`dev`** (para no `npm ci` completo, sem bundle/prune,
-roda `tsx watch` contra `src/` por bind-mount; fica root para evitar EACCES de
-uid). O client Prisma gerado no dev vive num **volume anônimo** em
-`/app/src/generated` (senão o bind-mount de `./src` o mascararia); o entrypoint de
-dev roda `prisma generate` no start para populá-lo. `build.network: host`
+roda `tsx watch` contra `src/` por bind-mount; **começa** root e cai para o uid
+do host antes de escrever em bind mount — ver [o container de dev escreve como o
+uid do host](../context/infrastructure.md#o-container-de-dev-escreve-como-o-uid-do-host-não-como-root-1016)).
+O client Prisma gerado no dev
+vive num **volume anônimo** em `/app/src/generated` (senão o bind-mount de
+`./src` o mascararia); o entrypoint de dev roda `prisma generate` no start, ainda
+como root, para populá-lo. `build.network: host`
 preservado (Tailscale MagicDNS) e `npm ci` único (memória do VPS ARM64).
 
 ## Alternativas consideradas
@@ -90,5 +99,5 @@ futura, e um comentário no próprio helper.
 - Ao **automatizar o deploy**: `prod:up` já é idempotente (`migrate deploy` no
   entrypoint); falta só o gatilho externo (CI/registry).
 - Se o `--wait` de prod precisar esperar o app *servir* (não só *subir*): adicionar
-  um healthcheck HTTP ao serviço `app` de prod (hoje sem, para manter o runtime
+  um healthcheck HTTP ao serviço `api` de prod (hoje sem, para manter o runtime
   intocado).

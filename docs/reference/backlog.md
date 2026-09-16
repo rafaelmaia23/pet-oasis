@@ -8,17 +8,26 @@
 
 ## Segurança
 
-### Timing attack no login e enumeração de usuário — **P**
-Hoje, um email inexistente provavelmente responde em poucos ms, enquanto um email existente com senha errada gasta o tempo do hash (centenas de ms). Essa diferença vira um oráculo de existência de conta e anula o cuidado anti-enumeração já tomado em `forgot-password` e `verify-email/resend`. **Correção:** rodar a verificação de hash contra um hash dummy fixo quando o usuário não existe, igualando o tempo dos dois caminhos. Barato e fecha um furo real.
+### ~~Timing attack no login e enumeração de usuário~~ — ✅ resolvido (Fase 10.9)
+Medido com o custo real do bcrypt: email desconhecido respondia em 5 ms e senha errada em 172 ms. O ramo sem conta passou a verificar contra um hash de ninguém (`simulatePasswordVerification`, `src/lib/password.ts`) e as medianas ficaram em 171 ms contra 172 ms. Racional e método da medição em `docs/context/identity-and-sessions.md` § "O relógio do login não é oráculo".
 
-### Comprimento máximo em todo campo de texto — **P**
-`express.json({ limit: "100kb" })` (Fase 7.0) protege o total do body, mas nada impede 99KB dentro de um campo `name`. Sem `.max()` nos schemas Zod isso vira lixo no banco, índice inchado e — agora que existe log estruturado — linhas de log gigantes. **Correção:** varredura em todos os schemas adicionando `.max()` coerente com a coluna do Prisma.
+### Resíduo de tempo no login: o contador de lockout só no ramo com conta — **P**
+Depois da 10.9 sobra ~1 ms entre as duas recusas: o ramo com conta grava o contador de lockout no Redis (`lockout.recordFailure`) e o ramo sem conta não. Em rede local é ruído; em Redis remoto pode voltar a ser mensurável. **Correção possível:** uma escrita dummy no Redis no ramo sem conta, ou medir com o Redis de produção antes de decidir que não vale o custo. Decisão de produto, não tomada.
 
-### Auditar mass assignment nos schemas de update — **P**
-Confirmar que os schemas de update rejeitam (ou removem) chaves desconhecidas, para ninguém enviar `status`, `roleId`, `bannedAt` ou `mustChangePassword` no body de um update legítimo. Se já estiver coberto pelo comportamento default do Zod, o item vira apenas um teste de regressão explícito — que vale ter, porque é o tipo de proteção que se perde silenciosamente num refactor.
+### ~~Comprimento máximo em todo campo de texto~~ — ✅ resolvido (Fase 10.13)
+Catálogo e pet já tinham teto; faltavam identidade e sessão (email 254, senha conferida 100, token 64, CPF 14 e telefone 20 medidos no texto cru com máscara, `cursor` 128, `targetId` 36). Cada teto sai como `maxLength` no `/openapi.json` e tem teste no módulo. Racional em `docs/context/security.md` § "Todo campo de texto tem teto".
 
-### Endurecer a verificação do JWT — **P**
-Fixar `algorithms: ["HS256"]` na verificação (sem pinar, o token fica exposto a *algorithm confusion*), validar `iss` e `aud`, e definir tolerância de clock skew. Poucas linhas, vulnerabilidade de manual.
+### Teto para `User-Agent` e `X-Forwarded-For` antes de gravar em `Session`/`AuditLog` — **P**
+A varredura da 10.13 cobriu campo de schema; os dois headers vão para o banco (`Session.userAgent`/`ipAddress`, `AuditLog.userAgent`/`ip`) sem teto próprio — o único é o do Node (`--max-http-header-size`, 16KB), e 16KB numa coluna de sessão por login é o mesmo lixo que o `.max()` evitou no corpo. **Correção:** truncar no `requestContext` (o único ponto que lê os dois) para um teto documentado, sem recusar a requisição — header grande não é erro do cliente que valha 4xx.
+
+### Inteiro sem `.max()` estoura o `Int` do Postgres antes de virar 422 — **P**
+`stockQuantity`, `weightGrams` e `volumeMl` da variante não têm teto: um valor acima de 2³¹−1 passa pelo Zod e morre no Prisma, que responde 500 em vez de 422. Não é texto, então ficou fora da 10.13. **Correção:** `.max()` coerente com o que o campo representa (estoque, peso e volume têm teto físico óbvio), com teste por schema como na 10.13.
+
+### ~~Auditar mass assignment nos schemas de update~~ — ✅ resolvido (Fase 10.12)
+Nenhum schema estava permissivo: todo update é `.strict()`, create e upsert descartam a chave desconhecida. O resultado foi só a suíte de regressão (`tests/integration/v1/mass-assignment.test.ts`, um caso por endpoint de escrita) e a regra de que schema de escrita novo entra nela no mesmo commit. Racional em `docs/context/security.md` § "Mass assignment".
+
+### ~~Endurecer a verificação do JWT~~ — ✅ resolvido (Fase 10.10)
+`algorithms: ["HS256"]`, `iss`/`aud` exigidos e `clockTolerance` de 5s, com emissão e verificação lendo as mesmas constantes em `src/lib/accessToken.ts`. O deploy invalida os access tokens em voo (não carregam `iss`/`aud`); o `refresh` recompõe o par. Racional em `docs/context/security.md` § "O access token tem algoritmo pinado".
 
 ### Bloquear senhas vazadas via HIBP — **M**
 No signup e no change-password, consultar a API de range do Have I Been Pwned por *k-anonymity*: envia-se apenas os 5 primeiros caracteres do SHA-1 da senha, nunca a senha nem o hash completo. Gratuito e sem chave para esse endpoint. Puro polimento, mas é o tipo de detalhe que se nota numa revisão de código.
@@ -53,6 +62,9 @@ A correção de erro de digitação da busca (9.9) trabalha contra um dicionári
 
 ### Systemd timer para a varredura de arquivos órfãos — **P**
 O `db:cleanup-uploads` (9.10) nasceu sem agendamento: roda à mão, ao contrário dos outros dois `cleanup-*`, que têm timer em `infra/cron/`. **Gatilho:** o dia em que ela encontrar arquivo órfão duas vezes — antes disso, agendar é automatizar um problema que ainda não se provou existir.
+
+### Subir `loginAsCatalogManager` para `tests/helpers/auth.ts` — **P**
+A função (`buildEmployee({ roleNames: ["catalog-manager"] })` + `loginAs`) está copiada verbatim em seis arquivos de integração (`tag`, `category`, `product.variant`, `product.image`, `product.read`, `mass-assignment`). A convenção do projeto tolera a cópia por arquivo, mas seis é o limiar em que uma mudança na role do catálogo vira seis edições. **Correção:** um helper `loginAsRole(roleName)` em `tests/helpers/auth.ts`, e os seis arquivos passam a importá-lo. Mecânico, sem mudança de comportamento; ficou fora da 10.12 para não espalhar aquele diff por cinco arquivos alheios.
 
 ### Backup e restore do Postgres — **M**
 Dump agendado do banco do deploy, com um *restore* de fato testado — backup nunca verificado não é backup. Complementa a política de retenção de logs.
@@ -116,23 +128,60 @@ Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real 
 
 **Problema:** o entrypoint trata falha de seed como fatal. Um `EACCES` ao gravar imagem de catálogo em `uploads/` colocou o container em crash loop e a API inteira fora do ar (502 no proxy), por causa de dado de demonstração. Contraria o padrão de degradação fail-open já adotado para Axiom/Sentry.
 
-**Proposta:** separar o seed do boot — passo one-shot (`docker compose run --rm app npm run db:seed`) ou serviço dedicado com `restart: no`. Se mantido no entrypoint, tornar fail-open: logar em `error` e seguir para o start do servidor. Deploy da fase 9 (2026-09-03).
+**Proposta:** separar o seed do boot — passo one-shot (`docker compose run --rm api npm run db:seed`) ou serviço dedicado com `restart: no`. Se mantido no entrypoint, tornar fail-open: logar em `error` e seguir para o start do servidor. Deploy da fase 9 (2026-09-03).
 
 ---
 
-### `uploads/` dentro do working tree do repositório
+### `res.sendFile` do bundle do Scalar quebra em checkout sob caminho com ponto
 
-**Problema:** o diretório de dados fica dentro do repo clonado em `/srv/pet-oasis`. O git escreve como o usuário do host (uid 1001) e o container como `node` (uid 1000) — não há dono que satisfaça os dois. Já causou dois incidentes: `git pull` abortado por `Permission denied` em `uploads/.gitkeep` (deixando checkout pela metade) e `EACCES` no seed. Arquivos enviados também ficam expostos a um `git clean -fd`.
+**Problema:** `router.get(SCALAR_BUNDLE_PATH, …)` chama `res.sendFile(scalarBundleFile)` com o
+caminho absoluto resolvido do `node_modules`. O `send` do Express recusa qualquer caminho que
+tenha um **segmento começando com ponto** (`dotfiles: "ignore"`): devolve `NotFoundError`, que o
+error handler central traduz em **500**. Em produção o caminho é `/app/node_modules/…` e nunca
+morde; morde quem clona o repo sob um diretório pontuado — um worktree em `.claude/worktrees/`,
+por exemplo, faz `tests/integration/v1/reference.test.ts` falhar com "expected 500 to be 200",
+mensagem que não aponta para a causa. Encontrado na Fase 10.4.
 
-**Proposta:** mover para fora do working tree (`/srv/pet-oasis-data/uploads`) e declarar bind mount no compose. Documentar o uid esperado no guia de deploy, ou fixar `user:` no serviço para não depender do `USER` da imagem base.
+**Proposta:** `res.sendFile(scalarBundleFile, { dotfiles: "allow" })` — o caminho não vem de
+request nenhum, é resolvido do próprio `node_modules`, então a guarda de dotfile não está
+protegendo nada aqui. Esforço: uma linha e um comentário dizendo por que é seguro.
 
 ---
 
-### Prisma não detecta libssl no runtime
+### ~~`uploads/` dentro do working tree do repositório~~ — ✅ resolvido (Fase 10.4)
 
-**Problema:** `node:22-bookworm-slim` não traz OpenSSL; o Prisma emite warning a cada boot e cai no default `openssl-1.1.x`. Funciona hoje, mas é escolha implícita de engine — frágil em ARM64 e em bump de imagem base.
+O diretório saiu para `/srv/pet-oasis-data/uploads` e **os dois** caminhos propostos foram
+tomados, não um ou outro: o uid está fixado no serviço (`user: "1000:1000"`) *e* documentado no
+guia, porque é o mesmo número dos dois lados e escrevê-lo num só deixaria o outro adivinhando.
 
-**Proposta:** instalar `openssl` no estágio runtime do Dockerfile. Baixo custo, remove ruído do log de inicialização.
+Além do proposto, `uploads/.gitkeep` foi removido e o `.gitignore` passou a ignorar o diretório
+inteiro: enquanto o git versionasse aquele caminho, ele continuaria dono dele em todo clone — era
+justamente o `.gitkeep` que o `pull` não conseguia escrever. E `UPLOAD_HOST_DIR` perdeu o
+fallback `:-./uploads`, que era o caminho silencioso de volta para dentro da árvore; faltando a
+variável, o `prod:up` falha nomeando-a. Racional em `docs/context/infrastructure.md` § "O
+diretório de uploads mora fora do working tree, e o uid é fixado no serviço".
+
+---
+
+### ~~Prisma não detecta libssl no runtime~~ — ✅ resolvido (Fase 10.5)
+
+O `openssl` foi instalado — mas nos estágios `build` **e** `runtime`, não só no runtime que este
+item propunha: a engine é escolhida duas vezes, no `npm ci` (onde o `@prisma/engines` baixa o
+binário) e no boot (onde o CLI redetecta), e instalar num só faria os dois discordarem. O estágio
+`dev` recebeu a mesma linha logo depois, fechando o item abaixo. O baked engine passou de
+`schema-engine-debian-openssl-1.1.x` para `debian-openssl-3.0.x` e o boot ficou sem warning, com as
+24 migrations aplicadas contra banco vazio na verificação. Custo: +2,34 MB líquidos. Racional em
+`docs/context/infrastructure.md` § "O OpenSSL vai nos três estágios da imagem".
+
+---
+
+### ~~O estágio `dev` da imagem ainda não detecta o libssl~~ — ✅ resolvido (logo após a 10.5)
+
+A mesma linha de `apt-get`, antes do `npm ci`. Verificado com um `npm run dev` de verdade: o
+`prisma generate` e o `migrate deploy` do entrypoint de dev não emitem mais `prisma:warn`, e o
+schema-engine baked passou de `debian-openssl-1.1.x` para `debian-openssl-3.0.x`. A estimativa de
+"~2 MB a mais" saiu errada de sinal: a imagem **encolheu** 2,66 MB (1368,56 → 1365,90 MB), porque a
+engine 3.0.x é menor que a 1.1.x o bastante para pagar a camada do apt e ainda sobrar.
 
 ## Necessidades do front web
 
@@ -164,58 +213,58 @@ A cascata é justamente o que dá valor à detecção — enfraquecê-la para re
 concorrência troca segurança por conveniência, enquanto a janela resolve a concorrência
 sem tocar na segurança.
 
-### IP do visitante atrás do front renderizado no servidor — **M**
+### `enum` de `code` no schema do 403 do login — **P**
 
-**Problema:** `GET /products` e `GET /products/:idOrSlug` estão no balde `catalog-read`
-(300 req / 15min), chaveado por `req.ip` (`src/lib/rateLimit.ts:147`,
-`src/modules/product/product.routes.ts:31,40`). Com o front em Next renderizando a
-vitrine no servidor, quem chama a API é o **container do front**, não o visitante: todos
-os visitantes colapsam num IP só e o site inteiro passa a dividir 300 requisições a cada
-15 minutos. ISR esconde a maior parte, mas **não a busca** — `?q=` e combinação de filtro
-têm cardinalidade alta, cada combinação nova é cache miss, e é exatamente o caminho por
-onde chega quem veio do Google.
+**Problema:** desde a 10.8 o `POST /auth/login` responde `ACCOUNT_BANNED`, `PASSWORD_RESET_REQUIRED`
+ou `EMAIL_NOT_VERIFIED` no 403, e o OpenAPI os nomeia — mas só na **descrição** da resposta. O
+schema continua sendo o `ErrorResponse` genérico (`code: string`), então um cliente que gera tipos
+a partir da spec não ganha o union e volta a digitar os literais à mão. O guia de integração é o
+contrato que o front lê, e ele já tem a tabela; o `enum` é polimento da spec gerada.
 
-**Motivo:** não é bug de nenhum dos dois lados. Limitar por IP está certo para um cliente
-que fala direto com a API; SSR é o que quebra a premissa "um IP ≈ um visitante". E como o
-mesmo `req.ip` alimenta lockout e audit log, a correção não pode ser local ao rate limit.
+**Decisão a tomar:** dar ao 403 do login um schema próprio com `code: z.enum([...])` cria um
+segundo componente de erro — precedente para outros endpoints com `code` por condição. Vale
+decidir se a spec deve carregar esse nível de detalhe por rota, ou se a tabela do guia basta.
 
-**Proposta:** o container do front repassa o IP do visitante em `X-Forwarded-For` e a API
-passa a confiar em **dois** saltos (`app.set("trust proxy", 2)`; hoje é `1`, em
-`src/app.ts:20`), porque a cadeia vira nginx → front → api. Duas condições fazem parte do
-item, não são detalhe de implementação:
+### ~~IP do visitante atrás do front renderizado no servidor~~ — ✅ resolvido (Fase 10.2)
+`req.ip` passou a vir do `X-Forwarded-For` por **endereço de origem**
+(`app.set("trust proxy", ["loopback", "uniquelocal"])`), e não pelos **dois saltos** que este item
+propunha: com o front renderizando no servidor existem duas cadeias vivas ao mesmo tempo
+(`visitante → nginx → api` e `visitante → nginx → front → api`), e nenhuma contagem única acerta as
+duas. A condição que o item já exigia — só confiar vindo da rede interna — virou a despublicação da
+porta 3000 em produção, feita na mesma issue porque as duas são uma decisão só. Rate limit, lockout
+e audit log voltam a ver o visitante; o cliente pode copiar o header ou acrescentar o próprio salto,
+tanto faz. Três cadeias cobertas por teste em `tests/integration/v1/visitor-ip.test.ts`. Racional em
+`docs/context/security.md` § "`trust proxy` é por endereço de origem" e `docs/context/infrastructure.md`
+§ "Três redes com papéis distintos".
 
-1. **O salto extra só pode ser confiado quando a requisição vem da rede interna.**
-   Confiar em dois saltos vindos da internet deixa qualquer um forjar o próprio IP e
-   furar rate limit, lockout e audit log de uma vez — trocaria um problema de capacidade
-   por um buraco de segurança.
-2. **Teste cobrindo os três caminhos** (direto, via nginx, via front): erro aqui é
-   silencioso e envenena o audit log sem ninguém perceber.
-
-**Ordem:** o front assume que isto estará pronto antes dele. Enquanto não estiver, a
-mitigação possível do lado do front é ISR agressivo, que não cobre a busca — então a
-vitrine com `?q=` fica atrás deste item.
-
-### Apex passa a ser o front; API migra para `api.pet-oasis.maiahub.com.br` — **M**
+### Apex passa a ser o front; API migra para `pet-oasis-api.maiahub.com.br` — **M**
 
 **Motivo:** o front web (repo `pet-oasis-web`) tem mais valor de portfólio no apex do que a
 referência Scalar — peça visual chama mais atenção que UI de documentação. A API não perde
-nada indo para um subdomínio, desde que link já publicado não quebre.
+nada indo para um subdomínio.
 
 **O que muda:**
 
-- **nginx**: server block novo para `api.pet-oasis.maiahub.com.br` e certificado com o SAN
-  novo. O apex passa a servir o container do front.
+- **Nome**: `pet-oasis-api.maiahub.com.br`, de **primeiro** nível sob o domínio. A primeira
+  versão escolheu `api.pet-oasis.maiahub.com.br`, e o handshake TLS falhou de fora: o DNS é
+  proxiado pela Cloudflare, e o Universal SSL dela só cobre o apex e `*.maiahub.com.br`.
+- **Reverse proxy**: proxy host no Nginx Proxy Manager para o nome novo, apontando ao container
+  da API por DNS da rede `proxy`, com certificado Let's Encrypt por desafio DNS na Cloudflare e
+  `real_ip_header CF-Connecting-IP; real_ip_recursive off;` na custom config (sem isso a borda
+  da Cloudflare vira o IP de todo visitante). O apex passa a servir o container do front.
 - **`.env.production`**: `APP_URL` → `https://pet-oasis.maiahub.com.br` (que agora é o front,
   que é o que essa variável sempre quis dizer) e `UPLOAD_PUBLIC_BASE_URL` →
-  `https://api.pet-oasis.maiahub.com.br/uploads`.
+  `https://pet-oasis-api.maiahub.com.br/uploads`.
 - **Sem migration**: o banco guarda a chave do arquivo, nunca a URL (ADR
   `file-storage-and-uploads.md`), então trocar a env var basta. A decisão daquele ADR paga
-  dividendo aqui.
+  dividendo aqui — e pagou duas vezes, porque a troca de nome também custou só a variável.
 - **Sem mudança na spec**: `servers: [{ url: "/api/v1" }]` (`src/docs/openapi.ts:85`) é
   relativo e segue o host que serve o documento.
-- **301 no apex** para `/reference` e `/openapi.json` apontando ao subdomínio: o README, os
-  badges e o GIF da demo divulgam o apex, e link publicado não deve morrer.
-- **Documentação**: README, badges e `docs/guides/deploy.md`.
+- **301 no apex — planejado e descartado**: a primeira versão previa `301` de `/reference` e
+  `/openapi.json` para o subdomínio, para link publicado não morrer. A demo era quase não
+  divulgada, e manter dois `location` para sempre num host que não é da API era resíduo sem
+  dono. O apex fica limpo; quem tinha o link antigo troca a base.
+- **Documentação**: README, badges, `docs/guides/deploy.md` e `docs/context/infrastructure.md`.
 
 **Contrato de rotas com o front (a parte que não é infraestrutura):** quatro caminhos são
 montados a partir de `APP_URL` e passam a ser obrigação do front, com estes nomes exatos —
@@ -223,7 +272,7 @@ montados a partir de `APP_URL` e passam a ser obrigação do front, com estes no
 `/confirm-account-reactivation`, todos com `?token=`. Renomear qualquer um deles no front
 quebra o email correspondente sem erro visível em lugar nenhum.
 
-**Ordem de execução (importa):** subir o subdomínio e os redirects **antes**, mas só virar
+**Ordem de execução (importa):** subir o subdomínio e o certificado **antes**, mas só virar
 `APP_URL` para o apex quando o front tiver as quatro rotas no ar. Virar antes transforma
 todo email de verificação e de reset em 404 — e são justamente os fluxos que travam conta
 nova.

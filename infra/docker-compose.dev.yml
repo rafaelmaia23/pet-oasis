@@ -1,4 +1,4 @@
-# Dev override — db + mailpit + app (tsx watch in-container against bind-mounted
+# Dev override — db + mailpit + api (tsx watch in-container against bind-mounted
 # src/). Distinct container names / volume / ports from test so both can run at
 # once. Bring up in FOREGROUND (`npm run dev`); Ctrl+C → graceful SIGTERM.
 services:
@@ -42,10 +42,10 @@ services:
       - "1025:1025" # SMTP
       - "8025:8025" # Web UI
 
-  app:
+  api:
     build:
       target: dev
-    container_name: pet-oasis-dev-app
+    container_name: pet-oasis-dev-api
     env_file: ../.env.development
     environment:
       # env_file keeps localhost/1025 for host tooling; inside the compose network
@@ -53,13 +53,36 @@ services:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
       REDIS_URL: "redis://redis:6379"
       SMTP_HOST: mailpit
+      # Uid/gid que o entrypoint assume depois do `prisma generate` (10.16). O
+      # script `dev` exporta os dois a partir de `id -u`/`id -g`, então quem
+      # clona não configura nada. O default 1000 existe para os scripts que não
+      # sobem o `api` (`dev:down`, `dev:mail`, `dev:db`) não avisarem variável
+      # vazia — não é cobertura: quem invocar o Compose por fora do npm com
+      # outro uid recebe uma árvore de 1000, e o EACCES volta.
+      # Ver o comentário do mount de ../uploads.
+      HOST_UID: ${HOST_UID:-1000}
+      HOST_GID: ${HOST_GID:-1000}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Publicada só em dev: é como o navegador e o Bruno alcançam a API na
+    # máquina de quem desenvolve. Em produção a porta não é publicada, e é isso
+    # que torna seguro o `trust proxy` por endereço privado do `app.ts`.
+    #
+    # Consequência de publicar aqui: em dev o `X-Forwarded-For` **é** forjável
+    # por quem alcançar esta porta (o peer é sempre o gateway da bridge, que é
+    # privado), então rate limit e lockout são contornáveis na máquina de
+    # desenvolvimento. Aceitável porque dev não tem dado real — e o que fecharia
+    # isso sem perder a porta seria publicar em `127.0.0.1:${API_PORT}:3000`, ao
+    # custo de não alcançar mais a API dev de outro aparelho da rede local.
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${API_PORT:-3000}:3000"
+    networks:
+      default:
+        aliases:
+          - api
     volumes:
       - ../src:/app/src
       - ../prisma:/app/prisma
@@ -67,6 +90,19 @@ services:
       # filesystem do host, que é o pré-requisito para um nginx passar a servi-lo
       # direto. De brinde, backup vira `rsync` de um diretório em vez de
       # arqueologia em /var/lib/docker/volumes.
+      #
+      # Aqui — e só aqui — o caminho fica dentro da árvore. O que obriga produção
+      # a sair dela (10.4) é o git e o container disputarem o dono do diretório;
+      # em dev o git não disputa (`uploads/` não é versionado, o `.gitkeep`
+      # saiu), mas o **host** disputa: `npm run db:seed` e `db:cleanup-uploads`
+      # rodam no host e escrevem aqui. Num clone novo o diretório não existe, e
+      # quem o cria é o Docker ao montar — como root. Foi isso que a 10.4 leu
+      # como "disputa que não existe" e a 10.16 corrigiu por outro lado: o
+      # entrypoint, ainda root, entrega esta raiz ao host (`chown`) e cai para
+      # HOST_UID/HOST_GID antes de qualquer escrita no bind mount, então tudo
+      # que nasce aqui tem o dono do host. Trocar o caminho por uma variável
+      # custaria um passo de setup a quem clona, sem resolver problema que dev
+      # tenha.
       - ../uploads:/app/uploads
       # Anonymous volume: keeps the container's generated Prisma client from being
       # masked by the host's src/ bind-mount (entrypoint runs `prisma generate`).

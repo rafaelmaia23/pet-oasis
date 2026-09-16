@@ -29,8 +29,12 @@ import app from "@/app";
 import { env } from "@/config/env";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { redis } from "@/lib/redis";
+import { refreshGraceKey } from "@/lib/refreshGrace";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import {
+  REFRESH_GRACE_DEFERRED_WINDOW_MS,
+  REFRESH_GRACE_WINDOW_MS,
   REFRESH_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_PATH,
 } from "@/modules/auth/auth.constants";
@@ -88,13 +92,51 @@ function rawRefreshTokenFromCookie(refreshCookie: string): string {
   return refreshCookie.split("=")[1] as string;
 }
 
-async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
-  const session = await prisma.session.findUniqueOrThrow({
-    where: {
-      refreshTokenHash: hashToken(rawRefreshTokenFromCookie(refreshCookie)),
-    },
+async function sessionByRawToken(rawRefreshToken: string) {
+  return prisma.session.findUniqueOrThrow({
+    where: { refreshTokenHash: hashToken(rawRefreshToken) },
   });
-  return session.id;
+}
+
+async function sessionIdFromCookie(refreshCookie: string): Promise<string> {
+  return (await sessionByRawToken(rawRefreshTokenFromCookie(refreshCookie))).id;
+}
+
+/** Envelhece o `usedAt` da linha para além dos 10s da janela, sem injetar relógio. */
+async function ageUsedAtPastGraceWindow(
+  rawRefreshToken: string,
+): Promise<void> {
+  await prisma.session.update({
+    where: { refreshTokenHash: hashToken(rawRefreshToken) },
+    data: { usedAt: new Date(Date.now() - REFRESH_GRACE_WINDOW_MS - 1_000) },
+  });
+}
+
+/**
+ * Posiciona uma requisição **fora** da janela de graça sem injetar relógio: envelhece
+ * o `usedAt` da linha e apaga a chave do cache — exatamente o estado em que a janela
+ * já passou (o TTL do Redis teria expirado sozinho).
+ */
+async function ageOutOfGraceWindow(rawRefreshToken: string): Promise<void> {
+  await ageUsedAtPastGraceWindow(rawRefreshToken);
+  await redis.del(refreshGraceKey(hashToken(rawRefreshToken)));
+}
+
+/**
+ * Posiciona a marca de 503 (10.18) direto na linha, sem injetar relógio: `age` é há
+ * quanto tempo o primeiro 503 foi respondido. Um valor abaixo de
+ * `REFRESH_GRACE_DEFERRED_WINDOW_MS` está dentro da marca; acima, fora.
+ */
+async function markGraceDeferred(
+  rawRefreshToken: string,
+  ageMs: number,
+): Promise<Date> {
+  const graceDeferredAt = new Date(Date.now() - ageMs);
+  await prisma.session.update({
+    where: { refreshTokenHash: hashToken(rawRefreshToken) },
+    data: { graceDeferredAt },
+  });
+  return graceDeferredAt;
 }
 
 afterEach(async () => {
@@ -103,6 +145,17 @@ afterEach(async () => {
 });
 
 describe("POST /api/v1/auth/signup", () => {
+  it("should reject a phone above 20 characters with 422 naming phone (10.13)", async () => {
+    // Onze dígitos válidos afogados em separadores: o regex pós-normalização
+    // aceitaria — só o teto sobre o texto cru recusa.
+    const data = makeCustomerData({ phone: `${"-".repeat(20)}11987654321` });
+
+    const response = await request(app).post("/api/v1/auth/signup").send(data);
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["phone"]);
+  });
+
   it("should return 201 and create a new user for valid data", async () => {
     const data = makeCustomerData();
 
@@ -268,6 +321,29 @@ describe("POST /api/v1/auth/signup", () => {
 });
 
 describe("POST /api/v1/auth/login", () => {
+  it("should reject an email above 254 characters with 422 naming email (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/login")
+      .send({
+        email: `${"a".repeat(250)}@example.com`,
+        password: "Whatever@1",
+      });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["email"]);
+  });
+
+  it("should reject a password above 100 characters with 422 naming password (10.13)", async () => {
+    const user = await buildCustomer();
+
+    const response = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: user.email, password: `Aa1!${"x".repeat(97)}` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["password"]);
+  });
+
   it("should return 200 with only the access token in the body", async () => {
     const user = await buildCustomer();
 
@@ -316,7 +392,9 @@ describe("POST /api/v1/auth/login", () => {
     expect(response.status).toBe(401);
   });
 
-  it("should return 403 when the account is not verified (PENDING)", async () => {
+  // 10.8: cada recusa pós-senha tem `code` próprio — é nele que o cliente
+  // ramifica a tela, nunca na prosa em pt-BR de `message`.
+  it("should return 403 EMAIL_NOT_VERIFIED when the account is not verified (PENDING)", async () => {
     const user = await buildCustomer({ status: "PENDING" });
 
     const response = await request(app).post("/api/v1/auth/login").send({
@@ -325,10 +403,10 @@ describe("POST /api/v1/auth/login", () => {
     });
 
     expect(response.status).toBe(403);
-    expect(response.body.code).toBe("FORBIDDEN");
+    expect(response.body.code).toBe("EMAIL_NOT_VERIFIED");
   });
 
-  it("should return 403 when the account is banned", async () => {
+  it("should return 403 ACCOUNT_BANNED when the account is banned", async () => {
     const user = await buildCustomer();
     await prisma.user.update({
       where: { id: user.id },
@@ -341,7 +419,26 @@ describe("POST /api/v1/auth/login", () => {
     });
 
     expect(response.status).toBe(403);
-    expect(response.body.code).toBe("FORBIDDEN");
+    expect(response.body.code).toBe("ACCOUNT_BANNED");
+  });
+
+  it("should keep unknown email and wrong password indistinguishable (same status and code)", async () => {
+    const user = await buildCustomer();
+
+    const wrongPassword = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: "wrongpassword",
+    });
+    const unknownEmail = await request(app).post("/api/v1/auth/login").send({
+      email: "nonexisting@test.com",
+      password: "Test@1234",
+    });
+
+    expect(wrongPassword.status).toBe(401);
+    expect(unknownEmail.status).toBe(401);
+    expect(wrongPassword.body.code).toBe("UNAUTHORIZED");
+    expect(unknownEmail.body.code).toBe("UNAUTHORIZED");
+    expect(wrongPassword.body.message).toBe(unknownEmail.body.message);
   });
 
   it("should return 401 for non-existing email", async () => {
@@ -401,7 +498,7 @@ describe("POST /api/v1/auth/login", () => {
 });
 
 describe("login refused by mustChangePassword (7.16)", () => {
-  it("should return 403 with the correct password when a reset was forced", async () => {
+  it("should return 403 PASSWORD_RESET_REQUIRED with the correct password when a reset was forced", async () => {
     const user = await buildCustomer();
     await prisma.user.update({
       where: { id: user.id },
@@ -414,6 +511,7 @@ describe("login refused by mustChangePassword (7.16)", () => {
     });
 
     expect(response.status).toBe(403);
+    expect(response.body.code).toBe("PASSWORD_RESET_REQUIRED");
     expect(response.body.message).toBe("Você precisa definir uma nova senha");
   });
 
@@ -434,7 +532,46 @@ describe("login refused by mustChangePassword (7.16)", () => {
     });
 
     expect(response.status).toBe(403);
+    expect(response.body.code).toBe("ACCOUNT_BANNED");
     expect(response.body.message).toBe("Conta suspensa");
+  });
+
+  it("should prioritize the lockout (429) over the banned refusal (order regression)", async () => {
+    const user = await buildCustomer();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { bannedAt: new Date(), banReason: "abuse" },
+    });
+    for (let i = 0; i < env.LOCKOUT_THRESHOLD; i++) {
+      await request(app).post("/api/v1/auth/login").send({
+        email: user.email,
+        password: "wrongpassword",
+      });
+    }
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.body.code).toBe("TOO_MANY_REQUESTS");
+  });
+
+  it("should prioritize the forced reset over the pending verification (order regression)", async () => {
+    const user = await buildCustomer({ status: "PENDING" });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { mustChangePassword: true },
+    });
+
+    const response = await request(app).post("/api/v1/auth/login").send({
+      email: user.email,
+      password: user.password,
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("PASSWORD_RESET_REQUIRED");
   });
 
   it("should complete the end-to-end forced reset flow (force -> reset -> login)", async () => {
@@ -554,6 +691,8 @@ describe("POST /api/v1/auth/refresh", () => {
 
     expect(rotateResponse.status).toBe(200);
 
+    await ageOutOfGraceWindow(rawRefreshTokenFromCookie(refreshCookieA));
+
     const replayResponse = await request(app)
       .post("/api/v1/auth/refresh")
       .set("Cookie", refreshCookieA);
@@ -602,6 +741,366 @@ describe("POST /api/v1/auth/refresh", () => {
 
     expect(session.refreshTokenHash).not.toBe(rawToken);
     expect(session.refreshTokenHash).toBe(hashToken(rawToken));
+  });
+
+  it("should replay the same pair when a used refresh token comes back inside the grace window (10.7)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(rotateResponse.status).toBe(200);
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(200);
+    expect(replayResponse.body.accessToken).toBe(
+      rotateResponse.body.accessToken,
+    );
+    expect(extractRefreshCookie(replayResponse)).toBe(
+      extractRefreshCookie(rotateResponse),
+    );
+
+    // Nenhuma rotação nova (duas linhas: a do login e a que a rotação criou) e
+    // nenhuma sessão morta — é o dano que a janela existe para evitar.
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    expect(sessions).toHaveLength(2);
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+
+    const auditLine = await prisma.auditLog.findFirst({
+      where: { action: "AUTH_REFRESH_GRACE_SERVED" },
+    });
+    expect(auditLine).not.toBeNull();
+    expect(auditLine?.targetId).toBe(user.id);
+  });
+
+  it("should hand back the freshest pair when the chain moved on inside the window (10.15)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie: cookieA } = await loginWithSession(
+      user.email,
+      user.password,
+    );
+
+    // A → B → C, tudo dentro da janela: é o que um cliente com prefetch faz.
+    const rotatedToB = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", cookieA);
+    expect(rotatedToB.status).toBe(200);
+
+    const rotatedToC = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", extractRefreshCookie(rotatedToB));
+    expect(rotatedToC.status).toBe(200);
+
+    // O retardatário chega com A, dois elos atrás.
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", cookieA);
+
+    expect(replayResponse.status).toBe(200);
+    // Recebe C, não B: B já foi rotacionado, e devolvê-lo faria o cliente
+    // voltar um elo e levar a cascata na renovação seguinte.
+    expect(extractRefreshCookie(replayResponse)).toBe(
+      extractRefreshCookie(rotatedToC),
+    );
+
+    // Converge: o par devolvido renova de novo, que é o ponto de seguir a corrente.
+    const nextResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", extractRefreshCookie(replayResponse));
+    expect(nextResponse.status).toBe(200);
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+
+    const auditLine = await prisma.auditLog.findFirst({
+      where: { action: "AUTH_REFRESH_GRACE_SERVED" },
+    });
+    expect(auditLine?.metadata).toMatchObject({ chainHops: 1 });
+  });
+
+  it("should not grace a link whose successor a logout just killed (10.15)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie: cookieA } = await loginWithSession(
+      user.email,
+      user.password,
+    );
+
+    const rotatedToB = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", cookieA);
+    expect(rotatedToB.status).toBe(200);
+
+    // O logout mata **B**, não A. Servir a graça olhando só a linha de A
+    // devolveria 200 e um cookie novo para uma sessão que acabou de ser fechada.
+    const logoutResponse = await request(app)
+      .post("/api/v1/auth/logout")
+      .set("Authorization", `Bearer ${rotatedToB.body.accessToken}`)
+      .set("Cookie", extractRefreshCookie(rotatedToB));
+    expect(logoutResponse.status).toBe(204);
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", cookieA);
+
+    expect(replayResponse.status).toBe(401);
+  });
+
+  it("should not grace a link killed in the meantime, even inside the window (10.7)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(rotateResponse.status).toBe(200);
+
+    // O que um ban, um reset de senha ou a cascata de um roubo anterior fazem.
+    // A janela não pode reabrir por dez segundos o que a API acabou de fechar.
+    await prisma.session.updateMany({
+      where: { userId: user.id },
+      data: { invalidatedAt: new Date() },
+    });
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(401);
+  });
+
+  it("should return 503 and kill nothing when the cached pair is gone inside the window (10.7)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(rotateResponse.status).toBe(200);
+
+    // Chave ausente com o Redis vivo — evicção por limite de memória, na
+    // produção. A janela ainda não passou: a API não decide entre concorrência
+    // e roubo, ela recusa a decisão.
+    await redis.del(
+      refreshGraceKey(hashToken(rawRefreshTokenFromCookie(refreshCookie))),
+    );
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(503);
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+  });
+
+  it("should stamp graceDeferredAt on the presented link when answering 503 for a missing pair (10.18)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+    expect((await sessionByRawToken(rawToken)).graceDeferredAt).toBeNull();
+
+    await redis.del(refreshGraceKey(hashToken(rawToken)));
+
+    const before = Date.now();
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(503);
+    // A mensagem manda tentar **agora**: "em alguns instantes" contradizia o guia
+    // e empurrava o cliente para fora da janela.
+    expect(replayResponse.body.action).toBe("Tente novamente agora");
+
+    const marked = await sessionByRawToken(rawToken);
+    expect(marked.graceDeferredAt).not.toBeNull();
+    expect(marked.graceDeferredAt?.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it("should stamp graceDeferredAt when the grace store itself is unreachable (10.18)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+
+    // A variante realista do caminho 1: Redis fora do ar. O `get` da janela
+    // falha, e é a única chamada que este teste derruba.
+    const getSpy = vi
+      .spyOn(redis, "get")
+      .mockRejectedValueOnce(new Error("redis down"));
+
+    try {
+      const replayResponse = await request(app)
+        .post("/api/v1/auth/refresh")
+        .set("Cookie", refreshCookie);
+
+      expect(replayResponse.status).toBe(503);
+    } finally {
+      getSpy.mockRestore();
+    }
+
+    expect((await sessionByRawToken(rawToken)).graceDeferredAt).not.toBeNull();
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+  });
+
+  it("should serve the live pair when the 10s window closed but the 503 mark is still open (10.18)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+
+    // A retentativa tardia do 503: `usedAt` já passou dos 10s, mas o primeiro
+    // 503 foi há menos de 30s — e o par ainda está no cache (o Redis voltou).
+    await ageUsedAtPastGraceWindow(rawToken);
+    await markGraceDeferred(rawToken, REFRESH_GRACE_DEFERRED_WINDOW_MS / 2);
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(200);
+    expect(extractRefreshCookie(replayResponse)).toBe(
+      extractRefreshCookie(rotateResponse),
+    );
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    expect(sessions).toHaveLength(2);
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+  });
+
+  it("should answer 503 again, kill nothing and keep the mark fixed when the pair is still gone inside the 503 mark (10.18, rule a)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    await loginWithSession(user.email, user.password); // sessão B, dispositivo independente
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+
+    await ageOutOfGraceWindow(rawToken);
+    const firstMark = await markGraceDeferred(
+      rawToken,
+      REFRESH_GRACE_DEFERRED_WINDOW_MS / 2,
+    );
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(503);
+
+    // Marca fixa (regra a): o segundo 503 não a renova — senão quem controla o
+    // ritmo adiaria a detecção para sempre.
+    expect((await sessionByRawToken(rawToken)).graceDeferredAt).toEqual(
+      firstMark,
+    );
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    expect(sessions.length).toBeGreaterThanOrEqual(3);
+    for (const session of sessions) {
+      expect(session.invalidatedAt).toBeNull();
+    }
+  });
+
+  it("should cascade as always once both the 10s window and the 503 mark are closed (10.18)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    await loginWithSession(user.email, user.password); // sessão B, dispositivo independente
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+
+    await ageOutOfGraceWindow(rawToken);
+    await markGraceDeferred(rawToken, REFRESH_GRACE_DEFERRED_WINDOW_MS + 1_000);
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(401);
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: user.id },
+    });
+    expect(sessions.length).toBeGreaterThanOrEqual(3);
+    for (const session of sessions) {
+      expect(session.invalidatedAt).not.toBeNull();
+    }
+  });
+
+  it("should not let the 503 mark reopen a link that was explicitly killed (10.18)", async () => {
+    const user = await buildCustomer();
+    const { refreshCookie } = await loginWithSession(user.email, user.password);
+    const rawToken = rawRefreshTokenFromCookie(refreshCookie);
+
+    const rotateResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+    expect(rotateResponse.status).toBe(200);
+
+    // Marca aberta, par no cache — e o elo morto no intervalo (ban, reset de
+    // senha, cascata anterior). A guarda de `invalidatedAt` continua na frente.
+    await markGraceDeferred(rawToken, REFRESH_GRACE_DEFERRED_WINDOW_MS / 2);
+    await prisma.session.updateMany({
+      where: { userId: user.id },
+      data: { invalidatedAt: new Date() },
+    });
+
+    const replayResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", refreshCookie);
+
+    expect(replayResponse.status).toBe(401);
+    expect(replayResponse.headers["set-cookie"]).toBeUndefined();
   });
 
   it("should return 401 when the refresh token is tampered with (D1 regression)", async () => {
@@ -1151,6 +1650,15 @@ describe("DELETE /api/v1/auth/sessions/:id", () => {
 });
 
 describe("POST /api/v1/auth/verify-email", () => {
+  it("should reject a token above 64 characters with 422 naming token (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/verify-email")
+      .send({ token: `${generateOpaqueToken()}a` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["token"]);
+  });
+
   it("should return 422 when the token is missing", async () => {
     const response = await request(app)
       .post("/api/v1/auth/verify-email")
@@ -1233,6 +1741,15 @@ describe("POST /api/v1/auth/verify-email", () => {
 });
 
 describe("POST /api/v1/auth/verify-email/resend", () => {
+  it("should reject an email above 254 characters with 422 naming email (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/verify-email/resend")
+      .send({ email: `${"a".repeat(250)}@example.com` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["email"]);
+  });
+
   it("should return 422 when the email is invalid", async () => {
     const response = await request(app)
       .post("/api/v1/auth/verify-email/resend")
@@ -1298,6 +1815,15 @@ describe("POST /api/v1/auth/verify-email/resend", () => {
 });
 
 describe("POST /api/v1/auth/forgot-password", () => {
+  it("should reject an email above 254 characters with 422 naming email (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: `${"a".repeat(250)}@example.com` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["email"]);
+  });
+
   it("should return 422 when the email is invalid", async () => {
     const response = await request(app)
       .post("/api/v1/auth/forgot-password")
@@ -1371,6 +1897,14 @@ describe("POST /api/v1/auth/forgot-password", () => {
 describe("POST /api/v1/auth/reset-password", () => {
   const NEW_PASSWORD = "NewPass@123";
 
+  it("should reject a token above 64 characters with 422 naming token (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: `${generateOpaqueToken()}a`, newPassword: "NewPass@123" });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["token"]);
+  });
   it("should return 422 when the token is missing", async () => {
     const response = await request(app)
       .post("/api/v1/auth/reset-password")
@@ -1528,6 +2062,21 @@ describe("POST /api/v1/auth/reset-password", () => {
 describe("POST /api/v1/auth/change-password", () => {
   const NEW_PASSWORD = "NewPass@123";
 
+  it("should reject a currentPassword above 100 characters with 422 naming it (10.13)", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-password")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        currentPassword: `Aa1!${"x".repeat(97)}`,
+        newPassword: "NewPass@123",
+      });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["currentPassword"]);
+  });
   it("should return 401 without an access token", async () => {
     const response = await request(app)
       .post("/api/v1/auth/change-password")
@@ -1637,6 +2186,38 @@ describe("POST /api/v1/auth/change-password", () => {
 });
 
 describe("POST /api/v1/auth/change-email", () => {
+  it("should reject a currentPassword above 100 characters with 422 naming it (10.13)", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        currentPassword: `Aa1!${"x".repeat(97)}`,
+        newEmail: "new@example.com",
+      });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["currentPassword"]);
+  });
+
+  it("should reject a newEmail above 254 characters with 422 naming newEmail (10.13)", async () => {
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/auth/change-email")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        currentPassword: user.password,
+        newEmail: `${"a".repeat(250)}@example.com`,
+      });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["newEmail"]);
+  });
+
   it("should return 401 without an access token", async () => {
     const response = await request(app)
       .post("/api/v1/auth/change-email")
@@ -1870,6 +2451,15 @@ describe("POST /api/v1/auth/change-email", () => {
 });
 
 describe("POST /api/v1/auth/confirm-email-change", () => {
+  it("should reject a token above 64 characters with 422 naming token (10.13)", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/confirm-email-change")
+      .send({ token: `${generateOpaqueToken()}a` });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["token"]);
+  });
+
   it("should return 422 when token is missing", async () => {
     const response = await request(app)
       .post("/api/v1/auth/confirm-email-change")

@@ -1,24 +1,12 @@
 import z from "zod";
 import { ROLE_NAMES } from "@/modules/role/role.constants";
+import { phoneSchema } from "@/modules/user/user.schema";
 
 export const createCustomerProfileSchema = z.object({
   params: z.object({
     userId: z.uuid("ID do usuário inválido"),
   }),
-  body: z.object({
-    phone: z
-      .string()
-      .transform((val) => val.replace(/\D/g, ""))
-      .pipe(
-        z
-          .string()
-          .regex(/^\d{10,11}$/, "Telefone deve ter 10 ou 11 dígitos (com DDD)"),
-      )
-      .meta({
-        description: "Telefone com DDD (10-11 dígitos)",
-        example: "11987654321",
-      }),
-  }),
+  body: z.object({ phone: phoneSchema }),
 });
 
 export const createEmployeeProfileSchema = z.object({

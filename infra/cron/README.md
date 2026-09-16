@@ -49,10 +49,12 @@ não acha o container, e o timer segue agendado como se nada tivesse acontecido.
 Foi o que aconteceu na Fase 10, ao renomear `pet-oasis-app` → `pet-oasis-api`. O procedimento
 abaixo serve para qualquer renomeação futura.
 
-**Ordem importa:** reinstale as units **antes** do `prod:up` que renomeia o container. As
-units só são exercitadas quando disparam, então reinstalar primeiro não quebra nada — enquanto
-o container velho ainda existe, o timer novo é que erraria, e nenhum dos três roda com
-frequência suficiente para pegar essa janela de minutos.
+**Ordem importa, e são duas ordens diferentes:** reinstale as units **antes** do `prod:up` que
+renomeia o container, mas rode a verificação manual **depois** dele. As units só são exercitadas
+quando disparam, então reinstalar primeiro não quebra nada — enquanto o container velho ainda
+existe, o timer novo é que erraria, e nenhum dos três roda com frequência suficiente para pegar
+essa janela de minutos. A execução manual, ao contrário, é um `docker exec` de verdade: rodada
+antes do deploy ela falha por construção, porque o container com o nome novo ainda não existe.
 
 ```sh
 # 1. Desligar e remover as units antigas
@@ -76,12 +78,15 @@ sudo systemctl enable --now pet-oasis-cleanup-sessions.timer
 sudo systemctl enable --now pet-oasis-cleanup-audit-log.timer
 sudo systemctl enable --now pet-oasis-demo-reset.timer     # só no deploy demo
 
-# 4. Provar que funcionam, sem esperar o agendamento
+# 4. Fazer o deploy que renomeia o container
+npm run prod:up
+
+# 5. Só agora, com o container novo de pé: provar que funcionam, sem esperar o agendamento
 sudo systemctl start pet-oasis-cleanup-sessions.service
 journalctl -u pet-oasis-cleanup-sessions.service -n 30 --no-pager
 ```
 
-O passo 4 não é opcional. Uma unit que aponta para um container inexistente falha **de um jeito
+O passo 5 não é opcional. Uma unit que aponta para um container inexistente falha **de um jeito
 que não te acorda**: sem alerta, sem página, só uma linha no journal que ninguém lê. Rodar uma
 vez à mão é o que transforma "provavelmente está certo" em "está certo".
 

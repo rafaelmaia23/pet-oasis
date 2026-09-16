@@ -13,11 +13,31 @@ import { router } from "@/routes";
 
 const app = express();
 
-// D7 — o deploy tem um proxy reverso na frente (ver docs/guides/deploy.md), então
-// `req.ip` deve vir do X-Forwarded-For que ELE escreve — é o IP real que o rate
-// limit, o lockout e os logs precisam. O `1` é literal: confia em exatamente um
-// salto. Sem proxy na frente isto seria um furo (header forjável pelo cliente).
-app.set("trust proxy", 1);
+// D7 (10.2) — o deploy tem um proxy reverso na frente e, desde o front web,
+// clientes internos que renderizam no servidor: `req.ip` deve vir do
+// X-Forwarded-For que ELES escrevem, senão o rate limit, o lockout e o audit log
+// registram o container em vez do visitante.
+//
+// Por **endereço de origem** e não por contagem de saltos: duas cadeias coexistem
+// — visitante→proxy→api, com um salto, e visitante→proxy→cliente→api, com dois —
+// e nenhum número único acerta as duas. Assim o Express caminha o header da
+// direita para a esquerda pulando os confiáveis e para no primeiro que não é, o
+// que também libera o cliente de escolher entre copiar o header ou acrescentar
+// o próprio salto (ver docs/guides/integrating-with-the-api.md).
+//
+// O que torna isto seguro é a porta 3000 **não** ser publicada no host em
+// produção (infra/docker-compose.prod.yml): quem alcança a API por endereço
+// privado é só o nginx e os containers das redes declaradas. Publicar a porta
+// de novo transformaria esta linha num furo.
+//
+// Limite conhecido: um visitante cujo **próprio** endereço é privado (rede de
+// escritório atrás do mesmo nginx, cliente por VPN) é pulado junto com os
+// saltos, e o IP registrado passa a ser o do container. É o preço de não poder
+// distinguir "salto de infraestrutura" de "visitante em rede privada" só pelo
+// endereço — e é aceitável enquanto o público chega pela internet. O dia em que
+// houver rede privada legítima do outro lado do proxy, a saída é o nginx
+// **reescrever** o header em vez de acrescentar, não afrouxar isto aqui.
+app.set("trust proxy", ["loopback", "uniquelocal"]);
 
 // Primeiro de todos: abre o contexto do request (requestId) para que qualquer
 // log emitido daqui em diante — inclusive de dentro de um middleware que

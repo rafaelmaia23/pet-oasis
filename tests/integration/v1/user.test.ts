@@ -50,6 +50,34 @@ afterEach(async () => {
 });
 
 describe("POST /api/v1/users", () => {
+  it("should reject an email above 254 characters with 422 naming email (10.13)", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeEmployeeData({ email: `${"a".repeat(250)}@example.com` }));
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["email"]);
+  });
+
+  it("should reject a cpf above 14 characters with 422 naming cpf (10.13)", async () => {
+    const user = await buildEmployee({ roleNames: ["manager"] });
+    const token = await loginAs(user.email, user.password);
+
+    // Onze dígitos válidos afogados em separadores: o `length(11)` depois da
+    // normalização aceitaria — só o teto sobre o texto cru recusa.
+    const response = await request(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeEmployeeData({ cpf: `${"-".repeat(10)}12345678901` }));
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["cpf"]);
+  });
+
   it("should return 422 if required fields are missing", async () => {
     const user = await buildEmployee({ roleNames: ["manager"] });
 

@@ -124,6 +124,9 @@ completo, os contra-argumentos e os gotchas.
 
 - Design de `Session` — access JWT 15min + refresh opaco rotativo
 - Ordem de checagem no `refresh`: reuso → invalidada → expirada
+- A janela de graça de 10s na rotação (10.7) — o mesmo par de volta, e o 503 que recusa decidir
+- A janela devolve o par **atual** da corrente, não o que o elo emitiu (10.15)
+- Um 503 já respondido abre uma segunda janela, gravada no banco (10.18) — e o teto de saltos em 5 como exposição aceita
 - Refresh token hasheado em repouso — item que virou teste, não código
 - Teto de sessões vivas
 
@@ -131,8 +134,9 @@ completo, os contra-argumentos e os gotchas.
 
 - Status e ban são ortogonais
 - Todo usuário nasce PENDING, inclusive os criados por admin
-- 403 (não 401) no login quando a senha está certa mas a conta não está ACTIVE
+- 403 (não 401) no login quando a senha está certa mas a conta não está ACTIVE — e um `code` por condição (`ACCOUNT_BANNED`/`PASSWORD_RESET_REQUIRED`/`EMAIL_NOT_VERIFIED`, 10.8)
 - Anti-enumeração em forgot / resend / signup
+- O relógio do login não é oráculo: email desconhecido paga o bcrypt (10.9)
 
 *Ban — a conta congelada*
 
@@ -248,9 +252,13 @@ completo, os contra-argumentos e os gotchas.
 
 *Hardening HTTP*
 
-- `app.set("trust proxy", 1)` (D7)
+- `trust proxy` é por endereço de origem, não por contagem de saltos (D7, revisto na 10.2)
 - Corpo grande demais é 413
 - CORS de origem não-permitida responde sem os headers, não com erro
+- A allowlist de CORS sai só da variável explícita — a `APP_URL` não entra por inércia (10.11)
+- Mass assignment: schema de update é `.strict()`, e a proteção tem teste próprio (10.12)
+- Todo campo de texto tem teto, e o teto é contrato (10.13)
+- O access token tem algoritmo pinado, `iss`/`aud` obrigatórios e folga de relógio explícita (10.10)
 - Auto-hospedar o bundle do Scalar em vez de allowlistar o CDN
 - A auto-hospedagem sozinha não bastou — o nonce é a segunda peça (7.1)
 - Sobram violações de CSP no console de `/reference`, e elas ficam
@@ -287,6 +295,11 @@ completo, os contra-argumentos e os gotchas.
 
 - Os dois bugs que motivaram a reformulação (Fase 6)
 - Compose base + overrides
+- O serviço do Compose se chama `api`, com alias de rede explícito (10.1) — o nome do serviço é o
+  endereço que o cliente interno escreve, e o alias explícito impede DNS que some em silêncio
+- Três redes com papéis distintos, e a porta da API despublicada (10.2, revisto na 10.17) —
+  `backend` interna com os dados, `pet-oasis` e `proxy` compartilhadas e ambas `external:`; não
+  publicar a porta é o que torna seguro o `trust proxy` por endereço
 - Envs por arquivo + dotenv-cli
 - Graceful shutdown nativo do Compose, não script com `spawn`
 - O client Prisma do dev num volume anônimo
@@ -294,10 +307,27 @@ completo, os contra-argumentos e os gotchas.
 *Imagem e boot de produção*
 
 - `migrate deploy`, nunca `migrate dev`
+- O boot para no dado de referência e segue no de demonstração (10.3) — o seed é fatal em
+  feature/role/raça/léxico e fail-open no dado atrás de flag, que só loga e some do `SeedResult`
 - O seed é bundlado pelo tsup (`dist/seed.js`)
 - Imagem multi-stage e não-root
+- O OpenSSL vai nos três estágios da imagem, e a engine do Prisma é detectada (10.5) — sem ele a
+  detecção falha e o default silencioso é a engine errada; detectar em vez de pinar é o que mantém
+  o ARM64 correto
+- Não existe script para apagar o banco de produção (10.5) — `down -v` de produção é ato
+  deliberado, digitado à mão; script de nome amigável ao lado do `prod:up` vira erro de digitação
+- A API atende num subdomínio, e o apex fica limpo (10.6) — `pet-oasis-api.maiahub.com.br`, de
+  primeiro nível porque segundo nível não fecha TLS atrás do proxy da Cloudflare; os 301 do apex
+  foram planejados e descartados; a cadeia de IP ganha a Cloudflare e o proxy resolve o visitante
+  por `CF-Connecting-IP`; a base das imagens segue a API sem migration (o banco guarda a chave), e
+  `APP_URL` só vira depois de o front ter as quatro rotas de email
 - O reverse proxy do upload existe, mas não neste repositório (9.10) — quem serve `/uploads/*` é
   o Node, e o bind mount é o que deixa a troca por nginx ser configuração
+- O diretório de uploads mora fora do working tree, e o uid é fixado no serviço (10.4) — git e
+  container não têm dono em comum; `UPLOAD_HOST_DIR` é obrigatória, sem fallback para dentro da árvore,
+  e absoluta — fonte relativa resolve contra `infra/`, o diretório do projeto, não contra a raiz (10.19)
+- O container de dev escreve como o uid do host, não como root (10.16) — num clone novo o Docker
+  cria `uploads/` como root ao montar; o entrypoint entrega a raiz ao host e cai de uid antes de gravar
 - `sharp` no ARM64 exige build no próprio servidor (9.10)
 
 *Documentação da API*

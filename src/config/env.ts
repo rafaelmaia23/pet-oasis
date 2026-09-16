@@ -52,7 +52,8 @@ const envSchema = z.object({
     .default("info"),
   LOG_BUFFER_SIZE: z.coerce.number().int().positive().default(500),
 
-  // Origens extras (staging/preview) além do APP_URL, separadas por vírgula.
+  // A allowlist inteira do CORS, separada por vírgula — só páginas web que
+  // chamam a API direto do navegador. APP_URL não entra (o front usa BFF).
   CORS_ALLOWED_ORIGINS: z.string().optional(),
 
   // Teto do corpo JSON aceito pelo body-parser (sintaxe do pacote `bytes`).

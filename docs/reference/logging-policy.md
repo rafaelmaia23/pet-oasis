@@ -117,6 +117,7 @@ Convenção: `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit
 | `AUTH_LOCKOUT_TRIGGERED` | `User` | `failureCount`, `backoffLevel`, `unlockAt` | 7.10 |
 | `AUTH_LOCKOUT_CLEARED` | `User` | `clearedBy` (enum: `ADMIN`, `SUCCESSFUL_LOGIN`) | 7.10 |
 | `AUTH_RATE_LIMIT_EXCEEDED` | `Route` | `rule`, `scope` (enum: `IP`, `EMAIL`) | 7.9 |
+| `AUTH_REFRESH_GRACE_SERVED` | `User` | `sessionId` (o elo reapresentado), `chainHops` (saltos até o par atual; `0` é o caso ordinário) | 10.7 · 10.15 |
 | `USER_CREATED` | `User` | `source` (enum: `SIGNUP`, `ADMIN`, `SEED`) | 7.6 |
 | `USER_DELETED` | `User` | `cascadedProfiles`, `cascadedRoles`, `cascadedOverrides`, `cascadedPets` (nº de filhos derrubados junto) | 7.6 · 8.1 · 9.4 |
 | `USER_PROFILE_CREATED` | `User` | `profileKind`, `roles` (nº de roles concedidas) | 8.3 |

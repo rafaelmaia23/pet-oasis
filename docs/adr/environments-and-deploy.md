@@ -63,8 +63,9 @@ ser **PID 1** e receber o sinal.
 Stages `build` → `runtime` (prod, intocado: bundle tsup, `npm prune --omit=dev`,
 `USER node`) + novo stage **`dev`** (para no `npm ci` completo, sem bundle/prune,
 roda `tsx watch` contra `src/` por bind-mount; **começa** root e cai para o uid
-do host antes de escrever em bind mount — ver "container de dev escreve como o
-uid do host" em `docs/context/infrastructure.md`). O client Prisma gerado no dev
+do host antes de escrever em bind mount — ver [o container de dev escreve como o
+uid do host](../context/infrastructure.md#o-container-de-dev-escreve-como-o-uid-do-host-não-como-root-1016)).
+O client Prisma gerado no dev
 vive num **volume anônimo** em `/app/src/generated` (senão o bind-mount de
 `./src` o mascararia); o entrypoint de dev roda `prisma generate` no start, ainda
 como root, para populá-lo. `build.network: host`

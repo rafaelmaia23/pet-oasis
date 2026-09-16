@@ -13,6 +13,10 @@
 # root and the host cannot write to it (EACCES on `npm run db:seed`).
 set -e
 
+# Fail here, naming the variable, rather than three lines later in a `chown`
+# that silently no-ops on an empty owner. Compose always sets both.
+: "${HOST_UID:?}" "${HOST_GID:?}"
+
 if [ "$(id -u)" = "0" ]; then
   echo "Generating Prisma client..."
   node_modules/.bin/prisma generate
@@ -23,12 +27,16 @@ if [ "$(id -u)" = "0" ]; then
   # tree written as root by the pre-10.16 container heals on the next `up`.
   chown -R "$HOST_UID:$HOST_GID" /app/uploads
 
-  echo "Dropping privileges to ${HOST_UID}:${HOST_GID}..."
-  # `setpriv` ships with util-linux in the base image — no extra package. HOME
-  # moves to a writable place because the host uid has no passwd entry in the
-  # container, and the Prisma CLI keeps its checkpoint cache under $HOME.
-  exec setpriv --reuid="$HOST_UID" --regid="$HOST_GID" --clear-groups \
-    env HOME=/tmp "$0" "$@"
+  # When the host user *is* root there is nothing to drop to — and dropping
+  # would land on uid 0 again, re-entering this block forever.
+  if [ "$HOST_UID" != "0" ]; then
+    echo "Dropping privileges to ${HOST_UID}:${HOST_GID}..."
+    # `setpriv` ships with util-linux in the base image — no extra package. HOME
+    # moves to a writable place because the host uid has no passwd entry in the
+    # container, and the Prisma CLI keeps its checkpoint cache under $HOME.
+    exec setpriv --reuid="$HOST_UID" --regid="$HOST_GID" --clear-groups \
+      env HOME=/tmp "$0" "$@"
+  fi
 fi
 
 echo "Applying migrations..."

@@ -55,8 +55,11 @@ services:
       SMTP_HOST: mailpit
       # Uid/gid que o entrypoint assume depois do `prisma generate` (10.16). O
       # script `dev` exporta os dois a partir de `id -u`/`id -g`, então quem
-      # clona não configura nada; o default 1000 cobre o caso de alguém invocar
-      # o Compose por fora do npm. Ver o comentário do mount de ../uploads.
+      # clona não configura nada. O default 1000 existe para os scripts que não
+      # sobem o `api` (`dev:down`, `dev:mail`, `dev:db`) não avisarem variável
+      # vazia — não é cobertura: quem invocar o Compose por fora do npm com
+      # outro uid recebe uma árvore de 1000, e o EACCES volta.
+      # Ver o comentário do mount de ../uploads.
       HOST_UID: ${HOST_UID:-1000}
       HOST_GID: ${HOST_GID:-1000}
     depends_on:

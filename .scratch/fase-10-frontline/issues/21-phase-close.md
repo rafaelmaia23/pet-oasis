@@ -30,7 +30,7 @@ mandava fazer "no fecho" e que estavam pendurados na issue 14 (fechada como trab
 - [x] `docs/todo.md`: o bloco da Fase 10 encolhe para a forma de fase fechada (~10 bullets, um
       por grupo de issues, com os ponteiros).
 - [x] Suíte completa + `typecheck` + `lint` + `docs:check` verdes na `fase-10`.
-- [ ] Merge `fase-10` → `dev` (`--no-ff`); suíte verde na `dev`; merge `dev` → `main`; nova
+- [x] Merge `fase-10` → `dev` (`--no-ff`); suíte verde na `dev`; merge `dev` → `main`; nova
       `dev` a partir da `main`.
 
 ## Tabela de rastreio (decisão da spec → dono permanente), conferida em 2026-09-16

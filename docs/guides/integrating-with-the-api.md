@@ -18,8 +18,11 @@ Há **duas** formas, e a escolha muda o que a API sabe sobre quem está chamando
 http://api:3000/api/v1
 ```
 
-`api` é o nome do serviço no Compose de produção, registrado como alias de rede em toda rede
-que ele integra. Sem TLS, sem sair do host, sem passar pelo nginx.
+`api` é o nome do serviço no Compose de produção e o alias de rede que ele carrega nas redes
+**do projeto** (`backend` e `pet-oasis`) — na `proxy`, compartilhada com outros projetos atrás
+do nginx (Nginx Proxy Manager), o alias é omitido de propósito (o porquê está em
+[`docs/context/infrastructure.md`](../context/infrastructure.md)). Para o cliente na
+`pet-oasis`, `api` resolve. Sem TLS, sem sair do host, sem passar pelo nginx.
 
 O cliente precisa entrar na rede **`pet-oasis`**, declarada como externa no compose dele:
 
@@ -145,6 +148,7 @@ Toda resposta de erro tem a mesma forma:
 | **403** | Autenticado, mas não permitido. Inclui as recusas de login **depois** de a senha conferir (ver abaixo) |
 | **404** | Não existe, ou existe e você não pode saber que existe |
 | **409** | Conflito de estado ou de unicidade. Quando a resposta nomeia o campo, dá para renderizar inline |
+| **413** | Corpo JSON acima do limite (a resposta não diz o teto), ou imagem acima do tamanho máximo de upload (a resposta diz o teto em MB no `action`) |
 | **422** | Validação — traz `errors` por campo |
 | **429** | Rate limit ou account lockout. Traz **`Retry-After`** em segundos; use o valor, não uma mensagem genérica |
 | **503** | Dependência externa indisponível (email, e o caso de refresh concorrente descrito abaixo). É retentável |
@@ -163,8 +167,9 @@ cada uma pede uma tela diferente:
 | Conta ainda não verificada | 403 | `EMAIL_NOT_VERIFIED` |
 
 As três de 403 só disparam **depois** de a senha conferir — quem as recebe é o dono da conta,
-então não há vazamento em ramificar por elas. As duas primeiras são deliberadamente
-indistinguíveis entre si.
+então não há vazamento em ramificar por elas. O mesmo vale para o 429 de conta travada: ele
+também só vem com a senha certa. Já **email desconhecido e senha errada** são deliberadamente
+indistinguíveis entre si — mesmo 401, mesmo `code`, mesma mensagem.
 
 Consequência de desenho para o cliente: **nenhuma conta pendente alcança o interior da
 aplicação**. O aviso de "verifique seu email" e o reenvio da verificação pertencem à tela de
@@ -174,9 +179,42 @@ login, não a uma tela interna.
 
 ## 5. Sessão e renovação
 
-O access token é um JWT de **15 minutos**, validado localmente pela API (sem consulta ao
-banco). O refresh é um token opaco, rotativo: cada uso emite um novo e marca o anterior como
-usado.
+O access token é um JWT de **15 minutos**, enviado em `Authorization: Bearer`. A assinatura é
+verificada localmente, mas o **usuário é relido a cada request**: é isso que mata o token de uma
+conta deletada na hora, e que faz as capabilities do `GET /me` serem sempre as atuais — perder
+uma role vale no request seguinte, não dali a 15 minutos. Não decodifique o JWT no cliente para
+decidir nada: o conteúdo dele é da API.
+
+O refresh é um token opaco, rotativo: cada uso emite um novo e marca o anterior como usado.
+
+**Ele viaja em cookie, nunca no corpo.** `POST /auth/login` e `POST /auth/refresh` devolvem
+**só** `{ "accessToken" }` no JSON; o refresh vai no `Set-Cookie`, e `/auth/refresh` e
+`/auth/logout` o leem de lá. O contrato do cookie:
+
+| Atributo | Valor | Consequência para o cliente |
+|---|---|---|
+| Nome | `refresh_token` | — |
+| `Path` | `/api/v1/auth` | O navegador só o reenvia para URLs sob esse path |
+| `HttpOnly` | sempre | JavaScript não lê; é o que protege o refresh de XSS |
+| `SameSite` | `Lax` | Não viaja em POST iniciado por outro site |
+| `Secure` | em produção | Só sai por HTTPS — em dev (`http://`) o atributo não é setado |
+| `Max-Age` | 7 dias, **deslizantes** | Cada refresh reinicia a contagem; sem uso por 7 dias, a sessão expira |
+
+Há um **teto de sessões vivas por usuário** (5 por padrão): o sexto login derruba a mais antiga.
+É o "por que meu celular deslogou" quando alguém entra em muitos dispositivos.
+
+**O que isso exige de um BFF.** Quem recebe o `Set-Cookie` é o servidor do cliente, não o
+navegador, e ele tem duas saídas:
+
+- **Repassar o cookie ao navegador.** Funciona, com uma condição: a rota do BFF que chama
+  `/auth/refresh` precisa viver sob um path que **case com `/api/v1/auth`**, senão o navegador
+  nunca reenvia o cookie. Esse é o modo de falha silencioso a evitar: o login funciona, o
+  primeiro refresh chega sem cookie e leva um 401 genérico — 15 minutos depois de tudo "estar
+  funcionando", sem nada no cliente nem no log da API que aponte para o path.
+- **Guardar o refresh numa sessão própria do BFF** e nunca expô-lo ao navegador. O BFF vira o
+  único portador do cookie e repassa para a API o que guardou.
+
+A API não tem preferência: as duas são corretas. A escolha é do cliente.
 
 **Reapresentar um refresh já usado é tratado como roubo** e invalida **todas** as sessões do
 usuário. É a proteção mais importante do módulo, e ela é agressiva de propósito.
@@ -245,11 +283,11 @@ allowlist dele.
 
 ## 8. Descobrir o resto
 
-- **`GET /openapi.json`** (público) — a especificação OpenAPI 3.1, gerada dos schemas Zod. É a
-  fonte para gerar tipos no cliente.
-- **`GET /reference`** (público) — a UI Scalar, interativa, com "try it".
+- **`GET /openapi.json`** (público, na **raiz do host** — não sob `/api/v1`) — a especificação
+  OpenAPI 3.1, gerada dos schemas Zod. É a fonte para gerar tipos no cliente.
+- **`GET /reference`** (público, também na raiz) — a UI Scalar, interativa, com "try it".
 - [`docs/reference/endpoints.md`](../reference/endpoints.md) — a lista de rotas em prosa, com
   a feature exigida por cada uma.
-- **`GET /me`** — as capabilities efetivas do usuário. Use para **esconder afordância**, nunca
+- **`GET /api/v1/me`** — as capabilities efetivas do usuário. Use para **esconder afordância**, nunca
   para decidir permissão: quem decide é a API, e um `can()` esquecido resulta em 403, que é
   feio, não inseguro. Honre o wildcard `*`.

@@ -57,9 +57,15 @@ mesmo idioma do `LOCKOUT_THRESHOLD`/`_WINDOW_MS`/`_MAX_MS` que o ADR já separav
 ### Conta travada responde 429 genérico
 
 Login com senha errada continua 401 genérico (nenhuma identidade estabelecida). Rate limit por
-IP e lockout por conta devolvem o **mesmo** 429, sem indicar qual disparou nem confirmar a
-existência da conta além do que as tentativas anteriores já revelam — mesmo espírito
-anti-enumeração de `forgot-password`/`verify-email/resend`.
+IP e lockout por conta devolvem o **mesmo** 429 — mesmo `code`, mesma prosa —, sem confirmar a
+existência da conta além do que as tentativas anteriores já revelam: mesmo espírito
+anti-enumeração de `forgot-password`/`verify-email/resend`. O que os distingue é só o **valor**
+de `Retry-After`, que ambos carregam desde a 10.22: a decisão original dizia "sem indicar qual
+disparou", e por um tempo só o rate limit mandava o header enquanto três documentos (guia de
+integração, `endpoints.md`, spec) prometiam-no também no lockout. A API passou a cumprir — tempo
+real até o fim da janela, em segundos arredondados para cima, pelo mesmo `headers` do
+`AppError` — e a distinção pelo valor é aceita porque o 429 de lockout só dispara com a senha
+certa. O número mora só no header. Racional completo na seção "Resposta 429 genérica" do ADR.
 
 ### Desbloqueio manual pelo admin, e reset completo
 

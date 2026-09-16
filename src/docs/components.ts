@@ -80,7 +80,19 @@ export const errorResponses = {
     errorResponseSchema,
   ),
   422: jsonResponse("Erro de validação", validationErrorSchema),
-  429: jsonResponse("Muitas tentativas — limite excedido", errorResponseSchema),
+  // 10.22: rate limit por IP e lockout por conta respondem o mesmo 429 — mesmo
+  // `code`, mesma prosa —, e ambos carregam `Retry-After`. O cliente usa o
+  // valor, não a mensagem; a spec precisa declará-lo para quem gera tipos.
+  429: {
+    ...jsonResponse("Muitas tentativas — limite excedido", errorResponseSchema),
+    headers: z.object({
+      "Retry-After": z.number().int().positive().meta({
+        description:
+          "Segundos até a próxima tentativa ser aceita (rate limit ou lockout de conta).",
+        example: 900,
+      }),
+    }),
+  },
   // 10.7: dependência externa indisponível. É **retentável** — o cliente que
   // recebe isso no refresh deve tentar de novo, não deslogar.
   503: jsonResponse(

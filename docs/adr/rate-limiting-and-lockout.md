@@ -74,10 +74,25 @@ já existentes (Fase 4).
 ### Resposta 429 genérica
 
 Rate limit por IP e lockout por conta devolvem **o mesmo 429** ("muitas
-tentativas, tente novamente mais tarde"), sem indicar qual dos dois disparou nem
+tentativas, tente novamente mais tarde"): mesmo `code`, mesma prosa, sem
 confirmar existência de conta. Senha errada continua **401** genérico (nenhuma
 identidade estabelecida). Mesmo espírito anti-enumeração já adotado em
 `forgot-password`/`verify-email/resend` na Fase 4.
+
+**Ambos carregam `Retry-After` (10.22).** A versão original desta decisão dizia
+"sem indicar qual dos dois disparou", e por um tempo só o rate limit mandava o
+header — o lockout respondia 429 seco, enquanto o guia de integração, o
+`endpoints.md` e a spec prometiam o header nos dois. A promessa passou a ser
+cumprida em vez de rebaixada: o lockout anexa o tempo real até o fim da janela,
+arredondado para cima em segundos, pelo mesmo mecanismo do rate limit (o header
+viaja no `AppError`, o handler central aplica). A forma dos dois 429 volta a ser
+idêntica; o **valor** os distingue (segundos num, minutos a horas no outro), e
+isso é aceito: o 429 de lockout só dispara **depois** de a senha conferir, então
+quem o recebe é o dono da conta ou alguém que já tem a senha — para esse, saber
+a duração não muda nada que a política por IP não trate. A prosa continua
+genérica de propósito: o número mora só no header, e o cliente renderiza "tente
+em N" a partir dele. Um `code` próprio para o lockout (`ACCOUNT_LOCKED`) seria
+outra decisão, de produto, e não foi tomada.
 
 ### Desbloqueio manual pelo admin
 

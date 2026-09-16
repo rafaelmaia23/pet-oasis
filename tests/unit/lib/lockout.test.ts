@@ -186,12 +186,41 @@ describe("getLockoutState", () => {
     expect(result.isLocked).toBe(true);
   });
 
+  // 10.22: o instante em que a trava acaba é o que vira `Retry-After` no
+  // login — a única informação que faltava sair daqui.
+  it("returns lockedUntil alongside isLocked while locked", async () => {
+    const lockedUntil = Date.now() + 100_000;
+    hgetallMock.mockResolvedValue({
+      failures: "0",
+      backoffLevel: "1",
+      lockedUntil: String(lockedUntil),
+    });
+
+    const result = await getLockoutState("user-1");
+
+    expect(result).toEqual({ isLocked: true, lockedUntil });
+  });
+
+  it("returns lockedUntil null once the window has passed", async () => {
+    hgetallMock.mockResolvedValue({
+      failures: "0",
+      backoffLevel: "1",
+      lockedUntil: String(Date.now() - 1),
+    });
+
+    const result = await getLockoutState("user-1");
+
+    expect(result).toEqual({ isLocked: false, lockedUntil: null });
+  });
+
   it("fails open when Redis is unavailable", async () => {
     hgetallMock.mockRejectedValue(new Error("connect ECONNREFUSED"));
 
     const result = await getLockoutState("user-1");
 
-    expect(result.isLocked).toBe(false);
+    // Sem instante inventado: destravado E sem `lockedUntil`, para que o login
+    // nunca monte um `Retry-After` a partir de um store que não respondeu.
+    expect(result).toEqual({ isLocked: false, lockedUntil: null });
   });
 });
 

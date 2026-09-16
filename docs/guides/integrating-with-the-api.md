@@ -18,12 +18,11 @@ Há **duas** formas, e a escolha muda o que a API sabe sobre quem está chamando
 http://api:3000/api/v1
 ```
 
-`api` é o nome do serviço no Compose de produção, e o alias de rede que ele carrega nas redes
-**do projeto** (`backend` e `pet-oasis`). Na `proxy` o alias é omitido de propósito: a rede é
-compartilhada com todo projeto que o nginx (Nginx Proxy Manager) serve neste host, e `api` é o
-nome genérico que um segundo projeto mais provavelmente usaria — dois aliases iguais viram
-round-robin no DNS do Docker. Para o cliente na `pet-oasis` nada disso importa: `api` resolve.
-Sem TLS, sem sair do host, sem passar pelo nginx.
+`api` é o nome do serviço no Compose de produção e o alias de rede que ele carrega nas redes
+**do projeto** (`backend` e `pet-oasis`) — na `proxy`, compartilhada com outros projetos atrás
+do nginx (Nginx Proxy Manager), o alias é omitido de propósito (o porquê está em
+[`docs/context/infrastructure.md`](../context/infrastructure.md)). Para o cliente na
+`pet-oasis`, `api` resolve. Sem TLS, sem sair do host, sem passar pelo nginx.
 
 O cliente precisa entrar na rede **`pet-oasis`**, declarada como externa no compose dele:
 
@@ -210,8 +209,8 @@ navegador, e ele tem duas saídas:
 - **Repassar o cookie ao navegador.** Funciona, com uma condição: a rota do BFF que chama
   `/auth/refresh` precisa viver sob um path que **case com `/api/v1/auth`**, senão o navegador
   nunca reenvia o cookie. Esse é o modo de falha silencioso a evitar: o login funciona, o
-  primeiro refresh chega sem cookie, a API responde 401 genérico "sem motivo" — 15 minutos
-  depois de tudo "estar funcionando", e o log da API mostra só um 401 genérico.
+  primeiro refresh chega sem cookie e leva um 401 genérico — 15 minutos depois de tudo "estar
+  funcionando", sem nada no cliente nem no log da API que aponte para o path.
 - **Guardar o refresh numa sessão própria do BFF** e nunca expô-lo ao navegador. O BFF vira o
   único portador do cookie e repassa para a API o que guardou.
 

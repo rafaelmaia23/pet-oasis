@@ -99,3 +99,14 @@ Cada fato novo foi conferido no código antes de escrito: compose de produção 
 e constantes de auth (cookie), middleware de autenticação (releitura), repository de auth
 (eviction e `expiresAt` deslizante), error handler e middleware de upload (413), `routes/index.ts`
 (montagem). `docs:check` verde.
+
+**O que a revisão achou.** O item 1 (alias `api` fora da `proxy`) tinha sido conferido no compose
+da **`dev`**, não no da branch: a `fase-10`, reaberta para o adendo, estava um commit atrás
+(`063fb52`, ajuste pós-fecho que tirou o alias) — o texto era verdadeiro contra `dev`/`main` e
+falso contra a base da própria branch. Correção: `dev` mergeada na `fase-10` antes de fechar, e o
+alias reconferido no compose desta branch. Lição para o próximo adendo: **reabrir uma fase é
+primeiro trazer a `dev` para ela.** A revisão também apontou que o porquê da omissão (round-robin
+no DNS) não é matéria de guia — ficou uma frase e o ponteiro para `infrastructure.md` §10.1, que
+já era o dono. Duas frases além do pedido, mantidas por serem transversais e curtas: "não
+decodifique o JWT no cliente" e "o 429 de lockout também só vem com a senha certa" (esta corrige
+uma ambiguidade real da tabela de recusas).

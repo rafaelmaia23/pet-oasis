@@ -218,6 +218,17 @@ contrato que o front lê, e ele já tem a tabela; o `enum` é polimento da spec 
 segundo componente de erro — precedente para outros endpoints com `code` por condição. Vale
 decidir se a spec deve carregar esse nível de detalhe por rota, ou se a tabela do guia basta.
 
+### `documenting-endpoints.md` lista só seis `errorResponses` e não fala de header — **P**
+
+**Problema:** o guia de documentação de endpoints enumera `errorResponses[400|401|403|404|409|422]`,
+mas o componente tem também 413 (9.10), 429 e 503 (10.7) — e, desde a 10.22, um componente de
+erro pode declarar **header** (`Retry-After` no 429). Quem documenta uma rota nova pelo guia não
+descobre que os três existem, nem que um header de resposta é declarável. Achado pela revisão de
+código da 10.22, fora do diff.
+
+**Esforço:** atualizar a lista e acrescentar um parágrafo sobre headers de resposta no componente
+de erro. Uma issue.
+
 ### ~~IP do visitante atrás do front renderizado no servidor~~ — ✅ resolvido (Fase 10.2)
 `req.ip` passou a vir do `X-Forwarded-For` por **endereço de origem**
 (`app.set("trust proxy", ["loopback", "uniquelocal"])`), e não pelos **dois saltos** que este item

@@ -35,7 +35,12 @@ const EMPTY_STATE: LockoutState = {
   lockedUntil: null,
 };
 
-export function isLocked(state: LockoutState, now: number): boolean {
+// Predicado de tipo: quem passa por aqui sabe que `lockedUntil` é número —
+// é o que `getLockoutState` devolve para virar `Retry-After` (10.22).
+export function isLocked(
+  state: LockoutState,
+  now: number,
+): state is LockoutState & { lockedUntil: number } {
   return state.lockedUntil !== null && state.lockedUntil > now;
 }
 
@@ -144,18 +149,29 @@ async function writeState(userId: string, state: LockoutState): Promise<void> {
   await redis.pexpire(key, env.LOCKOUT_MAX_MS);
 }
 
+/**
+ * `lockedUntil` só vem preenchido enquanto a trava vale (10.22): é o que o
+ * login transforma em `Retry-After`. Fora da janela, ou com o store fora do
+ * ar, é `null` — nunca um instante inventado para um 429 que não vai existir.
+ */
 export async function getLockoutState(
   userId: string,
-): Promise<{ isLocked: boolean }> {
+): Promise<
+  | { isLocked: true; lockedUntil: number }
+  | { isLocked: false; lockedUntil: null }
+> {
   try {
     const state = await readState(userId);
-    return { isLocked: isLocked(state, Date.now()) };
+    if (isLocked(state, Date.now())) {
+      return { isLocked: true, lockedUntil: state.lockedUntil };
+    }
+    return { isLocked: false, lockedUntil: null };
   } catch (error) {
     log.error(
       { err: error, userId },
       "lockout store unavailable, failing open",
     );
-    return { isLocked: false };
+    return { isLocked: false, lockedUntil: null };
   }
 }
 

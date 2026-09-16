@@ -140,6 +140,16 @@ describe("GET /openapi.json", () => {
     expect(forbidden.description).toContain("EMAIL_NOT_VERIFIED");
   });
 
+  it("should declare Retry-After on the login 429 — the client reads the value, not the prose (10.22)", async () => {
+    const { body } = await request(app).get("/openapi.json");
+
+    // Rate limit e lockout respondem o mesmo 429, e desde a 10.22 ambos com
+    // `Retry-After`. O guia manda usar o valor; a spec precisa declará-lo.
+    const tooMany = body.paths["/auth/login"].post.responses["429"];
+    expect(tooMany.headers["Retry-After"]).toBeDefined();
+    expect(tooMany.headers["Retry-After"].schema.type).toBe("integer");
+  });
+
   it("should publish the length limits as maxLength — they are contract (10.13)", async () => {
     const { body } = await request(app).get("/openapi.json");
 

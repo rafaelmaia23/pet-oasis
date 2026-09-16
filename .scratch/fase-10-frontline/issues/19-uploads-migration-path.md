@@ -26,24 +26,20 @@ escreve `./uploads` num compose de `infra/` acha que está apontando para a raiz
 
 **Blocked by:** None. É correção de documento e de comentário, não de código, e a 04 já está mergeada.
 
-**Status:** ready-for-agent
+**Status:** done
 
-**Triagem:** ready-for-agent — sem decisão de negócio pendente e sem acesso a servidor: o caminho
-foi decidido em 2026-09-16 (remover a receita em vez de corrigi-la, porque não há deploy que a
-consuma).
-
-- [ ] A seção "Migrar um deploy que ainda tem `uploads/` dentro do repo" sai do
+- [x] A seção "Migrar um deploy que ainda tem `uploads/` dentro do repo" sai do
       `docs/guides/deploy.md`. No lugar, uma nota curta: nenhum deploy antecede este layout — o demo
       é recriado do zero (`prod:down` + `prod:up` com `UPLOAD_HOST_DIR` absoluto no
       `.env.production`), então não há nada a migrar. O bloco "criar o diretório antes da primeira
       subida" fica, porque é o que de fato se executa.
-- [ ] O motivo de `UPLOAD_HOST_DIR` exigir caminho **absoluto** fica registrado onde se lê a
+- [x] O motivo de `UPLOAD_HOST_DIR` exigir caminho **absoluto** fica registrado onde se lê a
       variável: fonte relativa de bind mount resolve contra o diretório do primeiro `-f` (`infra/`),
       não contra a raiz do repo — é o mesmo motivo de o compose de dev pedir `../uploads`. Uma frase
       no bullet de `UPLOAD_HOST_DIR` do guia e no comentário do mount em
       `infra/docker-compose.prod.yml`, que hoje diz "fora do working tree" sem dizer por que
       relativo não serve.
-- [ ] `npm run docs:check` verde (a seção removida pode ser alvo de âncora em algum lugar).
+- [x] `npm run docs:check` verde (a seção removida pode ser alvo de âncora em algum lugar).
 
 ## Triagem (2026-09-16)
 
@@ -63,3 +59,21 @@ O que foi verificado antes de decidir, para que a decisão não dependa de memó
 Com isso, o terceiro critério original ("conferido no servidor real qual dos dois diretórios tem
 os arquivos") caiu: não há o que conferir. Se um dia existir um deploy com `infra/uploads`
 populado, a receita antiga está no histórico do git — e a nota nova diz que o caso não existe.
+
+## O que foi feito (2026-09-16)
+
+- `docs/guides/deploy.md`: a subseção de migração (35 linhas, com o `mv -T` e a conferência de
+  contagem) deu lugar a "Não há deploy para migrar" — quatro linhas: nenhum deploy antecede este
+  layout, o demo é recriado do zero (`prod:down` → `UPLOAD_HOST_DIR` absoluto → `prod:up`). O bloco
+  `mkdir` + `chown` de antes da primeira subida ficou intacto. O bullet de `UPLOAD_HOST_DIR` ganhou
+  o porquê do "absoluto": fonte relativa resolve contra o diretório do primeiro `-f` (`infra/`).
+- `infra/docker-compose.prod.yml`: o comentário do mount, que dizia "sem fallback" e "fora do
+  working tree", agora diz também **por que absoluto** — com o exemplo concreto de que `./uploads`
+  ali era `<repo>/infra/uploads`.
+- `docs/context/infrastructure.md`: a seção da 10.4 dizia que a propriedade "banco guarda a chave"
+  *tornou a migração um `mv`*, apontando para uma receita que deixou de existir. Reescrito no
+  condicional, e um parágrafo novo narra a remoção (10.19) com os dois motivos — a receita estava
+  errada, e não tinha executor. Sem `###` novo nem linha no índice: é reversão dentro da mesma
+  decisão, narrada no lugar, como a regra de contexto pede.
+- Nenhuma âncora apontava para a subseção removida; `docs:check`, `lint` e `typecheck` verdes. O
+  compose de prod só mudou em comentário (YAML validado).

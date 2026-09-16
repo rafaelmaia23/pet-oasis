@@ -318,8 +318,21 @@ mudasse o uid de `node` viraria EACCES no primeiro upload, e o sintoma — 500 a
 não aponta para a causa. Fixado, o número está escrito nos dois lugares que precisam concordar
 (o compose e o `chown` do [guia de deploy](../guides/deploy.md)), e eles mudam juntos ou nenhum.
 
-Nada gravado no banco mudou, e essa é a propriedade que tornou a migração um `mv`: o banco guarda
-a **chave** do arquivo, nunca a URL — que nasce de `UPLOAD_PUBLIC_BASE_URL` a cada resposta.
+Nada gravado no banco mudou, e essa é a propriedade que faria de uma migração um simples `mv`: o
+banco guarda a **chave** do arquivo, nunca a URL — que nasce de `UPLOAD_PUBLIC_BASE_URL` a cada
+resposta.
+
+A receita de migração que a 10.4 escreveu no guia de deploy foi **removida** na 10.19, por dois
+motivos que se somam. Ela estava errada: mandava mover `<repo>/uploads`, mas fonte relativa de bind
+mount resolve contra o **diretório do projeto** do Compose — o do primeiro `-f`, `infra/` —, então
+o `:-./uploads` antigo sempre gravou em `<repo>/infra/uploads` (é também o que explica o `EACCES`
+do seed: o Docker criou `infra/uploads` como root). O `mv` da receita moveria um diretório vazio e
+a conferência de contagem fecharia em `0 == 0`, dando o passo por feito. E ela não tinha executor:
+nenhum deploy carrega dados — o demo, parado na Fase 9, não tem `uploads/` e é recriado do zero na
+subida da Fase 10. Corrigir a receita seria polir código morto; o que ficou registrado, no bullet
+de `UPLOAD_HOST_DIR` do guia e no comentário do mount, é o fato que a derrubou — caminho relativo
+em compose de `infra/` não significa "a raiz do repo" — para que ninguém volte a escrever
+`./uploads` achando o contrário.
 
 ### O container de dev escreve como o uid do host, não como root (10.16)
 

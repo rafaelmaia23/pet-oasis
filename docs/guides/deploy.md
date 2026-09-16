@@ -23,6 +23,9 @@ Preencher o `.env.production`:
   mount, não volume nomeado: é o que permite, amanhã, o nginx servir `/uploads/` direto sem
   tocar em código nem no banco. **Obrigatória**: sem ela o `prod:up` falha nomeando a variável,
   e o caminho precisa ser **absoluto e fora do working tree** do repo clonado (ver abaixo).
+  Absoluto não é preciosismo: fonte relativa de bind mount resolve contra o **diretório do
+  projeto** do Compose, que é o do primeiro `-f` — `infra/`, não a raiz do repo. `./uploads`
+  aqui significaria `<repo>/infra/uploads` (é por isso que o compose de dev pede `../uploads`).
 - `UPLOAD_PUBLIC_BASE_URL` — a base pública das URLs de imagem, no host da **API**
   (`https://api.pet-oasis.maiahub.com.br/uploads`). Quem serve o byte é a API, então é o
   certificado dela que cobre o endereço. O banco guarda só a **chave**; a URL é montada com
@@ -51,44 +54,11 @@ sudo mkdir -p /srv/pet-oasis-data/uploads
 sudo chown -R 1000:1000 /srv/pet-oasis-data/uploads
 ```
 
-### Migrar um deploy que ainda tem `uploads/` dentro do repo
+### Não há deploy para migrar
 
-**A ordem importa, e é o passo fácil de errar:** esta mudança apaga `uploads/.gitkeep` do
-repositório, então o próprio `pull` que traz o deploy precisa *escrever* dentro de `uploads/` —
-e é exatamente essa escrita que já falhou uma vez. Mover o diretório **antes** de atualizar o
-código faz o `pull` não ter nada para apagar ali.
-
-Mover, não copiar-e-torcer: `mv` dentro do mesmo filesystem é atômico por entrada, e o `-T` faz
-o destino ser o próprio diretório em vez de virar um aninhado dentro dele. Com a stack
-**parada**, para que nada esteja gravando durante a troca:
-
-```bash
-cd /srv/pet-oasis                      # o repo clonado
-npm run prod:down
-
-find uploads -type f | wc -l           # a contagem de antes; anote
-
-# 1. sair da árvore ANTES de atualizar o código
-sudo mkdir -p /srv/pet-oasis-data
-sudo mv -T uploads /srv/pet-oasis-data/uploads
-sudo chown -R 1000:1000 /srv/pet-oasis-data/uploads
-
-find /srv/pet-oasis-data/uploads -type f | wc -l   # tem de bater com a de antes
-
-# 2. só agora o código novo — sem `uploads/` na árvore, nada a apagar lá dentro
-git pull
-
-# 3. UPLOAD_HOST_DIR=/srv/pet-oasis-data/uploads no .env.production, e então
-npm run prod:up
-```
-
-As duas contagens baterem é o que prova que nada ficou para trás. **Nenhuma linha do banco
-muda**: ele guarda a *chave* do arquivo, e a URL pública nasce de `UPLOAD_PUBLIC_BASE_URL` a
-cada resposta — mudar onde o byte mora é configuração, não migração de dados.
-
-Se `/srv/pet-oasis-data` estiver em outro filesystem, o `mv` copia em vez de renomear: mesma
-ordem, só mais lento, e a conferência de contagem passa a valer também como pré-requisito para
-apagar a origem.
+Nenhum deploy antecede este layout. Não existe produção com dados, e o único ambiente de pé é o
+demo, que é recriado do zero na subida desta versão: `npm run prod:down`, `UPLOAD_HOST_DIR`
+absoluto no `.env.production`, `npm run prod:up`. Não há diretório a mover nem contagem a conferir.
 
 ## Redes
 

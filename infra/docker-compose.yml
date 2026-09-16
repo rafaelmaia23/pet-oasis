@@ -33,7 +33,10 @@ services:
     # proxy como `external:`, porque só lá ela existe — declará-la aqui quebraria
     # o `npm run dev` de quem nunca subiu um nginx.
     #
-    # Em toda rede que integra, o serviço leva um **alias explícito** `api`,
-    # mesmo o Compose já criando um implícito com o nome do serviço: DNS que some
-    # numa renomeação falha em silêncio (o cliente vê ENOTFOUND, não uma pista),
-    # e essa é a falha cara aqui.
+    # Nas redes do projeto (`backend`, `pet-oasis`) o serviço leva um **alias
+    # explícito** `api`, mesmo o Compose já criando um implícito com o nome do
+    # serviço: DNS que some numa renomeação falha em silêncio (o cliente vê
+    # ENOTFOUND, não uma pista), e essa é a falha cara aqui. Na rede `proxy`,
+    # compartilhada com outros projetos, o alias genérico é o oposto — um risco
+    # de colisão — e o proxy aponta para o nome do container (ver o override de
+    # produção).

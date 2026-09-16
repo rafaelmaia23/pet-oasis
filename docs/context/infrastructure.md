@@ -318,8 +318,17 @@ mudasse o uid de `node` viraria EACCES no primeiro upload, e o sintoma — 500 a
 não aponta para a causa. Fixado, o número está escrito nos dois lugares que precisam concordar
 (o compose e o `chown` do [guia de deploy](../guides/deploy.md)), e eles mudam juntos ou nenhum.
 
-Nada gravado no banco mudou, e essa é a propriedade que tornou a migração um `mv`: o banco guarda
-a **chave** do arquivo, nunca a URL — que nasce de `UPLOAD_PUBLIC_BASE_URL` a cada resposta.
+Nada gravado no banco mudou, e essa é a propriedade que faria de uma migração um simples `mv`: o
+banco guarda a **chave** do arquivo, nunca a URL — que nasce de `UPLOAD_PUBLIC_BASE_URL` a cada
+resposta.
+
+A receita de migração que a 10.4 escreveu no guia de deploy foi **removida** na 10.19. Ela
+mandava mover `<repo>/uploads`, mas o `:-./uploads` antigo nunca gravou ali: fonte relativa de bind
+mount resolve contra o diretório do projeto do Compose — `infra/`, o do primeiro `-f` —, e o `mv`
+moveria um diretório vazio com a conferência de contagem fechando em `0 == 0`. Corrigir não valia:
+nenhum deploy carrega dados, e o demo é recriado do zero. O que ficou é o fato que a derrubou,
+no [guia de deploy](../guides/deploy.md) (bullet de `UPLOAD_HOST_DIR`) e no comentário do mount —
+para que "absoluto" deixe de parecer preciosismo.
 
 ### O container de dev escreve como o uid do host, não como root (10.16)
 

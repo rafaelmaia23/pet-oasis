@@ -87,6 +87,11 @@ services:
       # Sem fallback, de propósito: o `:-./uploads` que estava aqui era o
       # caminho silencioso de volta para dentro da árvore. Faltando a variável,
       # o `prod:up` falha nomeando-a, que é a mensagem certa.
+      #
+      # E **absoluto**, porque fonte relativa resolve contra o diretório do
+      # projeto do Compose — o do primeiro `-f`, este `infra/` —, não contra a
+      # raiz do repo: `./uploads` aqui era `<repo>/infra/uploads`, não
+      # `<repo>/uploads`. É o mesmo motivo de o compose de dev pedir `../uploads`.
       - "${UPLOAD_HOST_DIR:?obrigatorio - caminho absoluto FORA do working tree, ex. /srv/pet-oasis-data/uploads}:/app/uploads"
 
 # Três redes, três papéis. A API é o único serviço nas três — é ela que atravessa

@@ -145,7 +145,8 @@
 - A 15 (a ponta viva da corrente na janela de graça) foi decidida e fechada; a 16 (`uploads/`
   sem dono num clone novo) também — o container de dev passou a escrever como o uid do host.
   A 17 (a rede `pet-oasis` morria no `prod:down`) virou `external:` como a `proxy`. Seguem
-  abertas: a 18 (decisão em aberto — os dois caminhos em que a cascata ainda dispara sem roubo),
+  abertas: a 18 (decidida em 2026-09-16, pendente de execução — a marca de 503 no banco que
+  fecha o caminho da retentativa tardia; o teto de saltos fica em 5 como exposição aceita),
   a 19 (defeito no que a 04 já mergeou) e a 20 (passo de operador no servidor que a 17 exige).
 
 ---

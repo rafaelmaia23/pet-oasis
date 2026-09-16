@@ -361,6 +361,20 @@ nenhum deploy carrega dados, e o demo é recriado do zero. O que ficou é o fato
 no [guia de deploy](../guides/deploy.md) (bullet de `UPLOAD_HOST_DIR`) e no comentário do mount —
 para que "absoluto" deixe de parecer preciosismo.
 
+**O que o primeiro deploy com este layout ensinou (10.21).** A 10.19 estava certa em que não
+havia diretório a migrar — e errada em supor que por isso não havia nada a fazer. O `prod:up`
+da Fase 10 trocou o container mas **preservou o volume do banco**, e o banco da Fase 9 tinha as
+linhas de imagem do seed; os bytes delas viviam **dentro do container antigo** (a Fase 9 não
+tinha bind mount) e morreram com ele. O seed do boot é idempotente — não regrava o que o banco
+já tem —, então subiu limpo (`SEEDING COMPLETED!`) com a vitrine respondendo **404 em toda
+imagem**: linha sem byte é o único estado que nem o seed nem o healthcheck enxergam. Regra
+geral: **toda troca de onde os bytes moram exige regravá-los ou movê-los; o banco não avisa.**
+Numa demo, o conserto é o `demo-reset` (trunca e repovoa, gravando no mount novo); num deploy
+com dados seria um `mv` — e é para esse dia que a propriedade "o banco guarda a chave" continua
+valendo. Ficou também o detalhe do `chown`: o par que importa é o **número** `1000:1000`, o do
+`user:` do serviço, não o nome de usuário do host que por acaso o carrega (`opc` no servidor
+atual, `node` na imagem) — nomes divergem entre máquinas, o uid é o contrato.
+
 ### O container de dev escreve como o uid do host, não como root (10.16)
 
 A 10.4 tirou `uploads/.gitkeep` do git e deixou o mount de dev dentro da árvore com a

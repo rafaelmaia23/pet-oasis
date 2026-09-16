@@ -100,7 +100,8 @@ alimente — aceitável, mas o adaptador vem primeiro sempre que possível.
 
 O ADR dizia "o reverse proxy serve `/uploads/*` como estático, sem passar por
 Node". A verificação mostrou que **não existe reverse proxy no repositório**:
-`infra/docker-compose.prod.yml` publica `api:3000` direto. O proxy existe — é o
+`infra/docker-compose.prod.yml` só `expose:` a porta 3000 do serviço `api`, e quem a alcança
+é um proxy de fora do repo. O proxy existe — é o
 nginx do servidor pessoal onde a demo de portfólio é hospedada —, mas ele vive
 fora do git, e nenhuma configuração dele é versionada aqui.
 

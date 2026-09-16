@@ -86,12 +86,19 @@ docker network create pet-oasis   # idem
 > Compose. Não faz diferença: `external:` só exige que ela exista, e o `create` erra dizendo que
 > já existe — siga em frente.
 
-O nginx precisa estar nela (`docker network inspect proxy`) e passa a alcançar a API por
-`http://api:3000` — **não** por `127.0.0.1:3000`. A porta 3000 não é mais publicada no host:
+O NPM precisa estar nela (`docker network inspect proxy`) e passa a alcançar a API por
+`http://pet-oasis-api:3000` — o **nome do container**, não o alias `api`, e **não**
+`127.0.0.1:3000`. A porta 3000 não é mais publicada no host:
 
 ```nginx
-proxy_pass http://api:3000;
+proxy_pass http://pet-oasis-api:3000;
 ```
+
+Por que o nome do container e não `api`: a `proxy` é compartilhada com todo projeto que o NPM
+serve neste host, e `api` é o nome genérico que um segundo projeto mais provavelmente usaria.
+Dois containers respondendo pelo mesmo nome viram round-robin no DNS do Docker, e o proxy passa
+a alternar entre as duas APIs sem erro nenhum. Por isso o compose de produção **não** declara o
+alias `api` na `proxy` (só nas redes exclusivas do projeto, onde ele é contrato com o front).
 
 > ⚠️ **Não republique a porta da API.** A ausência de publicação é o que torna seguro o
 > `trust proxy` por endereço privado do `app.ts`: com a porta aberta na internet, qualquer um

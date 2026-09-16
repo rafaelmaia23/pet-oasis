@@ -71,12 +71,22 @@ fronteira entre os dados e quem os pede:
 |---|---|---|
 | `backend` (`internal: true`) | `db`, `redis`, `api` | onde os dados vivem, sem rota para a internet |
 | `pet-oasis` (`external: true`, `name:` explícito) | `api` + clientes internos | o endereço que um cliente no mesmo VPS usa |
-| `proxy` (`external: true`) | `api` + nginx + clientes internos que o nginx serve | por onde o público entra |
+| `proxy` (`external: true`) | `api` + o reverse proxy + clientes internos que ele serve | por onde o público entra — o proxy aponta para `pet-oasis-api`, nunca para `api` |
 
 O `internal: true` é o que faz um cliente na rede compartilhada **não** alcançar Postgres nem
 Redis: estar na `pet-oasis` dá acesso à API, e só. A API mantém saída para a internet (SMTP) pelas
 outras duas, que não são internas. O `name: pet-oasis` é **contrato**: é o que o compose do
 cliente escreve como `external: true`, e é esse nome que o `up` dele procura.
+
+**O alias `api` existe só nas redes do projeto.** Na `backend` e na `pet-oasis` ele é contrato —
+é o que o front escreve (`http://api:3000`), e o alias explícito é o que faz uma renomeação do
+serviço falhar alto em vez de em ENOTFOUND silencioso. Na `proxy` ele foi **removido** depois
+do primeiro deploy da fase: a rede é compartilhada com todo projeto que o reverse proxy serve no
+host, e `api` é justamente o nome genérico que um segundo projeto declararia — dois aliases
+iguais viram round-robin no DNS do Docker, e o proxy alterna entre as duas APIs sem nenhum erro.
+O proxy host aponta para o nome do container, `pet-oasis-api`. O nome do serviço continua
+resolvendo na `proxy` (o Compose sempre o publica), então a remoção reduz a colisão em vez de
+eliminá-la — eliminar exigiria renomear o serviço, e reabriria a 10.1 por um risco hipotético.
 
 A rede do nginx é **declarada** em vez de conectada à mão. O passo manual que existia
 (`docker network connect` depois de cada deploy) falhava do pior jeito possível: esquecê-lo deixa

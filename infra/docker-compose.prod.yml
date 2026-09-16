@@ -99,12 +99,19 @@ networks:
   backend:
     internal: true
 
-  # Nomeada e dedicada, compartilhada com clientes internos que rodam no mesmo
-  # host (hoje o `pet-oasis-web`). O `name:` explícito derruba o prefixo do
-  # projeto (`pet-oasis-prod_`): é este nome que o compose do cliente escreve
-  # como `external: true`, então ele é contrato, não detalhe. Quem entra aqui
-  # alcança a API e **não** alcança Postgres nem Redis, de propósito.
+  # Dedicada, compartilhada com clientes internos que rodam no mesmo host (hoje
+  # o `pet-oasis-web`). Quem entra aqui alcança a API e **não** alcança Postgres
+  # nem Redis, de propósito.
+  #
+  # `external: true`, como a `proxy` e pelo mesmo motivo: rede compartilhada
+  # entre stacks vive mais que qualquer uma delas. Se fosse gerenciada por este
+  # compose, o `prod:down` a apagaria sempre que o front também estivesse fora,
+  # e o `up` do front — que a declara externa — passaria a recusar subir até a
+  # API voltar. Criada uma vez no host, junto da `proxy` (ver
+  # docs/guides/deploy.md). O `name:` é contrato: é o que o compose do cliente
+  # escreve, e é ele que o `up` procura.
   pet-oasis:
+    external: true
     name: pet-oasis
 
   # A rede do reverse proxy, criada fora deste repositório (o nginx do servidor

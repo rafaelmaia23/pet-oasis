@@ -295,9 +295,11 @@ completo, os contra-argumentos e os gotchas.
 - Compose base + overrides
 - O serviço do Compose se chama `api`, com alias de rede explícito (10.1) — o nome do serviço é o
   endereço que o cliente interno escreve, e o alias explícito impede DNS que some em silêncio
-- Três redes com papéis distintos, e a porta da API despublicada (10.2) — `backend` interna com os
-  dados, `pet-oasis` compartilhada com clientes internos, `proxy` declarada em vez de conectada à
-  mão; não publicar a porta é o que torna seguro o `trust proxy` por endereço
+- Três redes com papéis distintos, e a porta da API despublicada (10.2, revisto na 10.17) —
+  `backend` interna com os dados, `pet-oasis` e `proxy` compartilhadas e ambas `external:` (rede
+  entre stacks vive mais que qualquer uma delas; a `pet-oasis` gerenciada pelo compose morria no
+  `prod:down` e travava o `up` do front); não publicar a porta é o que torna seguro o `trust proxy`
+  por endereço
 - Envs por arquivo + dotenv-cli
 - Graceful shutdown nativo do Compose, não script com `spawn`
 - O client Prisma do dev num volume anônimo

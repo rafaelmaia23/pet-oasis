@@ -37,8 +37,10 @@ networks:
     name: pet-oasis
 ```
 
-A rede é criada pelo compose de produção da API. Se a API não estiver de pé, o `up` do cliente
-falha dizendo que a rede não existe — que é a mensagem certa.
+A rede é do **host**, não da API: criada uma vez, fora dos dois repositórios (o passo está no
+[guia de deploy](deploy.md#redes), ao lado da `proxy`), e nenhuma das stacks a apaga ao descer.
+O cliente sobe com a API fora e vice-versa — o que falha, nesse caso, é a chamada, não o `up`.
+Se o `up` do cliente disser que a rede não existe, é o host que ainda não a criou.
 
 Há três redes, e só uma é compartilhada:
 

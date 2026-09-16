@@ -299,7 +299,8 @@ completo, os contra-argumentos e os gotchas.
   endereço que o cliente interno escreve, e o alias explícito impede DNS que some em silêncio
 - Três redes com papéis distintos, e a porta da API despublicada (10.2, revisto na 10.17) —
   `backend` interna com os dados, `pet-oasis` e `proxy` compartilhadas e ambas `external:`; não
-  publicar a porta é o que torna seguro o `trust proxy` por endereço
+  publicar a porta é o que torna seguro o `trust proxy` por endereço; o alias `api` fica fora da
+  `proxy` (rede de vários projetos, nome genérico colide) e o proxy aponta para `pet-oasis-api`
 - Envs por arquivo + dotenv-cli
 - Graceful shutdown nativo do Compose, não script com `spawn`
 - O client Prisma do dev num volume anônimo

@@ -70,9 +70,15 @@ services:
       pet-oasis:
         aliases:
           - api
-      proxy:
-        aliases:
-          - api
+      # Sem alias `api` aqui, de propósito: a `proxy` é compartilhada com o NPM
+      # e com qualquer outro projeto que ele sirva neste host, e `api` é o nome
+      # genérico que um segundo projeto mais provavelmente declararia — dois
+      # aliases iguais viram round-robin no DNS do Docker, e o proxy alterna
+      # entre as duas APIs em silêncio. O proxy host aponta para o nome que
+      # identifica o container, `pet-oasis-api`. (O nome do serviço, `api`,
+      # continua resolvendo nesta rede — o Compose sempre o publica —, por isso
+      # o guia manda apontar para `pet-oasis-api` e nunca para `api`.)
+      proxy: {}
     volumes:
       # Bind mount (9.10/AA2), com o caminho do host configurável: hoje o Node
       # serve `/uploads` por `express.static`, e o dia em que o nginx da frente

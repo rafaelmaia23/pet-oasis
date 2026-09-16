@@ -133,26 +133,23 @@ verdades divergindo em silêncio.
    o container do NPM). `pet-oasis-api` é o nome do container; `api` é o alias que o compose
    declara e resolve igual. **NUNCA `127.0.0.1:3000`** — a porta não é publicada no host, e é
    essa ausência que torna seguro o `trust proxy` por endereço privado (ver "Redes", acima).
-4. **Custom config** do proxy host, no bloco de `location` gerado pelo NPM:
+4. **Custom config** do proxy host (a aba *Advanced* do NPM, que entra no nível do `server`):
 
    ```nginx
    real_ip_header CF-Connecting-IP;
    real_ip_recursive off;
    ```
 
-   Sem isto a cadeia de IP da 10.2 quebra. Com o proxy da Cloudflare ligado, quem abre a
-   conexão no NPM é a **borda da Cloudflare**, não o visitante. O NPM anexa o `$remote_addr`
-   dele ao `X-Forwarded-For`, e a API receberia `visitante, ip-da-cloudflare`: o
-   `trust proxy ["loopback","uniquelocal"]` do `app.ts` para no IP da Cloudflare (que não é
-   privado) e todo visitante cai num balde só — o problema exato que a 10.2 resolveu. O NPM já
-   traz `set_real_ip_from` com as faixas da Cloudflare (`ip_ranges.conf`, baixado no boot);
-   as duas linhas acima fazem o `$remote_addr` virar o valor de `CF-Connecting-IP`, o
-   visitante, e a API recebe `visitante, visitante` — e pega o visitante. `recursive off`
-   porque `CF-Connecting-IP` carrega **um** endereço, não uma lista. A configuração vale para
-   **todo** proxy host que receba visitante pela Cloudflare — o da API e, quando o front subir,
-   o do apex (cadeia `visitante → Cloudflare → NPM → front → api`).
-5. **Redirect da raiz** (`/` → `/reference`), se quiser: é do **NPM**, não da aplicação — a
-   API não tem rota `/`.
+   É o que mantém verdadeira a cadeia de IP da 10.2 com a Cloudflare na frente: sem isto o
+   `X-Forwarded-For` que chega à API termina na borda da Cloudflare, o `trust proxy` para
+   nela, e todo visitante cai num balde só de rate limit. O NPM já confia nas faixas da
+   Cloudflare (`set_real_ip_from`, em `ip_ranges.conf`); as duas linhas fazem o `$remote_addr`
+   virar o visitante. Vale para **todo** proxy host que receba visitante pela Cloudflare — o da
+   API e, quando o front subir, o do apex. O porquê completo está em
+   `docs/context/infrastructure.md` § "A API atende num subdomínio, e o apex fica limpo (10.6)".
+
+O redirect da raiz (`/` → `/reference`) que o host público faz é do **NPM**, não da aplicação —
+a API não tem rota `/`.
 
 O que o NPM gera é o equivalente a este `location`, e é isto que qualquer outro reverse proxy
 precisaria reproduzir — os quatro `proxy_set_header` são o contrato do `trust proxy`:

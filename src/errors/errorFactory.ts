@@ -44,6 +44,18 @@ export const createTooManyRequestsError = (
   params: OmitFixed<AppErrorParams> = {},
 ) => new TooManyRequestsError(params);
 
+/**
+ * O header `Retry-After` de um 429, a partir de quanto falta em ms. Um lugar só
+ * para os dois emissores (rate limit e lockout, 10.22): segundos arredondados
+ * para cima, piso em 1 — o rate limit nunca chega a 0 (`msBeforeNext` de uma
+ * rejeição é sempre positivo), mas o lockout relê o relógio depois de decidir
+ * que está travado e pode cair alguns ms abaixo, e `Retry-After: 0` não é
+ * "tente agora" para ninguém.
+ */
+export const retryAfterHeader = (msUntilRetry: number) => ({
+  "Retry-After": Math.max(1, Math.ceil(msUntilRetry / 1000)).toString(),
+});
+
 export const createValidationError = (
   params: { errors?: ValidationErrorFields } & OmitFixed<AppErrorParams> = {},
 ) => new ValidationError(params);

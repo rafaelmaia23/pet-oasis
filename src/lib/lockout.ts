@@ -35,7 +35,12 @@ const EMPTY_STATE: LockoutState = {
   lockedUntil: null,
 };
 
-export function isLocked(state: LockoutState, now: number): boolean {
+// Predicado de tipo: quem passa por aqui sabe que `lockedUntil` é número —
+// é o que `getLockoutState` devolve para virar `Retry-After` (10.22).
+export function isLocked(
+  state: LockoutState,
+  now: number,
+): state is LockoutState & { lockedUntil: number } {
   return state.lockedUntil !== null && state.lockedUntil > now;
 }
 
@@ -157,8 +162,7 @@ export async function getLockoutState(
 > {
   try {
     const state = await readState(userId);
-    // `isLocked` já garante `lockedUntil !== null`; o tipo não sabe.
-    if (isLocked(state, Date.now()) && state.lockedUntil !== null) {
+    if (isLocked(state, Date.now())) {
       return { isLocked: true, lockedUntil: state.lockedUntil };
     }
     return { isLocked: false, lockedUntil: null };

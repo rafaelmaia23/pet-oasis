@@ -13,7 +13,7 @@ para todo 429.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-16
 
 **Decisões (usuário, 2026-09-16):**
 
@@ -38,22 +38,54 @@ para todo 429.
 
 ## Critérios
 
-- [ ] A consulta de estado do lockout passa a devolver **quando** a trava acaba, não só se está
+- [x] A consulta de estado do lockout passa a devolver **quando** a trava acaba, não só se está
       travada — é o único dado que falta; o instante já vive no store desde a Fase 7.
-- [ ] O login, no ramo de conta travada, anexa `Retry-After` ao 429 pelo mesmo mecanismo do rate
+- [x] O login, no ramo de conta travada, anexa `Retry-After` ao 429 pelo mesmo mecanismo do rate
       limit (o header viaja no erro, e o handler central aplica) — sem `res` no service.
-- [ ] Testes na fronteira HTTP, no padrão dos do lockout existentes: conta travada + senha certa
+- [x] Testes na fronteira HTTP, no padrão dos do lockout existentes: conta travada + senha certa
       → 429 **com** `Retry-After` presente, numérico, positivo e **dentro** da janela configurada
       (não se afirma o segundo exato). Vermelho antes da implementação.
-- [ ] Teste unitário da transição/consulta de estado afirmando o instante devolvido, e o
+- [x] Teste unitário da transição/consulta de estado afirmando o instante devolvido, e o
       fail-open (store indisponível → destravado, sem instante).
-- [ ] O componente 429 da especificação OpenAPI **declara** o header `Retry-After` — hoje ele não
+- [x] O componente 429 da especificação OpenAPI **declara** o header `Retry-After` — hoje ele não
       é declarado nem para o rate limit, e o cliente que gera tipos da spec não o vê.
-- [ ] `docs/reference/endpoints.md` e a descrição OpenAPI do login **não mudam**: já dizem "429
+- [x] `docs/reference/endpoints.md` e a descrição OpenAPI do login **não mudam**: já dizem "429
       com `Retry-After`" e passam a ser verdade. Conferir, não editar.
-- [ ] A seção "Resposta 429 genérica" do ADR de rate limit e lockout é reescrita narrando a
+- [x] A seção "Resposta 429 genérica" do ADR de rate limit e lockout é reescrita narrando a
       emenda (mesmo `code`, mesma prosa, ambos com `Retry-After`, e por que o valor não é
       vazamento novo), com a linha correspondente no índice `docs/context.md`.
-- [ ] Caso novo em `tests/integration/v1/mass-assignment.test.ts` **não** se aplica: nenhum
+- [x] Caso novo em `tests/integration/v1/mass-assignment.test.ts` **não** se aplica: nenhum
       schema de escrita novo.
-- [ ] Suíte completa, `typecheck`, `lint` e `docs:check` verdes.
+- [x] Suíte completa, `typecheck`, `lint` e `docs:check` verdes.
+
+## O que foi feito
+
+`getLockoutState` passou a devolver `lockedUntil` enquanto a trava vale — união discriminada
+(`{ isLocked: true; lockedUntil: number } | { isLocked: false; lockedUntil: null }`), com
+`isLocked` virando predicado de tipo para que o service não precise de fallback nem de `as`.
+Fail-open intacto: store fora do ar → destravado, `lockedUntil: null`, sem header.
+
+O header sai de um lugar só, `retryAfterHeader(ms)` em `src/errors/errorFactory.ts`, usado pelo
+rate limit e pelo lockout: segundos arredondados para cima, **piso em 1** decidido uma vez. A
+revisão de código achou que "o mesmo cálculo" já tinha nascido divergente (o piso só no lockout);
+o helper é a correção. O piso é necessário no lockout e inócuo no rate limit: o service relê o
+relógio depois de `getLockoutState` decidir que está travado, então o resto pode cair alguns ms
+abaixo de zero; `msBeforeNext` de uma rejeição do limitador é sempre positivo.
+
+Testes: unitário de `getLockoutState` (instante devolvido; `null` fora da janela; fail-open sem
+instante), HTTP no bloco "Account lockout (7.10)" (429 com `Retry-After` inteiro, positivo e
+dentro de `LOCKOUT_WINDOW_MS`), e `openapi.test.ts` afirmando o header declarado no 429 do login.
+Vermelho verificado antes da implementação nos três seams.
+
+OpenAPI: o componente 429 declara `Retry-After` (via `headers: z.object(...)`, que é a forma do
+`zod-openapi` — não um mapa por header). `endpoints.md` e a descrição do login conferidos e
+**não** editados: já diziam "429, com `Retry-After`".
+
+Doc: seção "Resposta 429 genérica" do ADR reescrita narrando a emenda; o espelho em
+`docs/context/security.md` também reescrito (a revisão achou a primeira versão em forma
+"decisão + errata", com o parágrafo antigo dizendo "sem indicar qual disparou" logo acima do
+novo); linha do índice atualizada. A revisão achou ainda, fora do diff, que
+`docs/guides/documenting-endpoints.md` lista só seis `errorResponses` e não fala de header —
+foi para `docs/reference/backlog.md` (**P**), não para trás.
+
+Suíte completa, `typecheck`, `lint` e `docs:check` verdes.

@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { RateLimiterRedis, RateLimiterRes } from "rate-limiter-flexible";
 import { env } from "@/config/env";
-import { createTooManyRequestsError } from "@/errors";
+import { createTooManyRequestsError, retryAfterHeader } from "@/errors";
 import { record } from "@/lib/auditLog";
 import { logger } from "@/lib/logger";
 import { redis } from "@/lib/redis";
@@ -124,9 +124,7 @@ async function enforce(
       // middleware (com `res` à mão) quanto direto de dentro de um service
       // (sem `res`, 8.7). O error handler central aplica nos dois casos.
       throw createTooManyRequestsError({
-        headers: {
-          "Retry-After": Math.ceil(rejection.msBeforeNext / 1000).toString(),
-        },
+        headers: retryAfterHeader(rejection.msBeforeNext),
       });
     }
 

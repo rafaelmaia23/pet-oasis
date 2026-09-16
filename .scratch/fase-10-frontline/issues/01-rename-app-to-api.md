@@ -8,7 +8,7 @@ ser verdade.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-05
 
 - [x] O serviço se chama `api` nos três arquivos de Compose (base, dev, prod) e o container de
       produção se chama `pet-oasis-api`; o de dev acompanha.

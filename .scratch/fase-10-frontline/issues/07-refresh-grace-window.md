@@ -15,7 +15,7 @@ claro** do par emitido, descartado no fim da requisição.
 **Blocked by:** None (can start immediately). É o item mais valioso da fase e não bloqueia nem é
 bloqueado por nada — recomendado começar por ele.
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-06
 
 - [x] O par emitido é cacheado no Redis com TTL igual à janela, chaveado pelo hash do token
       apresentado. Sem migration, e a janela passa a ser imposta pelo TTL da infraestrutura em

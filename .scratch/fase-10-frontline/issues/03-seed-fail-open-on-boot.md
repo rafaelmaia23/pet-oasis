@@ -8,7 +8,7 @@ externos de observabilidade.
 
 **Blocked by:** 01 (sequenciamento: edita o mesmo bloco de serviço).
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-06
 
 - [x] O seed sai do caminho crítico do boot — passo one-shot, ou serviço dedicado que não
       reinicia.

@@ -8,7 +8,10 @@ uma falha de permissão no seed.
 
 **Blocked by:** 01 (sequenciamento: edita o mesmo bloco de serviço).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
+
+**Triagem:** ready-for-human — tudo que o repositório podia entregar está mergeado; falta só a
+verificação de ponta a ponta no servidor (último critério).
 
 - [x] O diretório de dados fica fora do working tree, e entra por bind mount declarado.
 - [x] O uid esperado está documentado no guia de deploy, ou é fixado no serviço para não

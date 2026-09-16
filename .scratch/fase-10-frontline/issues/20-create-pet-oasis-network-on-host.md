@@ -21,8 +21,10 @@ que também são passos no servidor.
 
 **Status:** ready-for-human
 
-**Triagem:** ready-for-human — acesso ao servidor; um comando, sem decisão.
+**Triagem:** ready-for-human — acesso ao servidor; um comando, sem decisão. A rede já existe;
+sobra só confirmar no primeiro `prod:up` depois do merge que a API entra nela.
 
-- [ ] `docker network inspect pet-oasis` responde no servidor.
+- [x] `docker network inspect pet-oasis` responde no servidor *(rede criada pelo usuário em
+      2026-09-16)*.
 - [ ] `prod:up` com o compose da 17 sobe com a API na rede (`docker network inspect pet-oasis`
       lista o container `pet-oasis-api`).

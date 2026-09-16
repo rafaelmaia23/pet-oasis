@@ -8,7 +8,7 @@ a causa.
 **Blocked by:** None (can start immediately). Toca só o Dockerfile, então é a issue de infra que
 pode ser feita a qualquer momento, inclusive antes da 01.
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-06
 
 - [x] OpenSSL instalado no estágio de runtime da imagem — **e no de build**, porque a engine é
       escolhida duas vezes (ver a nota abaixo).

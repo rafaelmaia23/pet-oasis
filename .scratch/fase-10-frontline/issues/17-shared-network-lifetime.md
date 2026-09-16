@@ -20,7 +20,7 @@ zero **antes** do primeiro deploy conjunto, e é um incidente depois.
 
 **Status:** fechada em 2026-09-16
 
-**Triagem:** ready-for-agent — decidido em 2026-09-16: a `pet-oasis` vira `external: true`, criada
+**Decisão:** decidido em 2026-09-16: a `pet-oasis` vira `external: true`, criada
 uma vez no host ao lado da `proxy`, pelo mesmo motivo. As alternativas descartadas: manter a API
 como dona e reescrever o contrato do cliente (acopla o deploy do front ao da API em definitivo — o
 front não sobe nem uma página de manutenção com a API fora); e só documentar "crie a rede à mão

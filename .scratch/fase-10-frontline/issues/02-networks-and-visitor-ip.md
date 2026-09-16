@@ -12,7 +12,7 @@ que a API confia num header forjável pela internet.
 **Blocked by:** 01 (sequenciamento, não dependência lógica: as duas editam o mesmo bloco de
 serviço, e fazer esta antes significa escrever o trecho duas vezes).
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-05
 
 - [x] Três redes declaradas, com papéis distintos: uma interna sem rota para a internet com
       banco, cache e API; uma nomeada e dedicada, compartilhada com clientes internos; e a rede

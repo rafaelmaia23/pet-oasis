@@ -17,9 +17,9 @@ justamente o cliente com prefetch, que é o público da 10.7.
 **Blocked by:** None. A 10.7 está fechada e o comportamento de hoje é o que ela pediu ao pé da
 letra.
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-10
 
-**Triagem:** ready-for-agent — decidido pelo usuário em 2026-09-10: caminho **(2)**, seguir a corrente.
+**Decisão:** decidido pelo usuário em 2026-09-10: caminho **(2)**, seguir a corrente.
 
 ## Os caminhos
 

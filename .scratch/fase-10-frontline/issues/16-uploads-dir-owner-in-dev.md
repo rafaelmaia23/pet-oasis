@@ -14,9 +14,9 @@ A suíte não é atingida: `vitest.config.ts` redireciona `UPLOAD_DIR` para um t
 
 **Blocked by:** None.
 
-**Status:** done
+**Status:** fechada em 2026-09-16
 
-**Triagem:** ready-for-agent — conserto escolhido: **o container de dev grava como o uid do
+**Decisão:** conserto escolhido: **o container de dev grava como o uid do
 host**, não como root. Dos três caminhos abaixo, pré-criar o diretório (no script ou por um
 arquivo versionado) só decide o dono da raiz de `uploads/`: tudo que o seed dentro do container
 gravasse depois (`products/<id>/…`) continuaria de `root`, e `db:cleanup-uploads` no host, ou um

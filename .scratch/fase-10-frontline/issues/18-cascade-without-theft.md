@@ -37,7 +37,7 @@ que existia antes da 10.7, quando **toda** reapresentação cascateava.
 
 **Status:** fechada em 2026-09-16
 
-**Triagem:** ready-for-agent — decidido pelo usuário em 2026-09-16: caminho **(2b)** para o
+**Decisão:** decidido pelo usuário em 2026-09-16: caminho **(2b)** para o
 caminho 1, com a sub-regra **(a)**; teto de saltos **mantido em 5** e o caminho 2 registrado
 como exposição aceita.
 

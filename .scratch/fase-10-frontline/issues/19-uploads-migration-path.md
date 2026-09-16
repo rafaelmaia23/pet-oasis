@@ -26,7 +26,7 @@ escreve `./uploads` num compose de `infra/` acha que está apontando para a raiz
 
 **Blocked by:** None. É correção de documento e de comentário, não de código, e a 04 já está mergeada.
 
-**Status:** done
+**Status:** fechada em 2026-09-16
 
 - [x] A seção "Migrar um deploy que ainda tem `uploads/` dentro do repo" sai do
       `docs/guides/deploy.md`. No lugar, uma nota curta: nenhum deploy antecede este layout — o demo
@@ -77,3 +77,9 @@ populado, a receita antiga está no histórico do git — e a nota nova diz que 
   decisão, narrada no lugar, como a regra de contexto pede.
 - Nenhuma âncora apontava para a subseção removida; `docs:check`, `lint` e `typecheck` verdes. O
   compose de prod só mudou em comentário (YAML validado).
+- Revisão (padrões + spec): `docs/todo.md` passou a 14/20 com a 19 fechada; o índice
+  `docs/context.md` ganhou "e absoluta" na linha da 10.4 (o fato novo era acréscimo, não só
+  reversão); o parágrafo do `infrastructure.md` caiu pela metade e aponta para o guia em vez de
+  repetir a explicação; a nota do guia perdeu o "desta versão", que envelheceria no primeiro
+  deploy. A linha `Triagem:` sai mesmo — `docs/agents/triage-labels.md`: "a linha some quando o
+  item é concluído".

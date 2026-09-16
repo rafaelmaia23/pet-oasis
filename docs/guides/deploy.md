@@ -56,9 +56,9 @@ sudo chown -R 1000:1000 /srv/pet-oasis-data/uploads
 
 ### Não há deploy para migrar
 
-Nenhum deploy antecede este layout. Não existe produção com dados, e o único ambiente de pé é o
-demo, que é recriado do zero na subida desta versão: `npm run prod:down`, `UPLOAD_HOST_DIR`
-absoluto no `.env.production`, `npm run prod:up`. Não há diretório a mover nem contagem a conferir.
+Nenhum deploy com dados antecede este layout: quando ele entrou, não havia produção, e o demo
+(ainda sem `uploads/`) foi recriado do zero — `npm run prod:down`, `UPLOAD_HOST_DIR` absoluto no
+`.env.production`, `npm run prod:up`. Não há diretório a mover nem contagem a conferir.
 
 ## Redes
 

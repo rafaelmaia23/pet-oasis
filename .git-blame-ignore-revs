@@ -1,0 +1,7 @@
+# Commits que o `git blame` deve pular: moves mecânicos que não mudaram uma
+# linha de conteúdo. Ative uma vez por clone com
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (o GitHub lê este arquivo sozinho).
+
+# refactor(repo): move the API into apps/api
+9a4a3d1d673d262f2c3bb60e7caa2c31f2b58b52

@@ -8,7 +8,7 @@ oráculo, e não misturada ao move de diretório da issue seguinte.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-human (feita; aguarda merge na `fase-11`)
+**Status:** fechada em 2026-09-18
 
 O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
 

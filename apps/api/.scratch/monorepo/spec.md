@@ -259,8 +259,13 @@ Um único repositório `pet-oasis`, gerido por **pnpm workspaces** e orquestrado
   passa" — a espinha de autenticação é a Fase 12.
 - Quebrar o contrato por domínio; versionar o contrato; publicar em registry.
 - Carrinho, pedido, pagamento.
-- Migrar o `docs/context/` da API para outro formato — continua como está, só deixa de ser
-  chamado de glossário.
+- ~~Migrar o `docs/context/` da API para outro formato — continua como está, só deixa de ser
+  chamado de glossário.~~ **Revisto em 2026-09-18** (revisão da issue 02): a documentação de
+  domínio passa a seguir a skill sem adaptação — `CONTEXT.md` é glossário puro e decisão com
+  explicação vive em ADR; o `docs/context/` deixa de receber decisão nova. O destino do conteúdo
+  existente (migrar agora ou congelar e migrar por demanda) fecha no kickoff da issue 07. No
+  mesmo passo caiu a regra "documento permanente não cita `.scratch/`" — as issues são arquivos
+  fixos do tracker e podem ser citadas.
 
 ## Further Notes
 

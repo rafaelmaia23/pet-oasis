@@ -22,3 +22,13 @@ o pacote mais barato possível, antes de o contrato depender disso.
       por `typecheck` e `lint` verdes **sem** nenhuma alteração em `src/` ou `tests/`.
 - [ ] Suíte completa + `typecheck` + `lint` + `docs:check` verdes; Docker `build` verde (o
       preset precisa entrar no contexto).
+- [ ] Herança da 02, que só aparece aqui porque é aqui que nasce a primeira dependência
+      `workspace:*`: (1) o Dockerfile copia só `apps/api/package.json` antes do
+      `pnpm install --frozen-lockfile` — com `packages/*` no lockfile, o install congelado
+      exige os manifestos deles também no contexto; (2) o `pnpm deploy` do estágio `build` roda
+      hoje **sem** `injectWorkspacePackages` porque a API não depende de nenhum pacote do
+      workspace — a partir do pnpm 10 o `deploy` exige `injectWorkspacePackages: true` no
+      `pnpm-workspace.yaml` (ou `--legacy`) quando há dependência de workspace. Como os dois
+      pacotes desta issue são `devDependencies` e o deploy é `--prod`, pode ser que não quebre
+      ainda; verificar de propósito, e deixar a decisão registrada para a 09/10, onde o
+      `api-contracts` entra como dependência de produção e aí quebra com certeza.

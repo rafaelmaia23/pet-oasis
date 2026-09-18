@@ -14,10 +14,14 @@ services:
   # código. Renomear o serviço é renomear o contrato.
   api:
     build:
-      # A raiz do repo, não infra/ — os caminhos aqui são relativos a este
-      # arquivo. Com o contexto na raiz, o Dockerfile é achado em
-      # <context>/Dockerfile e o .dockerignore da raiz continua valendo.
-      context: ..
+      # A raiz do MONOREPO, não a do app nem infra/ — os caminhos aqui são
+      # relativos a este arquivo. O contexto precisa ser a raiz porque o
+      # pnpm-lock.yaml e o pnpm-workspace.yaml vivem lá, e o pnpm só instala
+      # um projeto de dentro do workspace dele. O Dockerfile então é nomeado, e
+      # o ignore que vale é o `Dockerfile.dockerignore` ao lado dele (por app;
+      # um `.dockerignore` da raiz serviria a todo Dockerfile do monorepo).
+      context: ../../..
+      dockerfile: apps/api/Dockerfile
       # Host DNS is Tailscale MagicDNS (100.100.100.100), reachable only from the
       # host network namespace; Docker's default bridge can't route to it, so
       # container DNS lookups during `pnpm install` hang. Building on the host network

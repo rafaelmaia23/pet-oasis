@@ -5,11 +5,15 @@ container, **`pet-oasis-api`** — o nome do serviço é o que o DNS da rede pub
 ele que um cliente interno (o front) alcança a API. É buildado e roda direto num VPS **ARM64**.
 
 No servidor (Node 24 com corepack: os scripts `prod:*` rodam via `pnpm`, e o corepack instala a
-versão pinada em `packageManager`; a imagem em si instala tudo dentro do build):
+versão pinada no `packageManager` do `package.json` da raiz do monorepo; a imagem em si instala
+tudo dentro do build). O VPS clona o monorepo inteiro, mas o que se opera é o projeto da API:
+`.env.production` e os scripts `prod:*` vivem em `apps/api`, e o build da imagem usa a raiz
+do monorepo como contexto (é onde estão o lockfile e o workspace — ver
+[o contexto de build](../context/infrastructure.md#o-contexto-de-build-é-a-raiz-do-monorepo-e-o-runtime-é-podado-por-pnpm-deploy-112)):
 
 ```bash
 corepack enable                    # uma vez por máquina
-git clone <repo> && cd pet-oasis
+git clone <repo> && cd pet-oasis/apps/api
 cp .env.example .env.production
 ```
 

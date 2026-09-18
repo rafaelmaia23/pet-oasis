@@ -55,8 +55,8 @@ function beforeSend(event: ErrorEvent): ErrorEvent {
  * `process.cwd()`, não caminho relativo ao módulo: o tsup achata
  * `src/lib/sentry.ts` num `dist/server.js` só, então "dois níveis acima do
  * arquivo" aponta pra profundidades diferentes em dev (tsx, arquivo fonte
- * fundo) e produção (bundle raso) — `process.cwd()` é `/app` nos três
- * ambientes (dev/test rodam da raiz do repo, o runtime tem `WORKDIR /app`
+ * fundo) e produção (bundle raso) — `process.cwd()` é o diretório da API nos
+ * três ambientes (dev e test rodam de `apps/api`, o runtime tem `WORKDIR /app`
  * com o `package.json` copiado ali), então é o único ponto estável.
  */
 function readPackageVersion(): string {

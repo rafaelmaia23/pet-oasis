@@ -83,9 +83,13 @@ services:
       default:
         aliases:
           - api
+    # Os destinos espelham o layout do repo dentro da imagem (`dev` para em
+    # /workspace/apps/api): o watcher precisa do node_modules do workspace, que
+    # fica em /workspace/node_modules, então o app não pode viver num /app raso
+    # como em produção.
     volumes:
-      - ../src:/app/src
-      - ../prisma:/app/prisma
+      - ../src:/workspace/apps/api/src
+      - ../prisma:/workspace/apps/api/prisma
       # Bind mount e não volume nomeado (9.10/AA2): o arquivo fica visível no
       # filesystem do host, que é o pré-requisito para um nginx passar a servi-lo
       # direto. De brinde, backup vira `rsync` de um diretório em vez de
@@ -103,10 +107,10 @@ services:
       # que nasce aqui tem o dono do host. Trocar o caminho por uma variável
       # custaria um passo de setup a quem clona, sem resolver problema que dev
       # tenha.
-      - ../uploads:/app/uploads
+      - ../uploads:/workspace/apps/api/uploads
       # Anonymous volume: keeps the container's generated Prisma client from being
       # masked by the host's src/ bind-mount (entrypoint runs `prisma generate`).
-      - /app/src/generated
+      - /workspace/apps/api/src/generated
 
 volumes:
   dev_pgdata:

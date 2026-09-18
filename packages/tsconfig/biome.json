@@ -1,0 +1,3 @@
+{
+  "extends": ["@pet-oasis/biome-config/biome"]
+}

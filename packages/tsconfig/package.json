@@ -10,5 +10,12 @@
     "./tsconfig.node.json": "./tsconfig.node.json",
     "./tsconfig.next.json": "./tsconfig.next.json",
     "./tsconfig.library.json": "./tsconfig.library.json"
+  },
+  "scripts": {
+    "lint": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@pet-oasis/biome-config": "workspace:*"
   }
 }

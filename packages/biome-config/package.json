@@ -7,5 +7,11 @@
   "author": "Rafael Maia da Fonseca",
   "exports": {
     "./biome": "./biome.json"
+  },
+  "scripts": {
+    "lint": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15"
   }
 }

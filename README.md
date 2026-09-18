@@ -40,13 +40,10 @@ de dentro do app.
 ### O que é cacheado, e por quê
 
 Rodar `pnpm typecheck` (ou `lint`, `build`, `docs:check`) duas vezes sem mudar nada devolve
-`FULL TURBO` na segunda: o Turbo calcula um hash por task a partir dos arquivos do pacote, das
-dependências externas no lockfile e do hash das tasks de que ela depende, e devolve o resultado
-guardado (logs e, no `build`, o `dist/`) quando o hash bate. O cache vive em `.turbo/`, fora do
-git. O `dependsOn: ["^…"]` de cada task é o que faz uma mudança em `packages/` invalidar a task
-de quem a consome — sem ele, o hash só veria os arquivos do próprio pacote.
-
-`test` não cacheia **de propósito**: a suíte depende de um Postgres subido pelo Compose e do
-`.env.test`, inputs que o Turbo não vê. Cachear seria decisão explícita, com esses inputs
-declarados — fica para depois. `dev` é persistente e não cacheia porque é um servidor, não um
-resultado.
+`FULL TURBO` na segunda: o Turbo guarda o resultado (logs e, no `build`, o `dist/`) sob um hash
+da task e o devolve quando o hash bate. O cache vive em `.turbo/`, fora do git. `test` não
+cacheia de propósito (a suíte depende de Compose e `.env.test`, que o Turbo não vê) e `dev` é
+um servidor, não um resultado. O que entra no hash, por que cada task tem o `dependsOn` que tem
+e o porquê de `test` ficar fora estão em
+[`apps/api/docs/context/architecture.md`](apps/api/docs/context/architecture.md#o-turborepo-é-o-pipeline-do-workspace-test-fica-fora-do-cache-de-propósito-114);
+cachear `test` está no backlog da API.

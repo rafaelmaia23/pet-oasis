@@ -21,11 +21,13 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       `dependsOn: ["^…"]`, o hash de uma task só vê os arquivos do próprio pacote — mudar a
       base do Biome devolvia o `lint` da API verde do cache. O `^` cria um nó por dependência
       (mesmo sem o script, `<NONEXISTENT>`) cujo hash cobre os arquivos dela. Por isso `lint`
-      tem `^lint` (forma do exemplo do próprio Turbo) e `typecheck`/`build`/`test` têm
-      `^build` — já é a ordem certa para quando o contrato tiver build. **(2)** O log que o
+      tem `^lint` (forma do exemplo do próprio Turbo) e `typecheck`/`build` têm `^build` — já é
+      a ordem certa para quando o contrato tiver build (`test` não: não cacheia, e a issue 09
+      decide fonte × `dist` e reflete no `turbo.json`). **(2)** O log que o
       Turbo grava em `<pacote>/.turbo/` é untracked e entrava no hash: toda rodada era cache
       miss até `.turbo/` entrar no `.gitignore`.
-- [x] `test` tem `cache: false`; `dev` é `persistent: true` e `cache: false`.
+- [x] `test` tem `cache: false` (cachear está no backlog da API, com o método); `dev` é
+      `persistent: true` e `cache: false`.
 - [x] Scripts da raiz delegam ao Turbo (`dev`, `build`, `typecheck`, `lint`, `test`,
       `docs:check`). `pnpm dev --filter=…` chega ao Turbo (o pnpm repassa a flag ao script),
       mas o nome tem de ser **com escopo**: `--filter=@pet-oasis/api` (ou `./apps/api`) — o

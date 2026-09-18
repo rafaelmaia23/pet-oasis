@@ -33,7 +33,6 @@
     "test": {
       // Sobe Postgres e Redis via Compose e lê `.env.test`: cachear exigiria
       // declarar esses inputs, e o risco é um verde de outro ambiente.
-      "dependsOn": ["^build"],
       "cache": false
     },
     "dev": {

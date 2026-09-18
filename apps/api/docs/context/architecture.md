@@ -148,16 +148,18 @@ que ela depende — e **só isso**: sem um `dependsOn: ["^…"]`, mudar a base d
 `packages/biome-config` devolvia o `lint` da API verde do cache. O `^` cria um nó por
 dependência (mesmo sem o script — aparece como `<NONEXISTENT>` no `--dry-run`) cujo hash cobre
 os arquivos dela, e é assim que o preset chega ao consumidor. Por isso `lint` tem `^lint` (a
-forma do próprio exemplo do Turbo: config linta antes de quem a estende) e `typecheck`, `build`
-e `test` têm `^build` — quem consome o `dist` de outro pacote precisa dele construído antes, e
-a ordem já está declarada para quando o contrato tiver build. **(2)** Arquivo untracked entra
+forma do próprio exemplo do Turbo: config linta antes de quem a estende) e `typecheck` e
+`build` têm `^build` — quem consome o `dist` de outro pacote precisa dele construído antes, e
+a ordem já está declarada para quando o contrato tiver build. `test` não tem: não cacheia, então
+o hash não importa, e ordenar atrás de um build que não existe seria adiantar uma decisão que é
+da issue do contrato (fonte TS ou `dist`). **(2)** Arquivo untracked entra
 no hash: o log que o Turbo grava em `<pacote>/.turbo/` fazia toda rodada ser cache miss até
 `.turbo/` entrar no `.gitignore` da raiz — só a raiz, porque só o Turbo produz e o Turbo é da
 raiz.
 
 `test` não cacheia: a suíte da API sobe Postgres e Redis via Compose e lê `.env.test`, inputs
-que o Turbo não vê. Cachear é decisão explícita, com esses inputs declarados, e fica para
-depois. `dev` é `persistent` e sem cache — é servidor, não resultado. E não há `env`/`globalEnv`
+que o Turbo não vê. Cachear é decisão explícita, com esses inputs declarados — está no
+[backlog](../reference/backlog.md#cachear-test-no-turborepo--m), com o método. `dev` é `persistent` e sem cache — é servidor, não resultado. E não há `env`/`globalEnv`
 declarados porque nenhuma task cacheada lê ambiente (só arquivos); o modo estrito do Turbo já
 deixa passar o que o Docker precisa (`HOME`, `PATH`, `DOCKER_*`), então `test` e `dev` rodam
 sem `passThroughEnv`. O dia em que uma task cacheada ler ambiente é o dia em que `env` entra.

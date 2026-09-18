@@ -21,7 +21,9 @@
     "typecheck": {
       // `^build`, e não `^typecheck`: quem consome o `dist` de outro pacote
       // precisa dele construído antes de checar tipos. Hoje nenhuma
-      // dependência tem build; quando o contrato tiver, a ordem já está aqui.
+      // dependência tem build — o contrato é consumido do fonte TS (ver o
+      // README dele) —, então isto é um nó vazio; se o contrato um dia ganhar
+      // `dist`, a ordem já está aqui.
       "dependsOn": ["^build"]
     },
     "lint": {

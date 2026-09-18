@@ -66,6 +66,7 @@
   "dependencies": {
     "@axiomhq/pino": "^1.8.0",
     "@faker-js/faker": "^10.4.0",
+    "@pet-oasis/api-contracts": "workspace:*",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@scalar/api-reference": "^1.63.0",

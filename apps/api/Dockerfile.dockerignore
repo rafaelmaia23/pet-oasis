@@ -29,6 +29,7 @@ apps/api/api-collection
 apps/api/docs
 apps/api/.scratch
 apps/api/tools
+packages/*/tests
 apps/api/uploads
 apps/api/assets-inbox
 **/*.md

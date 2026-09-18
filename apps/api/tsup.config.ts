@@ -9,6 +9,13 @@ export default defineConfig({
     "demo-reset": "src/scripts/demo-reset.ts",
     "refresh-search-lexemes": "src/scripts/refresh-search-lexemes.ts",
   },
+  // O contrato (`@pet-oasis/api-contracts`) é consumido do fonte TS, sem
+  // build: o `exports` dele aponta para `.ts`. O tsup externaliza toda
+  // `dependency` por padrão, e um `import` de `.ts` deixado no `dist/` só
+  // rodaria pelo type stripping do Node — frágil demais para produção. Inlinar
+  // o pacote é o que torna o bundle autocontido; o `zod` que ele importa
+  // continua externo, porque é dependência da própria API.
+  noExternal: ["@pet-oasis/api-contracts"],
   format: ["esm"],
   outDir: "dist",
   sourcemap: true,

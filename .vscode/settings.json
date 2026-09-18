@@ -8,5 +8,5 @@
     "source.fixAll.biome": "always"
   },
 
-  "biome.lsp.bin": "./node_modules/.bin/biome"
+  "biome.lsp.bin": "./apps/api/node_modules/.bin/biome"
 }

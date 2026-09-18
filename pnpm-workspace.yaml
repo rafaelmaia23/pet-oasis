@@ -1,8 +1,17 @@
+# Um workspace, um lockfile (pnpm-lock.yaml na raiz). Cada app e cada pacote
+# interno é um projeto do workspace; `pnpm --filter <nome> <script>` roda o
+# script daquele projeto a partir da raiz.
+packages:
+  - apps/*
+  - packages/*
+
 fetchTimeout: 60000
 fetchRetries: 2
 fetchRetryMintimeout: 2000
 fetchRetryMaxtimeout: 15000
 
+# Vale para o workspace inteiro: só estes pacotes podem rodar script de build
+# no install (o pnpm bloqueia os demais).
 allowBuilds:
   '@prisma/engines': true
   bcrypt: true

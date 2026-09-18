@@ -1,0 +1,13 @@
+# Ignores que valem para o repo inteiro; o que é de um app fica no .gitignore
+# dele (apps/api/.gitignore explica o porquê de uploads/ e assets-inbox/).
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+**/uploads/
+**/src/generated/
+
+# Notas pessoais de estudo — fora do git e fora do docs:check.
+.learning/

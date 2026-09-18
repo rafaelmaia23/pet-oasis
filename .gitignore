@@ -12,5 +12,11 @@ coverage/
 **/uploads/
 **/src/generated/
 
+# Cache e logs do Turborepo: `.turbo/` na raiz (cache) e em cada pacote (log da
+# task). Só o Turbo produz, e o Turbo é da raiz, então só a raiz ignora — e
+# precisa ignorar, porque arquivo untracked entra no hash da task e um log que
+# muda a cada run faria toda rodada ser cache miss.
+.turbo/
+
 # Notas pessoais de estudo — fora do git e fora do docs:check.
 .learning/

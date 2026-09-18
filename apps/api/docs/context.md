@@ -218,6 +218,10 @@ completo, os contra-argumentos e os gotchas.
   `packages/biome-config`, config pura que linta a si mesma; a API guarda só o que é relativo
   ao próprio diretório, e a migração foi provada por `--showConfig` idêntico (só o `jsx` saiu
   depois, por decisão)
+- O Turborepo é o pipeline do workspace; `test` fica fora do cache de propósito (11.4) — os
+  scripts da raiz delegam ao `turbo run`; `typecheck`/`lint`/`build`/`docs:check` cacheiam, e
+  o `dependsOn: ["^…"]` é o que faz um preset mudado em `packages/` invalidar quem o consome
+  (provado por teste negativo); `test` lê Compose e `.env.test`, então não cacheia
 
 *Documentação e processo*
 

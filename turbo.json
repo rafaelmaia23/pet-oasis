@@ -1,0 +1,43 @@
+{
+  // Pipeline do workspace. Cada task abaixo é o script de mesmo nome em cada
+  // pacote que o tiver; `^x` = "antes, a task x nas dependências do pacote".
+  // O `^` faz mais do que ordenar: cria um nó por dependência (mesmo sem o
+  // script — fica `<NONEXISTENT>`) cujo hash cobre os arquivos dela, e é assim
+  // que mudar um preset em `packages/` invalida a task de quem o consome. Sem
+  // ele, o hash de uma task só vê os arquivos do próprio pacote, e trocar a
+  // base do Biome devolvia `lint` verde do cache (provado na 11.4).
+  //
+  // Nenhuma task cacheada lê variável de ambiente — typecheck, lint, build e
+  // docs:check só leem arquivos —, então não há `env`/`globalEnv` a declarar.
+  // Quem lê ambiente é `test` (`.env.test`, via dotenv) e `dev`, e os dois não
+  // cacheiam. Um `env` aqui só faz sentido quando uma task cacheada passar a
+  // depender de ambiente.
+  "$schema": "https://turborepo.dev/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      // `^build`, e não `^typecheck`: quem consome o `dist` de outro pacote
+      // precisa dele construído antes de checar tipos. Hoje nenhuma
+      // dependência tem build; quando o contrato tiver, a ordem já está aqui.
+      "dependsOn": ["^build"]
+    },
+    "lint": {
+      // Os pacotes de config lintam a si mesmos antes de quem os estende, e
+      // o hash deles entra no de quem os estende (ver o cabeçalho).
+      "dependsOn": ["^lint"]
+    },
+    "docs:check": {},
+    "test": {
+      // Sobe Postgres e Redis via Compose e lê `.env.test`: cachear exigiria
+      // declarar esses inputs, e o risco é um verde de outro ambiente.
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

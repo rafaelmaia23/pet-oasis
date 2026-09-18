@@ -111,16 +111,18 @@
 
 ---
 
-# Ciclo 2 — Domínio pet shop (Fases 9–11)
+# Ciclo 2 — Domínio pet shop (Fase 9 em diante)
 
 > Abre o domínio do pet shop em si. A numeração das fases **continua global** (9, 10, …): o
 > ciclo é agrupamento de leitura, não reinício de contagem — a convenção de branch do
 > `CLAUDE.md` (`fase-<n>`, `feat/fase-<n>-<NN>-<slug>`) depende de um número único por fase.
 > A Fase 9 (fechada) trouxe pets e catálogo, ainda **sem checkout**. A Fase 10 (fechada)
-> desbloqueou o front web e pagou a dívida de deploy; a Fase 11 traz carrinho, pedido e pagamento.
+> desbloqueou o front web e pagou a dívida de deploy. A Fase 11 (aberta) transforma o repo no
+> monorepo `pet-oasis` — a API desce para `apps/api`, o web entra com histórico, e nasce o
+> pacote de contratos compartilhado; carrinho, pedido e pagamento vêm na fase seguinte.
 
 ## Fase 9 — Domínio pet shop: pets e catálogo ✅
-> Abriu o Ciclo 2 com duas agregações quase independentes — pets (ligados a `Customer`) e catálogo (marca, categoria, tag, produto, variante) —, que só se tocam na faceta "para qual espécie este produto serve". **Sem checkout**: carrinho, pedido e pagamento são a Fase 11. 12 sessões (9.1–9.12), cada uma 1:1 com sua sub-fase e em feat-branch própria; as três últimas de kickoff em grelha (17, 19 e 13 decisões fechadas antes de qualquer linha). Racional em `docs/context/pet-domain.md` (índice) e nos ADRs `pet-domain-modeling.md`, `product-catalog-modeling.md`, `product-vs-service.md`, `text-search.md`, `file-storage-and-uploads.md` e no adendo de `pagination.md`; o que ficou de fora, com o motivo, em `docs/reference/backlog.md`.
+> Abriu o Ciclo 2 com duas agregações quase independentes — pets (ligados a `Customer`) e catálogo (marca, categoria, tag, produto, variante) —, que só se tocam na faceta "para qual espécie este produto serve". **Sem checkout**: carrinho, pedido e pagamento ficam para uma fase posterior (no fecho da 9 eram "a Fase 11"; o número foi tomado pelo monorepo). 12 sessões (9.1–9.12), cada uma 1:1 com sua sub-fase e em feat-branch própria; as três últimas de kickoff em grelha (17, 19 e 13 decisões fechadas antes de qualquer linha). Racional em `docs/context/pet-domain.md` (índice) e nos ADRs `pet-domain-modeling.md`, `product-catalog-modeling.md`, `product-vs-service.md`, `text-search.md`, `file-storage-and-uploads.md` e no adendo de `pagination.md`; o que ficou de fora, com o motivo, em `docs/reference/backlog.md`.
 - **RBAC do domínio e a decisão que moldou a fase (9.1):** 9 features novas pelo critério "existe cargo real que tem esta e não a vizinha", nenhuma privilegiada (custo/margem fica fora de `PRIVILEGED_FEATURES` — o guard existe contra escalação do próprio RBAC, e quem delega visibilidade de custo é o gerente), e duas roles de funcionário (`stockist`, `catalog-manager`, com `manager` provado superconjunto por teste). Junto veio a decisão estruturante: **a vitrine do catálogo responde sem token**, porque e-commerce vive de quem chega pelo Google sem conta — o que exigiu, na 9.6, um terceiro modo de autenticação (`optionalAuthenticate`, que segue anônimo até com token ruim, sem nunca responder 401).
 - **Ordenação configurável (9.2), dívida do backlog paga antes de gerar retrabalho:** `?sort=&order=` só no offset (no cursor a chave teria que codificar o campo), allowlist como **mapa** campo → direção natural, `?order=` sem `?sort=` é 422, e tiebreaker por `id` também no offset — que fechou um furo pré-existente em `GET /users`.
 - **Pets (9.3–9.5):** `PetSpecies` é enum fechado **sem `OUTRO`** (buraco permanente de qualidade de dado; espécie nova é migration barata), `Breed` é catálogo curado de 142 raças semeado uma vez e **nunca consultado em runtime**, e `SPECIES_WITH_BREED` é constante explícita (só cão e gato) em vez de derivada de "existe raça para esta espécie". `microchipId` é unique **global**, valendo para a linha excluída. `deceasedAt` ≠ `deletedAt`: o pet falecido continua na lista do dono. O escopo é decidido em duas etapas (rota admite dono e staff, service separa) e o alvo inexistente **falha fechado** em 403, senão a rota vira oráculo de existência. `Pet` virou o primeiro filho de **domínio** da cascata da Fase 8 — desce na deleção, volta por correlação de data.
@@ -147,7 +149,20 @@
 
 ---
 
-## ⬜ Fase 11 — Carrinho, pedido e pagamento
+## 🔄 Fase 11 — Monorepo: pnpm workspaces, Turborepo e o primeiro contrato compartilhado
+> Nenhum domínio novo. O repositório vira, in-place, o monorepo `pet-oasis`: API em `apps/api`,
+> `pet-oasis-web` importado com histórico em `apps/web`, `packages/api-contracts` (schemas Zod
+> que atravessam a rede, dependendo só de `zod`), presets de tsconfig/biome compartilhados,
+> Conventional Commits com lint, CI de verificação, stack Compose único, docs de domínio no
+> formato da skill (`CONTEXT-MAP.md` + `CONTEXT.md` por app). Spec e issues em
+> `.scratch/monorepo/`.
+- Progresso: 0 de 13 issues fechadas.
+
+## ⬜ Fase 12 — Espinha de autenticação do web
+> Herdada do `pet-oasis-web` no import (Fase 11, issue 11): a spec e as issues dele passam a
+> viver no `.scratch/` da raiz com este número. Consome os schemas do contrato compartilhado.
+
+## ⬜ Carrinho, pedido e pagamento (fase seguinte, ainda sem número)
 
 Ainda **não planejada**. O caminho está em [`docs/README.md`](README.md): a ideia crua nasce em
 `.scratch/`, é grelhada, vira spec e issues na pasta do esforço, e só então desce para cá como

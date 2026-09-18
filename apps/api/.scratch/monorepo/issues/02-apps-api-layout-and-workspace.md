@@ -21,8 +21,10 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
 - [x] A raiz tem `package.json` (privado, só `packageManager`/`engines`, sem dependências) e
       `pnpm-workspace.yaml` (`apps/*`, `packages/*`, mais os settings e o `allowBuilds` da 01).
       Um só `pnpm-lock.yaml`, na raiz — o diff dele é só o importer mudando de `.` para
-      `apps/api`; nenhuma versão resolvida mudou. O pacote da API chama-se **`api`** (sem escopo),
-      que é o que `pnpm --filter api` desta issue e `pnpm deploy --filter web` da 11 escrevem.
+      `apps/api`; nenhuma versão resolvida mudou. O pacote da API chama-se **`@pet-oasis/api`**, no
+      escopo que a spec fixa para todo pacote do workspace — e `pnpm --filter api` (desta issue,
+      do Dockerfile e da 11) continua valendo: um filtro sem escopo casa o pacote escopado quando
+      o nome é único no workspace (verificado com o `docs:check` e com o `deploy` do Dockerfile).
 - [x] `.git-blame-ignore-revs` na raiz com o hash do move; `git config blame.ignoreRevsFile`
       ativado neste clone e documentado em `docs/guides/dev.md` (é por clone; o GitHub lê o
       arquivo sozinho).

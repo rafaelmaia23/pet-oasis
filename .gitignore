@@ -1,5 +1,8 @@
-# Ignores que valem para o repo inteiro; o que é de um app fica no .gitignore
-# dele (apps/api/.gitignore explica o porquê de uploads/ e assets-inbox/).
+# Ignores da raiz. Os padrões `**/` cobrem o que todo app do workspace produz
+# (node_modules, dist, envs, uploads, client gerado); cada app repete os seus
+# no próprio .gitignore, com o porquê ao lado (apps/api/.gitignore explica
+# uploads/ e assets-inbox/) — os dois cobrem de propósito, para que o app
+# continue coerente sozinho e a raiz proteja um app novo que ainda não tem o seu.
 node_modules/
 dist/
 coverage/

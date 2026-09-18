@@ -53,7 +53,7 @@ describe("pureza do contrato", () => {
         .filter((specifier) => {
           if (specifier === "zod") return false;
           if (specifier.startsWith(".")) return !isInsideSrc(file, specifier);
-          return true; // bare specifier (`@/`, `@prisma/…`, `express`, `apps/…`)
+          return true; // especificador nu: `@/`, `@prisma/…`, `express`, `apps/…`
         })
         .map((specifier) => `${relative(PACKAGE_ROOT, file)} → ${specifier}`),
     );

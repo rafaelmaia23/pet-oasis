@@ -15,7 +15,7 @@ próprio pacote fica vermelho se isso acontecer.
 | `…/pet` | `petSpeciesSchema`/`PetSpecies`, `petSexSchema`/`PetSex` |
 | `…/catalog` | `productStatusSchema`/`ProductStatus` |
 | `…/role` | `ROLE_NAMES`, `RoleName`, `roleNameSchema` |
-| `…/feature` | `FEATURE_NAMES`, `FeatureName`, `featureNameSchema`, `PRIVILEGED_FEATURES` |
+| `…/feature` | `FEATURE_NAMES`, `FeatureName`, `featureNameSchema`, `PERMISSION_FEATURES`, `PRIVILEGED_FEATURES` (derivado do anterior) |
 | `…/errors` | `ERROR_CODES`/`ErrorCode`, `errorResponseSchema`, `validationErrorResponseSchema` e os tipos |
 
 Cada domínio é uma entrada própria do `exports` para o consumidor importar só o que usa; o

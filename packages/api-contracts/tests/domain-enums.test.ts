@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import * as contract from "../src";
 import { DOMAIN_ENUMS } from "../src";
 import { productStatusSchema } from "../src/catalog";
 import { FEATURE_NAMES, PRIVILEGED_FEATURES } from "../src/feature";
@@ -23,6 +24,27 @@ describe("enums de domínio", () => {
       expect(schema).toBeInstanceOf(z.ZodEnum);
       expect(schema.options.length).toBeGreaterThan(0);
     }
+  });
+
+  it("não deixa `z.enum` exportado fora do registro sem declará-lo sem par no Prisma", () => {
+    // Um enum novo exportado do índice e esquecido do registro passaria pela
+    // paridade da API em silêncio. Aqui ele ou entra em DOMAIN_ENUMS, ou é
+    // declarado explicitamente como enum que não tem par no Prisma (roles e
+    // features são linhas, não enum; os `code` de erro só existem na API).
+    const WITHOUT_PRISMA_PAIR = [
+      "roleNameSchema",
+      "featureNameSchema",
+      "errorCodeSchema",
+    ];
+    const registered = new Set<unknown>(Object.values(DOMAIN_ENUMS));
+
+    const unaccounted = Object.entries(contract)
+      .filter(([, value]) => value instanceof z.ZodEnum)
+      .filter(([, value]) => !registered.has(value))
+      .map(([name]) => name)
+      .filter((name) => !WITHOUT_PRISMA_PAIR.includes(name));
+
+    expect(unaccounted).toEqual([]);
   });
 });
 

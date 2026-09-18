@@ -71,6 +71,17 @@ export type FeatureName = (typeof FEATURE_NAMES)[number];
 
 export const featureNameSchema = z.enum(FEATURE_NAMES);
 
+// As features do próprio sistema de permissão. É o que faz de uma role um
+// alvo privilegiado (ter qualquer uma delas, ou `*`) e é a base do conjunto
+// de não-escalação abaixo — derivado, não copiado, para que acrescentar uma
+// aqui a torne privilegiada por construção.
+export const PERMISSION_FEATURES = [
+  "read:feature",
+  "read:role",
+  "read:permission",
+  "manage:permission",
+] as const satisfies readonly FeatureName[];
+
 // Não-escalação: conceder uma destas por override — ou atribuir uma role que
 // a contenha — exige role **admin**, não só a feature `manage:permission`. São
 // as features que escalam o próprio sistema de permissão, mais
@@ -78,9 +89,6 @@ export const featureNameSchema = z.enum(FEATURE_NAMES);
 // semi-sensível). Custo/margem (`read:product:cost`) é segredo comercial, não
 // escalação: fica de fora de propósito.
 export const PRIVILEGED_FEATURES = [
-  "read:feature",
-  "read:role",
-  "read:permission",
-  "manage:permission",
+  ...PERMISSION_FEATURES,
   "read:audit-log:full",
 ] as const satisfies readonly FeatureName[];

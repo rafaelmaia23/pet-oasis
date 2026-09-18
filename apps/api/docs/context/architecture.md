@@ -189,7 +189,7 @@ está aqui e não ao lado do valor.
 
 `packages/api-contracts` (`@pet-oasis/api-contracts`) é o que atravessa a rede entre a API e os
 clientes: nasceu com o que **não depende de nenhum schema da API** — os enums de domínio como
-`z.enum`, os nomes de role e feature (e o conjunto privilegiado) como tuplas `as const`, e o
+`z.enum`, os nomes de role e feature (e os conjuntos de permissão e privilegiado, o segundo derivado do primeiro) como tuplas `as const`, e o
 shape de erro (envelope comum, `code`s conhecidos, `errors` por campo do 422). A migração dos
 schemas de request e das views é a etapa seguinte; esta é o "expand" do refactor largo, e a API
 consome do contrato só o que já tinha dono duplo: `role.constants.ts` e `feature.constants.ts`

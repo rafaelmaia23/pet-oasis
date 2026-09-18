@@ -91,7 +91,13 @@ export const validationErrorResponseSchema = z
     errors: validationErrorFieldsSchema.meta({
       example: { email: ["Invalid email address"] },
     }),
-    requestId: requestIdSchema,
+    // A descrição é a curta, de propósito: é o que o OpenAPI da API publica
+    // hoje para o 422, e o `openapi.json` tem de sair idêntico quando a API
+    // passar a importar daqui.
+    requestId: z.string().optional().meta({
+      description: "Id do request, igual ao header x-request-id.",
+      example: "5b1f8c2e-0d3a-4f5b-9c7d-2a1e6f4b8c90",
+    }),
   })
   .meta({
     id: "ValidationError",

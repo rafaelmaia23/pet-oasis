@@ -267,13 +267,13 @@ importers:
         specifier: ^5.0.6
         version: 5.0.6
       '@types/express-serve-static-core':
-        specifier: 5.1.2
+        specifier: ^5.1.2
         version: 5.1.2
       '@types/jsonwebtoken':
         specifier: ^9.0.10
         version: 9.0.10
       '@types/ms':
-        specifier: 2.1.0
+        specifier: ^2.1.0
         version: 2.1.0
       '@types/multer':
         specifier: ^2.2.0

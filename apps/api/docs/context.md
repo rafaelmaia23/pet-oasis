@@ -215,8 +215,9 @@ completo, os contra-argumentos e os gotchas.
   mesmo remédio para o mesmo padrão (9.10, 9.12)
 - O tsconfig e o Biome da API estendem presets do workspace (11.3) — `packages/tsconfig`
   (um preset por alvo, nomeados `tsconfig.<alvo>.json` por causa do Biome) e
-  `packages/biome-config`, config pura sem dependência; a API guarda só o que é relativo ao
-  próprio diretório, e a migração foi provada por `--showConfig` idêntico
+  `packages/biome-config`, config pura que linta a si mesma; a API guarda só o que é relativo
+  ao próprio diretório, e a migração foi provada por `--showConfig` idêntico (só o `jsx` saiu
+  depois, por decisão)
 
 *Documentação e processo*
 

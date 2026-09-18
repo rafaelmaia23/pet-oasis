@@ -12,28 +12,32 @@ o pacote mais barato possível, antes de o contrato depender disso.
 O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
 
 - [x] `packages/tsconfig` (`@pet-oasis/tsconfig`) publica quatro presets: `tsconfig.base.json`
-      (rigidez, semântica de módulo, emit com mapas e tipos, `jsx: react-jsx`),
+      (rigidez, semântica de módulo, emit com mapas e tipos — o `jsx: react-jsx` herdado do
+      `tsc --init` da API saiu na revisão, por decisão do dono: ninguém o usa),
       `tsconfig.node.json` (base + `types: ["node"]`), `tsconfig.next.json` (base + o que o
       `create-next-app` gera — nasce sem consumidor, validado na 11) e `tsconfig.library.json`
       (base + `lib: ["esnext"]`, sem DOM nem Node). Chamam-se `tsconfig.<alvo>.json`, não
       `<alvo>.json`: têm comentários, e o Biome só lê JSON com comentários em `tsconfig*.json` —
-      assim passam limpos pela base do workspace quando o lint cobrir `packages/` (verificado
-      com `biome check ../../packages` de dentro da API; hoje nenhum script os cobre). O `tsconfig.json` da API estende o de
+      assim passam limpos pela base do workspace — e passam mesmo: cada pacote tem script
+      `lint` (`biome check .`), o `tsconfig` com `biome.json` próprio estendendo a base
+      (`pnpm -r lint` roda os três; o Turbo da 04 os pega pelo script). O `tsconfig.json` da API estende o de
       Node e guarda `rootDir`, `outDir`, `paths`, `typeRoots` e `include` (tudo relativo ao
       diretório); o `types` desceu para o preset de Node, porque é o que o define como Node —
       o valor efetivo é o mesmo.
 - [x] `packages/biome-config` (`@pet-oasis/biome-config`) publica a base (formatter, linter,
       aspas duplas, ponto-e-vírgula sempre) em `biome.json`, exportada como `./biome`; o da
       API a estende e guarda só os quatro ignores que são dela.
-- [x] Privados, escopados, sem build — e **sem dependência nenhuma**, nem `peerDependencies`:
-      o pnpm auto-instala peers, o que dava a cada pacote um `node_modules` com a ferramenta
-      linkada e uma entrada no lockfile. A versão única de TS/Biome é assunto do `catalog:` (11).
-      Aparecem como `workspace:*` nas `devDependencies` da API e como importers vazios no
-      lockfile (`packages/tsconfig: {}`); `pnpm install --frozen-lockfile` passa.
+- [x] Privados, escopados, sem build, sem dependência de runtime e sem `peerDependencies`
+      (o pnpm auto-instala peers, e o `tsconfig` não roda TypeScript). A única `devDependency`
+      é o Biome que cada um roda no próprio `lint` (mais o `biome-config` no `tsconfig`). A
+      versão única de TS/Biome é assunto do `catalog:` (11). Aparecem como `workspace:*` nas
+      `devDependencies` da API e como importers no lockfile; `pnpm install --frozen-lockfile`
+      passa.
 - [x] Nenhum valor efetivo mudou, provado mais forte do que a issue pedia: `tsc --showConfig`
       (opções **e** lista de arquivos) e `biome rage --formatter --linter` idênticos antes e
       depois, mais o teste negativo (mudar `strict`/`quoteStyle` na base e ver a API refletir)
-      para provar que o `extends` está vivo. Zero mudança em `src/` e `tests/`.
+      para provar que o `extends` está vivo. Zero mudança em `src/` e `tests/`. Depois da
+      prova, e por decisão do dono, uma opção mudou: `jsx` saiu (ver o primeiro item).
 - [x] Suíte completa + `typecheck` + `lint` + `docs:check` verdes; os três targets do Docker
       buildam; `runtime` continua raso, uid 1000, 26 módulos de topo e nenhum `@pet-oasis/*`
       (devDeps podadas pelo `deploy --prod`); `dev` resolve os symlinks para os presets copiados.

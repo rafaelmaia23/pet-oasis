@@ -42,7 +42,7 @@ Duas regras seguram o desenho:
    comentário de `src/` não referenciam `.scratch/`. Versionar mudou a durabilidade do
    arquivo, não a autoridade do conteúdo: uma spec é o retrato de uma negociação num
    instante. Se algo de lá merece ser citado, é porque merece ter virado ADR ou contexto. O
-   `npm run docs:check` reprova quem esquecer.
+   `pnpm run docs:check` reprova quem esquecer.
 
 ## Onde procurar o *porquê* de uma decisão
 
@@ -57,7 +57,7 @@ real) vira **ADR** em [`adr/`](adr/); o contexto guarda só o ponteiro.
 ## Depois de mexer em doc
 
 ```bash
-npm run docs:check
+pnpm run docs:check
 ```
 
 Ele prova que todo caminho e toda âncora citados no repositório — inclusive nos comentários

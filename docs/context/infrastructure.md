@@ -118,13 +118,13 @@ e o Bruno alcançam a API na máquina de quem desenvolve.
 Dev não herda a topologia, de propósito: lá `db` e `redis` publicam porta para o tooling do host
 (prisma, vitest), o que é o oposto de `internal: true`. E a rede do proxy não pode ser declarada no
 compose **base** porque `external: true` exige que ela exista — declará-la ali quebraria o
-`npm run dev` de quem nunca subiu um nginx.
+`pnpm run dev` de quem nunca subiu um nginx.
 
 ### Envs por arquivo + dotenv-cli
 
 `.env.development`/`.env.test`/`.env.production` (fora do git) + `.env.example` versionado — colapsa
 cinco fontes numa por ambiente. Containers recebem via `env_file:`. No host, o `vitest.config.ts`
-carrega `.env.test` (`override: true`), então `npx vitest run <arquivo>` funciona sozinho, e a
+carrega `.env.test` (`override: true`), então `pnpm exec vitest run <arquivo>` funciona sozinho, e a
 autoria de migration usa `dotenv-cli` (`dotenv -e .env.development -- prisma …`). A URL do banco de
 teste, antes duplicada em quatro lugares, vive só no `.env.test`. `src/config/env.ts` e
 `prisma.config.ts` ficam intocados (o `import "dotenv/config"` vira no-op sem `.env` na raiz).
@@ -142,8 +142,8 @@ receber o sinal.
 
 O generator escreve em `src/generated`, que o bind-mount de `./src` mascararia; um volume anônimo em
 `/app/src/generated` preserva o client gerado no container (o entrypoint de dev roda `prisma
-generate` no start). Evita churn nos imports `@/generated`. O stage `dev` do Dockerfile para no `npm
-ci` completo (sem bundle/prune) e fica root, evitando EACCES de uid no bind-mount; o `runtime` de
+generate` no start). Evita churn nos imports `@/generated`. O stage `dev` do Dockerfile para no `pnpm
+install` completo (sem bundle/prune) e fica root, evitando EACCES de uid no bind-mount; o `runtime` de
 prod segue intocado.
 
 ---
@@ -216,11 +216,11 @@ entrypoint, mas o log de inicialização abria com dois blocos de warning e a en
 escolhida por acidente — acidente que muda de resultado em ARM64 ou num bump da imagem base.
 
 O `openssl` é instalado nos **três** estágios, porque a escolha acontece duas vezes em cada
-imagem: no `npm ci`, onde o `@prisma/engines` decide qual build do schema-engine baixar, e no boot,
+imagem: no `pnpm install`, onde o `@prisma/engines` decide qual build do schema-engine baixar, e no boot,
 onde o CLI redetecta. Instalar só no runtime faria os dois discordarem — a detecção pediria 3.0.x e
 a imagem carregaria o binário 1.1.x, que é o caso pior dos dois. O estágio `dev` entrou logo
 depois, pelo mesmo motivo pelo outro caminho: o `docker-entrypoint.dev.sh` roda `prisma generate` e
-`migrate deploy`, então todo `npm run dev` também abria com os dois blocos de warning. Lá o custo é
+`migrate deploy`, então todo `pnpm run dev` também abria com os dois blocos de warning. Lá o custo é
 **negativo** — a engine 3.0.x é menor que a 1.1.x o bastante para pagar a camada do apt e sobrar
 (1368,56 MB → 1365,90 MB).
 
@@ -398,7 +398,7 @@ justificativa de que em dev a disputa de dono não existia: o estágio `dev` rod
 escreve em qualquer lugar. Faltava o outro lado da mesma disputa. Num clone novo `uploads/` **não
 existe**, e quem o cria é o Docker ao montar o bind mount — como `root`, antes de qualquer
 processo do container rodar. Daí em diante tudo que o seed dentro do container gravava
-(`products/<id>/…`) era de `root`, e o que roda **no host** com o usuário do host — `npm run
+(`products/<id>/…`) era de `root`, e o que roda **no host** com o usuário do host — `pnpm run
 db:seed` com `SEED_FAKE_DATA=true`, `db:cleanup-uploads`, um `rm -rf uploads` — batia em
 `EACCES`. O segundo incidente que a 10.4 foi escrita para matar, reproduzido do outro lado.
 
@@ -408,7 +408,7 @@ host tropeçaria neles. O conserto foi na **causa**: o container de dev passou a
 uid do host. O script `dev` exporta `HOST_UID`/`HOST_GID` a partir de `id -u`/`id -g` — nenhum
 passo de setup. O Compose tem default `1000` só para os scripts que não sobem o `api`
 (`dev:down`, `dev:mail`, `dev:db`) não avisarem variável vazia; não é cobertura para quem invoca
-o Compose por fora do npm com outro uid — esse recebe uma árvore de `1000` e o EACCES volta, e a
+o Compose por fora do pnpm com outro uid — esse recebe uma árvore de `1000` e o EACCES volta, e a
 lição da 10.4 sobre fallback que reintroduz o bug vale aqui também. O
 [entrypoint de dev](../../infra/docker-entrypoint.dev.sh) roda em **duas passadas**: ainda como
 root, gera o client Prisma no volume anônimo `src/generated` (que é de root e não tem por que
@@ -430,7 +430,7 @@ para quem por acaso for `1000`.
 
 ### `sharp` no ARM64 exige build no próprio servidor (9.10)
 
-O `Dockerfile` é `node:22-bookworm-slim` (glibc, não Alpine), então o `npm ci` baixa o prebuild
+O `Dockerfile` é `node:24-bookworm-slim` (glibc, não Alpine), então o `pnpm install` baixa o prebuild
 `@img/sharp-linux-arm64` — nada compila, nenhum pacote de sistema entra na imagem.
 
 A condição é que a imagem seja **construída no ARM**, que é o que o `prod:up` faz (o Compose tem

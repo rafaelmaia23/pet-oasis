@@ -18,3 +18,5 @@ assets-inbox/
 
 # `.scratch/` é VERSIONADO (Fase 10): é o tracker — specs e issues vivem lá.
 # Deixou de ser rascunho fora do git; ver .scratch/README.md e docs/README.md.
+
+.learning/

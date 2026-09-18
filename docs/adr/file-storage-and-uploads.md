@@ -151,7 +151,7 @@ seguraria 40 MB em RAM de uma vez.
 ### A varredura de órfãos não nasceu com timer
 
 O ADR mandava seguir o padrão `src/scripts/` + systemd timer. O script existe
-(`src/scripts/cleanup-uploads.ts`, `npm run db:cleanup-uploads`), o timer não —
+(`src/scripts/cleanup-uploads.ts`, `pnpm run db:cleanup-uploads`), o timer não —
 e de propósito. Os `cleanup-*` que têm timer limpam crescimento **esperado e
 contínuo** (todo login cria sessão). Órfão de upload só nasce de falha, e
 agendar um evento que não deveria acontecer é ruído no `infra/cron/`. O timer

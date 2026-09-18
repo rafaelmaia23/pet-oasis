@@ -1,6 +1,6 @@
 # Dev override — db + mailpit + api (tsx watch in-container against bind-mounted
 # src/). Distinct container names / volume / ports from test so both can run at
-# once. Bring up in FOREGROUND (`npm run dev`); Ctrl+C → graceful SIGTERM.
+# once. Bring up in FOREGROUND (`pnpm run dev`); Ctrl+C → graceful SIGTERM.
 services:
   db:
     image: postgres:16-alpine
@@ -57,7 +57,7 @@ services:
       # script `dev` exporta os dois a partir de `id -u`/`id -g`, então quem
       # clona não configura nada. O default 1000 existe para os scripts que não
       # sobem o `api` (`dev:down`, `dev:mail`, `dev:db`) não avisarem variável
-      # vazia — não é cobertura: quem invocar o Compose por fora do npm com
+      # vazia — não é cobertura: quem invocar o Compose por fora do pnpm com
       # outro uid recebe uma árvore de 1000, e o EACCES volta.
       # Ver o comentário do mount de ../uploads.
       HOST_UID: ${HOST_UID:-1000}
@@ -94,7 +94,7 @@ services:
       # Aqui — e só aqui — o caminho fica dentro da árvore. O que obriga produção
       # a sair dela (10.4) é o git e o container disputarem o dono do diretório;
       # em dev o git não disputa (`uploads/` não é versionado, o `.gitkeep`
-      # saiu), mas o **host** disputa: `npm run db:seed` e `db:cleanup-uploads`
+      # saiu), mas o **host** disputa: `pnpm run db:seed` e `db:cleanup-uploads`
       # rodam no host e escrevem aqui. Num clone novo o diretório não existe, e
       # quem o cria é o Docker ao montar — como root. Foi isso que a 10.4 leu
       # como "disputa que não existe" e a 10.16 corrigiu por outro lado: o

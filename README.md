@@ -239,7 +239,7 @@ O raciocínio longo de cada uma está em [`docs/context/`](docs/context/), index
 
 ### Testes antes do código
 
-Toda feature nasce de um teste que falha. A suíte tem **1193 testes** (Vitest + Supertest + Faker) rodando contra um Postgres e um Redis reais e isolados, subidos e derrubados pelo próprio `npm test` — integração de verdade, não mocks de banco ou de infra. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
+Toda feature nasce de um teste que falha. A suíte tem **1193 testes** (Vitest + Supertest + Faker) rodando contra um Postgres e um Redis reais e isolados, subidos e derrubados pelo próprio `pnpm test` — integração de verdade, não mocks de banco ou de infra. `tsc --noEmit` e Biome fazem parte do fecho de qualquer tarefa.
 
 ### Disciplina de processo
 
@@ -254,7 +254,7 @@ Sobe inteiro com Docker — banco, Redis, mail-catcher e a API (serviço `api` d
 ```bash
 git clone https://github.com/rafaelmaia23/pet-oasis.git && cd pet-oasis
 cp .env.example .env.development   # preencha JWT_SECRET e PEPPER (≥ 32 chars cada)
-npm run dev
+pnpm run dev
 ```
 
 API em `http://localhost:3000/api/v1`, referência interativa em `/reference` e os emails de verificação caindo no [Mailpit](https://mailpit.axllent.org/) em `http://localhost:8025`.
@@ -272,7 +272,7 @@ Além do catálogo de referência (roles/features, sempre semeado), o seed pode 
 - **`SEED_ADMIN_USER=true`** — um usuário de teste com acesso total (role `admin`, diferente do usuário demo read-only), credenciais em `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`. **Só em dev** — nunca ligado no demo público, para não expor uma conta de escrita irrestrita na internet.
 - **`SEED_FAKE_DATA=true`** — o domínio inteiro povoado: 9 marcas, 20 categorias em 3 níveis, 8 tags, 35 produtos (51 variantes, com imagem) e 15 pets em 12 donos, mais um funcionário por role nova. O dataset é escolhido por **cobertura de cenário**, não por volume: existe produto em rascunho, produto descontinuado, variante esgotada e categoria no terceiro nível porque cada um deles é o que faz um filtro, uma view ou um limite serem demonstráveis. Nomes e marcas são reais e em português — a busca com tolerância a erro só se demonstra sobre palavras que existem.
 
-Ambos são idempotentes (`npm run db:seed` não duplica nada) e restaurados todo dia pelo reset do ambiente demo.
+Ambos são idempotentes (`pnpm run db:seed` não duplica nada) e restaurados todo dia pelo reset do ambiente demo.
 
 ---
 

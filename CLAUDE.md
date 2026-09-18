@@ -56,7 +56,7 @@ ele; se um commit sair assinado por engano, reescreva-o (branch local) antes de 
 
 ## Stack
 
-TypeScript (tsconfig strict: `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`) · Node/Express · Prisma 7 (driver adapter pg, output `src/generated/prisma`) · Zod 4 · Vitest+Supertest+Faker · Biome · JWT+bcrypt. Banco de teste na porta 5433.
+TypeScript (tsconfig strict: `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`) · Node 24/Express · **pnpm** (pinado em `packageManager`, instalado pelo corepack; install estrito — dependência usada é dependência declarada) · Prisma 7 (driver adapter pg, output `src/generated/prisma`) · Zod 4 · Vitest+Supertest+Faker · Biome · JWT+bcrypt. Banco de teste na porta 5433.
 
 ## Arquitetura — camadas
 
@@ -107,18 +107,18 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 ## Comandos
 
 - Ambientes via Compose base + overrides (arquivos em `infra/`, junto dos entrypoints; o `Dockerfile` fica na raiz porque é a raiz do contexto de build), isolados por `-p pet-oasis-{dev,test,prod}`; env por arquivo (`.env.development`/`.env.test`/`.env.production`, na raiz, fora do git; `.env.example` versionado). Racional em `docs/adr/environments-and-deploy.md`.
-- Dev: `npm run dev` (Compose em foreground: db + mailpit + app-em-container via tsx watch; Ctrl+C = SIGTERM gracioso) · `dev:down` · `dev:reset` · `dev:mail` · `dev:db` (só o Postgres-de-dev, detached e healthy — é o pré-requisito dos `db:*` quando não se quer a stack em foreground).
-- Teste: `npm test` (sobe o Postgres-de-test isolado, roda o Vitest no host e **sempre** derruba ao final, inclusive em falha) · `test:coverage` · `test:watch` · helpers `test:services:up`/`down`. Testar 1 arquivo (com o test-db de pé): `npx vitest run <nome>` · watch: `npx vitest <nome>` · 1 caso: `-t "nome"`.
-- Produção: `npm run prod:up` (build + só app + Postgres-de-prod, `migrate deploy` no entrypoint) · `prod:down` · `prod:logs`.
-- Migration dev (autoria consciente): `npm run db:migrate` (roda com `.env.development`, já gera o client) · `db:generate` · `db:seed` · `db:studio`.
-- Typecheck: `npm run typecheck` · Lint: `npm run lint` · Lint com fix: `npm run lint:fix` · Format: `npm run format`
-- Doc: `npm run docs:check` (todo caminho `docs/**.md` e toda âncora citados no repo existem — inclusive nos comentários de `src/`).
+- Dev: `pnpm run dev` (Compose em foreground: db + mailpit + app-em-container via tsx watch; Ctrl+C = SIGTERM gracioso) · `dev:down` · `dev:reset` · `dev:mail` · `dev:db` (só o Postgres-de-dev, detached e healthy — é o pré-requisito dos `db:*` quando não se quer a stack em foreground).
+- Teste: `pnpm test` (sobe o Postgres-de-test isolado, roda o Vitest no host e **sempre** derruba ao final, inclusive em falha) · `test:coverage` · `test:watch` · helpers `test:services:up`/`down`. Testar 1 arquivo (com o test-db de pé): `pnpm exec vitest run <nome>` · watch: `pnpm exec vitest <nome>` · 1 caso: `-t "nome"`.
+- Produção: `pnpm run prod:up` (build + só app + Postgres-de-prod, `migrate deploy` no entrypoint) · `prod:down` · `prod:logs`.
+- Migration dev (autoria consciente): `pnpm run db:migrate` (roda com `.env.development`, já gera o client) · `db:generate` · `db:seed` · `db:studio`.
+- Typecheck: `pnpm run typecheck` · Lint: `pnpm run lint` · Lint com fix: `pnpm run lint:fix` · Format: `pnpm run format`
+- Doc: `pnpm run docs:check` (todo caminho `docs/**.md` e toda âncora citados no repo existem — inclusive nos comentários de `src/`).
 
 ## ⚠️ REGRA — Prefira os scripts do `package.json` a comandos diretos
 
-Antes de rodar um comando pra fazer algo que o projeto já tem um script pronto (typecheck, lint, migration, teste, seed, etc.), **use o script** (`npm run <nome>`), não a ferramenta direta (`tsc --noEmit`, `prisma migrate dev`, `biome check .`, etc.). Os scripts existem pra manter o projeto consistente (flags certas, `DATABASE_URL` certa, etc.) — rodar a ferramenta crua por fora pode divergir sutilmente do que o script faz. Ex.: gerar uma migration deve ser `npm run db:migrate`, não `prisma migrate dev` direto no terminal.
+Antes de rodar um comando pra fazer algo que o projeto já tem um script pronto (typecheck, lint, migration, teste, seed, etc.), **use o script** (`pnpm run <nome>`), não a ferramenta direta (`tsc --noEmit`, `prisma migrate dev`, `biome check .`, etc.). Os scripts existem pra manter o projeto consistente (flags certas, `DATABASE_URL` certa, etc.) — rodar a ferramenta crua por fora pode divergir sutilmente do que o script faz. Ex.: gerar uma migration deve ser `pnpm run db:migrate`, não `prisma migrate dev` direto no terminal.
 
-Ao final de qualquer trabalho ou antes de commitar, rode `npm run typecheck` e `npm run lint` (ou `lint:fix` se houver algo auto-corrigível) e confirme que ambos passam limpos — igual já se faz com a suíte de testes.
+Ao final de qualquer trabalho ou antes de commitar, rode `pnpm run typecheck` e `pnpm run lint` (ou `lint:fix` se houver algo auto-corrigível) e confirme que ambos passam limpos — igual já se faz com a suíte de testes.
 
 Se perceber a necessidade de um script que não existe — algo que você (ou o padrão do projeto) vai repetir com frequência — **pare e sugira criar o script no `package.json`** em vez de só rodar o comando direto. Para algo pontual, que não vai se repetir, tudo bem rodar direto no terminal sem propor script novo.
 
@@ -128,9 +128,9 @@ Se perceber a necessidade de um script que não existe — algo que você (ou o 
 
 O trabalho em execução vive em **`.scratch/<slug>/`**: a `spec.md` do esforço e uma **issue por arquivo** em `issues/NN-<slug>.md`. O **`docs/todo.md` é o índice das fases** — estado, ponteiro para a pasta da fase aberta, e o resumo destilado de cada fase fechada. Consulte o índice para saber onde está o trabalho; consulte as issues para saber o que fazer.
 
-**Forma de registro:** a fase **aberta** ocupa poucas linhas no `docs/todo.md`, com o ponteiro para a pasta do esforço — o passo-a-passo vive nas issues, não ali. A fase **fechada** é destilada num resumo de poucos bullets, no fecho da **própria** fase. Essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas migram para o arquivo temático de `docs/context/` (ou o ADR correspondente) **antes** de a fase fechar — decisão sem dono permanente não fecha. A spec **não é apagada**: ganha a linha `Status: fechada em <data> — porquê promovido a <caminhos>`, que o `npm run docs:check` verifica. O molde das duas formas está em `docs/guides/todo-phases.md`.
+**Forma de registro:** a fase **aberta** ocupa poucas linhas no `docs/todo.md`, com o ponteiro para a pasta do esforço — o passo-a-passo vive nas issues, não ali. A fase **fechada** é destilada num resumo de poucos bullets, no fecho da **própria** fase. Essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas migram para o arquivo temático de `docs/context/` (ou o ADR correspondente) **antes** de a fase fechar — decisão sem dono permanente não fecha. A spec **não é apagada**: ganha a linha `Status: fechada em <data> — porquê promovido a <caminhos>`, que o `pnpm run docs:check` verifica. O molde das duas formas está em `docs/guides/todo-phases.md`.
 
-**Onde mora cada tipo de documento:** `.scratch/` é o **tracker versionado** (spec + issues); `docs/` é a memória permanente (ADR, `context/`, `reference/`, `guides/`). **Documento permanente nunca cita o tracker**: ADR, `docs/context/`, `README.md`, este arquivo e comentário de `src/` não referenciam `.scratch/` — versionar mudou a durabilidade do arquivo, não a autoridade do conteúdo. Só o `docs/todo.md` aponta para a pasta da fase aberta, e o `npm run docs:check` reprova quem esquecer. O mapa completo, da ideia ao código, está em `docs/README.md`.
+**Onde mora cada tipo de documento:** `.scratch/` é o **tracker versionado** (spec + issues); `docs/` é a memória permanente (ADR, `context/`, `reference/`, `guides/`). **Documento permanente nunca cita o tracker**: ADR, `docs/context/`, `README.md`, este arquivo e comentário de `src/` não referenciam `.scratch/` — versionar mudou a durabilidade do arquivo, não a autoridade do conteúdo. Só o `docs/todo.md` aponta para a pasta da fase aberta, e o `pnpm run docs:check` reprova quem esquecer. O mapa completo, da ideia ao código, está em `docs/README.md`.
 
 ## ⚠️ REGRA — Como ler o contexto: pelo índice, nunca inteiro
 
@@ -149,7 +149,7 @@ acrescente a linha correspondente no índice — os dois juntos, senão a decis�
 Decisão estrutural vira **ADR** em `docs/adr/`, e o contexto guarda só o ponteiro. Decisão
 revertida é **reescrita** narrando a reversão, não duplicada como decisão + errata.
 
-Depois de mexer em doc, rode **`npm run docs:check`**: ele prova que todo caminho e toda âncora
+Depois de mexer em doc, rode **`pnpm run docs:check`**: ele prova que todo caminho e toda âncora
 citados na documentação (inclusive nos comentários de `src/`) existem de fato.
 
 ## ⚠️ REGRA — Anotação de pendência vai no LOCAL DA EXECUÇÃO, nunca para trás

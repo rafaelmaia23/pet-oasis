@@ -52,7 +52,7 @@ correspondente no índice `docs/context.md` — os dois juntos, senão a decisã
 Decisão estrutural vira ADR em `docs/adr/`, e o contexto guarda só o ponteiro. Decisão revertida é
 **reescrita** narrando a reversão, nunca duplicada como decisão + errata.
 
-Depois de mexer em doc, rode **`npm run docs:check`**: ele prova que todo caminho e toda âncora
+Depois de mexer em doc, rode **`pnpm run docs:check`**: ele prova que todo caminho e toda âncora
 citados no repo (inclusive nos comentários de `src/`) existem de fato.
 
 ## Use o vocabulário do projeto

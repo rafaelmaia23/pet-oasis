@@ -38,7 +38,7 @@ bug 1); um bring-up de prod não instancia db-de-dev/test nem mailpit (mata o bu
 `.env.development`, `.env.test`, `.env.production` (todos fora do git) +
 `.env.example` versionado. Containers recebem o env via **`env_file:`** do Compose.
 Tooling do **host**: o runner do Vitest é auto-suficiente (o `vitest.config.ts`
-carrega `.env.test` com `override:true`, então `npx vitest run <arquivo>` funciona
+carrega `.env.test` com `override:true`, então `pnpm exec vitest run <arquivo>` funciona
 sozinho); a autoria de migration usa **`dotenv-cli`** (`dotenv -e .env.development
 -- prisma …`). A URL do banco de teste, antes duplicada em 4 lugares, vive só no
 `.env.test`. `src/config/env.ts` e `prisma.config.ts` ficam intocados — o
@@ -46,7 +46,7 @@ sozinho); a autoria de migration usa **`dotenv-cli`** (`dotenv -e .env.developme
 
 ### Boot determinístico
 Dev/test/prod usam **`prisma migrate deploy`** no boot (nunca `migrate dev`). A
-autoria de migration nova (`npm run db:migrate` = `migrate dev`) é um comando
+autoria de migration nova (`pnpm run db:migrate` = `migrate dev`) é um comando
 consciente, à parte. O seed de referência (features/roles) roda em todo ambiente;
 o **usuário demo** só quando `SEED_DEMO_USER=true` (ligado em prod/demo).
 
@@ -60,8 +60,8 @@ in-flight) → `prisma.$disconnect()` → exit, com timeout de força-saída (10
 ser **PID 1** e receber o sinal.
 
 ### Dockerfile
-Stages `build` → `runtime` (prod, intocado: bundle tsup, `npm prune --omit=dev`,
-`USER node`) + novo stage **`dev`** (para no `npm ci` completo, sem bundle/prune,
+Stages `build` → `runtime` (prod, intocado: bundle tsup, `pnpm prune --prod`,
+`USER node`) + novo stage **`dev`** (para no `pnpm install` completo, sem bundle/prune,
 roda `tsx watch` contra `src/` por bind-mount; **começa** root e cai para o uid
 do host antes de escrever em bind mount — ver [o container de dev escreve como o
 uid do host](../context/infrastructure.md#o-container-de-dev-escreve-como-o-uid-do-host-não-como-root-1016)).
@@ -69,7 +69,7 @@ O client Prisma gerado no dev
 vive num **volume anônimo** em `/app/src/generated` (senão o bind-mount de
 `./src` o mascararia); o entrypoint de dev roda `prisma generate` no start, ainda
 como root, para populá-lo. `build.network: host`
-preservado (Tailscale MagicDNS) e `npm ci` único (memória do VPS ARM64).
+preservado (Tailscale MagicDNS) e `pnpm install` único (memória do VPS ARM64).
 
 ## Alternativas consideradas
 

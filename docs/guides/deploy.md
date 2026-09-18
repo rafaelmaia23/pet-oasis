@@ -4,9 +4,11 @@ Produção sobe **só** a API + Postgres-de-prod. No Compose o serviço se chama
 container, **`pet-oasis-api`** — o nome do serviço é o que o DNS da rede publica, então é por
 ele que um cliente interno (o front) alcança a API. É buildado e roda direto num VPS **ARM64**.
 
-No servidor:
+No servidor (Node 24 com corepack: os scripts `prod:*` rodam via `pnpm`, e o corepack instala a
+versão pinada em `packageManager`; a imagem em si instala tudo dentro do build):
 
 ```bash
+corepack enable                    # uma vez por máquina
 git clone <repo> && cd pet-oasis
 cp .env.example .env.production
 ```
@@ -211,7 +213,7 @@ SQL
 ## Subir
 
 ```bash
-npm run prod:up    # build + up; migrate deploy + seed no entrypoint
+pnpm run prod:up    # build + up; migrate deploy + seed no entrypoint
 ```
 
 > ⚠️ **A imagem tem que ser construída no próprio servidor ARM.** É o que o `prod:up` faz (o
@@ -219,8 +221,8 @@ npm run prod:up    # build + up; migrate deploy + seed no entrypoint
 > "could not load the sharp module" — erro que não se parece nada com a causa, porque o
 > `sharp` traz binário nativo por arquitetura.
 
-`npm run prod:down` derruba; 
-`npm run prod:logs` acompanha. 
+`pnpm run prod:down` derruba; 
+`pnpm run prod:logs` acompanha. 
 A migração roda via `prisma migrate deploy` e o seed é idempotente — a subida deixa o ambiente do zero funcionando.
 
 ### O que no seed derruba o boot, e o que só loga

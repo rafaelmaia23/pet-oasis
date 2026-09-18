@@ -14,7 +14,7 @@ registrado para que o `git blame` continue apontando o autor real de cada linha.
       `apps/api` num único commit de move, sem alteração de conteúdo além dos caminhos.
 - [ ] A raiz tem `package.json` (privado, com `packageManager`/`engines`, sem dependências de
       app) e `pnpm-workspace.yaml` listando `apps/*` e `packages/*`. Um só `pnpm-lock.yaml`, na
-      raiz. O `.npmrc` sobe para a raiz.
+      raiz. O `pnpm-workspace.yaml` (settings + `allowBuilds`; a 01 não deixou `.npmrc`) sobe para a raiz.
 - [ ] O hash do commit do move entra num `.git-blame-ignore-revs` na raiz, e o repo é configurado
       para usá-lo; `git blame` de um arquivo movido mostra o commit anterior ao move.
 - [ ] Os arquivos de Compose continuam em `apps/api/infra` **nesta issue** (o stack unificado

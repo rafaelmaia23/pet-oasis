@@ -8,7 +8,7 @@
  * caminho quebrado só aparece quando alguém tenta seguir o link. Roda em cada
  * fecho de fase, junto da auditoria de doc.
  *
- * Uso: `npm run docs:check`
+ * Uso: `pnpm run docs:check`
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -21,6 +21,9 @@ const IGNORED_DIRS = new Set([
   "dist",
   "coverage",
   "generated",
+  // Notas pessoais de estudo, fora do git (.gitignore): não são documentação
+  // do repo, então não respondem à regra de "permanente não cita efêmero".
+  ".learning",
 ]);
 const SCANNED_EXTENSIONS = [".md", ".ts", ".json", ".yml", ".yaml", ".bru"];
 

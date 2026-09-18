@@ -1,4 +1,5 @@
 {
+  "root": false,
   "extends": ["@pet-oasis/biome-config/biome"],
   "files": {
     "includes": [

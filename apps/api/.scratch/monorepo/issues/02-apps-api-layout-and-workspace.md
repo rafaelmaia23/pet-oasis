@@ -7,7 +7,7 @@ registrado para que o `git blame` continue apontando o autor real de cada linha.
 
 **Blocked by:** 01.
 
-**Status:** ready-for-human (feita; aguarda merge na `fase-11`)
+**Status:** fechada em 2026-09-18
 
 O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
 

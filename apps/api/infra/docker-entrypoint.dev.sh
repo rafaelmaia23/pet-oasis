@@ -25,7 +25,9 @@ if [ "$(id -u)" = "0" ]; then
   # time — before this script runs. Handing the tree to the host uid here is
   # what lets the seed below create `products/…` inside it. Recursive so a
   # tree written as root by the pre-10.16 container heals on the next `up`.
-  chown -R "$HOST_UID:$HOST_GID" /app/uploads
+  # Relative to the cwd (the API's directory inside the workspace) so the
+  # script does not hardcode where the image puts the app.
+  chown -R "$HOST_UID:$HOST_GID" uploads
 
   # When the host user *is* root there is nothing to drop to — and dropping
   # would land on uid 0 again, re-entering this block forever.

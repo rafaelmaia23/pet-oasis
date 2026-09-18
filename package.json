@@ -9,6 +9,7 @@
     "node": "24"
   },
   "scripts": {
+    "prepare": "husky",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
@@ -17,6 +18,9 @@
     "docs:check": "turbo run docs:check"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "husky": "^9.1.7",
     "turbo": "2.10.13"
   }
 }

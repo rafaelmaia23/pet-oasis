@@ -28,7 +28,7 @@ Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos test
 - **`main` é produção.** **NENHUM** commit é feito direto nela — nunca, em hipótese alguma, nem mesmo commit de documentação ou de planejamento. `main` só recebe merge vindo de `dev`. No futuro esse merge dispara **deploy automático**, então tratar `main` como intocável não é preciosismo: é o que impede um commit de doc de virar um deploy.
 - **`dev` é a base de integração** e existe sempre. Toda branch de fase sai dela.
 - Cada fase do roadmap (ver `docs/todo.md`) tem **uma branch de fase** criada a partir da `dev`, nomeada `fase-<n>` (ex.: `fase-4`). O commit de **planejamento** da fase (a spec e as issues em `.scratch/<slug>/`) é o primeiro commit dessa branch — nunca vai direto na `dev` nem na `main`.
-- Cada **issue** da fase tem sua própria branch criada a partir da branch da fase, nomeada `feat/fase-<n>-<NN>-<slug>` (ex.: `feat/fase-10-01-rename-app-to-api`), onde `<NN>` é o número do arquivo em `.scratch/<slug>/issues/`. Ao terminar (testes + `typecheck` + `lint` verdes), **mergeia de volta na branch da fase** (`--no-ff`) e apaga a branch da issue.
+- Cada **issue** da fase tem sua própria branch criada a partir da branch da fase, nomeada `feat/fase-<n>-<NN>-<slug>` (ex.: `feat/fase-10-01-rename-app-to-api`), onde `<NN>` é o número do arquivo em `.scratch/<slug>/issues/`. Ao terminar (testes + `typecheck` + `lint` verdes), **mergeia de volta na branch da fase** (`--no-ff`, com a mensagem de merge padrão do Git — sem `-m`) e apaga a branch da issue.
 - Ao concluir a **fase inteira**, a branch da fase é mergeada na `dev` (`--no-ff`).
 - Depois de a suíte completa passar na `dev`, ela é mergeada na `main` e **uma `dev` nova é aberta a partir da `main`**.
 - Trabalho que não pertence a nenhuma fase (correção pontual, mudança de doc, ajuste de processo) também sai da `dev`, em branch própria com nome descritivo (ex.: `docs/branch-workflow`, `fix/<slug>`), e volta pra `dev` por merge `--no-ff`.
@@ -37,9 +37,29 @@ Resumo do fluxo: `dev` → `fase-<n>` → `feat/fase-<n>-<m>-<slug>` → merge n
 
 **A numeração de fase é global e nunca reinicia; a da issue é local à fase e reinicia em `01`.** O roadmap é agrupado em **ciclos** (Ciclo 1 = fundação, Fases 1–8; Ciclo 2 = domínio pet shop, Fase 9 em diante), mas o ciclo é só agrupamento de leitura no `docs/todo.md`: a fase seguinte à 9 é a 10, não "Ciclo 2 fase 2". O `<n>` do nome da branch depende disso — dois "fase-1" em ciclos diferentes tornariam o histórico ambíguo.
 
-## ⚠️ REGRA — Commits em inglês e NUNCA assinados
+## ⚠️ REGRA — Commits: Conventional Commits em inglês, escopo obrigatório, NUNCA assinados
 
-Mensagens de commit devem ser escritas em inglês.
+Mensagens de commit são **Conventional Commits em inglês**, `tipo(escopo): descrição`, e o hook
+`commit-msg` (husky + commitlint, instalado por `pnpm install` na raiz — config em
+`commitlint.config.mjs`) recusa o que sai da régua antes de o commit existir:
+
+- **Tipo** do `config-conventional`: `feat`, `fix`, `docs`, `build`, `ci`, `refactor`, `test`,
+  `chore`, `perf`, `style`, `revert` — em minúsculas.
+- **Escopo obrigatório**, restrito ao enum do monorepo: `api`, `web`, `contracts`, `tsconfig`,
+  `biome-config`, `infra`, `ci`, `repo` (`repo` = o que é da raiz: workspace, Turbo, hooks).
+  Multi-escopo com vírgula (`feat(api,contracts): …`). App novo entra no enum quando existir.
+- **Descrição começa em minúscula** — mesmo quando a primeira palavra é nome próprio ou
+  arquivo (`build(repo): turbo.jsonc, and a Biome config …`, não `…: Turborepo as …`); o
+  preset recusa `sentence-case`, que para ele é só "primeira letra maiúscula". Maiúscula no
+  meio é livre, e nome próprio inicial entre crases passa (`` …: `Turborepo` as … `` — o
+  commitlint tira o trecho entre crases antes de conferir). Sem ponto final. Header em até 100
+  colunas; linhas do corpo também.
+- **Merge** (`git merge --no-ff`, sem `-m`) usa a mensagem padrão do Git (`Merge branch '…'
+  into …`), que o commitlint ignora. O estilo `merge: …` usado até aqui está abandonado —
+  ele não passa no enum de tipos.
+- Um worktree novo só tem o hook depois de `pnpm install` (o `.husky/_/` é gerado, não
+  versionado) — sem ele o Git simplesmente não roda hook nenhum. O commitlint no CI (issue 06
+  da Fase 11) é a segunda barreira, ainda por construir.
 
 **Nenhum commit, merge ou PR deste repositório leva assinatura, trailer ou crédito de agente** —
 nem `Co-Authored-By`, nem `Signed-off-by`, nem `🤖 Generated with …`, nem rodapé de nenhum tipo.

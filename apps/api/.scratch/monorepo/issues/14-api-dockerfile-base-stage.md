@@ -8,15 +8,17 @@ Dockerfile e repetido nos bind mounts do Compose de dev) passa a ter uma fonte s
 repetição fica justificada por escrito. Levantado na revisão de padrões da issue 02 (Duplicated
 Code + Shotgun Surgery, ambos "judgement call"); nada disto muda comportamento.
 
-**Blocked by:** 03 (é a 03 que estabiliza o install no Dockerfile — manifestos dos `packages/*`
-no contexto e o `injectWorkspacePackages` do `deploy`; refatorar antes é refatorar o que vai
-mudar).
+**Blocked by:** 03 — fechada: o install no Dockerfile ficou como vai ficar (manifestos dos
+`packages/*` por `COPY --parents` antes do `pnpm install`, `COPY packages packages` depois, junto
+do fonte, nos dois estágios; o `injectWorkspacePackages` do `deploy` **não** foi necessário no
+pnpm 12 — ver `docs/context/infrastructure.md`). O bloco duplicado que esta issue concentra
+cresceu duas linhas.
 
 **Status:** ready-for-agent
 
 - [ ] Um estágio base concentra o que `build` e `dev` compartilham: OpenSSL antes do install
       (com o comentário do porquê, uma vez só), `corepack enable`, cópia dos manifestos do
-      workspace e `pnpm install --frozen-lockfile`. `build` e `dev` partem dele e ficam só com o
+      workspace (raiz, `apps/api` e `packages/*`) e `pnpm install --frozen-lockfile`. `build` e `dev` partem dele e ficam só com o
       que é seu (`generate`+`bundle`+`deploy` de um lado; entrypoint de dev do outro). O
       `runtime` continua raso, sem workspace, e não herda do base.
 - [ ] O caminho da API dentro da imagem de dev tem uma fonte só (um `ARG`/variável que o

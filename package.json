@@ -8,15 +8,15 @@
   "scripts": {
     "dev": "HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up --build --remove-orphans",
     "dev:down": "docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down --remove-orphans",
-    "dev:reset": "docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down -v --remove-orphans && npm run dev",
+    "dev:reset": "docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down -v --remove-orphans && pnpm run dev",
     "dev:mail": "docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d mailpit",
     "dev:db": "docker compose -p pet-oasis-dev --env-file .env.development -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up --wait -d db",
     "prod:up": "docker compose -p pet-oasis-prod --env-file .env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up --build --wait -d --remove-orphans",
     "prod:down": "docker compose -p pet-oasis-prod --env-file .env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml down --remove-orphans",
     "prod:logs": "docker compose -p pet-oasis-prod --env-file .env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml logs -f",
-    "test": "bash -c 'trap \"npm run test:services:down\" EXIT; npm run test:services:up && vitest run'",
-    "test:coverage": "bash -c 'trap \"npm run test:services:down\" EXIT; npm run test:services:up && vitest run --coverage'",
-    "test:watch": "bash -c 'trap \"npm run test:services:down\" EXIT; npm run test:services:up && vitest'",
+    "test": "bash -c 'trap \"pnpm run test:services:down\" EXIT; pnpm run test:services:up && vitest run'",
+    "test:coverage": "bash -c 'trap \"pnpm run test:services:down\" EXIT; pnpm run test:services:up && vitest run --coverage'",
+    "test:watch": "bash -c 'trap \"pnpm run test:services:down\" EXIT; pnpm run test:services:up && vitest'",
     "test:services:up": "docker compose -p pet-oasis-test --env-file .env.test -f infra/docker-compose.yml -f infra/docker-compose.test.yml up --wait -d db redis",
     "test:services:down": "docker compose -p pet-oasis-test --env-file .env.test -f infra/docker-compose.yml -f infra/docker-compose.test.yml down -v",
     "build": "tsup",
@@ -43,7 +43,9 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/express-serve-static-core": "5.1.2",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/ms": "2.1.0",
     "@types/multer": "^2.2.0",
     "@types/node": "^25.8.0",
     "@types/nodemailer": "^8.0.1",
@@ -88,11 +90,8 @@
     "zod": "^4.4.3",
     "zod-openapi": "^6.0.0"
   },
-  "allowScripts": {
-    "bcrypt@6.0.0": true,
-    "prisma@7.8.0": true,
-    "@prisma/engines@7.8.0": true,
-    "esbuild@0.27.7": true,
-    "esbuild@0.28.1": true
+  "packageManager": "pnpm@12.4.2+sha512.08adc6613180275c7c9edada39dcf08c9c61ad4e7eaf330a4f3461f102b0f907423454d117f98e72d47fef0616070644d7bffc973a6a57f5090a6d7c368b07c9",
+  "engines": {
+    "node": "24"
   }
 }

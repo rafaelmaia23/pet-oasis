@@ -1,0 +1,11 @@
+fetchTimeout: 60000
+fetchRetries: 2
+fetchRetryMintimeout: 2000
+fetchRetryMaxtimeout: 15000
+
+allowBuilds:
+  '@prisma/engines': true
+  bcrypt: true
+  esbuild: true
+  prisma: true
+  vue-demi: true # postinstall só lê a versão do Vue instalada e escolhe o build 2/3; vem do @scalar/api-reference (docs da API)

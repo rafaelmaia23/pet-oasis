@@ -10,7 +10,7 @@
  *
  * Roda uma vez, à mão, quando o acervo de `assets-inbox/` muda:
  *
- *     npx tsx tools/generate-fake-images.ts
+ *     pnpm exec tsx tools/generate-fake-images.ts
  *
  * Não há script no `package.json` de propósito: regenerar é evento raro (o
  * acervo é estável), e script para algo que não se repete é ruído.
@@ -197,7 +197,7 @@ async function main() {
 // Os bytes das imagens do seed fake moram aqui, em base64, e não como arquivos
 // em disco (9.11/AB1): o estágio \`runtime\` do Dockerfile não copia \`src/\` e o
 // tsup não empacota \`.webp\`, então o seed do container de produção não
-// encontraria arquivo nenhum. Regenerar: \`npx tsx tools/generate-fake-images.ts\`.
+// encontraria arquivo nenhum. Regenerar: \`pnpm exec tsx tools/generate-fake-images.ts\`.
 //
 // Cada valor é o **arquivo de entrada**, não o derivado final: quem grava é
 // \`storeImage\` (\`src/lib/storage/image.ts\`), pelo mesmo pipeline de \`sharp\` que

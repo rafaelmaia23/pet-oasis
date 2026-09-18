@@ -6,7 +6,7 @@ import { defineConfig } from "vitest/config";
 
 // Load .env.test into process.env for the whole Vitest run (main process +
 // globalSetup's execSync children + workers, which inherit process.env). This
-// makes `npx vitest run <file>` work standalone — no dotenv-cli prefix needed —
+// makes `pnpm exec vitest run <file>` work standalone — no dotenv-cli prefix needed —
 // and keeps the test DB URL in a single place (.env.test). override:true guards
 // against a stray DATABASE_URL exported in the shell clobbering the test DB.
 dotenv.config({ path: ".env.test", override: true });

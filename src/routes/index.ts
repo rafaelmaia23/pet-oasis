@@ -6,6 +6,7 @@ import {
   referenceHandler,
   SCALAR_BUNDLE_PATH,
   scalarBundleFile,
+  scalarBundleRoot,
 } from "@/docs/reference";
 import {
   authenticate,
@@ -79,10 +80,13 @@ router.use("/reference", docsCspNonce, docsCsp, referenceHandler);
 
 // Bundle do Scalar servido pela própria origem (D3) — imutável por versão do
 // pacote, então cache longo. Sem isto, a CSP `script-src 'self'` bloquearia a UI.
+// `root` separado do arquivo por causa do `.pnpm` no caminho real — ver
+// `scalarBundleRoot`.
+
 router.get(SCALAR_BUNDLE_PATH, (_req, res) => {
   res.type("application/javascript");
   res.setHeader("Cache-Control", "public, max-age=604800, immutable");
-  res.sendFile(scalarBundleFile);
+  res.sendFile(scalarBundleFile, { root: scalarBundleRoot });
 });
 
 router.use("/api/v1", v1Router);

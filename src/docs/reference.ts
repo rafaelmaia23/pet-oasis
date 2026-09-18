@@ -9,19 +9,26 @@ import helmet from "helmet";
 export const SCALAR_BUNDLE_PATH = "/scalar/standalone.js";
 
 /**
- * Caminho do bundle standalone dentro do pacote `@scalar/api-reference`.
+ * Diretório `dist/` do pacote `@scalar/api-reference`, resolvido em runtime.
  *
  * O subpath `dist/browser/standalone.js` não está no mapa de `exports`, então
- * resolve-se a raiz do pacote e monta-se o caminho a partir dela. Resolver em
- * runtime (em vez de embutir no build) faz dev (tsx) e produção (bundle do
- * tsup) usarem o mesmo código: o pacote é dep de produção e está no
- * `node_modules` da imagem.
+ * resolve-se o entry do pacote e parte-se dele. Resolver em runtime (em vez de
+ * embutir no build) faz dev (tsx) e produção (bundle do tsup) usarem o mesmo
+ * código: o pacote é dep de produção e está no `node_modules` da imagem.
+ *
+ * Fica separado do arquivo (abaixo) por causa do pnpm: `require.resolve`
+ * devolve o caminho **real**, e sob pnpm ele atravessa `node_modules/.pnpm/…`.
+ * O `res.sendFile` recusa qualquer segmento iniciado por ponto (`dotfiles:
+ * "ignore"`, o default — é a proteção contra servir `.env`/`.git`), então o
+ * caminho absoluto vai em `root`, onde o `send` não aplica essa checagem, e só
+ * o trecho relativo é inspecionado.
  */
-export const scalarBundleFile = path.join(
-  path.dirname(createRequire(import.meta.url).resolve("@scalar/api-reference")),
-  "browser",
-  "standalone.js",
+export const scalarBundleRoot = path.dirname(
+  createRequire(import.meta.url).resolve("@scalar/api-reference"),
 );
+
+/** Caminho do bundle relativo a `scalarBundleRoot` — sem segmento com ponto. */
+export const scalarBundleFile = path.join("browser", "standalone.js");
 
 const NONCE_BYTES = 16;
 

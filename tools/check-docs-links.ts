@@ -8,7 +8,7 @@
  * caminho quebrado só aparece quando alguém tenta seguir o link. Roda em cada
  * fecho de fase, junto da auditoria de doc.
  *
- * Uso: `npm run docs:check`
+ * Uso: `pnpm run docs:check`
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";

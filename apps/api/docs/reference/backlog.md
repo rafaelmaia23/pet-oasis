@@ -54,6 +54,9 @@ Hoje há um endpoint só. O ideal são dois papéis distintos: um público e mí
 ### Cachear `test` no Turborepo — **M**
 Da Fase 11 (issue 04), o `test` é a única task de verificação fora do cache: a suíte da API sobe Postgres e Redis via Compose e lê `.env.test`, inputs que o Turbo não vê, e um cache que os ignora devolve verde de outro ambiente. Cachear exige declarar esses inputs (`inputs` com os Compose e o `.env.example`, `env` com o que a suíte lê) e um teste negativo provando que mudar cada um invalida — o mesmo método que provou o `dependsOn` na 11.4. Só compensa quando a suíte deixar de caber num `pnpm test` de dois minutos ou quando o CI (issue 06) passar a rodá-la em todo PR.
 
+### Excluir `.claude/` no `biome.json` da raiz — **P**
+Da Fase 11 (issue 05): a varredura do repo inteiro pelo Biome (11.4, rodada de `apps/api` com `biome check ../..`) devolve dezenas de erros de formatação que não são do repo — vêm de `.claude/worktrees/*/apps/api/src/generated/`, worktrees locais do Claude Code com o client do Prisma gerado. O Biome não lê o `.gitignore`, e os ignores da `biome.json` da API não valeram para aquela cópia (não investigado — o diretório inteiro é lixo local, não há o que lintar nele). Um `"!.claude"` no `includes` da raiz resolve; vale fazer junto do ajuste de lint do CI (issue 06) ou na primeira vez em que a varredura completa for usada de verdade.
+
 ### CI: supply chain e segredos — **M**
 `pnpm audit` no pipeline, Dependabot ou Renovate ligado para dependências, e `gitleaks` varrendo o histórico atrás de segredo commitado por engano. Somar um `SECURITY.md` na raiz com o canal de reporte. Barato, e no contexto de portfólio comunica maturidade mais rápido que qualquer feature.
 

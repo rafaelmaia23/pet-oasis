@@ -48,3 +48,13 @@ um servidor, não um resultado. O que entra no hash, por que cada task tem o `de
 e o porquê de `test` ficar fora estão em
 [`apps/api/docs/context/architecture.md`](apps/api/docs/context/architecture.md#o-turborepo-é-o-pipeline-do-workspace-test-fica-fora-do-cache-de-propósito-114);
 cachear `test` está no backlog da API.
+
+## Commits
+
+Conventional Commits em inglês, `tipo(escopo): descrição`, com o **escopo obrigatório** e
+restrito ao enum do workspace — `api`, `web`, `contracts`, `tsconfig`, `biome-config`, `infra`,
+`ci`, `repo` (multi-escopo com vírgula). O `pnpm install` da raiz instala o hook `commit-msg`
+(husky), que roda o commitlint (`commitlint.config.mjs`) e recusa a mensagem fora da régua antes
+de o commit existir. Merge usa a mensagem padrão do Git, que o commitlint ignora. A regra
+completa, com o que o preset recusa (descrição em maiúscula, ponto final, header acima de 100
+colunas), está no [`CLAUDE.md`](apps/api/CLAUDE.md).

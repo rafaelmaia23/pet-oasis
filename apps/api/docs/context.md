@@ -224,6 +224,12 @@ completo, os contra-argumentos e os gotchas.
   (provado por teste negativo); `test` lê Compose e `.env.test`, então não cacheia; o
   arquivo é `turbo.jsonc` (comentário com suporte de IDE) e a raiz ganhou `biome.json`
   próprio, que é por que as configs aninhadas têm `root: false`
+- Conventional Commits com escopo obrigatório, recusados no hook (11.5) — husky + commitlint
+  na raiz, `config-conventional` mais `scope-empty`/`scope-enum` (`api`, `web`, `contracts`,
+  `tsconfig`, `biome-config`, `infra`, `ci`, `repo`; vírgula para multi-escopo); o `prepare`
+  instala o hook no `pnpm install` (sem `.git` — Docker — sai com 0; worktree novo só tem hook
+  depois de instalar); descrição começa em minúscula mesmo com nome próprio (`sentence-case` é
+  só "primeira letra"); merge usa a mensagem padrão do Git, que o commitlint ignora
 - O contrato é consumido do fonte TS e só depende de `zod`; enum tem dois donos e um teste
   (11.9) — `packages/api-contracts` nasce com enums, nomes de role/feature e shape de erro;
   `exports` → `src/**/*.ts` (tsup inlina via `noExternal`); guarda de pureza no pacote, paridade

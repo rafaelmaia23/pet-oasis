@@ -13,7 +13,7 @@ do refactor largo; a migração dos consumidores é a issue 10.
 - [ ] Pacote privado escopado, estendendo o preset de biblioteca do `@pet-oasis/tsconfig` e a
       base do `biome-config`; `exports` com entradas por domínio (`auth`, `user`, `catalog`…)
       além do índice — decidir se o consumo é do fonte TS ou de `dist` buildado, registrar a
-      decisão no README do pacote e refletir no `turbo.json`.
+      decisão no README do pacote e refletir no `turbo.jsonc`.
 - [ ] Enums de domínio (todos os que os schemas da API hoje importam do Prisma gerado) definidos
       como `z.enum([...])` no contrato, com o tipo derivado exportado.
 - [ ] **Teste de paridade** na API: para cada enum exportado pelo contrato, os `options` são

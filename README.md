@@ -2,7 +2,7 @@
 
 Monorepo do Pet Oasis — um pet shop online. Gerido por **pnpm workspaces**
 (`pnpm-workspace.yaml` na raiz, um só `pnpm-lock.yaml`) e orquestrado por **Turborepo**
-(`turbo.json` na raiz).
+(`turbo.jsonc` na raiz).
 
 | Caminho | O quê |
 |---|---|
@@ -18,7 +18,7 @@ pnpm install                         # o workspace inteiro, da raiz
 ## Comandos da raiz
 
 Cada script da raiz é `turbo run <task>`: o Turbo roda o script de mesmo nome em todo pacote
-que o tiver, na ordem que o `turbo.json` declara, e em paralelo onde a ordem permite.
+que o tiver, na ordem que o `turbo.jsonc` declara, e em paralelo onde a ordem permite.
 
 | Comando | O que faz | Cache |
 |---|---|---|

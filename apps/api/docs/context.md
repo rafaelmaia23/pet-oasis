@@ -221,7 +221,9 @@ completo, os contra-argumentos e os gotchas.
 - O Turborepo é o pipeline do workspace; `test` fica fora do cache de propósito (11.4) — os
   scripts da raiz delegam ao `turbo run`; `typecheck`/`lint`/`build`/`docs:check` cacheiam, e
   o `dependsOn: ["^…"]` é o que faz um preset mudado em `packages/` invalidar quem o consome
-  (provado por teste negativo); `test` lê Compose e `.env.test`, então não cacheia
+  (provado por teste negativo); `test` lê Compose e `.env.test`, então não cacheia; o
+  arquivo é `turbo.jsonc` (comentário com suporte de IDE) e a raiz ganhou `biome.json`
+  próprio, que é por que as configs aninhadas têm `root: false`
 
 *Documentação e processo*
 

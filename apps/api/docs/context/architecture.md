@@ -132,7 +132,7 @@ JSX.
 ### O Turborepo é o pipeline do workspace; `test` fica fora do cache de propósito (11.4)
 
 Com três pacotes, "rodar o `typecheck` do repo" já não é um comando: é um por pacote, numa
-ordem que depende de quem consome o quê. O Turborepo (`turbo.json` na raiz, `turbo` pinado
+ordem que depende de quem consome o quê. O Turborepo (`turbo.jsonc` na raiz, `turbo` pinado
 exato como devDependency da raiz) transforma isso num pipeline: cada task é o script de mesmo
 nome em cada pacote que o tiver, e os scripts da raiz (`typecheck`, `lint`, `build`, `test`,
 `dev`, `docs:check`) só delegam — `turbo run <task>`. `pnpm <task> --filter=@pet-oasis/api`
@@ -163,6 +163,27 @@ que o Turbo não vê. Cachear é decisão explícita, com esses inputs declarado
 declarados porque nenhuma task cacheada lê ambiente (só arquivos); o modo estrito do Turbo já
 deixa passar o que o Docker precisa (`HOME`, `PATH`, `DOCKER_*`), então `test` e `dev` rodam
 sem `passThroughEnv`. O dia em que uma task cacheada ler ambiente é o dia em que `env` entra.
+
+O arquivo chama-se `turbo.jsonc`, e não `turbo.json`, pelo mesmo motivo que os presets se
+chamam `tsconfig.<alvo>.json`: tem comentários, e nem todo leitor de JSON os aceita — o Turbo e
+o Biome sim, o validador JSON do VS Code não (abria com dezenas de erros). `.jsonc` é a forma
+que a documentação do Turbo recomenda para comentário com suporte de IDE.
+
+A raiz também tem um `biome.json` próprio, e ele é a razão de as três `biome.json` aninhadas
+(API, `tsconfig`, `biome-config`) declararem `root: false`. Sem config na raiz, o editor caía
+nos defaults do Biome (tabs) em qualquer arquivo dela — `turbo.jsonc`, `package.json` —, e um
+salvar com formatação automática reescreveria o arquivo fora da régua do workspace. A config da
+raiz estende a base **por caminho** (`./packages/biome-config/biome.json`), não pelo nome do
+pacote, porque a raiz não declara `@pet-oasis/biome-config` como dependência e o pacote não
+existe no `node_modules` dela; e exclui `.turbo`, porque o Biome não lê o `.gitignore` e o
+cache do Turbo entraria na varredura. O `root: false` é exigência do Biome 2: com uma config na
+raiz, toda config aninhada sem ele é acusada como "nested root". Ele não se propaga por
+`extends` — a base o declara para lintar a si mesma, e a API continua recebendo a base (mesma
+prova negativa da 11.3). O que se ganha, além do editor, é um `biome check .` da raiz que cobre
+o repositório inteiro numa varredura só; o `lint` por pacote via Turbo continua sendo o
+caminho cacheado, e é ele que a CI vai rodar. Comentário dentro de `biome.json` não é aceito
+(só em `biome.jsonc`, e renomear os quatro quebraria o `exports` do preset) — por isso o porquê
+está aqui e não ao lado do valor.
 
 ---
 

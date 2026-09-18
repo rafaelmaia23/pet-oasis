@@ -1,0 +1,11 @@
+{
+  // Alvo Node (app ou script): o base mais os tipos do Node. `types` fecha a
+  // inclusão automática de @types/* só no `node` — qualquer outro tipo global
+  // entra por import ou pelo `typeRoots` do app. Sem `lib`: o default do target
+  // (es2022 completo) fica; restringir é decisão do app, não do preset.
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  }
+}

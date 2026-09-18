@@ -1,0 +1,11 @@
+{
+  // Alvo biblioteca (pacote interno consumido por outros projetos do
+  // workspace). O base já emite `.d.ts` com mapas; o que muda é a `lib`:
+  // só `esnext`, sem DOM nem tipos do Node, porque uma biblioteca que roda em
+  // servidor E em navegador não pode depender dos globais de nenhum dos dois.
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["esnext"]
+  }
+}

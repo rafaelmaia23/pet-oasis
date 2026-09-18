@@ -156,7 +156,7 @@
 > Conventional Commits com lint, CI de verificação, stack Compose único, docs de domínio no
 > formato da skill (`CONTEXT-MAP.md` + `CONTEXT.md` por app). Spec e issues em
 > `.scratch/monorepo/`.
-- Progresso: 4 de 14 issues fechadas.
+- Progresso: 5 de 14 issues fechadas.
 
 ## ⬜ Fase 12 — Espinha de autenticação do web
 > Herdada do `pet-oasis-web` no import (Fase 11, issue 11): a spec e as issues dele passam a

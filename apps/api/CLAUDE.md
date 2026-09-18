@@ -51,12 +51,15 @@ Mensagens de commit são **Conventional Commits em inglês**, `tipo(escopo): des
 - **Descrição começa em minúscula** — mesmo quando a primeira palavra é nome próprio ou
   arquivo (`build(repo): turbo.jsonc, and a Biome config …`, não `…: Turborepo as …`); o
   preset recusa `sentence-case`, que para ele é só "primeira letra maiúscula". Maiúscula no
-  meio é livre. Sem ponto final. Header em até 100 colunas; linhas do corpo também.
+  meio é livre, e nome próprio inicial entre crases passa (`` …: `Turborepo` as … `` — o
+  commitlint tira o trecho entre crases antes de conferir). Sem ponto final. Header em até 100
+  colunas; linhas do corpo também.
 - **Merge** (`git merge --no-ff`, sem `-m`) usa a mensagem padrão do Git (`Merge branch '…'
   into …`), que o commitlint ignora. O estilo `merge: …` usado até aqui está abandonado —
   ele não passa no enum de tipos.
 - Um worktree novo só tem o hook depois de `pnpm install` (o `.husky/_/` é gerado, não
-  versionado); o CI é a segunda barreira.
+  versionado) — sem ele o Git simplesmente não roda hook nenhum. O commitlint no CI (issue 06
+  da Fase 11) é a segunda barreira, ainda por construir.
 
 **Nenhum commit, merge ou PR deste repositório leva assinatura, trailer ou crédito de agente** —
 nem `Co-Authored-By`, nem `Signed-off-by`, nem `🤖 Generated with …`, nem rodapé de nenhum tipo.

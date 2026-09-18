@@ -179,9 +179,12 @@ existe no `node_modules` dela; e exclui `.turbo`, porque o Biome não lê o `.gi
 cache do Turbo entraria na varredura. O `root: false` é exigência do Biome 2: com uma config na
 raiz, toda config aninhada sem ele é acusada como "nested root". Ele não se propaga por
 `extends` — a base o declara para lintar a si mesma, e a API continua recebendo a base (mesma
-prova negativa da 11.3). O que se ganha, além do editor, é um `biome check .` da raiz que cobre
-o repositório inteiro numa varredura só; o `lint` por pacote via Turbo continua sendo o
-caminho cacheado, e é ele que a CI vai rodar. Comentário dentro de `biome.json` não é aceito
+prova negativa da 11.3). O que se ganha, além do editor, é uma varredura do repositório inteiro num
+comando só — com uma ressalva medida na 11.5: o `extends` por nome de pacote da API só
+resolve quando o **cwd** é `apps/api` (`node_modules/.bin/biome check ../..`), porque a raiz
+não tem o pacote em `node_modules` e não tem o Biome como dependência; rodado da raiz, o nome
+não resolve e o check aborta. O `lint` por pacote via Turbo continua sendo o caminho
+cacheado, e é ele que a CI vai rodar. Comentário dentro de `biome.json` não é aceito
 (só em `biome.jsonc`, e renomear os quatro quebraria o `exports` do preset) — por isso o porquê
 está aqui e não ao lado do valor.
 
@@ -209,14 +212,15 @@ que o `prepare` faz é gravar `core.hooksPath = .husky/_` no `.git/config` e ger
 consequências disso: no build Docker, onde não há `.git`, o husky imprime `.git can't be found`
 e sai com 0 — a imagem não muda e o log de build ganha uma linha; e um **worktree novo não tem
 o hook** até rodar `pnpm install` nele (o `.husky/_/` não vem no checkout), o que é uma das
-razões de o CI (11.6) lintar os commits do PR também — o hook local é a primeira barreira, não a
-única.
+razões de o CI (issue 06, ainda por vir) ter de lintar os commits do PR também — o hook local
+é a primeira barreira, não a única.
 
 Três coisas do preset que não são óbvias e foram medidas antes de escrever a regra. **(1)** O
 `subject-case` recusa `sentence-case`, e para o commitlint isso é só "primeira letra
 maiúscula": `build(repo): Turborepo as the pipeline` falha, `build(repo): turbo.jsonc, and a
 Biome config …` passa — a descrição começa em minúscula mesmo quando a primeira palavra é nome
-próprio ou arquivo, e maiúscula no meio é livre. Foi a regra que mais pegou o histórico da
+próprio ou arquivo, e maiúscula no meio é livre — ou a primeira palavra vai entre crases, que
+o `ensureCase` remove antes de conferir (`` build(repo): `Turborepo` as … `` passa). Foi a regra que mais pegou o histórico da
 própria fase (dois commits das issues 01–04). **(2)** O `scope-enum` já separa o escopo por
 `,`, `/` e `\` e confere cada pedaço — o multi-escopo vem de graça, sem regra extra. **(3)** O
 commitlint ignora por padrão mensagem que começa com `Merge …` (a que o `git merge --no-ff`
@@ -226,7 +230,7 @@ mensagem padrão do Git já diz (`Merge branch 'feat/…' into fase-11`). A part
 `git merge --no-ff <branch>`, sem `-m`.
 
 O histórico anterior não é reescrito: a régua vale do commit em que entrou em diante, e o
-`--from`/`--to` do CI cobre só os commits do PR.
+`--from`/`--to` que o CI vai rodar cobre só os commits do PR.
 
 ---
 

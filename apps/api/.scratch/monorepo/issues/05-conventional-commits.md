@@ -41,9 +41,18 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       raiz ganhou a seção "Commits"; o porquê em `docs/context/architecture.md` (11.5),
       indexado. O `CLAUDE.md` da raiz ainda é o provisório que importa o da API — a 07 escreve o
       definitivo e leva a convenção junto.
-- [x] Achado lateral, sem mudança: o `biome check` do repo inteiro (11.4) só resolve o
-      `extends: "@pet-oasis/biome-config/biome"` da API quando o **cwd** é `apps/api`
+- [x] Achado lateral: o `biome check` do repo inteiro (11.4) só resolve o `extends:
+      "@pet-oasis/biome-config/biome"` da API quando o **cwd** é `apps/api`
       (`node_modules/.bin/biome check ../..`); da raiz, o nome do pacote não resolve, porque a
-      raiz não o tem em `node_modules`. Rodado de lá: 937 arquivos, e os únicos erros vêm de
-      `.claude/worktrees/…` (worktrees locais com Prisma gerado, fora do git) — o repo está
-      limpo; excluir `.claude` no `biome.json` da raiz é ajuste da 04/06, não desta.
+      raiz não o tem em `node_modules`. O 11.4 foi reescrito com essa ressalva. Rodado de lá:
+      937 arquivos, e os únicos erros vêm de `.claude/worktrees/…` (worktrees locais com Prisma
+      gerado, fora do git) — o repo está limpo; excluir `.claude` no `biome.json` da raiz está
+      no `docs/reference/backlog.md`, com o contexto.
+- [x] Revisão (duas frentes, padrões e spec): todos os ACs reverificados empiricamente pelo
+      revisor; correções aplicadas — `docs/todo.md` com o progresso, o CI citado como futuro
+      (issue 06) e não como fato, e a saída das crases no `subject-case` (o commitlint remove
+      o trecho entre crases antes de conferir, então `` …: `Turborepo` as … `` passa)
+      documentada no `CLAUDE.md` e no 11.5. Ficou para o dono: o 11.5 entrou em
+      `docs/context/` seguindo a 04, embora a spec revista diga que o `docs/context/` deixa de
+      receber decisão nova "a partir da 07" — se a leitura for "a partir de já", o 11.5 vira ADR
+      na 07 junto com o resto.

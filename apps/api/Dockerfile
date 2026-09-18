@@ -39,7 +39,17 @@ RUN apt-get update \
 # bcrypt chega sem binário.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
+# Os manifestos dos pacotes internos (`packages/*`) também: o lockfile os
+# lista como importers, e o install é do workspace que o lockfile descreve. O
+# pnpm 12 não recusa o install sem eles (cria os symlinks pendurados e segue),
+# mas um install que só funciona por tolerância é acidente esperando bump.
+# `--parents` mantém o caminho de cada um; um pacote novo não muda esta linha.
+COPY --parents packages/*/package.json ./
 RUN pnpm install --frozen-lockfile
+# Os pacotes internos inteiros, junto do fonte: o tsconfig.json da API estende
+# o preset de `packages/tsconfig` (lido pelo `prisma generate` e pelo tsup), e
+# é para o diretório deles que os symlinks do install apontam.
+COPY packages packages
 COPY apps/api/prisma apps/api/prisma
 COPY apps/api/src apps/api/src
 COPY apps/api/tsconfig.json apps/api/tsup.config.ts apps/api/prisma.config.ts apps/api/
@@ -111,7 +121,12 @@ RUN apt-get update \
   && corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
+COPY --parents packages/*/package.json ./
 RUN pnpm install --frozen-lockfile
+# Os presets não têm bind mount no Compose de dev: mudança em `packages/*` pede
+# rebuild da imagem (`pnpm run dev` já builda). São arquivos de config, mudam
+# raramente; quando mudarem com frequência, o mount é a resposta.
+COPY packages packages
 COPY apps/api/prisma apps/api/prisma
 COPY apps/api/src apps/api/src
 COPY apps/api/tsconfig.json apps/api/tsup.config.ts apps/api/prisma.config.ts apps/api/

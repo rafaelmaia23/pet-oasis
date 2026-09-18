@@ -6,6 +6,8 @@ Monorepo do Pet Oasis — um pet shop online. Gerido por **pnpm workspaces**
 | Caminho | O quê |
 |---|---|
 | [`apps/api`](apps/api/README.md) | A API REST (Node/Express, Prisma, Zod) — README, guias, ADRs e tracker vivem lá |
+| `packages/tsconfig` | Presets de TypeScript (`@pet-oasis/tsconfig`): base estrito + um por alvo (Node, Next, biblioteca) |
+| `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`): formatter, linter e estilo; cada app estende e acrescenta só os ignores que são seus |
 
 ```bash
 corepack enable                      # uma vez por máquina; instala o pnpm pinado em `packageManager`

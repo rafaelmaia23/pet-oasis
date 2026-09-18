@@ -1,4 +1,5 @@
 {
+  "extends": ["@pet-oasis/biome-config/biome"],
   "files": {
     "includes": [
       "**",
@@ -7,18 +8,5 @@
       "!dist",
       "!src/lib/seed/fakeImages.constants.ts"
     ]
-  },
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "space"
-  },
-  "linter": {
-    "enabled": true
-  },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "double",
-      "semicolons": "always"
-    }
   }
 }

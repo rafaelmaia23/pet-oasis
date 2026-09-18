@@ -56,7 +56,7 @@ ele; se um commit sair assinado por engano, reescreva-o (branch local) antes de 
 
 ## Stack
 
-TypeScript (tsconfig strict: `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`) · Node 24/Express · **pnpm** (pinado em `packageManager`, instalado pelo corepack; install estrito — dependência usada é dependência declarada) · Prisma 7 (driver adapter pg, output `src/generated/prisma`) · Zod 4 · Vitest+Supertest+Faker · Biome · JWT+bcrypt. Banco de teste na porta 5433.
+TypeScript (tsconfig strict: `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess` — vem do preset `@pet-oasis/tsconfig`, em `packages/tsconfig`; o `tsconfig.json` da API estende o de Node e guarda só o que é relativo ao diretório; mesmo desenho para o Biome, base em `packages/biome-config`) · Node 24/Express · **pnpm** (pinado em `packageManager`, instalado pelo corepack; install estrito — dependência usada é dependência declarada) · Prisma 7 (driver adapter pg, output `src/generated/prisma`) · Zod 4 · Vitest+Supertest+Faker · Biome · JWT+bcrypt. Banco de teste na porta 5433.
 
 ## Arquitetura — camadas
 

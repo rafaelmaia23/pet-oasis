@@ -40,6 +40,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
+    "@pet-oasis/biome-config": "workspace:*",
+    "@pet-oasis/tsconfig": "workspace:*",
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",

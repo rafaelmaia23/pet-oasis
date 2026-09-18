@@ -213,6 +213,10 @@ completo, os contra-argumentos e os gotchas.
 - `src/scripts/` é código; `infra/` é agendamento
 - SQL cru vive exclusivamente no repository — três pontos, e os dois locks são o
   mesmo remédio para o mesmo padrão (9.10, 9.12)
+- O tsconfig e o Biome da API estendem presets do workspace (11.3) — `packages/tsconfig`
+  (um preset por alvo, nomeados `tsconfig.<alvo>.json` por causa do Biome) e
+  `packages/biome-config`, config pura sem dependência; a API guarda só o que é relativo ao
+  próprio diretório, e a migração foi provada por `--showConfig` idêntico
 
 *Documentação e processo*
 
@@ -315,6 +319,10 @@ completo, os contra-argumentos e os gotchas.
 - O contexto de build é a raiz do monorepo, e o runtime é podado por `pnpm deploy` (11.2) — o
   lockfile e o workspace vivem na raiz; `Dockerfile.dockerignore` por app; o `runtime` fica raso
   em `/app` (mounts e `docker exec` intactos) com o `node_modules` só da API, autocontido
+- Os pacotes internos entram na imagem em duas camadas, e o `deploy` não precisa de
+  `injectWorkspacePackages` (11.3) — manifestos de `packages/*` antes do install, pacotes
+  inteiros depois com o fonte; a exigência do `deploy` era do pnpm 10 e foi verificada ausente
+  no 12, nos dois cenários (dev e prod dependency)
 - O OpenSSL vai nos três estágios da imagem, e a engine do Prisma é detectada (10.5) — sem ele a
   detecção falha e o default silencioso é a engine errada; detectar em vez de pinar é o que mantém
   o ARM64 correto

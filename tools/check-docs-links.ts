@@ -21,6 +21,9 @@ const IGNORED_DIRS = new Set([
   "dist",
   "coverage",
   "generated",
+  // Notas pessoais de estudo, fora do git (.gitignore): não são documentação
+  // do repo, então não respondem à regra de "permanente não cita efêmero".
+  ".learning",
 ]);
 const SCANNED_EXTENSIONS = [".md", ".ts", ".json", ".yml", ".yaml", ".bru"];
 

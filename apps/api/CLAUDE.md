@@ -106,7 +106,9 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 
 ## Comandos
 
-- Ambientes via Compose base + overrides (arquivos em `infra/`, junto dos entrypoints; o `Dockerfile` fica na raiz porque é a raiz do contexto de build), isolados por `-p pet-oasis-{dev,test,prod}`; env por arquivo (`.env.development`/`.env.test`/`.env.production`, na raiz, fora do git; `.env.example` versionado). Racional em `docs/adr/environments-and-deploy.md`.
+A API é o projeto `api` do workspace pnpm do monorepo e vive em **`apps/api`**. Todo script abaixo é dela: roda de dentro de `apps/api` (`pnpm run <script>`) ou da raiz do monorepo com `pnpm --filter api <script>` — mesmo script, mesmo cwd. O `pnpm install` é um só, o do workspace (raiz: `pnpm-lock.yaml` + `pnpm-workspace.yaml`).
+
+- Ambientes via Compose base + overrides (arquivos em `infra/`, junto dos entrypoints; o `Dockerfile` fica em `apps/api`, mas o **contexto de build é a raiz do monorepo** — o lockfile e o workspace vivem lá —, e o ignore dele é o `Dockerfile.dockerignore` ao lado), isolados por `-p pet-oasis-{dev,test,prod}`; env por arquivo (`.env.development`/`.env.test`/`.env.production`, em `apps/api`, fora do git; `.env.example` versionado). Racional em `docs/adr/environments-and-deploy.md` e em `docs/context/infrastructure.md`.
 - Dev: `pnpm run dev` (Compose em foreground: db + mailpit + app-em-container via tsx watch; Ctrl+C = SIGTERM gracioso) · `dev:down` · `dev:reset` · `dev:mail` · `dev:db` (só o Postgres-de-dev, detached e healthy — é o pré-requisito dos `db:*` quando não se quer a stack em foreground).
 - Teste: `pnpm test` (sobe o Postgres-de-test isolado, roda o Vitest no host e **sempre** derruba ao final, inclusive em falha) · `test:coverage` · `test:watch` · helpers `test:services:up`/`down`. Testar 1 arquivo (com o test-db de pé): `pnpm exec vitest run <nome>` · watch: `pnpm exec vitest <nome>` · 1 caso: `-t "nome"`.
 - Produção: `pnpm run prod:up` (build + só app + Postgres-de-prod, `migrate deploy` no entrypoint) · `prod:down` · `prod:logs`.

@@ -312,6 +312,9 @@ completo, os contra-argumentos e os gotchas.
   feature/role/raça/léxico e fail-open no dado atrás de flag, que só loga e some do `SeedResult`
 - O seed é bundlado pelo tsup (`dist/seed.js`)
 - Imagem multi-stage e não-root
+- O contexto de build é a raiz do monorepo, e o runtime é podado por `pnpm deploy` (11.2) — o
+  lockfile e o workspace vivem na raiz; `Dockerfile.dockerignore` por app; o `runtime` fica raso
+  em `/app` (mounts e `docker exec` intactos) com o `node_modules` só da API, autocontido
 - O OpenSSL vai nos três estágios da imagem, e a engine do Prisma é detectada (10.5) — sem ele a
   detecção falha e o default silencioso é a engine errada; detectar em vez de pinar é o que mantém
   o ARM64 correto

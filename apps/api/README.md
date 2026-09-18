@@ -249,10 +249,10 @@ Cada fase do roadmap tem sua branch, cada feature a sua, e nada é desenvolvido 
 
 ## Rodar localmente
 
-Sobe inteiro com Docker — banco, Redis, mail-catcher e a API (serviço `api` do Compose, container `pet-oasis-dev-api`) com hot-reload:
+Sobe inteiro com Docker — banco, Redis, mail-catcher e a API (serviço `api` do Compose, container `pet-oasis-dev-api`) com hot-reload. A API é um projeto do monorepo `pet-oasis` (pnpm workspaces) e vive em `apps/api`; os scripts dela rodam de lá — ou da raiz, com `pnpm --filter api <script>`:
 
 ```bash
-git clone https://github.com/rafaelmaia23/pet-oasis.git && cd pet-oasis
+git clone https://github.com/rafaelmaia23/pet-oasis.git && cd pet-oasis/apps/api
 cp .env.example .env.development   # preencha JWT_SECRET e PEPPER (≥ 32 chars cada)
 pnpm run dev
 ```

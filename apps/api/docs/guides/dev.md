@@ -2,14 +2,30 @@
 
 Pré-requisitos: **Docker** (com Compose) e **Node 24** com o corepack ligado — os scripts do
 `package.json` rodam via `pnpm`, e é o corepack que instala a versão exata pinada no campo
-`packageManager` (nada de `npm i -g pnpm`). Tudo mais roda em container, inclusive o app — com
-hot-reload via `tsx watch` lendo `src/` por bind-mount.
+`packageManager` do `package.json` da **raiz do monorepo** (nada de `npm i -g pnpm`). Tudo mais
+roda em container, inclusive o app — com hot-reload via `tsx watch` lendo `src/` por bind-mount.
+
+A API é o projeto `api` do workspace pnpm e vive em `apps/api`. Os arquivos de ambiente
+(`.env.*`) e todo script abaixo são **dela**: rode-os de dentro de `apps/api`, ou da raiz com
+`pnpm --filter api <script>` (o mesmo script, o mesmo cwd).
 
 ```bash
 corepack enable                     # uma vez por máquina; o pnpm certo vem na primeira chamada
-git clone <repo> && cd pet-oasis
+git clone <repo> && cd pet-oasis/apps/api
 cp .env.example .env.development   # preencha JWT_SECRET e PEPPER (≥ 32 chars cada)
 pnpm run dev                        # Compose em foreground: db + mailpit + app
+```
+
+Para rodar a suíte, o `typecheck` ou o `lint` no host é preciso instalar o workspace uma vez,
+**da raiz** (`pnpm install` em `pet-oasis/`): é lá que vivem o `pnpm-lock.yaml` e o
+`pnpm-workspace.yaml`, e é a raiz que o pnpm instala — rodar `pnpm install` de dentro de
+`apps/api` faz o mesmo, porque o pnpm sobe até o workspace.
+
+`git blame` de um arquivo da API atravessa o commit que a moveu para `apps/api` se o clone
+souber ignorá-lo — uma vez por clone:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs   # na raiz do monorepo
 ```
 
 Na subida o container aplica as migrations (`prisma migrate deploy`) e semeia features/roles (usuário demo só com `SEED_DEMO_USER=true`). Então acesse:

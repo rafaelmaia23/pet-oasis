@@ -9,6 +9,7 @@ Monorepo do Pet Oasis — um pet shop online. Gerido por **pnpm workspaces**
 | [`apps/api`](apps/api/README.md) | A API REST (Node/Express, Prisma, Zod) — README, guias, ADRs e tracker vivem lá |
 | `packages/tsconfig` | Presets de TypeScript (`@pet-oasis/tsconfig`): base estrito + um por alvo (Node, Next, biblioteca) |
 | `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`): formatter, linter e estilo; cada app estende e acrescenta só os ignores que são seus |
+| [`packages/api-contracts`](packages/api-contracts/README.md) | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): enums de domínio, nomes de role/feature, shape de erro; só depende de `zod`, consumido do fonte TS |
 
 ```bash
 corepack enable                      # uma vez por máquina; instala o pnpm pinado em `packageManager`
@@ -26,7 +27,7 @@ que o tiver, na ordem que o `turbo.jsonc` declara, e em paralelo onde a ordem pe
 | `pnpm lint` | `biome check .` de cada pacote — os pacotes de config antes de quem os estende | sim |
 | `pnpm build` | build de cada pacote que tem um (hoje só a API, `tsup` → `dist/`) | sim, com `dist/` restaurado do cache |
 | `pnpm docs:check` | links e âncoras da documentação | sim |
-| `pnpm test` | a suíte de cada pacote (a da API sobe Postgres e Redis via Compose e derruba ao final) | **não** |
+| `pnpm test` | a suíte de cada pacote (a da API sobe Postgres e Redis via Compose e derruba ao final; a do contrato é pura) | **não** |
 | `pnpm dev` | sobe todos os apps em dev (persistente; Ctrl+C derruba) | **não** |
 
 Um app só: `pnpm dev --filter=@pet-oasis/api` — o pnpm repassa a flag ao Turbo, e o mesmo

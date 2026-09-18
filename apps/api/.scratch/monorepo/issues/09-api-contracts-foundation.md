@@ -8,32 +8,58 @@ do refactor largo; a migração dos consumidores é a issue 10.
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-18
 
-- [ ] Pacote privado escopado, estendendo o preset de biblioteca do `@pet-oasis/tsconfig` e a
-      base do `biome-config`; `exports` com entradas por domínio (`auth`, `user`, `catalog`…)
-      além do índice — decidir se o consumo é do fonte TS ou de `dist` buildado, registrar a
-      decisão no README do pacote e refletir no `turbo.jsonc`.
-- [ ] Enums de domínio (todos os que os schemas da API hoje importam do Prisma gerado) definidos
-      como `z.enum([...])` no contrato, com o tipo derivado exportado.
-- [ ] **Teste de paridade** na API: para cada enum exportado pelo contrato, os `options` são
-      exatamente os valores do enum gerado pelo Prisma correspondente. Um valor a mais ou a
-      menos de qualquer lado é teste vermelho.
-- [ ] Nomes de role e de feature, e o conjunto de features privilegiadas, exportados do
-      contrato como constantes tipadas (`as const` + union). Os `*.constants.ts` da API passam
-      a **reexportar** do contrato (expand: nenhum import da API muda ainda).
-- [ ] Shape de erro exportado: envelope comum, `code` conhecidos (401/403/409/422/404), o
-      `errors` por campo do 422 — como schema Zod e tipo.
-- [ ] **Guarda de pureza** (teste no próprio pacote): `dependencies` do `package.json` é
-      exatamente `{ zod }`; nenhum arquivo do pacote importa de fora dele (sem `@/`, sem
-      `apps/`, sem `@prisma`, sem caminho relativo que saia de `src`).
-- [ ] O pacote tem `typecheck`, `lint` e `test` próprios (Vitest), rodando pelo Turbo da raiz.
-- [ ] Dockerfile da API: **nada a fazer pelo `deploy`** — a 03 verificou no pnpm 12.4.2 que o
-      `pnpm deploy --prod` materializa dependência de workspace de produção sem
-      `injectWorkspacePackages` (`docs/context/infrastructure.md`, 11.3), e os estágios `build`
-      e `dev` já copiam `packages/*` (manifestos antes do install, pacotes inteiros depois). O
-      que esta issue deve garantir é só: se o consumo for de `dist`, o build do contrato roda no
-      estágio `build` **antes** do tsup da API; se for do fonte TS, o `COPY packages packages`
-      já basta. Provar com os três targets buildando, como na 02.
-- [ ] Suíte da API + do pacote + `typecheck` + `lint` + `docs:check` verdes; `CLAUDE.md` da raiz
-      ganha a regra "o contrato só depende de `zod`; enum tem dois donos e um teste".
+O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
+
+- [x] `packages/api-contracts` (`@pet-oasis/api-contracts`), privado, escopado, `type: module`,
+      estendendo `tsconfig.library.json` e a base do `biome-config`. `exports` com o índice e
+      uma entrada por domínio: `./user`, `./pet`, `./catalog`, `./role`, `./feature`,
+      `./errors` (não `auth` — o que existe hoje de autorização são nomes de role e feature, e
+      as entradas espelham os módulos da API para a issue 10 migrar módulo a módulo).
+      **Decisão: consumo do fonte TS**, `exports` → `src/**/*.ts`, sem `dist` — todos os
+      consumidores compilam TS (tsup, tsx, Vite, Next com `transpilePackages`). Registrado no
+      README do pacote e em `docs/context/architecture.md` (11.9); no `turbo.jsonc` o `^build`
+      fica como nó vazio, com o comentário ajustado. O preço está pago no `tsup.config.ts` da
+      API: `noExternal: ["@pet-oasis/api-contracts"]`, senão o `dist/` sairia com `import` de
+      `.ts` (provado: o bundle tem zero imports do pacote, só comentários de caminho).
+- [x] Cinco enums (`ProfileKind`, `UserStatus`, `PetSpecies`, `PetSex`, `ProductStatus`) como
+      `z.enum` com tipo derivado — os que schemas e presenters importam do Prisma. Mais o
+      registro `DOMAIN_ENUMS` (chave = nome do enum do Prisma), que é o que o teste de paridade
+      percorre.
+- [x] Paridade em `apps/api/tests/unit/contracts/enumParity.test.ts`: para cada entrada de
+      `DOMAIN_ENUMS`, `.options` = valores do enum gerado; e a lista dos dois lados é comparada
+      — todo enum do Prisma está no registro **ou** numa lista explícita de internos (hoje só
+      `VerificationPurpose`, que nunca sai do service). Provado por teste negativo (valor a mais
+      no contrato → vermelho).
+- [x] `ROLE_NAMES`/`RoleName`/`roleNameSchema`, `FEATURE_NAMES`/`FeatureName`/
+      `featureNameSchema` e `PRIVILEGED_FEATURES` no contrato. Os `*.constants.ts` da API
+      reexportam e guardam só o que o seed anexa a cada nome: `feature.constants.ts` virou um
+      `Record<FeatureName, string>` de descrições e `role.constants.ts` um
+      `Record<RoleName, RoleDefinition>` — chave faltando ou sobrando é erro de typecheck
+      (provado nos dois sentidos). `PERMISSION_FEATURES` continua na API (é grupo de composição
+      do seed); `DEFAULT_FEATURES`/`DEFAULT_ROLES` mantêm o shape, na ordem do contrato. Nenhum
+      import da API mudou além dos dois constants; o teste de `role.constants` ganhou dois casos
+      fixando o alinhamento com o contrato.
+- [x] Shape de erro: `errorResponseSchema` (envelope do `AppError.toJson()` + `requestId`),
+      `validationErrorResponseSchema` (422, `errors` por campo) e `ERROR_CODES`/`errorCodeSchema`
+      com **todos** os `code` que a API emite (não só os cinco do enunciado), inclusive os três
+      403 de login. O `code` do envelope fica `z.string()` de propósito — `code` novo na API não
+      pode quebrar o parse do cliente; o enum é para quem trata caso conhecido. Os `.meta()` do
+      OpenAPI vieram junto para a issue 10 trocar o `components.ts` por import sem mudar o
+      `openapi.json`.
+- [x] Guarda de pureza em `packages/api-contracts/tests/purity.test.ts`: `dependencies` é
+      exatamente `["zod"]` e nenhum especificador de `src/**/*.ts` é diferente de `zod` ou de
+      relativo que fique dentro de `src/` (provado por teste negativo com `node:fs`).
+- [x] `typecheck` (dois programas: `src/` como biblioteca sem DOM/Node, `tests/` como Node —
+      a guarda lê o filesystem), `lint` e `test` (Vitest, sem config) no pacote; o Turbo da raiz
+      os pega pelo script (`pnpm typecheck` = 2 tasks, `pnpm lint` = 4).
+- [x] Dockerfile: nada a fazer, como previsto — o `COPY packages packages` entrega o fonte.
+      Provado com os três targets buildando; o `runtime` tem o pacote materializado pelo
+      `pnpm deploy --prod` (é `dependency`) e o `dist/server.js` sem import dele
+      (`node --check` OK). Só o comentário do `COPY` foi atualizado e `packages/*/tests` entrou
+      no `Dockerfile.dockerignore`.
+- [x] Suíte da API (1301) + do pacote (9) + `typecheck` + `lint` + `docs:check` verdes.
+      `CLAUDE.md` da raiz ganhou a regra "o contrato só depende de `zod`; enum tem dois donos e
+      um teste"; o da API aponta o contrato como dono dos nomes e de `PRIVILEGED_FEATURES`;
+      README da raiz lista o pacote; decisão em `docs/context/architecture.md` (11.9), indexada.

@@ -224,6 +224,10 @@ completo, os contra-argumentos e os gotchas.
   (provado por teste negativo); `test` lê Compose e `.env.test`, então não cacheia; o
   arquivo é `turbo.jsonc` (comentário com suporte de IDE) e a raiz ganhou `biome.json`
   próprio, que é por que as configs aninhadas têm `root: false`
+- O contrato é consumido do fonte TS e só depende de `zod`; enum tem dois donos e um teste
+  (11.9) — `packages/api-contracts` nasce com enums, nomes de role/feature e shape de erro;
+  `exports` → `src/**/*.ts` (tsup inlina via `noExternal`); guarda de pureza no pacote, paridade
+  contrato × Prisma na API via `DOMAIN_ENUMS`; os `*.constants.ts` reexportam e guardam só o seed
 
 *Documentação e processo*
 

@@ -5,9 +5,6 @@
   "description": "Base do Biome do monorepo: formatter, linter e estilo (aspas duplas, ponto-e-vírgula sempre). Config pura, sem build.",
   "license": "MIT",
   "author": "Rafael Maia da Fonseca",
-  "files": [
-    "biome.json"
-  ],
   "exports": {
     "./biome": "./biome.json"
   }

@@ -17,7 +17,8 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       `create-next-app` gera — nasce sem consumidor, validado na 11) e `tsconfig.library.json`
       (base + `lib: ["esnext"]`, sem DOM nem Node). Chamam-se `tsconfig.<alvo>.json`, não
       `<alvo>.json`: têm comentários, e o Biome só lê JSON com comentários em `tsconfig*.json` —
-      assim a própria base do workspace linta os presets. O `tsconfig.json` da API estende o de
+      assim passam limpos pela base do workspace quando o lint cobrir `packages/` (verificado
+      com `biome check ../../packages` de dentro da API; hoje nenhum script os cobre). O `tsconfig.json` da API estende o de
       Node e guarda `rootDir`, `outDir`, `paths`, `typeRoots` e `include` (tudo relativo ao
       diretório); o `types` desceu para o preset de Node, porque é o que o define como Node —
       o valor efetivo é o mesmo.

@@ -5,9 +5,6 @@
   "description": "Presets de TypeScript do monorepo: um base estrito e um por alvo (Node, Next, biblioteca). Config pura, sem build.",
   "license": "MIT",
   "author": "Rafael Maia da Fonseca",
-  "files": [
-    "tsconfig.*.json"
-  ],
   "exports": {
     "./tsconfig.base.json": "./tsconfig.base.json",
     "./tsconfig.node.json": "./tsconfig.node.json",

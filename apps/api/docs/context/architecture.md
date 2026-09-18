@@ -112,8 +112,9 @@ O `biome.json` da API estende a base e guarda só os ignores que são dela (Pris
 
 Dois detalhes que não são gosto. Os presets chamam-se `tsconfig.<alvo>.json`, e não
 `<alvo>.json`, porque têm comentários e o Biome só lê JSON com comentários em arquivos cujo nome
-casa `tsconfig*.json` — assim a própria base do workspace linta os presets sem mexer no parser
-JSON de todo mundo. E os dois pacotes não declaram `peerDependencies` em `typescript` e
+casa `tsconfig*.json` — assim os presets passam limpos pela base do workspace no dia em que o
+lint cobrir `packages/` (hoje o `biome check .` roda de dentro da API), sem mexer no parser JSON
+de todo mundo. E os dois pacotes não declaram `peerDependencies` em `typescript` e
 `@biomejs/biome`: o pnpm auto-instala peers, o que daria a cada pacote de config um
 `node_modules` com a ferramenta linkada e uma entrada de dependência no lockfile — ruído para
 quem não tem código. A versão única das ferramentas é assunto do `catalog:` do workspace.

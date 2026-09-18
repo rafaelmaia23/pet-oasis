@@ -14,6 +14,14 @@ reescrito para o monorepo, `main` virando o monorepo, e o repo renomeado no GitH
 - [ ] Tabela de rastreio decisão → destino feita e conferida: toda decisão da spec tem dono em
       `docs/context/` (da raiz ou da API) ou em ADR; a primeira linha da spec vira
       `Status: fechada em <data> — porquê promovido a <caminhos>`.
+- [ ] Racionais que nasceram na execução (não estão na spec) e hoje vivem só em comentário de
+      código, a promover para `docs/context/infrastructure.md` (ou `architecture.md`):
+      da issue 01 — Node e pnpm com fonte única (`engines` + `packageManager`, corepack; o
+      Dockerfile não escreve versão nenhuma, e o pnpm recusa Node fora de `engines`); `.npmrc`
+      não existe porque pnpm 12 lê `pnpm-workspace.yaml`; `allowBuilds` (por que `vue-demi`
+      entra e `sharp` não); e o gotcha do bundle do Scalar (caminho real em
+      `node_modules/.pnpm/…` × `sendFile` recusando segmento com ponto → `root` + arquivo
+      relativo, em `src/docs/reference.ts`).
 - [ ] `docs/todo.md` da raiz: Fase 11 destilada na forma fechada; a fase de carrinho/pedido/
       pagamento reaparece como "a fazer" com número novo, sem perder o que a Fase 9 já decidiu
       para ela (`OrderItem` polimórfico, preço gravado, `StockMovement`).

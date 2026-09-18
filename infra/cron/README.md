@@ -79,7 +79,7 @@ sudo systemctl enable --now pet-oasis-cleanup-audit-log.timer
 sudo systemctl enable --now pet-oasis-demo-reset.timer     # só no deploy demo
 
 # 4. Fazer o deploy que renomeia o container
-npm run prod:up
+pnpm run prod:up
 
 # 5. Só agora, com o container novo de pé: provar que funcionam, sem esperar o agendamento
 sudo systemctl start pet-oasis-cleanup-sessions.service

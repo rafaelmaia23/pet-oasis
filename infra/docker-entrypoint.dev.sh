@@ -6,11 +6,11 @@
 # Two passes, two uids (10.16). The container starts as root, and only the
 # Prisma client generation runs that way: the anonymous volume it writes to is
 # root-owned. The script then re-executes itself as the host's uid/gid
-# (HOST_UID/HOST_GID — `npm run dev` exports them from `id -u`/`id -g`), so
+# (HOST_UID/HOST_GID — `pnpm run dev` exports them from `id -u`/`id -g`), so
 # everything that touches a bind mount — migrate, the seed (which writes images
 # into ../uploads) and the watcher — runs as the user who owns those paths on
 # the host. Without this, a fresh clone's `uploads/` is created by Docker as
-# root and the host cannot write to it (EACCES on `npm run db:seed`).
+# root and the host cannot write to it (EACCES on `pnpm run db:seed`).
 set -e
 
 # Fail here, naming the variable, rather than three lines later in a `chown`
@@ -44,11 +44,11 @@ node_modules/.bin/prisma migrate deploy
 
 echo "Seeding database..."
 # Same split as production (10.3): reference data failing stops the boot here
-# via `set -e`; demonstration data failing only logs, so `npm run dev` never
+# via `set -e`; demonstration data failing only logs, so `pnpm run dev` never
 # dies over a fake catalog. The fence lives in src/lib/seed/optionalSeedStep.ts.
 # Run the seed directly with the local tsx binary. `prisma db seed` would spawn
 # `tsx` expecting it on PATH, which fails when prisma is invoked directly (not
-# via an npm script that prepends node_modules/.bin).
+# via a package.json script that prepends node_modules/.bin).
 node_modules/.bin/tsx prisma/seed.ts
 
 echo "Starting dev server (tsx watch)..."

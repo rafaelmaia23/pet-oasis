@@ -468,4 +468,4 @@ completo, os contra-argumentos e os gotchas.
 - **Fecho de fase** → o *porquê* migra do `todo.md` para o arquivo temático **antes** de o
   passo-a-passo expandido ser removido; o que a fase entregou vai para
   [`context/history.md`](context/history.md).
-- `npm run docs:check` valida que todo caminho e toda âncora citados na documentação existem.
+- `pnpm run docs:check` valida que todo caminho e toda âncora citados na documentação existem.

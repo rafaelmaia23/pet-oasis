@@ -64,7 +64,7 @@ ressurge no fecho da fase seguinte.
 1. Cada decisão nomeada na spec ganha dono permanente — `docs/context/` ou um ADR.
    **Migrar antes de fechar**: decisão sem dono não é fechada; escrever o dono é o trabalho.
 2. A primeira linha do `spec.md` vira
-   `Status: fechada em <AAAA-MM-DD> — porquê promovido a <caminhos>`. O `npm run docs:check`
+   `Status: fechada em <AAAA-MM-DD> — porquê promovido a <caminhos>`. O `pnpm run docs:check`
    exige que os caminhos nomeados existam.
 3. A fase encolhe no [`docs/todo.md`](../todo.md) para o resumo de resultado.
 

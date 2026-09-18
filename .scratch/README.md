@@ -27,7 +27,7 @@ todos fecharam.
 `CLAUDE.md` e comentário de `src/` não referenciam `.scratch/` — versionar mudou a
 durabilidade do arquivo, não a autoridade do conteúdo. Uma spec é o retrato de uma
 negociação num instante, e envelhece assim que a implementação diverge dela. Só o
-[`docs/todo.md`](../docs/todo.md) aponta para cá, e o `npm run docs:check` reprova quem
+[`docs/todo.md`](../docs/todo.md) aponta para cá, e o `pnpm run docs:check` reprova quem
 esquecer.
 
 **Spec fechada é marcada, não apagada.** No fecho da fase, a primeira linha do `spec.md`

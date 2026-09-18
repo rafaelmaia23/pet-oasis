@@ -82,7 +82,6 @@ router.use("/reference", docsCspNonce, docsCsp, referenceHandler);
 // pacote, então cache longo. Sem isto, a CSP `script-src 'self'` bloquearia a UI.
 // `root` separado do arquivo por causa do `.pnpm` no caminho real — ver
 // `scalarBundleRoot`.
-
 router.get(SCALAR_BUNDLE_PATH, (_req, res) => {
   res.type("application/javascript");
   res.setHeader("Cache-Control", "public, max-age=604800, immutable");

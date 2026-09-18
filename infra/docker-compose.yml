@@ -6,7 +6,7 @@
 #   test → docker-compose.test.yml  (db [+ mailpit via `--profile mail`]; NO api,
 #                                    Vitest runs the app in-process on the host)
 #
-# Always invoke through the npm scripts, which pass `-p <project>`,
+# Always invoke through the package.json scripts, which pass `-p <project>`,
 # `--env-file .env.<env>` and the right `-f` files. Never a bare `docker compose`.
 services:
   # `api` e não `app`: o nome do serviço é o que o DNS da rede do Compose
@@ -20,7 +20,7 @@ services:
       context: ..
       # Host DNS is Tailscale MagicDNS (100.100.100.100), reachable only from the
       # host network namespace; Docker's default bridge can't route to it, so
-      # container DNS lookups during `npm ci` hang. Building on the host network
+      # container DNS lookups during `pnpm install` hang. Building on the host network
       # sidesteps it without touching the daemon's global DNS config.
       network: host
     restart: unless-stopped
@@ -31,7 +31,7 @@ services:
     # compartilhada com clientes internos, e a do nginx, externa a este repo) e
     # dev tem a `default` do projeto. Só a de produção pode declarar a rede do
     # proxy como `external:`, porque só lá ela existe — declará-la aqui quebraria
-    # o `npm run dev` de quem nunca subiu um nginx.
+    # o `pnpm run dev` de quem nunca subiu um nginx.
     #
     # Nas redes do projeto (`backend`, `pet-oasis`) o serviço leva um **alias
     # explícito** `api`, mesmo o Compose já criando um implícito com o nome do

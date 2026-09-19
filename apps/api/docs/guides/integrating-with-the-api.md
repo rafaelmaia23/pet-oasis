@@ -21,7 +21,7 @@ http://api:3000/api/v1
 `api` é o nome do serviço no Compose de produção e o alias de rede que ele carrega nas redes
 **do projeto** (`backend` e `pet-oasis`) — na `proxy`, compartilhada com outros projetos atrás
 do nginx (Nginx Proxy Manager), o alias é omitido de propósito (o porquê está em
-[`docs/context/infrastructure.md`](../context/infrastructure.md)). Para o cliente na
+[`0148`](../adr/0148-tres-redes-papeis-distintos-porta-api-despublicada.md)). Para o cliente na
 `pet-oasis`, `api` resolve. Sem TLS, sem sair do host, sem passar pelo nginx.
 
 O cliente precisa entrar na rede **`pet-oasis`**, declarada como externa no compose dele:

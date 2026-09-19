@@ -1,0 +1,7 @@
+{
+  // Só para `tools/` — os scripts da raiz que não pertencem a pacote nenhum.
+  // Estende o preset Node do workspace pelo mesmo motivo que a API: a rigidez
+  // é regra do monorepo. Nada de `paths` nem `outDir`: o tsc aqui só checa.
+  "extends": "@pet-oasis/tsconfig/tsconfig.node.json",
+  "include": ["tools/**/*"]
+}

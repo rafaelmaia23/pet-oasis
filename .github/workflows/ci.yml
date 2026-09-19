@@ -3,7 +3,7 @@
 #
 # Dois jobs, independentes:
 #
-#   verify      typecheck · lint · docs:check · test, via Turborepo, SÓ DO QUE FOI AFETADO
+#   verify      typecheck · lint · test via Turborepo, SÓ DO QUE FOI AFETADO; docs:check inteiro
 #               em relação à base (a base do PR, ou o commit anterior no push). O afetado é
 #               por PACOTE: mudar só a raiz (README, este arquivo) não roda nada; mudar
 #               qualquer arquivo de `apps/api` — inclusive `apps/api/docs/` — roda a API
@@ -152,8 +152,14 @@ jobs:
       # estrito de env do Turbo deixa passar por ser variável de vendor de CI, e chama o
       # Vitest direto contra os services acima. A alternativa — o CI chamar `vitest` por fora
       # do Turbo — perderia o filtro do afetado.
-      - name: typecheck · lint · docs:check · test
-        run: pnpm exec turbo run typecheck lint docs:check test ${{ steps.base.outputs.flags }}
+      - name: typecheck · lint · test
+        run: pnpm exec turbo run typecheck lint test ${{ steps.base.outputs.flags }}
+
+      # `docs:check` não é task do Turbo: é script da raiz que varre o monorepo inteiro
+      # (a documentação de um app cita a do outro; o recorte por pacote esconderia isso).
+      # Roda sempre, fora do afetado.
+      - name: docs:check
+        run: pnpm docs:check
         env:
           TURBO_SCM_BASE: ${{ steps.base.outputs.base }}
 

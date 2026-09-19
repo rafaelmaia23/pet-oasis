@@ -166,18 +166,33 @@ importers:
 
   .:
     devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.4.15
+        version: 2.5.4
       '@commitlint/cli':
         specifier: ^21.2.2
         version: 21.2.2(@types/node@25.9.5)(conventional-commits-parser@7.1.2)(typescript@6.0.3)
       '@commitlint/config-conventional':
         specifier: ^21.2.2
         version: 21.2.2
+      '@pet-oasis/tsconfig':
+        specifier: workspace:*
+        version: link:packages/tsconfig
+      '@types/node':
+        specifier: ^25.8.0
+        version: 25.9.5
       husky:
         specifier: ^9.1.7
         version: 9.1.7
+      tsx:
+        specifier: ^4.22.0
+        version: 4.23.1
       turbo:
         specifier: 2.10.13
         version: 2.10.13
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   apps/api:
     dependencies:

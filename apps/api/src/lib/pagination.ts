@@ -17,7 +17,7 @@ import { createValidationError } from "@/errors";
  *
  * `limit` default 20 / máximo 100 são **constantes** (fazem parte do contrato
  * documentado no OpenAPI, não da configuração de ambiente). Racional completo em
- * `docs/adr/pagination.md`.
+ * `docs/adr/0004-pagination.md`.
  */
 
 export const DEFAULT_LIMIT = 20;

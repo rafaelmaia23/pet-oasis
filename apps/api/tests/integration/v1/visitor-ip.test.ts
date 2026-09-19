@@ -19,7 +19,7 @@ vi.mock("@/lib/email", () => ({ send: sendMock }));
  *    servidor e acrescenta o próprio endereço ao header)
  *
  * Contagem de saltos não serve as três ao mesmo tempo — por isso a confiança é
- * por **endereço de origem** (`docs/context/security.md`). O erro aqui é
+ * por **endereço de origem** (`docs/adr/0123-trust-proxy-endereco-origem-nao-contagem-saltos.md`). O erro aqui é
  * silencioso: nada quebra, o rate limit passa a ser coletivo e o audit log
  * grava o container em vez do visitante. Daí o teste afirmar os **dois**
  * destinos do valor, `Session.ipAddress` e `AuditLog.ip`, e não `req.ip` por

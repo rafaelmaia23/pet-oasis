@@ -170,7 +170,7 @@ Nome do pet **não** entra em `metadata` de nenhuma das quatro ações acima —
 por ser PII do pet, mas porque nome de pet é frequentemente usado como resposta
 de pergunta de segurança e como componente de senha; e porque a política
 vigente é "ids e enums", que só vale se não for flexibilizada caso a caso
-(planejamento da Fase 9, `docs/context/pet-domain.md`). Provado por teste: o
+(planejamento da Fase 9, `docs/adr/0006-pet-domain-modeling.md`). Provado por teste: o
 `metadata` de `PET_CREATED` não contém o nome enviado no cadastro.
 
 As nove ações de taxonomia (9.6) seguem a mesma regra do pet: **o nome não entra
@@ -210,7 +210,7 @@ gerado por nós), então não existe ponto do código em que ele esteja disponí
 para ser logado.
 
 `PRODUCT_IMAGE_DELETED` é, como `TAG_DELETED`, registro de um **hard delete**
-(`docs/context/lifecycle.md`): a linha some junto com os arquivos, e esta é a
+(`docs/adr/0046-imagem-unico-hard-delete-dominio-projeto.md`): a linha some junto com os arquivos, e esta é a
 única prova de que a imagem existiu. A compactação de posições que a exclusão
 dispara sai como `PRODUCT_IMAGES_REORDERED` com `reason: "COMPACTION"`, separada
 da reordenação pedida por um humano — as duas mexem no mesmo dado, mas só uma é

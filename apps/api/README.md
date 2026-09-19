@@ -32,7 +32,7 @@
 
 Uma API REST de pet shop levada a sério: modelagem de domínio, camadas rígidas, testes escritos antes do código e cada decisão de arquitetura registrada por escrito.
 
-O projeto tem dois propósitos que se reforçam. É uma **aplicação real** — a fundação de autenticação, autorização e gestão de usuários já está completa e no ar. E é um **veículo de aprendizado deliberado** de TDD e clean code: nenhuma feature entra sem teste que a guie, e o *porquê* de cada escolha vive em [`docs/context/`](docs/context/) e nos [ADRs](docs/adr/), não só na cabeça de quem escreveu.
+O projeto tem dois propósitos que se reforçam. É uma **aplicação real** — a fundação de autenticação, autorização e gestão de usuários já está completa e no ar. E é um **veículo de aprendizado deliberado** de TDD e clean code: nenhuma feature entra sem teste que a guie, e o *porquê* de cada escolha vive nos [ADRs](docs/adr/) — um por decisão, indexados em [`docs/adr/README.md`](docs/adr/README.md) —, não só na cabeça de quem escreveu.
 
 O **Ciclo 1** — a fundação — está concluído: autenticação com refresh rotativo, RBAC com overrides por usuário, perfis, verificação de email, banimento e recuperação de senha. O **Ciclo 2** abre o domínio do pet shop em si.
 
@@ -235,7 +235,7 @@ Cada camada só conversa com a adjacente. O **repository** é a única que toca 
 | Busca textual no **Postgres**, não em Meilisearch/Typesense | Tolerância a erro de digitação sem somar um serviço com estado próprio para manter sincronizado. O custo assumido é conhecido e está escrito: o dicionário de lexemas é materializado, então palavra nova só corrige typo depois do refresh. |
 | OpenAPI gerado dos schemas Zod | Fonte única de verdade. A doc não tem como divergir da validação, porque é a validação. |
 
-O raciocínio longo de cada uma está em [`docs/context/`](docs/context/), indexado por [`docs/context.md`](docs/context.md); as decisões estruturais viraram [ADRs](docs/adr/).
+O raciocínio longo de cada uma está nos [ADRs](docs/adr/), um por decisão, indexados por tema em [`docs/adr/README.md`](docs/adr/README.md).
 
 ### Testes antes do código
 
@@ -243,7 +243,7 @@ Toda feature nasce de um teste que falha. A suíte tem **1193 testes** (Vitest +
 
 ### Disciplina de processo
 
-Cada fase do roadmap tem sua branch, cada feature a sua, e nada é desenvolvido direto na `main`. O estado e a ordem das tarefas vivem em [`docs/todo.md`](docs/todo.md); os commits são atômicos, seguem Conventional Commits com escopo (lintados no hook e no CI) e descrevem a mudança, não o arquivo. Todo PR e todo push em `dev`/`main` passam pelo CI do monorepo (typecheck, lint, docs e a suíte, só do que foi afetado) — a fase só chega à `dev`, e a `dev` à `main`, com o PR verde.
+Cada fase do roadmap tem sua branch, cada feature a sua, e nada é desenvolvido direto na `main`. O estado e a ordem das tarefas vivem em [`docs/todo.md`](../../docs/todo.md); os commits são atômicos, seguem Conventional Commits com escopo (lintados no hook e no CI) e descrevem a mudança, não o arquivo. Todo PR e todo push em `dev`/`main` passam pelo CI do monorepo (typecheck, lint e a suíte só do que foi afetado; `docs:check` do repo inteiro) — a fase só chega à `dev`, e a `dev` à `main`, com o PR verde.
 
 ---
 
@@ -297,7 +297,7 @@ Ambos são idempotentes (`pnpm run db:seed` não duplica nada) e restaurados tod
 | ✅ | 9 | Pets ligados a Customers (CRUD, escopos *own*/*others*, falecimento ≠ exclusão) e catálogo completo: produto/variante, marca, categoria em árvore, tag, vitrine pública com view por capability, busca textual com tolerância a erro de digitação e upload de imagem — sem checkout |
 | 🔜 | 10 | Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) |
 
-Detalhe atômico de cada item em [`docs/todo.md`](docs/todo.md).
+Detalhe atômico de cada item em [`docs/todo.md`](../../docs/todo.md).
 
 ---
 
@@ -306,11 +306,10 @@ Detalhe atômico de cada item em [`docs/todo.md`](docs/todo.md).
 | Arquivo | Conteúdo |
 |---|---|
 | [`docs/README.md`](docs/README.md) | **O mapa**: o que é cada pasta de documentação e o caminho de uma ideia até o código |
-| [`docs/context.md`](docs/context.md) | Índice do *porquê* de cada decisão — uma linha por decisão, apontando o arquivo |
-| [`docs/context/`](docs/context/) | O raciocínio longo, por tema: autorização, ciclo de vida, identidade, segurança, observabilidade… |
-| [`docs/adr/`](docs/adr/) | Architecture Decision Records das escolhas estruturais |
-| [`docs/todo.md`](docs/todo.md) | Roadmap por fase, no nível da tarefa |
-| [`docs/reference/`](docs/reference/) | Consulta pontual: [rotas](docs/reference/endpoints.md), [política de log](docs/reference/logging-policy.md), [backlog](docs/reference/backlog.md) |
+| [`docs/adr/README.md`](docs/adr/README.md) | Índice do *porquê* de cada decisão — uma linha por decisão, por tema, apontando o ADR |
+| [`docs/adr/`](docs/adr/) | Architecture Decision Records: as escolhas estruturais (`0001`–`0010`) e uma decisão por arquivo daí em diante |
+| [`docs/todo.md`](../../docs/todo.md) | Roadmap por fase (na raiz do monorepo), com o tracker em [`.scratch/`](../../.scratch/README.md) |
+| [`docs/reference/`](docs/reference/) | Consulta pontual: [rotas](docs/reference/endpoints.md), [política de log](docs/reference/logging-policy.md), [backlog](../../docs/reference/backlog.md) |
 | [`docs/guides/`](docs/guides/) | Como fazer: [ambiente de dev](docs/guides/dev.md), [deploy](docs/guides/deploy.md), [documentar endpoint](docs/guides/documenting-endpoints.md) |
 | [`CLAUDE.md`](CLAUDE.md) | Convenções do projeto, escritas para orientar assistência de IA |
 

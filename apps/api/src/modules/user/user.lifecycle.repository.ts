@@ -145,8 +145,8 @@ export async function cascadeDeleteProfile(
 }
 
 /**
- * Mata o grafo inteiro sob a conta. As roles vão **sem** filtro de `appliesTo`:
- * o pai aqui é a conta, e D1 não admite filho ativo de pai morto.
+ * Mata o grafo inteiro sob o `User`. As roles vão **sem** filtro de `appliesTo`:
+ * o pai aqui é o `User`, e D1 não admite filho ativo de pai morto.
  */
 export async function cascadeDeleteUserGraph(
   tx: Prisma.TransactionClient,
@@ -295,11 +295,11 @@ export async function restoreRolesOfProfile(
  * Restaura o perfil nomeado e desce para as roles que morreram **junto com
  * ele**. Devolve `null` quando não há perfil morto para restaurar.
  *
- * Qualquer perfil morto serve, tenha morrido sozinho ou na cascata da conta
+ * Qualquer perfil morto serve, tenha morrido sozinho ou na cascata do usuário
  * (K20): pedir um perfil é ação explícita, e amarrar a restauração ao instante
- * exato da morte da conta abriria um furo no D14 — um ex-cliente que perdeu o
- * perfil e só depois teve a conta deletada reativaria com **zero** perfil
- * ativo, porque a linha morta não bate com o `deletedAt` da conta e, existindo,
+ * exato da morte do usuário abriria um furo no D14 — um ex-cliente que perdeu o
+ * perfil e só depois teve o usuário deletado reativaria com **zero** perfil
+ * ativo, porque a linha morta não bate com o `deletedAt` do `User` e, existindo,
  * também impede criar uma nova. Nada volta de carona porque nada volta sem ser
  * nomeado.
  */
@@ -361,9 +361,9 @@ export async function restoreProfile(
 /**
  * Restaura os perfis pedidos — e só eles. Cada um traz as roles que morreram no
  * instante em que ele morreu, que não é necessariamente o instante em que a
- * conta morreu (K20).
+ * usuário morreu (K20).
  *
- * A linha do `User` não é tocada aqui: quem reativa a conta é o repositório de
+ * A linha do `User` não é tocada aqui: quem reativa o usuário é o repositório de
  * user, junto da senha nova e do `status`.
  */
 export async function restoreProfilesOfUser(

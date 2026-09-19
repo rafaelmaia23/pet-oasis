@@ -71,7 +71,7 @@ export const authPaths: ZodOpenApiPathsObject = {
       responses: {
         200: jsonResponse("Autenticado", accessTokenSchema),
         401: errorResponses[401],
-        // 10.8: a senha conferiu, a *conta* é que está recusada — e o
+        // 10.8: a senha conferiu, o *usuário* é que está recusado — e o
         // cliente ramifica a tela pelo `code`, nunca pela prosa de `message`.
         403: jsonResponse(
           "Conta recusada após a senha conferir. `code` distingue a condição: " +

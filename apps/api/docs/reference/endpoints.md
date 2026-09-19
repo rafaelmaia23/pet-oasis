@@ -14,7 +14,7 @@ As rotas de negócio ficam sob **`/api/v1`** (`src/routes/index.ts`). `authentic
 
 As rotas de **documentação** (`/openapi.json`, `/reference`) ficam no router de topo, **fora** de `/api/v1` e de `authenticate` — são públicas.
 
-**Vitrine do catálogo (Fase 9.1 / N15):** a leitura de catálogo responde **sem token** — o e-commerce vive de quem chega pelo Google sem conta. `/breeds` (9.3) é pública "seca": não tem escrita nem view por feature efetiva, então basta não montar `authenticate`. A taxonomia (9.6) trouxe o middleware de **autenticação opcional**, porque ali leitura pública e escrita sob feature convivem no mesmo router; `/products` entrou nesse grupo já na **9.7**, quando só tinha escrita, e por isso a vitrine da **9.8** foi acréscimo ao router e não remontagem — é também a primeira rota do projeto em que a *forma* da resposta, e não só o acesso, muda com a feature efetiva do ator. `/variants` fica do lado protegido — variante não tem leitura pública própria, ela aparece dentro do produto.
+**Vitrine do catálogo (Fase 9.1 / N15):** a leitura de catálogo responde **sem token** — o e-commerce vive de quem chega pelo Google sem usuário. `/breeds` (9.3) é pública "seca": não tem escrita nem view por feature efetiva, então basta não montar `authenticate`. A taxonomia (9.6) trouxe o middleware de **autenticação opcional**, porque ali leitura pública e escrita sob feature convivem no mesmo router; `/products` entrou nesse grupo já na **9.7**, quando só tinha escrita, e por isso a vitrine da **9.8** foi acréscimo ao router e não remontagem — é também a primeira rota do projeto em que a *forma* da resposta, e não só o acesso, muda com a feature efetiva do ator. `/variants` fica do lado protegido — variante não tem leitura pública própria, ela aparece dentro do produto.
 
 **Rate limit da vitrine (Fase 9.6):** as quatro leituras públicas de catálogo (`/breeds`, `/brands`, `/categories`, `/tags`) compartilham um balde **por IP** (`catalogIpLimiter`, rule `catalog-read`) — não há identidade para um balde por usuário. Balde único de propósito: separar por rota daria a um scraper N orçamentos pelo preço de um. `/breeds` subiu na 9.3 sem limiter e foi coberta aqui.
 
@@ -28,8 +28,8 @@ configuração — o banco guarda a **chave**, nunca a URL.
 **Rate limit do upload (Fase 9.10 / AA18):** os três `PUT`/`POST` de imagem compartilham um balde
 **por usuário** (`uploadUserLimiter`, rule `image-upload`) — o primeiro do projeto com chave que
 não é IP nem email. Por IP ele atropelaria o mutirão de cadastro inicial, em que vários
-funcionários saem pelo mesmo NAT; o que ele barra (script bugado, conta comprometida) é
-propriedade de uma conta. `canAccess` roda **antes** dele, para que quem não pode subir imagem
+funcionários saem pelo mesmo NAT; o que ele barra (script bugado, usuário comprometido) é
+propriedade de um usuário. `canAccess` roda **antes** dele, para que quem não pode subir imagem
 receba 401/403 sem consumir cota.
 
 Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado; `feature` = exige a feature via `canAccess(...)`.
@@ -61,20 +61,20 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 
 | Método + Path | Auth | Descrição |
 |---|---|---|
-| POST `/api/v1/auth/signup` | público | Auto-cadastro; cria um usuário (customer), 201. Email de conta soft-deletada com o **cpf batendo** → dispara reativação e responde **202** genérico (nada é criado); cpf não batendo, conta banida ou conta ativa → 409 genérico |
+| POST `/api/v1/auth/signup` | público | Auto-cadastro; cria um usuário (customer), 201. Email de usuário soft-deletado com o **cpf batendo** → dispara reativação e responde **202** genérico (nada é criado); cpf não batendo, usuário banido ou usuário ativo → 409 genérico |
 | POST `/api/v1/auth/login` | público | Autentica; seta cookie httpOnly de refresh, retorna access token. Recusa, nesta ordem: 401 (credencial errada — email desconhecido e senha errada indistinguíveis) · 429 (lockout, com `Retry-After`) · 403 com `code` por condição: `ACCOUNT_BANNED`, `PASSWORD_RESET_REQUIRED`, `EMAIL_NOT_VERIFIED` (10.8) |
 | POST `/api/v1/auth/refresh` | público (usa cookie de refresh) | Rotaciona o refresh e emite novo access token |
 | POST `/api/v1/auth/logout` | `manage:session` | Revoga a sessão do cookie de refresh, limpa o cookie |
 | GET `/api/v1/auth/sessions` | `read:session` | Lista as sessões vivas do próprio usuário |
 | DELETE `/api/v1/auth/sessions/:id` | `manage:session` | Revoga uma sessão específica do próprio usuário |
-| POST `/api/v1/auth/verify-email` | público | Verifica o email via token e ativa a conta (`ACTIVE`), 204 |
+| POST `/api/v1/auth/verify-email` | público | Verifica o email via token e ativa o usuário (`ACTIVE`), 204 |
 | POST `/api/v1/auth/verify-email/resend` | público | Reenvia o email de verificação (sempre 200 genérico) |
 | POST `/api/v1/auth/forgot-password` | público | Dispara email de reset de senha (sempre 200 genérico) |
 | POST `/api/v1/auth/reset-password` | público | Troca a senha via token e invalida TODAS as sessões, 204 |
 | POST `/api/v1/auth/change-password` | `authenticate` | Troca a senha logado (exige senha atual) e invalida TODAS as sessões, 204 |
 | POST `/api/v1/auth/change-email` | `update:user` | Pede a troca de email (exige senha atual); dispara aviso de segurança pro email antigo com o link de confirmação |
 | POST `/api/v1/auth/confirm-email-change` | público | Confirma a troca via token, grava o email antigo em `PreviousEmail` (só histórico — não reserva o endereço, 8.6), 204 |
-| POST `/api/v1/auth/confirm-account-reactivation` | público | Reativa a conta via token e define **senha nova** (obrigatória); restaura os perfis escolhidos e as roles que morreram com eles — overrides nunca voltam (D6'). `phone` só é exigido quando o perfil de cliente precisa nascer do zero. 204 |
+| POST `/api/v1/auth/confirm-account-reactivation` | público | Reativa o usuário via token e define **senha nova** (obrigatória); restaura os perfis escolhidos e as roles que morreram com eles — overrides nunca voltam (D6'). `phone` só é exigido quando o perfil de cliente precisa nascer do zero. 204 |
 
 ## Me — `src/modules/me/me.routes.ts`
 
@@ -93,9 +93,9 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | DELETE `/api/v1/users/:id` | `delete:user` | Soft delete do usuário + invalida sessões |
 | POST `/api/v1/users/:id/ban` | `manage:user:status` | Bane o usuário (`bannedAt`/`bannedBy`/`banReason`) + invalida sessões, 204 |
 | DELETE `/api/v1/users/:id/ban` | `manage:user:status` | Desbane o usuário (limpa colunas de ban, preserva `status`), 204 |
-| DELETE `/api/v1/users/:id/lock` | `manage:user:status` | Desbloqueia a conta travada por lockout, reset completo do contador, 204 · conta com a role `demo` é isenta do lockout (8.8), então nunca chega a travar |
+| DELETE `/api/v1/users/:id/lock` | `manage:user:status` | Desbloqueia o usuário travado por lockout, reset completo do contador, 204 · usuário com a role `demo` é isento do lockout (8.8), então nunca chega a travar |
 | POST `/api/v1/users/:id/force-password-reset` | `manage:user:status` | Força troca de senha (bloqueia login até o reset), invalida sessões + envia email de reset, 204 |
-| POST `/api/v1/users/:id/reactivate` | `reactivate:user` | Dispara a reativação de uma conta excluída escolhendo perfis (obrigatório, ≥1) e roles (opcional, default = as da cascata); **não reativa**, só emite o token e envia o email — quem conclui é o dono. 204 · 404 conta não excluída · 409 banida · 422 perfil de funcionário inexistente · 403 role privilegiada sem ator admin |
+| POST `/api/v1/users/:id/reactivate` | `reactivate:user` | Dispara a reativação de um usuário excluído escolhendo perfis (obrigatório, ≥1) e roles (opcional, default = as da cascata); **não reativa**, só emite o token e envia o email — quem conclui é o dono. 204 · 404 usuário não excluído · 409 banido · 422 perfil de funcionário inexistente · 403 role privilegiada sem ator admin |
 
 ## User profile — `src/modules/user/profile/user.profile.routes.ts`
 

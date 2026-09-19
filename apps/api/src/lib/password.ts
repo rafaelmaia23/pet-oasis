@@ -25,10 +25,10 @@ async function verifyPassword(
 const dummyHash = hashPassword(randomBytes(32).toString("hex"));
 
 /**
- * Gasta o custo de uma verificação de senha sem ter conta contra a qual
+ * Gasta o custo de uma verificação de senha sem ter usuário contra a qual
  * verificar (10.9). Sem isso, o login de um email desconhecido responde em
  * microssegundos e o de uma senha errada no tempo do bcrypt — e a diferença é
- * oráculo de existência de conta, anulando a indistinguibilidade de status,
+ * oráculo de existência de usuário, anulando a indistinguibilidade de status,
  * code e mensagem. O resultado do `compare` é ignorado: a função existe para
  * gastar tempo, não para decidir.
  */

@@ -254,7 +254,7 @@ export const FAKE_PET_ROSTER: FakePet[] = [
     birthDate: "2022-02-17",
   },
   {
-    // Dono banido: o ban é da conta, não do pet — o registro segue ativo.
+    // Dono banido: o ban é do usuário, não do pet — o registro segue ativo.
     ownerSlug: "banned-customer",
     name: "Duque",
     species: "DOG",

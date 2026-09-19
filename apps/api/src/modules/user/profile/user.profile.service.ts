@@ -39,7 +39,7 @@ const describeFeatures = (features: string[]) =>
  * sobre si mesmo sempre, sobre terceiros só com a versão `:others`.
  *
  * A mensagem nomeia a variante que faltou de verdade: pedir `:others` a quem
- * está agindo sobre a própria conta mandaria o usuário atrás da feature errada.
+ * está agindo sobre o próprio `User` mandaria o usuário atrás da feature errada.
  */
 function assertCanActOnCustomerProfile(
   actor: AuthUser,

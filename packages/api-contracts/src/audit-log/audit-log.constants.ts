@@ -10,7 +10,7 @@
  *
  * Declaradas mesmo antes de cada ponto ser ligado — evita reabrir este
  * arquivo a cada sub-fase nova. As mais recentes são o par de reativação de
- * conta (8.4/8.5); hoje todas as ações da lista têm call site.
+ * usuário (8.4/8.5); hoje todas as ações da lista têm call site.
  */
 export const AUDIT_ACTIONS = [
   "AUTH_LOGIN_FAILED",
@@ -24,7 +24,7 @@ export const AUDIT_ACTIONS = [
   "AUTH_REFRESH_GRACE_SERVED",
   "USER_CREATED",
   "USER_DELETED",
-  // Perfil (não a conta). Criação e restauração entraram na 8.3; a deleção,
+  // Perfil (não o `User`). Criação e restauração entraram na 8.3; a deleção,
   // na 8.1 (K8), porque com a cascata ela derruba roles e overrides —
   // inclusive privilegiados — sem nada disso aparecer na resposta 204.
   "USER_PROFILE_CREATED",
@@ -36,9 +36,9 @@ export const AUDIT_ACTIONS = [
   "USER_ROLE_REVOKED",
   "USER_PERMISSION_GRANTED",
   "USER_PERMISSION_REVOKED",
-  // Reativação de conta soft-deletada (8.4/8.5). O pedido e a confirmação são
+  // Reativação de usuário soft-deletado (8.4/8.5). O pedido e a confirmação são
   // ações separadas porque acontecem em momentos e por atores diferentes: quem
-  // pede é o signup ou um admin; quem confirma é o dono da conta, com o token.
+  // pede é o signup ou um admin; quem confirma é o dono do `User`, com o token.
   "ACCOUNT_REACTIVATION_REQUESTED",
   "ACCOUNT_REACTIVATION_COMPLETED",
   "PASSWORD_RESET_REQUESTED",

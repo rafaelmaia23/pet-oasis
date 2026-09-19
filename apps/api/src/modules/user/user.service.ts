@@ -44,7 +44,7 @@ const log = logger.child({ module: "user" });
 export const DEFAULT_EMPLOYEE_ROLES: RoleName[] = ["attendant"];
 export const DEFAULT_CUSTOMER_ROLES: RoleName[] = ["customer"];
 
-/** Como a conta nasceu, para o audit distinguir signup de criação por admin. */
+/** Como o usuário nasceu, para o audit distinguir signup de criação por admin. */
 export type UserCreationSource = "SIGNUP" | "ADMIN";
 
 export async function createEmployee(
@@ -100,18 +100,18 @@ const EMAIL_IN_USE_ERROR = {
 };
 
 /**
- * Decide, para o signup de cliente, entre criar conta nova, recusar e reativar.
+ * Decide, para o signup de cliente, entre criar usuário novo, recusar e reativar.
  *
  * Os três ramos de recusa devolvem **a mesma** mensagem de propósito: só o email
  * bater não prova identidade (cpf não é segredo, mas conhecer os dois já é
  * evidência suficiente para disparar um email ao dono), e uma resposta
- * diferente por caso revelaria que a conta existe e em que estado ela está.
+ * diferente por caso revelaria que o usuário existe e em que estado ele está.
  *
- * D12: conta **ativa** nunca é tocada — nem vinculada, nem alterada. O caminho
- * de quem tem uma conta viva é logar.
+ * D12: usuário **ativo** nunca é tocado — nem vinculado, nem alterado. O caminho
+ * de quem tem um usuário vivo é logar.
  *
- * D13 (8.6): só o email **atual** de uma conta é reservado. Um endereço que a
- * conta já largou (`PreviousEmail`) não entra em nenhum destes ramos — é
+ * D13 (8.6): só o email **atual** de um usuário é reservado. Um endereço que a
+ * usuário já largou (`PreviousEmail`) não entra em nenhum destes ramos — é
  * histórico, não reserva.
  */
 async function resolveCustomerSignupEmail(
@@ -131,7 +131,7 @@ async function resolveCustomerSignupEmail(
   }
 
   // 8.7: só a partir daqui o request de fato dispara email para o endereço, e
-  // sem que o ator tenha provado posse da conta — mesma superfície de abuso do
+  // sem que o ator tenha provado posse do `User` — mesma superfície de abuso do
   // `forgot-password`, então mesmo balde (K27), com `rule` própria no audit.
   await consumeEmailTargetLimit(
     emailTargetLimiter,
@@ -150,7 +150,7 @@ async function resolveCustomerSignupEmail(
 }
 
 /**
- * Devolve `null` quando o email pertencia a uma conta soft-deletada e o cpf
+ * Devolve `null` quando o email pertencia a um usuário soft-deletado e o cpf
  * bateu: nesse caso nada é criado, um email de reativação sai, e o controller
  * responde 202 (K18).
  */
@@ -471,15 +471,15 @@ export async function unlockAccount(
 }
 
 /**
- * Admin dispara a reativação de uma conta soft-deletada, escolhendo perfis e —
+ * Admin dispara a reativação de um usuário soft-deletado, escolhendo perfis e —
  * opcionalmente — roles (D8/K19). Não reativa nada: emite o token e manda o
- * email, e quem conclui é o dono da conta, definindo a senha nova (K17).
+ * email, e quem conclui é o dono do `User`, definindo a senha nova (K17).
  *
  * **Não-escalação (K22):** o guard corre sobre as roles que de fato vão voltar —
  * as nomeadas, ou, no default, as que morreram com cada perfil. Roda antes de
  * qualquer escrita, então um manager barrado não deixa nem token nem email para
  * trás. É o mesmo `assertAdminForRoleAssignment` da atribuição de role e da
- * reativação de perfil (8.3): uma conta que volta com `admin` é alguém sendo
+ * reativação de perfil (8.3): um usuário que volta com `admin` é alguém sendo
  * atribuído a `admin`.
  *
  * O molde `assertAdminForPrivilegedTarget` (ban/lock) não serve aqui: ele lê as
@@ -493,8 +493,8 @@ export async function reactivateAccount(
 ) {
   const target = await userRepository.findDeletedUserById(targetId);
 
-  // Conta viva também cai aqui: não é uma conta deletada, e dizer "existe mas
-  // está ativa" seria contar sobre uma conta que o ator talvez nem possa ver.
+  // Usuário vivo também cai aqui: não é um usuário deletado, e dizer "existe mas
+  // está ativo" seria contar sobre um usuário que o ator talvez nem possa ver.
   if (!target) {
     throw createNotFoundError({
       message: "Usuário excluído não encontrado",
@@ -518,7 +518,7 @@ export async function reactivateAccount(
   }));
 
   // Restaurar um perfil que nunca existiu é impossível, e criar do zero só vale
-  // para o de cliente (§5.2): virar funcionário é ato próprio, com a conta viva.
+  // para o de cliente (§5.2): virar funcionário é ato próprio, com o usuário vivo.
   const impossible = claimedProfiles.filter(
     ({ kind, deletedAt }) => kind === "EMPLOYEE" && deletedAt === null,
   );
@@ -543,7 +543,7 @@ export async function reactivateAccount(
         ),
       );
 
-  // Uma role só volta se o perfil dela voltar junto — senão a conta ficaria com
+  // Uma role só volta se o perfil dela voltar junto — senão o usuário ficaria com
   // uma atribuição ativa sob um perfil morto, o oposto do D1.
   if (choice.roleNames) {
     for (const kind of ["CUSTOMER", "EMPLOYEE"] as const) {

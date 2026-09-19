@@ -42,7 +42,7 @@ export const FEATURE_NAMES = [
   "read:permission",
   "manage:permission",
 
-  // Status de conta (banir/desbanir)
+  // Status de usuário (banir/desbanir)
   "manage:user:status",
 
   // Logs — `read:audit-log` vê o IP mascarado; `:full` vê o IP inteiro

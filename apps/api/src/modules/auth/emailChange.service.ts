@@ -79,7 +79,7 @@ export async function changeEmail(
     });
   }
 
-  // Só o email ATIVO de alguém bloqueia (D13, 8.6): um endereço que outra conta
+  // Só o email ATIVO de alguém bloqueia (D13, 8.6): um endereço que outro usuário
   // já largou está em `PreviousEmail` como histórico e é reutilizável.
   if (await findUserByEmail(newEmail)) {
     throw createConflictError(EMAIL_IN_USE_ERROR);

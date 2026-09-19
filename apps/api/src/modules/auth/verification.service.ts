@@ -26,7 +26,7 @@ function buildVerificationEmail(rawToken: string) {
 
 /**
  * O que disparou o envio, para a linha de log distinguir o email inicial (na
- * criação da conta) de um reenvio pedido pelo usuário.
+ * criação do usuário) de um reenvio pedido pelo usuário.
  */
 type VerificationTrigger = "ACCOUNT_CREATION" | "RESEND";
 

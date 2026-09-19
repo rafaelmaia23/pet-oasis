@@ -49,7 +49,7 @@ export const errorResponses = {
     errorResponseSchema,
   ),
   422: jsonResponse("Erro de validação", validationErrorResponseSchema),
-  // 10.22: rate limit por IP e lockout por conta respondem o mesmo 429 — mesmo
+  // 10.22: rate limit por IP e lockout por usuário respondem o mesmo 429 — mesmo
   // `code`, mesma prosa —, e ambos carregam `Retry-After`. O cliente usa o
   // valor, não a mensagem; a spec precisa declará-lo para quem gera tipos.
   429: {

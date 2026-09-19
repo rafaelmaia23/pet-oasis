@@ -31,7 +31,7 @@ export const ERROR_CODES = [
   "PAYLOAD_TOO_LARGE",
   // 422
   "VALIDATION_ERROR",
-  // 429 — rate limit por IP e lockout por conta respondem o mesmo `code`, e
+  // 429 — rate limit por IP e lockout por usuário respondem o mesmo `code`, e
   // ambos carregam `Retry-After`
   "TOO_MANY_REQUESTS",
   // 500

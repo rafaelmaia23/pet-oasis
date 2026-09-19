@@ -33,10 +33,10 @@ export const signup = async (req: Request, res: Response) => {
 
   const result = await authService.signup(body);
 
-  // Nada foi criado: o email pertencia a uma conta soft-deletada, o cpf bateu, e
+  // Nada foi criado: o email pertencia a um usuário soft-deletado, o cpf bateu, e
   // saiu um email de reativação. 202 diz exatamente isso — pedido aceito, efeito
   // fora da request (K18). A mensagem é condicional para não confirmar que a
-  // conta existe.
+  // usuário existe.
   if (!result) {
     res.status(202).json({
       message:

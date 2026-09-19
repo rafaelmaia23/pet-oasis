@@ -161,17 +161,17 @@ cada uma pede uma tela diferente:
 | Condição | Status | `code` |
 |---|---|---|
 | Email desconhecido ou senha errada | 401 | `UNAUTHORIZED` |
-| Conta travada por tentativas erradas | 429 | `TOO_MANY_REQUESTS` (com `Retry-After`) |
-| Conta banida | 403 | `ACCOUNT_BANNED` |
+| Usuário travado por tentativas erradas | 429 | `TOO_MANY_REQUESTS` (com `Retry-After`) |
+| Usuário banido | 403 | `ACCOUNT_BANNED` |
 | Troca de senha forçada pelo admin | 403 | `PASSWORD_RESET_REQUIRED` |
-| Conta ainda não verificada | 403 | `EMAIL_NOT_VERIFIED` |
+| Usuário ainda não verificado | 403 | `EMAIL_NOT_VERIFIED` |
 
-As três de 403 só disparam **depois** de a senha conferir — quem as recebe é o dono da conta,
-então não há vazamento em ramificar por elas. O mesmo vale para o 429 de conta travada: ele
+As três de 403 só disparam **depois** de a senha conferir — quem as recebe é o próprio usuário,
+então não há vazamento em ramificar por elas. O mesmo vale para o 429 de usuário travado: ele
 também só vem com a senha certa. Já **email desconhecido e senha errada** são deliberadamente
 indistinguíveis entre si — mesmo 401, mesmo `code`, mesma mensagem.
 
-Consequência de desenho para o cliente: **nenhuma conta pendente alcança o interior da
+Consequência de desenho para o cliente: **nenhum usuário pendente alcança o interior da
 aplicação**. O aviso de "verifique seu email" e o reenvio da verificação pertencem à tela de
 login, não a uma tela interna.
 
@@ -181,7 +181,7 @@ login, não a uma tela interna.
 
 O access token é um JWT de **15 minutos**, enviado em `Authorization: Bearer`. A assinatura é
 verificada localmente, mas o **usuário é relido a cada request**: é isso que mata o token de uma
-conta deletada na hora, e que faz as features efetivas do `GET /me` serem sempre as atuais — perder
+usuário deletado na hora, e que faz as features efetivas do `GET /me` serem sempre as atuais — perder
 uma role vale no request seguinte, não dali a 15 minutos. Não decodifique o JWT no cliente para
 decidir nada: o conteúdo dele é da API.
 
@@ -264,8 +264,8 @@ Renomear qualquer um deles quebra o email correspondente **sem erro visível em 
 nem no cliente, nem na API, nem no log. Só o destinatário vê o 404.
 
 Corolário para a ordem de deploy: virar `APP_URL` para um cliente que ainda não tem as quatro
-rotas no ar transforma verificação de conta e reset de senha em 404 — que são justamente os
-fluxos que travam conta nova.
+rotas no ar transforma verificação de usuário e reset de senha em 404 — que são justamente os
+fluxos que travam usuário novo.
 
 ---
 

@@ -95,7 +95,7 @@ export async function assertAdminForRoleAssignment(
  * inspecioná-lo (K22).
  *
  * Cada perfil traz as roles que morreram **junto com ele**, e o instante não é
- * necessariamente o da morte da conta (K20) — por isso a chave vem do próprio
+ * necessariamente o da morte do usuário (K20) — por isso a chave vem do próprio
  * perfil, não do `User`.
  */
 export async function getRolesRestorableWithProfiles(

@@ -138,7 +138,7 @@ export const reactivateAccountSchema = z.object({
     id: z.uuid("Invalid user ID"),
   }),
   body: z.object({
-    // `.min(1)` é o D14 no schema: uma conta ativa sem nenhum perfil ativo é
+    // `.min(1)` é o D14 no schema: um usuário ativo sem nenhum perfil ativo é
     // estado proibido, então escolher zero perfis nem chega ao service.
     profiles: z
       .array(profileKindSchema)
@@ -148,7 +148,7 @@ export const reactivateAccountSchema = z.object({
         example: ["CUSTOMER"],
       }),
     // Omitido = default do D8 (todas as roles que morreram com cada perfil).
-    // Nomeada, tem a semântica do K15/K21: é *com que roles a conta volta* —
+    // Nomeada, tem a semântica do K15/K21: é *com que roles o usuário volta* —
     // restaura a que morreu naquela cascata, concede a que não morreu ali.
     roleNames: z
       .array(z.enum(ROLE_NAMES))

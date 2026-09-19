@@ -174,7 +174,7 @@ export async function updateUser(id: string, data: updateUserData) {
 }
 
 /**
- * Encerra a conta e **cascateia** para o grafo inteiro (D1): perfis, roles e
+ * Encerra o `User` e **cascateia** para o grafo inteiro (D1): perfis, roles e
  * overrides. Um único `new Date()` para toda a transação (D4) — é a igualdade
  * desses timestamps que a restauração (8.2) usa como chave.
  *

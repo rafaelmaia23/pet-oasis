@@ -17,17 +17,15 @@ da skill, sem racional, sem implementação. O *porquê* continua nos ADRs da AP
       auditoria).
 - [x] Todo termo é **destilado** dos ADRs existentes (`apps/api/docs/adr/`) — nenhum termo novo
       é inventado; termo que o código chama de um nome e a doc de outro é resolvido a favor do
-      código. Discrepâncias anotadas para o dono decidir (o glossário segue o código; os
-      documentos que divergem **não** foram tocados): (1) a prosa dos ADRs diz "conta" onde o
-      código diz `User`; (2) os ADRs de view dizem *capability* onde o código diz feature
-      efetiva (`computeEffectiveFeatures`, `features` do `/me`); (3) o ADR `0087` lista `me`
-      como degrau das views de user, mas no contrato `me` é recurso próprio (`meViews`);
-      (4) `apps/api/docs/reference/schema.md` § "Constantes de domínio" lista as roles sem
-      `stockist` e `catalog-manager`; (5) dois comentários se dizem "a única tabela de domínio
-      sem `deletedAt`" (`Tag`, 9.6/W5, e `ProductImage`, 9.10/AA16); (6) os comentários de
-      `prisma/schema.prisma` citam o ADR de pets e a política de log pelos caminhos antigos
-      (sem número, e `logging-policy` fora de `reference/`), que não existem mais — o
-      `docs:check` não varre `.prisma`.
+      código. Discrepâncias que o glossário expôs e o fecho corrigiu na fonte: o ADR `0087`
+      listava `me` como degrau das views de user (é recurso próprio, `meViews`);
+      `apps/api/docs/reference/schema.md` listava as roles sem `stockist` e `catalog-manager`; `Tag` e
+      `ProductImage` se diziam, cada uma, "a única tabela de domínio sem `deletedAt`" (ADRs
+      `0007`/`0046`, `schema.md`, `schema.prisma` e dois repositórios); e os comentários de
+      `prisma/schema.prisma` citavam ADRs pelos caminhos antigos — o `docs:check` passou a
+      varrer `.prisma`. Ficaram em aberto, para o dono, dois sinônimos de prosa espalhados
+      por dezenas de arquivos: "conta" onde o código diz `User` (44 ADRs) e *capability* onde
+      o código diz feature efetiva (25 arquivos, inclusive os títulos dos ADRs `0086`/`0087`).
 - [x] Nenhuma frase do glossário explica *por que* — se a definição precisa de racional, ela
       aponta para o ADR.
 - [x] `apps/api/docs/adr/README.md` (índice), `apps/api/CLAUDE.md`, `docs/agents/domain.md` e o

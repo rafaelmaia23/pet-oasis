@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Enums com dois donos (ver `src/user/index.ts`): o Prisma é dono do banco, o
+// Enums com dois donos (ver `src/user/user.enums.ts`): o Prisma é dono do banco, o
 // contrato do que atravessa a rede; o teste de paridade da API prova que os
 // valores batem.
 

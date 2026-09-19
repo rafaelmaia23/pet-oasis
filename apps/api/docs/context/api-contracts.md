@@ -30,7 +30,10 @@ A fronteira foi decidida caso a caso pelo mesmo critério: **o que precisa de al
 - `resolveSlug` (usa `slugify` e lança o 422) ficou em `catalog.slug.ts`; `slugSchema`,
   `catalogNameSchema` e `catalogDescriptionSchema` migraram.
 - O teto do token opaco (`OPAQUE_TOKEN_LENGTH`) virou constante do contrato, porque é o `.max()`
-  dos campos `token`; `lib/token.ts` deriva os bytes dele, e não o contrário.
+  dos campos `token`; a entropia (`OPAQUE_TOKEN_BYTES`) continua da API, em `lib/token.ts`, e
+  um teste unitário prova que o gerador emite exatamente o comprimento do contrato — a revisão
+  derrubou a versão em que os bytes eram derivados do contrato, porque isso deixava o contrato
+  ditar a entropia (e um teto ímpar viraria `randomBytes(31.5)`).
 - `MAX_IMAGES_PER_PRODUCT` mora ao lado do schema de reordenação que ele limita; a taxonomia de
   auditoria (`AUDIT_ACTIONS`, `AUDIT_TARGET_TYPES`) é o que `?action=`/`?targetType=` aceitam e
   migrou inteira — `lib/auditLog.ts` tipa o descritor a partir dela.
@@ -42,8 +45,9 @@ O `openapi.json` gerado saiu **byte a byte idêntico** ao anterior em cada commi
 (o `.meta()` viajou junto), a suíte de `mass-assignment` e os testes de schema passaram sem
 alteração, e os testes unitários dos schemas que migraram (paginação, `targetType` do audit)
 migraram para `packages/api-contracts/tests/`. Dentro do pacote, enums e nomes vivem em arquivos
-folha (`user.enums.ts`, `role.names.ts`, `pet.enums.ts`, …) e todo import entre domínios aponta
-para a folha, nunca para o índice — é o que impede um ciclo `user → role → user` de virar TDZ.
+folha (`user.enums.ts`, `role.names.ts`, `pet.enums.ts`, `pagination.schema.ts`, …) e todo import
+entre domínios aponta para a folha, nunca para o índice — é o que impede um ciclo
+`user → role → user` de virar TDZ.
 
 ---
 

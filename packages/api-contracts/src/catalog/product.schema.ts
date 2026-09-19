@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { buildOffsetQuerySchema, defineSortConfig } from "../pagination";
+import {
+  buildOffsetQuerySchema,
+  defineSortConfig,
+} from "../pagination/pagination.schema";
 import { petSpeciesSchema } from "../pet/pet.enums";
 import { productStatusSchema } from "./catalog.enums";
 import { catalogNameSchema, slugSchema } from "./catalog.schema";

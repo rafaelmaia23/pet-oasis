@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
-import { OPAQUE_TOKEN_LENGTH } from "@pet-oasis/api-contracts/auth";
 
 /**
- * O comprimento do token em hex é contrato (é o teto dos campos `token` dos
- * schemas de auth, 10.13); os bytes são derivados dele para que o gerador e o
- * schema nunca discordem — cada byte vira dois caracteres hex.
+ * A entropia do token é decisão da API, não do contrato. O que o contrato fixa
+ * é o comprimento em hex que atravessa a rede (`OPAQUE_TOKEN_LENGTH`, teto dos
+ * campos `token` dos schemas de auth, 10.13) — e `tests/unit/lib/token.test.ts`
+ * prova que o gerador emite exatamente esse comprimento, para que mexer num
+ * dos dois lados sem o outro fique vermelho em vez de recusar todo token.
  */
-const OPAQUE_TOKEN_BYTES = OPAQUE_TOKEN_LENGTH / 2;
+const OPAQUE_TOKEN_BYTES = 32;
 
 function generateOpaqueToken(): string {
   return randomBytes(OPAQUE_TOKEN_BYTES).toString("hex");

@@ -1,12 +1,10 @@
-import type {
-  ProductView,
-  VariantInput,
-} from "@pet-oasis/api-contracts/catalog";
 import {
   type CreateProductInput,
   type ListProductsQuery,
   PRODUCT_SORT,
+  type ProductView,
   type UpdateProductInput,
+  type VariantInput,
 } from "@pet-oasis/api-contracts/catalog";
 import { z } from "zod";
 import { createNotFoundError, createValidationError } from "@/errors";

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Enum com dois donos (ver `src/user/index.ts`): o teste de paridade da API
+// Enum com dois donos (ver `src/user/user.enums.ts`): o teste de paridade da API
 // prova que os valores batem com o enum gerado pelo Prisma.
 
 // "Isto está à venda?" e "isto existe?" são perguntas diferentes: o status

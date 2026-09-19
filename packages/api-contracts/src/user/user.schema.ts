@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { buildOffsetQuerySchema, defineSortConfig } from "../pagination";
+import {
+  buildOffsetQuerySchema,
+  defineSortConfig,
+} from "../pagination/pagination.schema";
 import { ROLE_NAMES } from "../role/role.names";
 import { profileKindSchema, userStatusSchema } from "./user.enums";
 

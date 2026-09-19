@@ -287,7 +287,7 @@ O descarte do `AuditLog` acontece **exclusivamente** em `src/scripts/cleanup-aud
 
 O acesso do usuário demo é intencional: é o que torna a trilha de auditoria visível para quem avalia o projeto sem ter acesso às contas do mantenedor. É seguro porque §4.2 garante que não há PII no payload e §5.3 mascara o IP.
 
-**Concessão de `read:audit-log:full` é privilegiada (Fase 7.8):** como destrava o IP inteiro, `read:audit-log:full` entra em `PRIVILEGED_FEATURES` (`role.constants.ts`) — concedê-la via override, ou atribuir uma role que a contenha, exige role **admin**, no mesmo idioma de não-escalação das features de permissão. `read:log`/`read:audit-log` são normais (concedíveis por um manager sem ser admin).
+**Concessão de `read:audit-log:full` é privilegiada (Fase 7.8):** como destrava o IP inteiro, `read:audit-log:full` entra em `PRIVILEGED_FEATURES` (`@pet-oasis/api-contracts/feature`) — concedê-la via override, ou atribuir uma role que a contenha, exige role **admin**, no mesmo idioma de não-escalação das features de permissão. `read:log`/`read:audit-log` são normais (concedíveis por um manager sem ser admin).
 
 Não existe rota de escrita, edição ou remoção de log. Ausência de `PATCH`/`DELETE` em `/audit-logs` é coberta por teste.
 

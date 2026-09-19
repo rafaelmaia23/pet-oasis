@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { cursorQuerySchema } from "../pagination";
+import { cursorQuerySchema } from "../pagination/pagination.schema";
 import { AUDIT_ACTIONS, AUDIT_TARGET_TYPES } from "./audit-log.constants";
 
 /**

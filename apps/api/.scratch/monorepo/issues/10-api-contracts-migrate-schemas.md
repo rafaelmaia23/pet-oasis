@@ -24,7 +24,8 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       `meta` (`@pet-oasis/api-contracts/pagination`), e `lib/pagination.ts` ficou só com o que
       toca o repository (`skip`/`take`, `buildOrderBy`, cursor, envelopes); `resolveSlug` ficou
       na API como `catalog.slug.ts` (usa `slugify` e a factory de erro); o teto do token opaco
-      virou `OPAQUE_TOKEN_LENGTH` no contrato e `lib/token.ts` deriva os bytes dele;
+      virou `OPAQUE_TOKEN_LENGTH` no contrato, os bytes continuam da API e um teste prova o par
+      (a revisão derrubou a derivação bytes ← contrato);
       `MAX_IMAGES_PER_PRODUCT` mora ao lado do schema de reordenação (o
       `product.image.constants.ts` sumiu); a taxonomia de auditoria (`AUDIT_ACTIONS`,
       `AUDIT_TARGET_TYPES`) migrou inteira (o `lib/auditLog.constants.ts` sumiu) — é o que o

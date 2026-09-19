@@ -14,7 +14,8 @@ export const signupSchema = createCustomerSchema;
  * email, reativação) em hex — é o que viaja na URL e volta no corpo. É contrato
  * porque é o teto dos campos `token` abaixo (10.13): um valor de outro tamanho
  * não pode casar com hash nenhum, então recusá-lo antes do banco não muda o
- * resultado — só o custo. Quem gera o token (na API) deriva os bytes daqui.
+ * resultado — só o custo. A entropia (quantos bytes o gerador da API sorteia)
+ * não é contrato: um teste na API prova que o gerador emite este comprimento.
  */
 export const OPAQUE_TOKEN_LENGTH = 64;
 

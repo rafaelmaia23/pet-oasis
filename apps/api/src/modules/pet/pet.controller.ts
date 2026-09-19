@@ -1,15 +1,15 @@
-import type { Request, Response } from "express";
-import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
-import { uploadedFile } from "@/middlewares/upload.middleware";
-import { getAuthUser } from "@/utils/getAuthUser";
-import { petPresenter } from "./pet.presenter";
 import {
   createPetSchema,
   listCustomerPetsSchema,
   listPetsSchema,
   petParamsSchema,
   updatePetSchema,
-} from "./pet.schema";
+} from "@pet-oasis/api-contracts/pet";
+import type { Request, Response } from "express";
+import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
+import { uploadedFile } from "@/middlewares/upload.middleware";
+import { getAuthUser } from "@/utils/getAuthUser";
+import { petPresenter } from "./pet.presenter";
 import * as petService from "./pet.service";
 
 export const createPet = async (req: Request, res: Response) => {

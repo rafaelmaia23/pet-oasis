@@ -1,16 +1,13 @@
-import { FEATURE_NAMES } from "@pet-oasis/api-contracts/feature";
-import { ROLE_NAMES } from "@pet-oasis/api-contracts/role";
+import {
+  FEATURE_NAMES,
+  type FeatureName,
+  PRIVILEGED_FEATURES,
+} from "@pet-oasis/api-contracts/feature";
+import { ROLE_NAMES, type RoleName } from "@pet-oasis/api-contracts/role";
 import { describe, expect, it } from "vitest";
 import { ProfileKind } from "@/generated/prisma/enums";
-import {
-  DEFAULT_FEATURES,
-  type FeatureName,
-} from "@/modules/feature/feature.constants";
-import {
-  DEFAULT_ROLES,
-  PRIVILEGED_FEATURES,
-  type RoleName,
-} from "@/modules/role/role.constants";
+import { DEFAULT_FEATURES } from "@/modules/feature/feature.constants";
+import { DEFAULT_ROLES } from "@/modules/role/role.constants";
 
 const roleDefinition = (name: RoleName) => {
   const role = DEFAULT_ROLES.find((r) => r.name === name);

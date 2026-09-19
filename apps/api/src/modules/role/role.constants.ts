@@ -1,17 +1,15 @@
 import {
+  type FeatureName,
   PERMISSION_FEATURES,
-  PRIVILEGED_FEATURES,
 } from "@pet-oasis/api-contracts/feature";
 import { ROLE_NAMES, type RoleName } from "@pet-oasis/api-contracts/role";
 import { ProfileKind } from "@/generated/prisma/enums";
-import type { FeatureName } from "../feature/feature.constants";
 
 // Os **nomes** de role e os conjuntos de features de permissão e privilegiadas
 // são contrato (`@pet-oasis/api-contracts`): o web valida o nome que digita e
 // a API checa a não-escalação sobre a mesma lista. O que fica aqui é o que só
 // o seed precisa — a definição de cada role (descrição, features, a que perfil
 // se aplica) e os grupos semânticos que a compõem.
-export { PERMISSION_FEATURES, PRIVILEGED_FEATURES, ROLE_NAMES, type RoleName };
 
 type RoleDefinition = {
   description: string;

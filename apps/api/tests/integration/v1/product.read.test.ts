@@ -1,3 +1,7 @@
+import {
+  productListViews,
+  productViews,
+} from "@pet-oasis/api-contracts/catalog";
 import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
@@ -8,10 +12,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import z from "zod";
 import app from "@/app";
 import { prisma } from "@/lib/prisma";
-import {
-  productListViews,
-  productViews,
-} from "@/modules/product/product.presenter";
 
 /**
  * Leitura do catálogo (9.8) — a **vitrine**. Arquivo próprio porque

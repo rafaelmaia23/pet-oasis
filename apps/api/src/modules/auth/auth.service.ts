@@ -1,3 +1,5 @@
+import type { LoginInput } from "@pet-oasis/api-contracts/auth";
+import type { CreateCustomerInput } from "@pet-oasis/api-contracts/user";
 import { env } from "@/config/env";
 import {
   createForbiddenError,
@@ -21,14 +23,12 @@ import { generateOpaqueToken, hashToken } from "@/lib/token";
 import { describeUserAgent } from "@/lib/userAgent";
 import * as userService from "@/modules/user/user.service";
 import * as userRepository from "../user/user.repository";
-import type { CreateCustomerInput } from "../user/user.schema";
 import {
   REFRESH_GRACE_DEFERRED_WINDOW_MS,
   REFRESH_GRACE_WINDOW_MS,
   REFRESH_TOKEN_TTL_MS,
 } from "./auth.constants";
 import * as authRepository from "./auth.repository";
-import type { LoginInput } from "./auth.schema";
 
 const log = logger.child({ module: "auth" });
 

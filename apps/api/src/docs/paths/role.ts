@@ -1,6 +1,5 @@
+import { roleParamsSchema, roleViews } from "@pet-oasis/api-contracts/role";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { roleViews } from "@/modules/role/role.presenter";
-import { roleParamsSchema } from "@/modules/role/role.schema";
 import { errorResponses, jsonResponse, staticList } from "../components";
 import { fromEnvelope } from "../helpers";
 

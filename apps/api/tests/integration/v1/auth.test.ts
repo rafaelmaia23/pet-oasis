@@ -1,3 +1,5 @@
+import { sessionViews } from "@pet-oasis/api-contracts/auth";
+import { userViews } from "@pet-oasis/api-contracts/user";
 import {
   buildCustomer,
   buildEmployee,
@@ -38,8 +40,6 @@ import {
   REFRESH_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_PATH,
 } from "@/modules/auth/auth.constants";
-import { sessionViews } from "@/modules/auth/auth.presenter";
-import { userViews } from "@/modules/user/user.presenter";
 import {
   findUserById,
   softDeleteUserAndInvalidateSessions,

@@ -1,5 +1,5 @@
+import type { FeatureName } from "@pet-oasis/api-contracts/feature";
 import { prisma } from "@/lib/prisma";
-import type { FeatureName } from "@/modules/feature/feature.constants";
 
 export async function getAllFeatures() {
   return prisma.feature.findMany();

@@ -11,7 +11,7 @@ inteiro — fluxo, regras transversais, onde mora cada documento. O que é espec
 |---|---|---|
 | `apps/api` | A API REST (Node 24/Express, Prisma 7, Zod 4, Postgres, Redis) | `apps/api/CLAUDE.md` |
 | `apps/web` | O front web (Next.js) — importado com histórico na Fase 11 (issue 11); ainda não existe aqui | — |
-| `packages/api-contracts` | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): enums de domínio, nomes de role/feature e shape de erro como schemas Zod, dependendo **só de `zod`** e consumido do fonte TS | `packages/api-contracts/README.md` |
+| `packages/api-contracts` | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): schemas Zod de request, views de resposta, enums de domínio, nomes de role/feature e shape de erro, dependendo **só de `zod`** e consumido do fonte TS | `packages/api-contracts/README.md` |
 | `packages/tsconfig` | Presets de TypeScript (`@pet-oasis/tsconfig`): base estrito + um por alvo (Node, Next, biblioteca) | — |
 | `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`); cada app estende e acrescenta só os ignores que são seus | — |
 | `docs/` | Documentação do **sistema**: ADRs de sistema, índice das fases, backlog, guias e config das skills | `docs/README.md` |

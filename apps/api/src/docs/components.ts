@@ -1,51 +1,18 @@
 /// <reference types="zod-openapi" />
+
+import {
+  errorResponseSchema,
+  validationErrorResponseSchema,
+} from "@pet-oasis/api-contracts/errors";
+import {
+  cursorMetaSchema,
+  offsetMetaSchema,
+} from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
 import type {
   ZodOpenApiResponseObject,
   ZodOpenApiSecuritySchemeObject,
 } from "zod-openapi";
-import { cursorMetaSchema, offsetMetaSchema } from "@/lib/pagination";
-
-// Formato padrão de erro da API (AppError.toJson) — vira componente reusável.
-export const errorResponseSchema = z
-  .object({
-    name: z.string().meta({ example: "NotFoundError" }),
-    message: z.string().meta({ example: "Recurso não encontrado" }),
-    statusCode: z.number().meta({ example: 404 }),
-    action: z.string().optional().meta({
-      example: "Verifique o identificador informado e tente novamente",
-    }),
-    code: z.string().optional().meta({ example: "NOT_FOUND" }),
-    requestId: z.string().optional().meta({
-      description:
-        "Id do request, igual ao header x-request-id. Cite-o ao reportar um problema: ele recupera o request inteiro nos logs.",
-      example: "5b1f8c2e-0d3a-4f5b-9c7d-2a1e6f4b8c90",
-    }),
-  })
-  .meta({ id: "ErrorResponse", description: "Formato padrão de erro da API" });
-
-// Erro de validação (422) — AppError + `errors` por campo.
-export const validationErrorSchema = z
-  .object({
-    name: z.string().meta({ example: "ValidationError" }),
-    message: z
-      .string()
-      .meta({ example: "Erro de validação nos dados enviados" }),
-    statusCode: z.literal(422),
-    action: z.string().optional(),
-    code: z.literal("VALIDATION_ERROR"),
-    errors: z
-      .record(z.string(), z.array(z.string()))
-      .meta({ example: { email: ["Invalid email address"] } }),
-    requestId: z.string().optional().meta({
-      description: "Id do request, igual ao header x-request-id.",
-      example: "5b1f8c2e-0d3a-4f5b-9c7d-2a1e6f4b8c90",
-    }),
-  })
-  .meta({
-    id: "ValidationError",
-    description: "Erro de validação (422) com detalhes por campo",
-  });
 
 export const securitySchemes = {
   bearerAuth: {
@@ -63,7 +30,9 @@ function jsonResponse(
   return { description, content: { "application/json": { schema } } };
 }
 
-// Respostas de erro reutilizáveis — referenciar por código nas operações.
+// Respostas de erro reutilizáveis — referenciar por código nas operações. O
+// shape (envelope comum e o 422 com `errors` por campo) é contrato: vem de
+// `@pet-oasis/api-contracts/errors`, o mesmo que o cliente usa para ler.
 export const errorResponses = {
   400: jsonResponse("Requisição malformada", errorResponseSchema),
   401: jsonResponse(
@@ -79,7 +48,7 @@ export const errorResponses = {
     "Arquivo maior que o tamanho máximo permitido",
     errorResponseSchema,
   ),
-  422: jsonResponse("Erro de validação", validationErrorSchema),
+  422: jsonResponse("Erro de validação", validationErrorResponseSchema),
   // 10.22: rate limit por IP e lockout por conta respondem o mesmo 429 — mesmo
   // `code`, mesma prosa —, e ambos carregam `Retry-After`. O cliente usa o
   // valor, não a mensagem; a spec precisa declará-lo para quem gera tipos.

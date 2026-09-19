@@ -1,15 +1,3 @@
-import type { Request, Response } from "express";
-import { env } from "@/config/env";
-import { listEnvelope } from "@/lib/pagination";
-import { getAuthUser } from "@/utils/getAuthUser";
-import { userPresenter } from "../user/user.presenter";
-import * as accountReactivationService from "./accountReactivation.service";
-import {
-  REFRESH_TOKEN_COOKIE_NAME,
-  REFRESH_TOKEN_COOKIE_PATH,
-  REFRESH_TOKEN_TTL_MS,
-} from "./auth.constants";
-import { sessionPresenter } from "./auth.presenter";
 import {
   changeEmailSchema,
   changePasswordSchema,
@@ -22,7 +10,19 @@ import {
   sessionParamsSchema,
   signupSchema,
   verifyEmailSchema,
-} from "./auth.schema";
+} from "@pet-oasis/api-contracts/auth";
+import type { Request, Response } from "express";
+import { env } from "@/config/env";
+import { listEnvelope } from "@/lib/pagination";
+import { getAuthUser } from "@/utils/getAuthUser";
+import { userPresenter } from "../user/user.presenter";
+import * as accountReactivationService from "./accountReactivation.service";
+import {
+  REFRESH_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_COOKIE_PATH,
+  REFRESH_TOKEN_TTL_MS,
+} from "./auth.constants";
+import { sessionPresenter } from "./auth.presenter";
 import * as authService from "./auth.service";
 import * as emailChangeService from "./emailChange.service";
 import * as passwordService from "./password.service";

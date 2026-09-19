@@ -1,8 +1,8 @@
+import type { RoleName } from "@pet-oasis/api-contracts/role";
 import type { Prisma } from "@/generated/prisma/client";
 import type { UserStatus } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
-import type { RoleName } from "../role/role.constants";
 import {
   type CascadeCounts,
   cascadeDeleteUserGraph,

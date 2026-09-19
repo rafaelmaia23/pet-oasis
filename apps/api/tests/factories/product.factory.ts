@@ -1,10 +1,10 @@
 import { faker } from "@faker-js/faker";
-import { prisma } from "@/lib/prisma";
-import * as productRepository from "@/modules/product/product.repository";
 import {
   type CreateProductInput,
   createProductSchema,
-} from "@/modules/product/product.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import { prisma } from "@/lib/prisma";
+import * as productRepository from "@/modules/product/product.repository";
 import { withResolvedDefault } from "@/modules/product/product.service";
 import { slugify } from "@/utils/slugify";
 

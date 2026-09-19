@@ -1,10 +1,10 @@
-import type { Request, Response } from "express";
-import { uploadedFile } from "@/middlewares/upload.middleware";
 import {
   productImageParamsSchema,
   productImagesParamsSchema,
   reorderProductImagesSchema,
-} from "./product.image.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import type { Request, Response } from "express";
+import { uploadedFile } from "@/middlewares/upload.middleware";
 import * as imageService from "./product.image.service";
 import { productImagePresenter } from "./product.presenter";
 

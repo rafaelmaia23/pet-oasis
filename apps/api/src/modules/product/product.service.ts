@@ -1,3 +1,11 @@
+import {
+  type CreateProductInput,
+  type ListProductsQuery,
+  PRODUCT_SORT,
+  type ProductView,
+  type UpdateProductInput,
+  type VariantInput,
+} from "@pet-oasis/api-contracts/catalog";
 import { z } from "zod";
 import { createNotFoundError, createValidationError } from "@/errors";
 import { ProductStatus } from "@/generated/prisma/enums";
@@ -6,22 +14,14 @@ import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
 import { imageUrls } from "@/lib/storage";
 import * as brandRepository from "@/modules/brand/brand.repository";
 import { withLogo } from "@/modules/brand/brand.service";
-import { resolveSlug } from "@/modules/catalog/catalog.schema";
+import { resolveSlug } from "@/modules/catalog/catalog.slug";
 import * as categoryRepository from "@/modules/category/category.repository";
 import { subtreeIdsOf } from "@/modules/category/category.tree";
 import * as tagRepository from "@/modules/tag/tag.repository";
 import { definedOnly } from "@/utils/definedOnly";
-import type { ProductView } from "./product.presenter";
 import type { ProductWithRelations } from "./product.repository";
 import * as productRepository from "./product.repository";
-import {
-  type CreateProductInput,
-  type ListProductsQuery,
-  PRODUCT_SORT,
-  type UpdateProductInput,
-} from "./product.schema";
 import * as productSearchRepository from "./product.search.repository";
-import type { VariantInput } from "./product.variant.schema";
 
 /**
  * Regras **semânticas** do produto — as que precisam do banco. Sem escopo

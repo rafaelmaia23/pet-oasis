@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  catalogNameSchema,
-  slugSchema,
-} from "@/modules/catalog/catalog.schema";
+import { catalogNameSchema, slugSchema } from "./catalog.schema";
 
 /**
  * Tag é o mais enxuto dos três recursos de taxonomia: nome e slug, nada mais.

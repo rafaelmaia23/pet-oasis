@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { petViews } from "@pet-oasis/api-contracts/pet";
 import {
   buildPet,
   findSrdBreedId,
@@ -15,7 +16,6 @@ import z from "zod";
 import app from "@/app";
 import { PetSex, PetSpecies } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
-import { petViews } from "@/modules/pet/pet.presenter";
 
 afterEach(async () => {
   await clearDatabase();

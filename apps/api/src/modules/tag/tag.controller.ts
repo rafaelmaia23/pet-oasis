@@ -1,11 +1,11 @@
-import type { Request, Response } from "express";
-import { listEnvelope } from "@/lib/pagination";
-import { tagPresenter } from "./tag.presenter";
 import {
   createTagSchema,
   tagParamsSchema,
   updateTagSchema,
-} from "./tag.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import type { Request, Response } from "express";
+import { listEnvelope } from "@/lib/pagination";
+import { tagPresenter } from "./tag.presenter";
 import * as tagService from "./tag.service";
 
 export const listTags = async (_req: Request, res: Response) => {

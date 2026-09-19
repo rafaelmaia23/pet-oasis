@@ -1,7 +1,7 @@
+import { listBreedsSchema } from "@pet-oasis/api-contracts/pet";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
 import { breedPresenter } from "./breed.presenter";
-import { listBreedsSchema } from "./breed.schema";
 import * as breedService from "./breed.service";
 
 export const listBreeds = async (req: Request, res: Response) => {

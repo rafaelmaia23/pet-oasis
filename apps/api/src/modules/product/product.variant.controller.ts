@@ -1,11 +1,11 @@
-import type { Request, Response } from "express";
-import { getAuthUser } from "@/utils/getAuthUser";
-import { variantPresenter } from "./product.presenter";
 import {
   createVariantSchema,
   updateVariantSchema,
   variantParamsSchema,
-} from "./product.variant.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import type { Request, Response } from "express";
+import { getAuthUser } from "@/utils/getAuthUser";
+import { variantPresenter } from "./product.presenter";
 import * as variantService from "./product.variant.service";
 
 export const createVariant = async (req: Request, res: Response) => {

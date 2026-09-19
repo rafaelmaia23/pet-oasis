@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { userViews } from "@pet-oasis/api-contracts/user";
 import { buildPet } from "@tests/factories/pet.factory";
 import {
   attachOverrides,
@@ -15,7 +16,6 @@ import { afterEach, assert, describe, expect, it } from "vitest";
 import app from "@/app";
 import { createNotFoundError } from "@/errors/errorFactory";
 import { prisma } from "@/lib/prisma";
-import { userViews } from "@/modules/user/user.presenter";
 import { findUserById } from "@/modules/user/user.repository";
 
 afterEach(async () => {

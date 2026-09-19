@@ -24,7 +24,8 @@ são as **máscaras** (`000.000.000-00`, `+55 (11) 9 8765-4321`), e o `.max()` f
 onze dígitos afogados em 99KB de hífen passariam pelo `length(11)` de depois.
 
 As peças ficaram **uma por conceito** (`emailSchema`, `cpfSchema`, `phoneSchema` em
-`user.schema.ts`; o teto de senha conferida e o de token em `auth.schema.ts`): o telefone estava
+`user.schema.ts`; o teto de senha conferida e o de token em `auth.schema.ts` — desde a 11.10 os
+dois arquivos vivem no contrato, `packages/api-contracts/src/user/` e `src/auth/`): o telefone estava
 copiado três vezes (signup, perfil de cliente, reativação), e três cópias com teto seriam três
 lugares para o teto divergir. O teto sai no `/openapi.json` como `maxLength` de graça, porque a
 spec é gerada dos schemas — e é contrato: `openapi.test.ts` afirma uma amostra de cada classe

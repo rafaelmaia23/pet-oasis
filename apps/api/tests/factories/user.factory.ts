@@ -1,12 +1,18 @@
 import { faker } from "@faker-js/faker";
+import type { FeatureName } from "@pet-oasis/api-contracts/feature";
+import type { RoleName } from "@pet-oasis/api-contracts/role";
+import {
+  type CreateCustomerInput,
+  type CreateEmployeeInput,
+  createCustomerSchema,
+  createEmployeeSchema,
+} from "@pet-oasis/api-contracts/user";
 import { cpf } from "cpf-cnpj-validator";
 import { createInternalServerError } from "@/errors/errorFactory";
 import type { ProfileKind, UserStatus } from "@/generated/prisma/enums";
 import { type AuthUser, computeEffectiveFeatures } from "@/lib/authorization";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
-import type { FeatureName } from "@/modules/feature/feature.constants";
-import type { RoleName } from "@/modules/role/role.constants";
 import { getRolesByNames } from "@/modules/role/role.repository";
 import { createCustomerProfile } from "@/modules/user/profile/user.profile.repository";
 import {
@@ -14,12 +20,6 @@ import {
   createEmployee,
   findUserById,
 } from "@/modules/user/user.repository";
-import {
-  type CreateCustomerInput,
-  type CreateEmployeeInput,
-  createCustomerSchema,
-  createEmployeeSchema,
-} from "@/modules/user/user.schema";
 import {
   DEFAULT_CUSTOMER_ROLES,
   DEFAULT_EMPLOYEE_ROLES,

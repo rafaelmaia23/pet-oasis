@@ -1,7 +1,7 @@
+import { roleParamsSchema } from "@pet-oasis/api-contracts/role";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
 import { rolePresenter } from "./role.presenter";
-import { roleParamsSchema } from "./role.schema";
 import * as roleService from "./role.service";
 
 export const getAllRoles = async (_: Request, res: Response) => {

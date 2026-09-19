@@ -1,6 +1,9 @@
 import { z } from "zod";
-import { PetSex, PetSpecies } from "@/generated/prisma/enums";
-import { buildOffsetQuerySchema, defineSortConfig } from "@/lib/pagination";
+import {
+  buildOffsetQuerySchema,
+  defineSortConfig,
+} from "../pagination/pagination.schema";
+import { petSexSchema, petSpeciesSchema } from "./pet.enums";
 
 /**
  * Validação **sintática** do pet — forma, tipo e faixa, sem banco. As três
@@ -22,15 +25,15 @@ const microchipIdSchema = z
 
 const petFieldsSchema = z.object({
   name: nameSchema,
-  species: z.enum(PetSpecies).meta({
+  species: petSpeciesSchema.meta({
     description: "Espécie do pet",
-    example: PetSpecies.DOG,
+    example: "DOG",
   }),
   breedId: z.uuid("Invalid breed ID").nullable().optional().meta({
     description:
       "Raça (obrigatória para cão e gato, proibida nas demais espécies)",
   }),
-  sex: z.enum(PetSex).optional().meta({ example: PetSex.MALE }),
+  sex: petSexSchema.optional().meta({ example: "MALE" }),
   birthDate: z.coerce
     .date()
     .nullable()
@@ -106,14 +109,12 @@ export const PET_SORT = defineSortConfig({
  */
 export const listPetsSchema = z.object({
   query: buildOffsetQuerySchema(PET_SORT, {
-    species: z
-      .enum(PetSpecies)
+    species: petSpeciesSchema
       .optional()
-      .meta({ description: "Filtra pela espécie", example: PetSpecies.DOG }),
-    sex: z
-      .enum(PetSex)
+      .meta({ description: "Filtra pela espécie", example: "DOG" }),
+    sex: petSexSchema
       .optional()
-      .meta({ description: "Filtra pelo sexo", example: PetSex.MALE }),
+      .meta({ description: "Filtra pelo sexo", example: "MALE" }),
     customerId: z
       .uuid("Invalid customer ID")
       .optional()

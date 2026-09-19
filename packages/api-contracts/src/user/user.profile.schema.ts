@@ -1,6 +1,6 @@
-import z from "zod";
-import { ROLE_NAMES } from "@/modules/role/role.constants";
-import { phoneSchema } from "@/modules/user/user.schema";
+import { z } from "zod";
+import { ROLE_NAMES } from "../role/role.names";
+import { phoneSchema } from "./user.schema";
 
 export const createCustomerProfileSchema = z.object({
   params: z.object({

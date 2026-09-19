@@ -1,11 +1,11 @@
-import type { ZodOpenApiPathsObject } from "zod-openapi";
 import {
   createCustomerProfileSchema,
   createEmployeeProfileSchema,
   deleteCustomerProfileSchema,
   deleteEmployeeProfileSchema,
-} from "@/modules/user/profile/user.profile.schema";
-import { userViews } from "@/modules/user/user.presenter";
+  userViews,
+} from "@pet-oasis/api-contracts/user";
+import type { ZodOpenApiPathsObject } from "zod-openapi";
 import { errorResponses, jsonResponse, noContentResponse } from "../components";
 import { fromEnvelope } from "../helpers";
 

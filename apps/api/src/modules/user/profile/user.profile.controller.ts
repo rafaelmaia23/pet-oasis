@@ -1,13 +1,13 @@
-import type { Request, Response } from "express";
-import { getAuthUser } from "@/utils/getAuthUser";
-import { userPresenter } from "../user.presenter";
-import { resolveUserView } from "../user.view-resolver";
 import {
   createCustomerProfileSchema,
   createEmployeeProfileSchema,
   deleteCustomerProfileSchema,
   deleteEmployeeProfileSchema,
-} from "./user.profile.schema";
+} from "@pet-oasis/api-contracts/user";
+import type { Request, Response } from "express";
+import { getAuthUser } from "@/utils/getAuthUser";
+import { userPresenter } from "../user.presenter";
+import { resolveUserView } from "../user.view-resolver";
 import * as userProfileService from "./user.profile.service";
 
 export const createCustomerProfile = async (req: Request, res: Response) => {

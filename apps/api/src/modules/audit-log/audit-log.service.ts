@@ -1,6 +1,6 @@
+import type { ListAuditLogsQuery } from "@pet-oasis/api-contracts/audit-log";
 import { cursorEnvelope } from "@/lib/pagination";
 import * as auditLogRepository from "./audit-log.repository";
-import type { ListAuditLogsQuery } from "./audit-log.schema";
 
 export async function listAuditLogs(query: ListAuditLogsQuery) {
   const rows = await auditLogRepository.findAuditLogs(query);

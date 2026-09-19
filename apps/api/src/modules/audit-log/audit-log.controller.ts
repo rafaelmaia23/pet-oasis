@@ -1,8 +1,8 @@
+import { listAuditLogsSchema } from "@pet-oasis/api-contracts/audit-log";
 import type { Request, Response } from "express";
 import { hasFeature } from "@/lib/authorization";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { auditLogPresenter, maskIp } from "./audit-log.presenter";
-import { listAuditLogsSchema } from "./audit-log.schema";
 import * as auditLogService from "./audit-log.service";
 
 export const getAuditLogs = async (req: Request, res: Response) => {

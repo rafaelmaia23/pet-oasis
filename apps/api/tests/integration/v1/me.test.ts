@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { meViews } from "@pet-oasis/api-contracts/me";
 import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
@@ -7,7 +8,6 @@ import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import app from "@/app";
 import { prisma } from "@/lib/prisma";
-import { meViews } from "@/modules/me/me.presenter";
 
 afterEach(async () => {
   await clearDatabase();

@@ -1,30 +1,24 @@
+import {
+  createProductSchema,
+  createVariantSchema,
+  listProductsSchema,
+  productDetailParamsSchema,
+  productImageParamsSchema,
+  productImagesParamsSchema,
+  productImageViews,
+  productListViews,
+  productParamsSchema,
+  productViews,
+  reorderProductImagesSchema,
+  updateProductSchema,
+  updateVariantSchema,
+  variantParamsSchema,
+  variantViews,
+} from "@pet-oasis/api-contracts/catalog";
+import { offsetMetaSchema } from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
 import { env } from "@/config/env";
-import { offsetMetaSchema } from "@/lib/pagination";
-import {
-  productImageParamsSchema,
-  productImagesParamsSchema,
-  reorderProductImagesSchema,
-} from "@/modules/product/product.image.schema";
-import {
-  productImagePresenter,
-  productListViews,
-  productViews,
-  variantViews,
-} from "@/modules/product/product.presenter";
-import {
-  createProductSchema,
-  listProductsSchema,
-  productDetailParamsSchema,
-  productParamsSchema,
-  updateProductSchema,
-} from "@/modules/product/product.schema";
-import {
-  createVariantSchema,
-  updateVariantSchema,
-  variantParamsSchema,
-} from "@/modules/product/product.variant.schema";
 import { errorResponses, jsonResponse, noContentResponse } from "../components";
 import { fromEnvelope, imageUploadBody } from "../helpers";
 
@@ -200,7 +194,7 @@ export const productPaths: ZodOpenApiPathsObject = {
       ...fromEnvelope(productImagesParamsSchema),
       ...imageUploadBody(env.UPLOAD_MAX_FILE_SIZE_BYTES),
       responses: {
-        201: jsonResponse("Imagem criada", productImagePresenter.views.default),
+        201: jsonResponse("Imagem criada", productImageViews.default),
         401: errorResponses[401],
         403: errorResponses[403],
         404: errorResponses[404],
@@ -220,7 +214,7 @@ export const productPaths: ZodOpenApiPathsObject = {
       responses: {
         200: jsonResponse(
           "Imagens na nova ordem",
-          z.object({ data: z.array(productImagePresenter.views.default) }),
+          z.object({ data: z.array(productImageViews.default) }),
         ),
         401: errorResponses[401],
         403: errorResponses[403],

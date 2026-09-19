@@ -1,61 +1,22 @@
+import { defineSortConfig } from "@pet-oasis/api-contracts/pagination";
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 import type { AppError } from "@/errors";
 import {
   buildCursorFilter,
   buildOffsetArgs,
-  buildOffsetQuerySchema,
   buildOrderBy,
   cursorEnvelope,
-  cursorQuerySchema,
-  DEFAULT_LIMIT,
   decodeCursor,
-  defineSortConfig,
   encodeCursor,
   listEnvelope,
-  MAX_LIMIT,
   offsetEnvelope,
-  offsetQuerySchema,
 } from "@/lib/pagination";
 
+// Os schemas de query (`offsetQuerySchema`, `cursorQuerySchema`,
+// `buildOffsetQuerySchema`) são contrato e têm o próprio teste no pacote
+// `@pet-oasis/api-contracts`; aqui fica o que traduz a query em banco.
+
 describe("pagination", () => {
-  describe("offsetQuerySchema", () => {
-    it("should default page to 1 and limit to DEFAULT_LIMIT", () => {
-      const parsed = offsetQuerySchema.parse({});
-      expect(parsed).toEqual({ page: 1, limit: DEFAULT_LIMIT });
-    });
-
-    it("should coerce string query params to numbers", () => {
-      const parsed = offsetQuerySchema.parse({ page: "3", limit: "50" });
-      expect(parsed).toEqual({ page: 3, limit: 50 });
-    });
-
-    it("should reject a limit above MAX_LIMIT", () => {
-      const result = offsetQuerySchema.safeParse({
-        limit: String(MAX_LIMIT + 1),
-      });
-      expect(result.success).toBe(false);
-    });
-
-    it("should reject page below 1", () => {
-      expect(offsetQuerySchema.safeParse({ page: "0" }).success).toBe(false);
-    });
-  });
-
-  describe("cursorQuerySchema", () => {
-    it("should default limit and leave cursor optional", () => {
-      const parsed = cursorQuerySchema.parse({});
-      expect(parsed.limit).toBe(DEFAULT_LIMIT);
-      expect(parsed.cursor).toBeUndefined();
-    });
-
-    it("should reject a limit above MAX_LIMIT", () => {
-      expect(
-        cursorQuerySchema.safeParse({ limit: String(MAX_LIMIT + 1) }).success,
-      ).toBe(false);
-    });
-  });
-
   describe("buildOffsetArgs", () => {
     it("should translate page/limit into skip/take", () => {
       expect(buildOffsetArgs({ page: 1, limit: 20 })).toEqual({
@@ -85,57 +46,6 @@ describe("pagination", () => {
     const sortConfig = defineSortConfig({
       fields: { createdAt: "desc", name: "asc" },
       default: "createdAt",
-    });
-
-    const schema = buildOffsetQuerySchema(sortConfig, {
-      status: z.enum(["ACTIVE", "PENDING"]).optional(),
-    });
-
-    describe("buildOffsetQuerySchema", () => {
-      it("should keep page/limit defaults and leave sort/order optional", () => {
-        const parsed = schema.parse({});
-        expect(parsed).toEqual({ page: 1, limit: DEFAULT_LIMIT });
-      });
-
-      it("should keep the resource filters alongside sort/order", () => {
-        const parsed = schema.parse({ status: "ACTIVE", sort: "name" });
-        expect(parsed.status).toBe("ACTIVE");
-        expect(parsed.sort).toBe("name");
-      });
-
-      it("should reject a sort field outside the allowlist", () => {
-        const result = schema.safeParse({ sort: "passwordHash" });
-        expect(result.success).toBe(false);
-        expect(result.error?.issues.some((i) => i.path.includes("sort"))).toBe(
-          true,
-        );
-      });
-
-      it("should reject an order value other than asc/desc", () => {
-        const result = schema.safeParse({ sort: "name", order: "sideways" });
-        expect(result.success).toBe(false);
-        expect(result.error?.issues.some((i) => i.path.includes("order"))).toBe(
-          true,
-        );
-      });
-
-      it("should reject order without sort, naming the order field (S3)", () => {
-        const result = schema.safeParse({ order: "asc" });
-        expect(result.success).toBe(false);
-        expect(result.error?.issues.some((i) => i.path.includes("order"))).toBe(
-          true,
-        );
-      });
-
-      it("should still expose .shape (the OpenAPI generator depends on it)", () => {
-        expect(Object.keys(schema.shape).sort()).toEqual([
-          "limit",
-          "order",
-          "page",
-          "sort",
-          "status",
-        ]);
-      });
     });
 
     describe("buildOrderBy", () => {

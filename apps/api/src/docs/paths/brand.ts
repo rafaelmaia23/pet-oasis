@@ -1,11 +1,11 @@
-import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { env } from "@/config/env";
-import { brandViews } from "@/modules/brand/brand.presenter";
 import {
   brandParamsSchema,
+  brandViews,
   createBrandSchema,
   updateBrandSchema,
-} from "@/modules/brand/brand.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import type { ZodOpenApiPathsObject } from "zod-openapi";
+import { env } from "@/config/env";
 import {
   errorResponses,
   jsonResponse,

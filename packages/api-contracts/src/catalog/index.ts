@@ -1,11 +1,12 @@
-import { z } from "zod";
-
-// Enum com dois donos (ver `src/user/index.ts`): o teste de paridade da API
-// prova que os valores batem com o enum gerado pelo Prisma.
-
-// "Isto está à venda?" e "isto existe?" são perguntas diferentes: o status
-// convive com o soft delete. DISCONTINUED some da vitrine mas preserva o
-// histórico de venda; excluído é erro de cadastro. DRAFT ainda não está à
-// venda e só aparece para quem tem `read:product:internal`.
-export const productStatusSchema = z.enum(["DRAFT", "ACTIVE", "DISCONTINUED"]);
-export type ProductStatus = z.infer<typeof productStatusSchema>;
+export * from "./brand.schema";
+export * from "./brand.views";
+export * from "./catalog.enums";
+export * from "./catalog.schema";
+export * from "./category.schema";
+export * from "./category.views";
+export * from "./product.image.schema";
+export * from "./product.schema";
+export * from "./product.variant.schema";
+export * from "./product.views";
+export * from "./tag.schema";
+export * from "./tag.views";

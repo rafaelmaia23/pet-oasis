@@ -1,6 +1,6 @@
+import type { ListRecentLogsQuery } from "@pet-oasis/api-contracts/log";
 import { env } from "@/config/env";
 import { logBuffer } from "@/lib/logBuffer";
-import type { ListRecentLogsQuery } from "./log.schema";
 
 /**
  * Lê o ring buffer de logs em memória (7.3), mais recentes primeiro. As entradas

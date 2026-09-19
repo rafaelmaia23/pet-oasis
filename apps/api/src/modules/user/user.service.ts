@@ -1,3 +1,12 @@
+import { PERMISSION_FEATURES } from "@pet-oasis/api-contracts/feature";
+import type { RoleName } from "@pet-oasis/api-contracts/role";
+import {
+  type CreateCustomerInput,
+  type CreateEmployeeInput,
+  type ListUsersQuery,
+  type UpdateUserInput,
+  USER_SORT,
+} from "@pet-oasis/api-contracts/user";
 import {
   createConflictError,
   createForbiddenError,
@@ -19,13 +28,6 @@ import { hashPassword } from "@/lib/password";
 import { consumeEmailTargetLimit, emailTargetLimiter } from "@/lib/rateLimit";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import * as userRepository from "@/modules/user/user.repository";
-import {
-  type CreateCustomerInput,
-  type CreateEmployeeInput,
-  type ListUsersQuery,
-  type UpdateUserInput,
-  USER_SORT,
-} from "@/modules/user/user.schema";
 import { validateRoles } from "@/utils/validateRoles";
 import { requestAccountReactivation } from "../auth/accountReactivation.service";
 import { PASSWORD_RESET_TTL_MS } from "../auth/auth.constants";
@@ -35,7 +37,6 @@ import {
   assertAdminForRoleAssignment,
   getRolesRestorableWithProfiles,
 } from "../permission/permission.service";
-import { PERMISSION_FEATURES, type RoleName } from "../role/role.constants";
 import { getRolesByNames } from "../role/role.repository";
 
 const log = logger.child({ module: "user" });

@@ -1,10 +1,10 @@
-import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { tagViews } from "@/modules/tag/tag.presenter";
 import {
   createTagSchema,
   tagParamsSchema,
+  tagViews,
   updateTagSchema,
-} from "@/modules/tag/tag.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import type { ZodOpenApiPathsObject } from "zod-openapi";
 import {
   errorResponses,
   jsonResponse,

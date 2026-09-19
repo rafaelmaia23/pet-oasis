@@ -1,3 +1,4 @@
+import { breedViews } from "@pet-oasis/api-contracts/pet";
 import { buildCustomer } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
@@ -12,7 +13,6 @@ import {
   DEFAULT_BREEDS,
   SRD_BREED_NAME,
 } from "@/modules/breed/breed.constants";
-import { breedViews } from "@/modules/breed/breed.presenter";
 
 afterEach(async () => {
   await clearDatabase();

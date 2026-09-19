@@ -83,9 +83,10 @@ escrever um consumidor de lista genérico.
 
 ### Limites
 
-`limit` default **20**, máximo **100**, constantes em `src/lib/pagination.ts`
-(não são env var: fazem parte do contrato documentado no OpenAPI, não da
-configuração de ambiente). `limit` acima do teto → **422**, com o `errors` por
+`limit` default **20**, máximo **100**, constantes do contrato
+(`@pet-oasis/api-contracts/pagination`; até a 11.10 viviam em
+`src/lib/pagination.ts` — não são env var: fazem parte do contrato documentado
+no OpenAPI, não da configuração de ambiente). `limit` acima do teto → **422**, com o `errors` por
 campo do idioma do projeto — não um clamp silencioso, que faria o cliente
 acreditar que recebeu tudo.
 
@@ -166,7 +167,9 @@ pontos de contrato em aberto. Decididos com o usuário na sessão e implementado
 | S3 | `?order=` sem `?sort=` | **422** nomeando `order`. Mesmo idioma de `limit > 100` (422, não clamp silencioso). Aplicar ao campo default foi preterido: amarraria o significado da URL a um default implícito, que mudaria em silêncio se o campo default do recurso mudasse. |
 | S4 | Direção do tiebreaker | Segue o `order` pedido (`?sort=name&order=asc` → `[{name:"asc"},{id:"asc"}]`). Qualquer direção fixa serviria para não pular/repetir registro; seguir o `order` mantém a leitura coerente dentro do grupo empatado. |
 
-**Forma no código** (`src/lib/pagination.ts`): o recurso declara a allowlist com
+**Forma no código** (schemas de query em `@pet-oasis/api-contracts/pagination`
+desde a 11.10; `buildOrderBy` e o resto do lado do banco em
+`src/lib/pagination.ts`): o recurso declara a allowlist com
 `defineSortConfig({ fields, default })`; `buildOffsetQuerySchema(config, filters)`
 devolve a query inteira (page/limit + sort/order + filtros do recurso) com o
 `sort` como `z.enum` da allowlist e a regra S3 embutida — o refinamento mora no

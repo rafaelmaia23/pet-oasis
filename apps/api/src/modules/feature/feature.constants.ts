@@ -9,7 +9,6 @@ import {
 // a prova, no typecheck: feature do contrato sem descrição é chave faltando;
 // descrição sem feature é propriedade em excesso. Os dois lados não divergem
 // em silêncio.
-export { FEATURE_NAMES, type FeatureName };
 
 const FEATURE_DESCRIPTIONS: Record<FeatureName, string> = {
   // User features

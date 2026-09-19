@@ -1,12 +1,12 @@
-import type { Request, Response } from "express";
-import { listEnvelope } from "@/lib/pagination";
-import { uploadedFile } from "@/middlewares/upload.middleware";
-import { brandPresenter } from "./brand.presenter";
 import {
   brandParamsSchema,
   createBrandSchema,
   updateBrandSchema,
-} from "./brand.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import type { Request, Response } from "express";
+import { listEnvelope } from "@/lib/pagination";
+import { uploadedFile } from "@/middlewares/upload.middleware";
+import { brandPresenter } from "./brand.presenter";
 import * as brandService from "./brand.service";
 
 export const listBrands = async (_req: Request, res: Response) => {

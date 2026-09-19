@@ -1,8 +1,8 @@
+import type { UpdateTagInput } from "@pet-oasis/api-contracts/catalog";
 import type { Prisma } from "@/generated/prisma/client";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
-import type { UpdateTagInput } from "./tag.schema";
 
 /**
  * Única camada que toca o Prisma no módulo. Diferente de marca e categoria, aqui

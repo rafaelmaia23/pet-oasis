@@ -11,7 +11,7 @@ Monorepo do Pet Oasis — um pet shop online. Gerido por **pnpm workspaces**
 | [`apps/api`](apps/api/README.md) | A API REST (Node/Express, Prisma, Zod) — README, guias e ADRs (índice em [`apps/api/docs/adr/README.md`](apps/api/docs/adr/README.md)) vivem lá |
 | `packages/tsconfig` | Presets de TypeScript (`@pet-oasis/tsconfig`): base estrito + um por alvo (Node, Next, biblioteca) |
 | `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`): formatter, linter e estilo; cada app estende e acrescenta só os ignores que são seus |
-| [`packages/api-contracts`](packages/api-contracts/README.md) | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): enums de domínio, nomes de role/feature, shape de erro; só depende de `zod`, consumido do fonte TS |
+| [`packages/api-contracts`](packages/api-contracts/README.md) | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): schemas Zod de request, views de resposta, enums de domínio, nomes de role/feature e shape de erro; só depende de `zod`, consumido do fonte TS |
 | [`docs/`](docs/README.md) | Documentação do **sistema**: ADRs de sistema, [índice das fases](docs/todo.md), [backlog](docs/reference/backlog.md), guias e config das skills |
 | [`.scratch/`](.scratch/README.md) | O tracker (spec + issues por esforço), único para o monorepo |
 | [`CONTEXT-MAP.md`](CONTEXT-MAP.md) | O mapa dos contextos — um por app, com o glossário (`CONTEXT.md`) de cada um |

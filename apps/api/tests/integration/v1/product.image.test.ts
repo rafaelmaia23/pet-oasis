@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { MAX_IMAGES_PER_PRODUCT } from "@pet-oasis/api-contracts/catalog";
 import {
   buildCatalogTaxonomy,
   buildProduct,
@@ -16,7 +17,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import app from "@/app";
 import { env } from "@/config/env";
 import { prisma } from "@/lib/prisma";
-import { MAX_IMAGES_PER_PRODUCT } from "@/modules/product/product.image.constants";
 
 afterEach(async () => {
   await clearDatabase();

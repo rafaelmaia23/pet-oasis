@@ -1,3 +1,4 @@
+import type { RoleName } from "@pet-oasis/api-contracts/role";
 import { buildPet } from "@tests/factories/pet.factory";
 import {
   attachOverrides,
@@ -25,7 +26,6 @@ import app from "@/app";
 import { env } from "@/config/env";
 import { prisma } from "@/lib/prisma";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
-import type { RoleName } from "@/modules/role/role.constants";
 import { softDeleteUserAndInvalidateSessions } from "@/modules/user/user.repository";
 
 // A reativação atravessa dois routers (o signup em `/auth`, a ação do admin em

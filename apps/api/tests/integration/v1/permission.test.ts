@@ -1,4 +1,7 @@
 import { faker } from "@faker-js/faker";
+import { userFeatureViews } from "@pet-oasis/api-contracts/permission";
+import type { RoleName } from "@pet-oasis/api-contracts/role";
+import { roleViews } from "@pet-oasis/api-contracts/role";
 import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
@@ -11,9 +14,6 @@ import app from "@/app";
 import { createNotFoundError } from "@/errors/errorFactory";
 import { prisma } from "@/lib/prisma";
 import { getFeatureByName } from "@/modules/feature/feature.repository";
-import { userFeatureViews } from "@/modules/permission/permission.presenter";
-import type { RoleName } from "@/modules/role/role.constants";
-import { roleViews } from "@/modules/role/role.presenter";
 import { getRoleByName } from "@/modules/role/role.repository";
 import { findUserById } from "@/modules/user/user.repository";
 

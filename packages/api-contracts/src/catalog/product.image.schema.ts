@@ -1,9 +1,21 @@
 import { z } from "zod";
-import { MAX_IMAGES_PER_PRODUCT } from "./product.image.constants";
+
+/**
+ * Teto de imagens por produto. Constante e não env var (9.10/AA19): "um produto
+ * tem no máximo 8 imagens" não muda entre dev e produção — é regra de domínio,
+ * e regra que mora em env é regra que ninguém acha lendo o domínio. É contrato
+ * porque o cliente precisa saber quando parar de oferecer upload, e porque é o
+ * teto do array de reordenação abaixo.
+ *
+ * É também o limite estrutural do crescimento de disco, mais forte que qualquer
+ * rate limit: o número de arquivos é no máximo 8 × produtos, e produto só nasce
+ * pelas mãos de quem tem `manage:product`.
+ */
+export const MAX_IMAGES_PER_PRODUCT = 8;
 
 /**
  * Validação **sintática** das imagens. O arquivo em si não passa por aqui: quem
- * o valida é o pipeline (`src/lib/storage/`), por magic bytes, porque
+ * o valida é o pipeline de storage da API, por magic bytes, porque
  * `Content-Type` e extensão são texto que o cliente escreve. O que sobra para o
  * Zod é o que vem em params e no corpo da reordenação.
  */

@@ -1,3 +1,4 @@
+import { auditLogViews } from "@pet-oasis/api-contracts/audit-log";
 import { buildEmployee } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
@@ -8,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import app from "@/app";
 import { prisma } from "@/lib/prisma";
-import { auditLogViews } from "@/modules/audit-log/audit-log.presenter";
 
 const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }));
 vi.mock("@/lib/email", () => ({ send: sendMock }));

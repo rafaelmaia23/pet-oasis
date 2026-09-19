@@ -1,10 +1,10 @@
+import { MAX_IMAGES_PER_PRODUCT } from "@pet-oasis/api-contracts/catalog";
 import { createNotFoundError, createValidationError } from "@/errors";
 import {
   deleteImage as deleteFile,
   imageUrls,
   storeImage,
 } from "@/lib/storage";
-import { MAX_IMAGES_PER_PRODUCT } from "./product.image.constants";
 import * as imageRepository from "./product.image.repository";
 import { resolveProduct } from "./product.service";
 

@@ -9,12 +9,15 @@
 `packages/api-contracts` (`@pet-oasis/api-contracts`) é o que atravessa a rede entre a API e os
 clientes: nasceu com o que **não depende de nenhum schema da API** — os enums de domínio como
 `z.enum`, os nomes de role e feature (e os conjuntos de permissão e privilegiado, o segundo derivado do primeiro) como tuplas `as const`, e o
-shape de erro (envelope comum, `code`s conhecidos, `errors` por campo do 422). A migração dos
-schemas de request e das views é a etapa seguinte; esta é o "expand" do refactor largo, e a API
-consome do contrato só o que já tinha dono duplo: `role.constants.ts` e `feature.constants.ts`
-**reexportam** os nomes de lá e guardam só o que o seed anexa a cada nome (descrição, features
-por role, `appliesTo`), num `Record<Name, …>` — chave faltando ou sobrando é erro de typecheck,
-não teste. Nenhum outro import da API mudou.
+shape de erro (envelope comum, `code`s conhecidos, `errors` por campo do 422). Esta foi o
+"expand" do refactor largo: a API consumiu do contrato só o que já tinha dono duplo —
+`role.constants.ts` e `feature.constants.ts` reexportaram os nomes de lá e guardaram só o que o
+seed anexa a cada nome (descrição, features por role, `appliesTo`), num `Record<Name, …>` —
+chave faltando ou sobrando é erro de typecheck, não teste. O "contract" veio na 11.10: os
+schemas de request e as views migraram inteiros, os `*.schema.ts` da API deixaram de existir e
+os reexports caíram (a API importa os nomes do contrato). A fronteira caso a caso e o que ficou
+na API como composição estão no
+[`0199`](0199-schemas-de-request-e-views-sao-codigo-do-contrato.md).
 
 **Duas fronteiras, cada uma com um teste.** (1) O pacote só depende de `zod`: `dependencies` é
 exatamente `{ zod }` e nenhum arquivo importa de fora de `src/` — a guarda de pureza no próprio

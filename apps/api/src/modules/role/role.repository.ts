@@ -1,5 +1,5 @@
+import type { RoleName } from "@pet-oasis/api-contracts/role";
 import { prisma } from "@/lib/prisma";
-import type { RoleName } from "@/modules/role/role.constants";
 
 const roleInclude = {
   features: { include: { feature: true } },

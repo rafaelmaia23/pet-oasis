@@ -3,7 +3,7 @@ import {
   catalogDescriptionSchema,
   catalogNameSchema,
   slugSchema,
-} from "@/modules/catalog/catalog.schema";
+} from "./catalog.schema";
 
 /**
  * Validação **sintática** da categoria. As regras da árvore (pai existe,

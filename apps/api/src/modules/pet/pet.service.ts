@@ -1,4 +1,10 @@
 import {
+  type CreatePetInput,
+  type ListPetsQuery,
+  PET_SORT,
+  type UpdatePetInput,
+} from "@pet-oasis/api-contracts/pet";
+import {
   createForbiddenError,
   createNotFoundError,
   createValidationError,
@@ -11,12 +17,6 @@ import { SPECIES_WITH_BREED } from "@/modules/breed/breed.constants";
 import { findBreedById } from "@/modules/breed/breed.repository";
 import { findActiveCustomerById } from "@/modules/user/profile/user.profile.repository";
 import * as petRepository from "./pet.repository";
-import {
-  type CreatePetInput,
-  type ListPetsQuery,
-  PET_SORT,
-  type UpdatePetInput,
-} from "./pet.schema";
 
 /**
  * Autorização de escopo (`own` × `:others`) em duas etapas, no idioma da 8.3.

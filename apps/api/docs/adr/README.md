@@ -196,6 +196,10 @@ contra-argumentos e os gotchas.
 > [`reference/endpoints.md`](../reference/endpoints.md); o contrato formal é o
 > `/openapi.json`, gerado dos próprios schemas Zod.
 
+#### Onde o contrato vive
+
+- [`0199`](0199-schemas-de-request-e-views-sao-codigo-do-contrato.md) Schemas de request e views são código do pacote `@pet-oasis/api-contracts` (11.10) — a API importa tudo do contrato; o que precisa de algo além de `zod` fica na API como composição
+
 #### Views (presenter)
 
 Cada recurso tem views resolvidas pela **capability do viewer** (não pelo role). `.parse()`

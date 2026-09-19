@@ -1,3 +1,4 @@
+import { PRIVILEGED_FEATURES } from "@pet-oasis/api-contracts/feature";
 import {
   createConflictError,
   createNotFoundError,
@@ -10,7 +11,6 @@ import {
 } from "@/lib/authorization";
 import { logger } from "@/lib/logger";
 import * as featureRepository from "@/modules/feature/feature.repository";
-import { PRIVILEGED_FEATURES } from "../role/role.constants";
 import * as roleRepository from "../role/role.repository";
 import { toRoleDTO } from "../role/role.service";
 import * as userRepository from "../user/user.repository";

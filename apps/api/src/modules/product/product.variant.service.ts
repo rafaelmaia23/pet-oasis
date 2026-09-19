@@ -1,3 +1,8 @@
+import type {
+  CreateVariantInput,
+  UpdateVariantInput,
+  VariantView,
+} from "@pet-oasis/api-contracts/catalog";
 import {
   createConflictError,
   createForbiddenError,
@@ -6,13 +11,8 @@ import {
 import type { AuditDescriptor } from "@/lib/auditLog";
 import { type AuthUser, hasFeature } from "@/lib/authorization";
 import { definedOnly } from "@/utils/definedOnly";
-import type { VariantView } from "./product.presenter";
 import { resolveProduct, withVariantAvailability } from "./product.service";
 import * as variantRepository from "./product.variant.repository";
-import type {
-  CreateVariantInput,
-  UpdateVariantInput,
-} from "./product.variant.schema";
 
 /**
  * Regras da variante — a unidade vendável. Três invariantes vivem aqui, porque

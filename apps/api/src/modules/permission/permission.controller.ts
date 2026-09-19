@@ -1,5 +1,3 @@
-import type { Request, Response } from "express";
-import { listEnvelope } from "@/lib/pagination";
 import {
   deleteUserRoleParamsSchema,
   getPermissionParamsSchema,
@@ -8,7 +6,9 @@ import {
   postUserRoleParamsSchema,
   removePermissionParamsSchema,
   upsertPermissionParamsSchema,
-} from "@/modules/permission/permission.schema";
+} from "@pet-oasis/api-contracts/permission";
+import type { Request, Response } from "express";
+import { listEnvelope } from "@/lib/pagination";
 import * as permissionService from "@/modules/permission/permission.service";
 import { rolePresenter } from "@/modules/role/role.presenter";
 import { getAuthUser } from "@/utils/getAuthUser";

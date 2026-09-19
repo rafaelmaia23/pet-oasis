@@ -1,6 +1,6 @@
 # Fase 10 — Desbloqueio do front web e dívida de deploy
 
-Status: fechada em 2026-09-16 — porquê promovido a docs/context/identity-and-sessions.md, docs/context/security.md, docs/context/infrastructure.md, docs/guides/integrating-with-the-api.md, docs/guides/deploy.md, docs/reference/backlog.md; adendo em 2026-09-16 (issues 22–23: `Retry-After` no lockout e revisão final do guia de integração)
+Status: fechada em 2026-09-16 — porquê promovido a apps/api/docs/adr/README.md#identidade-e-sessões, apps/api/docs/adr/README.md#segurança, apps/api/docs/adr/README.md#infraestrutura, apps/api/docs/guides/integrating-with-the-api.md, apps/api/docs/guides/deploy.md, docs/reference/backlog.md; adendo em 2026-09-16 (issues 22–23: `Retry-After` no lockout e revisão final do guia de integração)
 
 > Nenhum domínio novo. Tudo aqui existe porque o `pet-oasis-web` precisa, ou porque a
 > produção já cobrou. Decisões fechadas em quatro rodadas de grelha; a errata para o outro

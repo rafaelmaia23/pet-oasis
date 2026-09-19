@@ -52,8 +52,8 @@ nomeando o campo — 18 casos. Mais um em `openapi.test.ts` afirmando que o `max
 para uma amostra de cada classe (corpo, texto cru com máscara, query): o teto é contrato, e um
 teto removido num refactor fica vermelho na spec.
 
-**Docs.** `docs/reference/endpoints.md` (parágrafo "Comprimento máximo"), decisão em
-`docs/context/security.md` § "Todo campo de texto tem teto, e o teto é contrato" com linha no
+**Docs.** `apps/api/docs/reference/endpoints.md` (parágrafo "Comprimento máximo"), decisão em
+`apps/api/docs/adr/0128-todo-campo-texto-tem-teto-teto-contrato.md` com linha no
 índice, regra de "campo de texto novo nasce com `.max()`" em `CLAUDE.md`, e o item do backlog
 riscado.
 

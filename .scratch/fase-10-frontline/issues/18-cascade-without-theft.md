@@ -124,10 +124,10 @@ teto precisa existir para limitar o trabalho por requisição — duas idas por 
 - [x] A mensagem do 503 (`action`) para de dizer "em alguns instantes" e passa a dizer para
       tentar de novo **agora** — hoje ela contradiz o guia, e quem obedece à mensagem provoca o
       caminho 1.
-- [x] `docs/context/identity-and-sessions.md`, na seção da janela de graça: a marca, a sub-regra
+- [x] `apps/api/docs/adr/README.md#identidade-e-sessões`, na seção da janela de graça: a marca, a sub-regra
       (a) e os dois caminhos recusados; o teto em 5 e o caminho 2 como **exposição aceita**, com
       o parágrafo do "para quem perguntar de novo" destilado.
-- [x] `docs/guides/integrating-with-the-api.md`: o bullet do 503 passa a dizer que a retentativa
+- [x] `apps/api/docs/guides/integrating-with-the-api.md`: o bullet do 503 passa a dizer que a retentativa
       tem uma janela própria (30 s a partir do primeiro 503) e que, passada ela, a reapresentação
       é indistinguível de roubo. O OpenAPI do `/auth/refresh` não muda de status — só de texto,
       se a descrição do 503 citar os 10 s.
@@ -156,6 +156,6 @@ teto precisa existir para limitar o trabalho por requisição — duas idas por 
   `vi.spyOn(redis, "get")`, `UNAVAILABLE`); marca aberta + par no cache serve a ponta viva; marca
   aberta sem par é 503 de novo, nada morre, marca não renova; marca fechada cascateia; elo
   invalidado com marca aberta é 401 sem cookie.
-- Docs: `docs/context/identity-and-sessions.md` (dois parágrafos em negrito na seção da janela),
-  índice em `docs/context.md`, bullet do 503 no guia de integração, descrição do
+- Docs: `apps/api/docs/adr/README.md#identidade-e-sessões` (dois parágrafos em negrito na seção da janela),
+  índice em `apps/api/docs/adr/README.md`, bullet do 503 no guia de integração, descrição do
   `/auth/refresh` no OpenAPI.

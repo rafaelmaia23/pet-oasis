@@ -11,7 +11,7 @@ Code + Shotgun Surgery, ambos "judgement call"); nada disto muda comportamento.
 **Blocked by:** 03 — fechada: o install no Dockerfile ficou como vai ficar (manifestos dos
 `packages/*` por `COPY --parents` antes do `pnpm install`, `COPY packages packages` depois, junto
 do fonte, nos dois estágios; o `injectWorkspacePackages` do `deploy` **não** foi necessário no
-pnpm 12 — ver `docs/context/infrastructure.md`). O bloco duplicado que esta issue concentra
+pnpm 12 — ver `apps/api/docs/adr/README.md#infraestrutura`). O bloco duplicado que esta issue concentra
 cresceu duas linhas.
 
 **Status:** ready-for-agent

@@ -50,16 +50,16 @@ arquivos — **não** é para editar lá.
 - `README.md` — linhas 18, 43, 47, 48, 49, 68, 82, 123, 209.
 - `api-collection/environments/prod.bru` — `baseUrl`.
 - `.env.example:193` — exemplo de `UPLOAD_PUBLIC_BASE_URL`.
-- `docs/guides/integrating-with-the-api.md:59` — a base pública.
-- `docs/guides/deploy.md:30` — exemplo de `UPLOAD_PUBLIC_BASE_URL`.
-- `docs/context/infrastructure.md:241` e `docs/context.md:318` (a linha do índice).
+- `apps/api/docs/guides/integrating-with-the-api.md:59` — a base pública.
+- `apps/api/docs/guides/deploy.md:30` — exemplo de `UPLOAD_PUBLIC_BASE_URL`.
+- `apps/api/docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md` e `apps/api/docs/adr/README.md:318` (a linha do índice).
 - `docs/reference/backlog.md:240` (título do item) e `:248`, `:252`.
 
 **Remoção do 301 e da receita nginx/certbot, narrando a reversão (não errata):**
 
 - `README.md:43` — a frase "O apex redireciona `/reference` e `/openapi.json` para cá com 301"
   sai; fica só "a API está no ar em `pet-oasis-api.maiahub.com.br`".
-- `docs/guides/deploy.md` § "Domínio e reverse proxy" (linhas 107–213), reescrita inteira:
+- `apps/api/docs/guides/deploy.md` § "Domínio e reverse proxy" (linhas 107–213), reescrita inteira:
   - some a tabela dos dois 301 e o parágrafo "São só esses dois";
   - some "A ordem, que não é livre" (é a ordem do `certbot --nginx` + HTTP-01, que não é o que
     o servidor faz) e "A forma final" (os dois server blocks crus);
@@ -76,17 +76,16 @@ arquivos — **não** é para editar lá.
   - "Verificar" perde as duas linhas de 301 e troca o host nas outras; ganha uma linha que prove
     a cadeia de IP pela Cloudflare (um login recusado vindo de fora grava em `audit_logs` o IP do
     visitante, não `2606:4700::`/`104.x`/`172.x`).
-- `docs/context/infrastructure.md` § "A API atende num subdomínio, e o apex guarda dois 301
-  (10.6)": título e corpo reescritos — o apex é do front e **fica limpo**; o parágrafo dos 301
+- `apps/api/docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md` (então "…e o apex guarda dois 301 (10.6)"): título e corpo reescritos — o apex é do front e **fica limpo**; o parágrafo dos 301
   vira a narrativa de que eles foram planejados e descartados (demo quase não divulgada, e o
   custo de manter dois `location` para sempre num host que não é da API); entra o parágrafo do
   nome (segundo nível não fecha TLS atrás do proxy da Cloudflare — por isso primeiro nível) e o
   da cadeia de IP com `CF-Connecting-IP`, ligado à decisão da 10.2 (que hoje só fala em
   `visitante → nginx → api`, sem a Cloudflare na frente). "A ordem é parte da decisão" perde a
   menção aos 301. O ponteiro para o `deploy.md` fica.
-- `docs/context.md:318-320` — a linha do índice acompanha o título novo e perde o "continuam
+- `apps/api/docs/adr/README.md:318-320` — a linha do índice acompanha o título novo e perde o "continuam
   chegando por 301".
-- `docs/context/security.md:157-158` e `docs/guides/integrating-with-the-api.md:89-94` — as
+- `apps/api/docs/adr/0123-trust-proxy-endereco-origem-nao-contagem-saltos.md` e `apps/api/docs/guides/integrating-with-the-api.md:89-94` — as
   cadeias `visitante → nginx → api` ganham a Cloudflare na frente, ou uma frase dizendo que o
   proxy resolve o IP real antes de encaminhar. Só o necessário para a descrição não mentir; a
   decisão em si mora em `infrastructure.md`.
@@ -108,7 +107,7 @@ já está no apex no servidor); `src/docs/openapi.ts` (`servers` relativo segue 
 - [x] Nenhuma menção a 301 do apex, `certbot`, HTTP-01 ou server block cru fora de `.scratch/`
       **como instrução** — as três que restam (`context.md`, `infrastructure.md`, `backlog.md`)
       dizem "planejado e descartado". Mesma ressalva do item anterior.
-- [x] `docs/context/infrastructure.md` narra as três decisões acima como reescrita da 10.6
+- [x] `apps/api/docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md` narra as três decisões acima como reescrita da 10.6
       (não como decisão nova + errata), e a cadeia de IP com Cloudflare está ligada à 10.2.
 - [x] `deploy.md` § "Domínio e reverse proxy" descreve o NPM + desafio DNS + `CF-Connecting-IP`,
       com o roteiro *Verificar* apontando para o host novo e sem 301.

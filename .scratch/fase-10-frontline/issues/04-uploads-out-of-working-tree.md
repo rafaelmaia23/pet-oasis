@@ -35,8 +35,7 @@ Além do pedido, duas coisas que o critério não nomeia mas sem as quais ele n�
   para dentro da árvore: variável esquecida no `.env.production` e o bug volta sem aviso. Agora
   o `prod:up` falha nomeando a variável, como a rede `proxy` já faz.
 
-O racional permanente está em `docs/context/infrastructure.md` § "O diretório de uploads mora
-fora do working tree, e o uid é fixado no serviço", com a linha correspondente no índice.
+O racional permanente está em `apps/api/docs/adr/0162-diretorio-uploads-mora-fora-working-tree-uid-fixado.md`, com a linha correspondente no índice.
 
 ### Verificado localmente (2026-09-06)
 
@@ -62,7 +61,7 @@ O que **falta** é a verificação de ponta a ponta no servidor, porque ela prec
 produção real e do `.env.production`: subir, enviar uma imagem pelo endpoint, rodar `git clean
 -fd` no repo clonado e conferir que a URL continua servindo o byte. O procedimento de migração
 do diretório existente (com a stack parada, `mv -T`, `chown`, conferência de contagem antes e
-depois) está em `docs/guides/deploy.md` § "Diretório de uploads".
+depois) está em `apps/api/docs/guides/deploy.md` § "Diretório de uploads".
 
 ### Verificado no servidor (2026-09-16)
 

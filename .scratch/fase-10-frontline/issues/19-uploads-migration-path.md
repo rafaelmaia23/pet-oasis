@@ -29,7 +29,7 @@ escreve `./uploads` num compose de `infra/` acha que está apontando para a raiz
 **Status:** fechada em 2026-09-16
 
 - [x] A seção "Migrar um deploy que ainda tem `uploads/` dentro do repo" sai do
-      `docs/guides/deploy.md`. No lugar, uma nota curta: nenhum deploy antecede este layout — o demo
+      `apps/api/docs/guides/deploy.md`. No lugar, uma nota curta: nenhum deploy antecede este layout — o demo
       é recriado do zero (`prod:down` + `prod:up` com `UPLOAD_HOST_DIR` absoluto no
       `.env.production`), então não há nada a migrar. O bloco "criar o diretório antes da primeira
       subida" fica, porque é o que de fato se executa.
@@ -62,7 +62,7 @@ populado, a receita antiga está no histórico do git — e a nota nova diz que 
 
 ## O que foi feito (2026-09-16)
 
-- `docs/guides/deploy.md`: a subseção de migração (35 linhas, com o `mv -T` e a conferência de
+- `apps/api/docs/guides/deploy.md`: a subseção de migração (35 linhas, com o `mv -T` e a conferência de
   contagem) deu lugar a "Não há deploy para migrar" — quatro linhas: nenhum deploy antecede este
   layout, o demo é recriado do zero (`prod:down` → `UPLOAD_HOST_DIR` absoluto → `prod:up`). O bloco
   `mkdir` + `chown` de antes da primeira subida ficou intacto. O bullet de `UPLOAD_HOST_DIR` ganhou
@@ -70,7 +70,7 @@ populado, a receita antiga está no histórico do git — e a nota nova diz que 
 - `infra/docker-compose.prod.yml`: o comentário do mount, que dizia "sem fallback" e "fora do
   working tree", agora diz também **por que absoluto** — com o exemplo concreto de que `./uploads`
   ali era `<repo>/infra/uploads`.
-- `docs/context/infrastructure.md`: a seção da 10.4 dizia que a propriedade "banco guarda a chave"
+- `apps/api/docs/adr/README.md#infraestrutura`: a seção da 10.4 dizia que a propriedade "banco guarda a chave"
   *tornou a migração um `mv`*, apontando para uma receita que deixou de existir. Reescrito no
   condicional, e um parágrafo novo narra a remoção (10.19) com os dois motivos — a receita estava
   errada, e não tinha executor. Sem `###` novo nem linha no índice: é reversão dentro da mesma
@@ -78,7 +78,7 @@ populado, a receita antiga está no histórico do git — e a nota nova diz que 
 - Nenhuma âncora apontava para a subseção removida; `docs:check`, `lint` e `typecheck` verdes. O
   compose de prod só mudou em comentário (YAML validado).
 - Revisão (padrões + spec): `docs/todo.md` passou a 14/20 com a 19 fechada; o índice
-  `docs/context.md` ganhou "e absoluta" na linha da 10.4 (o fato novo era acréscimo, não só
+  `apps/api/docs/adr/README.md` ganhou "e absoluta" na linha da 10.4 (o fato novo era acréscimo, não só
   reversão); o parágrafo do `infrastructure.md` caiu pela metade e aponta para o guia em vez de
   repetir a explicação; a nota do guia perdeu o "desta versão", que envelheceria no primeiro
   deploy. A linha `Triagem:` sai mesmo — `docs/agents/triage-labels.md`: "a linha some quando o

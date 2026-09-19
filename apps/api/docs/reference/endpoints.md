@@ -1,7 +1,7 @@
 # pet-oasis — Endpoints
 
 > Índice interno das rotas existentes (1 linha por rota). O contrato formal da API é o `GET /openapi.json` (OpenAPI 3.1) + a UI interativa em `GET /reference`; este arquivo é só o índice enxuto para organização enquanto o projeto cresce.
-> Ao adicionar/alterar rotas, atualize aqui. Detalhe de decisões no `docs/context.md`.
+> Ao adicionar/alterar rotas, atualize aqui. Detalhe de decisões no `docs/adr/README.md`.
 
 ## Mounting
 
@@ -38,7 +38,7 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 
 **Ordenação (Fase 9.2):** listagens por **offset** aceitam `?sort=<campo>&order=asc|desc`, com allowlist própria de cada recurso (campo fora dela → 422; `order` sem `sort` → 422). Omitir `order` usa a direção natural do campo. O cursor não tem ordenação configurável.
 
-**Comprimento máximo (Fase 10.13):** todo campo de texto — corpo, query ou path — tem teto, e acima dele a resposta é **422** nomeando o campo. O teto é contrato: sai no `/openapi.json` como `maxLength`, e o front pode usá-lo no `<input>`. Os do catálogo e do pet já vinham dos próprios módulos (nome 80, slug 80, descrição 500/2000, SKU 40, rótulo 60, `q` 100, …); a fase fechou os que faltavam, todos de identidade e de sessão: **email 254** (RFC 5321), **senha 100** também onde ela é só *conferida* (login, troca de senha e de email — senha maior nunca foi gravada), **token de email 64** (o tamanho exato que o gerador emite), **CPF 14** e **telefone 20** medidos no **texto cru, com máscara** — a normalização tira os separadores depois, então o teto é sobre o que o cliente digita —, **`cursor` 128** e **`targetId` 36** no audit log. Racional em [`../context/security.md`](../context/security.md#todo-campo-de-texto-tem-teto-e-o-teto-é-contrato-1013).
+**Comprimento máximo (Fase 10.13):** todo campo de texto — corpo, query ou path — tem teto, e acima dele a resposta é **422** nomeando o campo. O teto é contrato: sai no `/openapi.json` como `maxLength`, e o front pode usá-lo no `<input>`. Os do catálogo e do pet já vinham dos próprios módulos (nome 80, slug 80, descrição 500/2000, SKU 40, rótulo 60, `q` 100, …); a fase fechou os que faltavam, todos de identidade e de sessão: **email 254** (RFC 5321), **senha 100** também onde ela é só *conferida* (login, troca de senha e de email — senha maior nunca foi gravada), **token de email 64** (o tamanho exato que o gerador emite), **CPF 14** e **telefone 20** medidos no **texto cru, com máscara** — a normalização tira os separadores depois, então o teto é sobre o que o cliente digita —, **`cursor` 128** e **`targetId` 36** no audit log. Racional em [`../context/security.md`](../adr/0128-todo-campo-texto-tem-teto-teto-contrato.md).
 
 ---
 
@@ -219,7 +219,7 @@ A view da resposta é escolhida pelo **ator**, não pela rota, e são **três** 
 
 Isso vale também para quem acabou de escrever: um autor sem `read:product:cost` não vê a margem do produto que criou.
 
-**Busca textual (Fase 9.9):** `?q=` é o único filtro que não é igualdade. O corpus é **nome (peso A), descrição (peso C) e nome da marca** — tag fica de fora porque já é filtro próprio, e SKU tem **curto-circuito de casamento exato** (código impresso na caixa, digitado inteiro) em vez de entrar no vetor. Erro de digitação é tolerado por **reescrita da query**: cada palavra que não existe no dicionário de lexemas do catálogo é trocada pela mais parecida (`pg_trgm`) antes de a busca rodar, e o termo efetivamente usado volta ecoado no `meta`. O SQL cru **só ranqueia**: a visibilidade continua saindo do mesmo `where` da listagem, então rascunho e produto excluído não vazam pela busca. Palavra criada depois do último `pnpm run db:refresh-search` é achada literalmente, mas ainda não corrige typo. O termo é `trim`ado; vazio depois do trim, com menos de 2 ou mais de 100 caracteres → **422** nomeando `q`. Ter `?q=` troca o default da ordenação para **relevância**; com `?sort=` explícito, os dois compõem. Racional em [`../adr/text-search.md`](../adr/text-search.md).
+**Busca textual (Fase 9.9):** `?q=` é o único filtro que não é igualdade. O corpus é **nome (peso A), descrição (peso C) e nome da marca** — tag fica de fora porque já é filtro próprio, e SKU tem **curto-circuito de casamento exato** (código impresso na caixa, digitado inteiro) em vez de entrar no vetor. Erro de digitação é tolerado por **reescrita da query**: cada palavra que não existe no dicionário de lexemas do catálogo é trocada pela mais parecida (`pg_trgm`) antes de a busca rodar, e o termo efetivamente usado volta ecoado no `meta`. O SQL cru **só ranqueia**: a visibilidade continua saindo do mesmo `where` da listagem, então rascunho e produto excluído não vazam pela busca. Palavra criada depois do último `pnpm run db:refresh-search` é achada literalmente, mas ainda não corrige typo. O termo é `trim`ado; vazio depois do trim, com menos de 2 ou mais de 100 caracteres → **422** nomeando `q`. Ter `?q=` troca o default da ordenação para **relevância**; com `?sort=` explícito, os dois compõem. Racional em [`../adr/text-search.md`](../adr/0009-text-search.md).
 
 | Método + Path | Auth | Descrição |
 |---|---|---|

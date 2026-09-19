@@ -116,14 +116,14 @@ networks:
   #
   # `external: true`, como a `proxy` e pelo mesmo motivo: rede compartilhada
   # entre stacks vive mais que qualquer uma delas, então nenhuma delas a cria
-  # nem a apaga (ver docs/context/infrastructure.md). Criada uma vez no host,
+  # nem a apaga (ver docs/adr/0148-tres-redes-papeis-distintos-porta-api-despublicada.md). Criada uma vez no host,
   # junto da `proxy`. O `name:` é contrato: é o que o compose do cliente escreve.
   pet-oasis:
     external: true
     name: pet-oasis
 
   # A rede do reverse proxy, criada fora deste repositório (o nginx do servidor
-  # não é versionado aqui — ver docs/context/infrastructure.md). Declarada, e não
+  # não é versionado aqui — ver docs/adr/0161-reverse-proxy-upload-existe-nao-neste-repositorio.md). Declarada, e não
   # mais conectada à mão com `docker network connect` depois de cada deploy:
   # passo manual esquecido é a API inalcançável pelo público, com o container de
   # pé e o healthcheck verde.

@@ -68,7 +68,7 @@ seam onde a propriedade **é** observável, `tests/unit/lib/password.test.ts`: m
 `simulatePasswordVerification` dentro de 2× da de `verifyPassword` contra um hash real, mais a
 garantia de que ela nunca devolve `true`. Verificado vermelho sabotando a função (sem o
 `compare`, falha), e estável em três execuções. A prova na fronteira HTTP é a medição manual
-acima, registrada com o método em `docs/context/identity-and-sessions.md` (decisão "O relógio do
+acima, registrada com o método em `apps/api/docs/adr/README.md#identidade-e-sessões` (decisão "O relógio do
 login não é oráculo").
 
 Suíte completa, `typecheck`, `lint` e `docs:check` verdes.

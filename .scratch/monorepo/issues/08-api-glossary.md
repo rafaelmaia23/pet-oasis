@@ -18,6 +18,6 @@ de ser chamado de glossário.
       código, e a discrepância é anotada para o usuário decidir.
 - [ ] Nenhuma frase do glossário explica *por que* — se a definição precisa de racional, ela
       aponta para o arquivo temático de `docs/context/` ou o ADR.
-- [ ] `docs/context.md` (índice) e `docs/agents/domain.md` da API passam a apontar para o
+- [ ] `apps/api/docs/adr/README.md` (índice) e `docs/agents/domain.md` da API passam a apontar para o
       glossário como fonte do vocabulário e para os arquivos temáticos como fonte do porquê.
 - [ ] `CONTEXT-MAP.md` da raiz aponta para ele; `docs:check` verde.

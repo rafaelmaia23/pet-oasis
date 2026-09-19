@@ -49,11 +49,11 @@ para todo 429.
       fail-open (store indisponível → destravado, sem instante).
 - [x] O componente 429 da especificação OpenAPI **declara** o header `Retry-After` — hoje ele não
       é declarado nem para o rate limit, e o cliente que gera tipos da spec não o vê.
-- [x] `docs/reference/endpoints.md` e a descrição OpenAPI do login **não mudam**: já dizem "429
+- [x] `apps/api/docs/reference/endpoints.md` e a descrição OpenAPI do login **não mudam**: já dizem "429
       com `Retry-After`" e passam a ser verdade. Conferir, não editar.
 - [x] A seção "Resposta 429 genérica" do ADR de rate limit e lockout é reescrita narrando a
       emenda (mesmo `code`, mesma prosa, ambos com `Retry-After`, e por que o valor não é
-      vazamento novo), com a linha correspondente no índice `docs/context.md`.
+      vazamento novo), com a linha correspondente no índice `apps/api/docs/adr/README.md`.
 - [x] Caso novo em `tests/integration/v1/mass-assignment.test.ts` **não** se aplica: nenhum
       schema de escrita novo.
 - [x] Suíte completa, `typecheck`, `lint` e `docs:check` verdes.
@@ -82,10 +82,10 @@ OpenAPI: o componente 429 declara `Retry-After` (via `headers: z.object(...)`, q
 **não** editados: já diziam "429, com `Retry-After`".
 
 Doc: seção "Resposta 429 genérica" do ADR reescrita narrando a emenda; o espelho em
-`docs/context/security.md` também reescrito (a revisão achou a primeira versão em forma
+`apps/api/docs/adr/README.md#segurança` também reescrito (a revisão achou a primeira versão em forma
 "decisão + errata", com o parágrafo antigo dizendo "sem indicar qual disparou" logo acima do
 novo); linha do índice atualizada. A revisão achou ainda, fora do diff, que
-`docs/guides/documenting-endpoints.md` lista só seis `errorResponses` e não fala de header —
+`apps/api/docs/guides/documenting-endpoints.md` lista só seis `errorResponses` e não fala de header —
 foi para `docs/reference/backlog.md` (**P**), não para trás.
 
 Suíte completa, `typecheck`, `lint` e `docs:check` verdes.

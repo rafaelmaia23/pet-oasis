@@ -26,7 +26,7 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       do Dockerfile e da 11) continua valendo: um filtro sem escopo casa o pacote escopado quando
       o nome é único no workspace (verificado com o `docs:check` e com o `deploy` do Dockerfile).
 - [x] `.git-blame-ignore-revs` na raiz com o hash do move; `git config blame.ignoreRevsFile`
-      ativado neste clone e documentado em `docs/guides/dev.md` (é por clone; o GitHub lê o
+      ativado neste clone e documentado em `apps/api/docs/guides/dev.md` (é por clone; o GitHub lê o
       arquivo sozinho).
 - [x] Compose continua em `apps/api/infra`; `context: ../../..` + `dockerfile: apps/api/Dockerfile`.
       O `runtime` recebe só as dependências de produção da API via
@@ -53,6 +53,6 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
 - [x] README da API, guias de dev e deploy e `CLAUDE.md` dizem `cd pet-oasis/apps/api` e
       `pnpm --filter api`; a raiz ganhou um `README.md` curto e um `CLAUDE.md` provisório que só
       importa o da API (`@apps/api/CLAUDE.md`) até a 07. O porquê do contexto de build e do
-      `deploy` está em `docs/context/infrastructure.md` (indexado). `.gitignore` da raiz cobre
+      `deploy` está em `apps/api/docs/adr/README.md#infraestrutura` (indexado). `.gitignore` da raiz cobre
       `node_modules`, `dist`, `.env.*`, `**/uploads`, `**/src/generated` e `.learning/`; o do app
       continua o de antes.

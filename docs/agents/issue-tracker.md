@@ -2,7 +2,8 @@
 
 Este repo **não usa um issue tracker externo**. Não existe GitHub Issues em uso, não existe
 `gh` instalado, e nenhuma skill deve tentar criar issue remota. Specs e issues vivem como
-markdown versionado dentro do próprio repo, em `.scratch/`.
+markdown versionado dentro do próprio repo, em `.scratch/` da raiz do monorepo — um tracker só,
+uma numeração de fase só, para API, contratos e web.
 
 ## Onde fica cada coisa
 
@@ -61,8 +62,9 @@ ressurge no fecho da fase seguinte.
 
 ## Fechar um esforço
 
-1. Cada decisão nomeada na spec ganha dono permanente — `docs/context/` ou um ADR.
-   **Migrar antes de fechar**: decisão sem dono não é fechada; escrever o dono é o trabalho.
+1. Cada decisão nomeada na spec ganha dono permanente — um **ADR** (no app dono da decisão, ou
+   em `docs/adr/` da raiz quando é de sistema) e a linha no índice. **Migrar antes de fechar**:
+   decisão sem dono não é fechada; escrever o dono é o trabalho.
 2. A primeira linha do `spec.md` vira
    `Status: fechada em <AAAA-MM-DD> — porquê promovido a <caminhos>`. O `pnpm run docs:check`
    exige que os caminhos nomeados existam.
@@ -87,8 +89,8 @@ formato daquele arquivo. Nunca crie um arquivo de tickets novo ao lado desses do
 ## Quando uma skill disser "buscar o ticket relevante"
 
 Leia `.scratch/<slug>/issues/NN-*.md`. O usuário normalmente passa o número. Para o *porquê*
-por trás do item, siga o ponteiro para a spec do esforço, para `docs/context.md` ou para o
-ADR citado — ver [`docs/agents/domain.md`](domain.md).
+por trás do item, siga o ponteiro para a spec do esforço, para o índice de ADRs do app
+(`apps/api/docs/adr/README.md`) ou para o ADR citado — ver [`docs/agents/domain.md`](domain.md).
 
 ## Operações de wayfinding
 

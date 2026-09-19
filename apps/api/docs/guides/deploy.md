@@ -9,7 +9,7 @@ versão pinada no `packageManager` do `package.json` da raiz do monorepo; a imag
 tudo dentro do build). O VPS clona o monorepo inteiro, mas o que se opera é o projeto da API:
 `.env.production` e os scripts `prod:*` vivem em `apps/api`, e o build da imagem usa a raiz
 do monorepo como contexto (é onde estão o lockfile e o workspace — ver
-[o contexto de build](../context/infrastructure.md#o-contexto-de-build-é-a-raiz-do-monorepo-e-o-runtime-é-podado-por-pnpm-deploy-112)):
+[o contexto de build](../adr/0156-contexto-build-raiz-monorepo-runtime-podado-pnpm-deploy.md)):
 
 ```bash
 corepack enable                    # uma vez por máquina
@@ -76,7 +76,7 @@ sudo systemctl start pet-oasis-demo-reset.service     # trunca e repovoa, gravan
 ls /srv/pet-oasis-data/uploads                          # brands  pets  products
 ```
 
-Racional em `docs/context/infrastructure.md` § "O diretório de uploads mora fora do working tree".
+Racional em `docs/adr/0162-diretorio-uploads-mora-fora-working-tree-uid-fixado.md`.
 
 ## Redes
 
@@ -135,13 +135,11 @@ A API atende em **`pet-oasis-api.maiahub.com.br`**. O apex (`pet-oasis.maiahub.c
 front e fica **limpo**: nenhum caminho da API é redirecionado a partir dele. Quem chama a API
 usa a base do subdomínio — o README e a coleção Bruno (`api-collection/environments/prod.bru`)
 já apontam para lá. O porquê do nome (primeiro nível sob `maiahub.com.br`, e não
-`api.pet-oasis.…`) e o de não haver redirect estão em `docs/context/infrastructure.md`
-§ "A API atende num subdomínio, e o apex fica limpo (10.6)".
+`api.pet-oasis.…`) e o de não haver redirect estão em `docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md`.
 
 O reverse proxy é o **Nginx Proxy Manager** (NPM), e a configuração dele **não vive neste
 repositório** — é do servidor pessoal que hospeda a demo, pelo mesmo motivo registrado em
-`docs/context/infrastructure.md` § "O reverse proxy do upload existe, mas não neste repositório
-(9.10)". O que segue é a **forma** que ela precisa ter; versionar uma cópia aqui só criaria duas
+`docs/adr/0161-reverse-proxy-upload-existe-nao-neste-repositorio.md`. O que segue é a **forma** que ela precisa ter; versionar uma cópia aqui só criaria duas
 verdades divergindo em silêncio.
 
 ### O que o proxy host precisa ter
@@ -171,7 +169,7 @@ verdades divergindo em silêncio.
    Cloudflare (`set_real_ip_from`, em `ip_ranges.conf`); as duas linhas fazem o `$remote_addr`
    virar o visitante. Vale para **todo** proxy host que receba visitante pela Cloudflare — o da
    API e, quando o front subir, o do apex. O porquê completo está em
-   `docs/context/infrastructure.md` § "A API atende num subdomínio, e o apex fica limpo (10.6)".
+   `docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md`.
 
 O redirect da raiz (`/` → `/reference`) que o host público faz é do **NPM**, não da aplicação —
 a API não tem rota `/`.

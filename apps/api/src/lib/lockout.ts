@@ -9,7 +9,7 @@ import { redis } from "@/lib/redis";
  * vive só no Redis (hash `lockout:{userId}`), sem coluna nova no `User` — é
  * efêmero por natureza, e o histórico de tentativas já existe via
  * `AUTH_LOGIN_FAILED` no audit log. Racional completo em
- * `docs/adr/rate-limiting-and-lockout.md`.
+ * `docs/adr/0003-rate-limiting-and-lockout.md`.
  *
  * Fail-open (D2): qualquer falha do Redis é capturada, loga `error` e a
  * conta segue destravada — o lockout nunca impede um login por falha de infra.

@@ -44,7 +44,7 @@ Documentação: o OpenAPI do `/auth/login` ganhou descrição da operação com 
 ordem e um 403 próprio que nomeia os três códigos (asserido em `openapi.test.ts`);
 `endpoints.md` e a coleção Bruno refletem. O guia de integração já prometia esses códigos ao
 front desde a 10.6 — esta issue é a API cumprindo o que o guia dizia. O porquê foi para a decisão
-já existente "403 (não 401) no login" em `docs/context/identity-and-sessions.md`, como emenda
+já existente "403 (não 401) no login" em `apps/api/docs/adr/README.md#identidade-e-sessões`, como emenda
 narrando a mudança, não como decisão nova.
 
 Fica no backlog, não decidido: o 403 do login descreve os códigos em **prosa**, sem `enum` no

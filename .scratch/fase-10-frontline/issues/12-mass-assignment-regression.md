@@ -78,7 +78,7 @@ acoplado ao `clearDatabase`, e a regra nova enterrada em `docs/context/` onde qu
 não lê. Tudo corrigido no commit de revisão; a 6ª cópia de `loginAsCatalogManager` foi para o
 `docs/reference/backlog.md` em vez de espalhar este diff por cinco arquivos alheios.
 
-Decisão registrada em `docs/context/security.md` ("Mass assignment: schema de update é `.strict()`,
+Decisão registrada em `apps/api/docs/adr/README.md#segurança` ("Mass assignment: schema de update é `.strict()`,
 e a proteção tem teste próprio (10.12)") + linha no índice; ponteiro acionável em `CLAUDE.md`
 (Convenções de código); item do backlog marcado resolvido.
 

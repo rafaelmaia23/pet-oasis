@@ -86,7 +86,7 @@ async function resolvePet(
 }
 
 /**
- * As três regras de espécie×raça do `docs/adr/pet-domain-modeling.md`. São
+ * As três regras de espécie×raça do `docs/adr/0006-pet-domain-modeling.md`. São
  * semânticas (a última consulta o banco), então vivem aqui e não no Zod.
  *
  * Quem decide "esta espécie exige raça?" é `SPECIES_WITH_BREED`, constante

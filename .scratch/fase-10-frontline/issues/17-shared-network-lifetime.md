@@ -44,14 +44,14 @@ quem escrever o guia:
 
 1. `infra/docker-compose.prod.yml`: `pet-oasis` ganha `external: true` (o `name:` fica); o
    comentário passa a dizer que ela é criada fora do repo, como a `proxy`, e por quê.
-2. `docs/guides/deploy.md`, seção Redes: a tabela diz "fora deste repo, uma vez" para as duas; o
+2. `apps/api/docs/guides/deploy.md`, seção Redes: a tabela diz "fora deste repo, uma vez" para as duas; o
    bloco de `docker network create` cria as duas, com a justificativa comum (rede compartilhada
    entre stacks vive mais que qualquer uma delas). O `up` passa a falhar em host virgem se ela não
    existir — a mesma "mensagem certa" que 10.2 defendeu para a `proxy`.
-3. `docs/guides/integrating-with-the-api.md`: a frase "a rede é criada pelo compose de produção da
+3. `apps/api/docs/guides/integrating-with-the-api.md`: a frase "a rede é criada pelo compose de produção da
    API; se a API não estiver de pé, o `up` do cliente falha" é reescrita — a rede é do host, o
    front sobe com a API fora, e o passo de criação está no guia de deploy.
-4. `docs/context/infrastructure.md`, decisão 10.2: reescrever narrando a mudança (não decisão +
+4. `apps/api/docs/adr/README.md#infraestrutura`, decisão 10.2: reescrever narrando a mudança (não decisão +
    errata), incluindo o comportamento do `down` com endpoints ativos, que é o que estreita a
    janela do incidente e o que tornaria a alternativa "só documentar" tentadora.
 5. No host de produção, antes do primeiro `prod:up` com esta mudança, criar a rede — passo de

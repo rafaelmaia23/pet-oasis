@@ -15,7 +15,7 @@ reescrito para o monorepo, `main` virando o monorepo, e o repo renomeado no GitH
       `docs/context/` (da raiz ou da API) ou em ADR; a primeira linha da spec vira
       `Status: fechada em <data> — porquê promovido a <caminhos>`.
 - [ ] Racionais que nasceram na execução (não estão na spec) e hoje vivem só em comentário de
-      código, a promover para `docs/context/infrastructure.md` (ou `architecture.md`):
+      código, a promover para `apps/api/docs/adr/README.md#infraestrutura` (ou `architecture.md`):
       da issue 01 — Node e pnpm com fonte única (`engines` + `packageManager`, corepack; o
       Dockerfile não escreve versão nenhuma, e o pnpm recusa Node fora de `engines`); `.npmrc`
       não existe porque pnpm 12 lê `pnpm-workspace.yaml`; `allowBuilds` (por que `vue-demi`

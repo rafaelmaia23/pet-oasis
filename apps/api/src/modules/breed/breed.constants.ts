@@ -6,7 +6,7 @@ import { PetSpecies } from "@/generated/prisma/enums";
  * consultado em API de terceiro em runtime (disponibilidade refém de um
  * terceiro, sem id estável para FK, cobertura ruim fora de cão e gato).
  * Manutenção dali em diante é edição desta constante — raça de animal não muda
- * com frequência. Racional completo em `docs/adr/pet-domain-modeling.md`.
+ * com frequência. Racional completo em `docs/adr/0006-pet-domain-modeling.md`.
  *
  * Mora em `src/modules/breed/` e não em `src/lib/seed/` porque
  * `SPECIES_WITH_BREED` é lida em **runtime** pelo `pet.service` (9.4): um

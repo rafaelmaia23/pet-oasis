@@ -10,7 +10,7 @@ import { redis } from "@/lib/redis";
  * Rate limiting por IP e por email-alvo (7.9), Redis via `rate-limiter-flexible`.
  * Fail-open (D2): se o Redis falhar, `consume()` rejeita com um erro que NÃO é
  * `RateLimiterRes` — o limitador é ignorado e o request segue, emitindo `error`
- * no application log. Racional completo em `docs/adr/rate-limiting-and-lockout.md`.
+ * no application log. Racional completo em `docs/adr/0003-rate-limiting-and-lockout.md`.
  */
 
 const log = logger.child({ module: "rateLimit" });

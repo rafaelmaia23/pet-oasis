@@ -30,7 +30,7 @@ do refactor largo; a migração dos consumidores é a issue 10.
 - [ ] O pacote tem `typecheck`, `lint` e `test` próprios (Vitest), rodando pelo Turbo da raiz.
 - [ ] Dockerfile da API: **nada a fazer pelo `deploy`** — a 03 verificou no pnpm 12.4.2 que o
       `pnpm deploy --prod` materializa dependência de workspace de produção sem
-      `injectWorkspacePackages` (`docs/context/infrastructure.md`, 11.3), e os estágios `build`
+      `injectWorkspacePackages` (`apps/api/docs/adr/README.md#infraestrutura`, 11.3), e os estágios `build`
       e `dev` já copiam `packages/*` (manifestos antes do install, pacotes inteiros depois). O
       que esta issue deve garantir é só: se o consumo for de `dist`, o build do contrato roda no
       estágio `build` **antes** do tsup da API; se for do fonte TS, o `COPY packages packages`

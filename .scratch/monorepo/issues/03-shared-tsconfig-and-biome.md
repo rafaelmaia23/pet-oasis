@@ -51,10 +51,10 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       estágios. (2) O `pnpm deploy --prod` do 12.4.2 **funciona sem `injectWorkspacePackages`**
       também com dependência de workspace em `dependencies` (simulado movendo um pacote e
       revertendo): o pacote é materializado na store autocontida do deploy. Registrado em
-      `docs/context/infrastructure.md` (11.3) e na issue 09, que é onde o contrato vira
+      `apps/api/docs/adr/README.md#infraestrutura` (11.3) e na issue 09, que é onde o contrato vira
       dependência de produção — nada a mudar no workspace, só o build do contrato antes do
       tsup se o consumo for de `dist`.
-- [x] Docs: decisão de tooling em `docs/context/architecture.md` ("Onde cada coisa vive") e a
-      das camadas da imagem em `docs/context/infrastructure.md`, ambas indexadas; README da
+- [x] Docs: decisão de tooling em `apps/api/docs/adr/README.md#arquitetura` ("Onde cada coisa vive") e a
+      das camadas da imagem em `apps/api/docs/adr/README.md#infraestrutura`, ambas indexadas; README da
       raiz lista os dois pacotes; `CLAUDE.md` da API aponta os presets na linha de stack; a
       issue 14 (estágio base) reflete o install como ficou.

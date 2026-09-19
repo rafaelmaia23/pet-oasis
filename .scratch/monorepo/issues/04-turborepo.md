@@ -48,10 +48,10 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       provado com a prova negativa da 03 (mudar `quoteStyle` na base ainda chega à API).
       `biome check .` da raiz cobre o repo inteiro (302 arquivos); o Turbo segue lintando por
       pacote. Comentário em `biome.json` não é aceito (só em `biome.jsonc`, e renomear
-      quebraria o `exports` do preset): o porquê vive em `docs/context/architecture.md`.
+      quebraria o `exports` do preset): o porquê vive em `apps/api/docs/adr/README.md#arquitetura`.
 - [x] `.turbo/` no `.gitignore` da raiz (só a raiz: só o Turbo produz, e o Turbo é da raiz);
       `docs:check` roda da raiz como task, cacheada (só lê arquivos versionados da API).
 - [x] Suíte completa + `typecheck` + `lint` + `docs:check` verdes via Turbo. README da raiz
       com a tabela de comandos e "o que é cacheado, e por quê"; a decisão em
-      `docs/context/architecture.md` (11.4), indexada; `CLAUDE.md` da API aponta os scripts
+      `apps/api/docs/adr/README.md#arquitetura` (11.4), indexada; `CLAUDE.md` da API aponta os scripts
       da raiz na seção de comandos.

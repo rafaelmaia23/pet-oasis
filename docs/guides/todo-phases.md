@@ -27,7 +27,7 @@ em ritmos diferentes — que foi exatamente o que aconteceu na Fase 9.
 ```markdown
 ## Fase <n> — <título> ✅
 > Uma nota de abertura: o que a fase entregou, em quantas issues, e **os ponteiros** para
-> onde o porquê mora agora (`context/`, ADRs).
+> onde o porquê mora agora (os ADRs).
 - Um bullet por **grupo de issues**, dizendo o que ficou decidido e por quê — não o que
   foi planejado.
 - …
@@ -41,7 +41,7 @@ recuperável — nas issues, que não são apagadas, e no histórico do git.
 
 1. **Encolher é trabalho de fecho da própria fase**, não da seguinte.
 2. **Migrar antes de fechar.** Cada decisão nomeada na spec precisa ter dono em
-   `docs/context/` ou em um ADR **antes** de a fase fechar. Decisão sem dono não fecha:
+   um ADR (do app, ou da raiz quando é de sistema) **antes** de a fase fechar. Decisão sem dono não fecha:
    escrever o dono é o trabalho. Na prática, isso quer dizer montar uma tabela de rastreio
    (decisão → arquivo de destino) e conferi-la.
 3. **A spec é marcada, não apagada.** No fecho, a primeira linha do `spec.md` vira

@@ -15,7 +15,7 @@ import { prisma } from "@/lib/prisma";
  * do casamento**: acento, radical, erro de digitação e ordem por relevância.
  *
  * Toda asserção é de comportamento observável — "buscar `golen` acha a Golden"
- * —, nunca da forma da query. É a armadilha que o ADR `docs/adr/text-search.md`
+ * —, nunca da forma da query. É a armadilha que o ADR `docs/adr/0009-text-search.md`
  * aponta como a maior desta sub-fase.
  */
 

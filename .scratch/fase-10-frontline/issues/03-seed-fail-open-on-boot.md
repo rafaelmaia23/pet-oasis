@@ -29,7 +29,7 @@ externos de observabilidade.
 >
 > O fail-open não é silencioso: o passo falho entra em `failedOptionalSteps` no `SeedResult` e a
 > última linha do seed vira `SEEDING COMPLETED WITH FAILURES: <passos>`. Racional permanente em
-> [`docs/context/infrastructure.md`](../../../docs/context/infrastructure.md).
+> [`apps/api/docs/adr/README.md#infraestrutura`](../../../apps/api/docs/adr/README.md#infraestrutura).
 >
 > **Teste automatizado, ao contrário do que a spec previa:** a fronteira saiu em TypeScript
 > (`src/lib/seed/optionalSeedStep.ts`), não no Docker, então ela é testável sem falsificar nada —

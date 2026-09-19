@@ -42,5 +42,5 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       (verificado localmente com rede `pet-oasis` e `UPLOAD_HOST_DIR` descartáveis).
 - [x] README, guias de dev e deploy, `CLAUDE.md`, ADRs, `docs/context/`, Compose e
       entrypoints não dizem mais `npm`; os guias ganharam o pré-requisito `corepack enable`.
-      Ficam `npm` só em narrativa histórica (`docs/context/history.md`, itens riscados do
+      Ficam `npm` só em narrativa histórica (`apps/api/docs/reference/history.md`, itens riscados do
       `backlog.md`, issues de fases fechadas).

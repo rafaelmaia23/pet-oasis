@@ -1,9 +1,9 @@
-# Imagem é o único hard delete de domínio do projeto (9.10)
+# Imagem é hard delete, como a tag (9.10)
 
 > Decisão migrada em 2026-09-18 do contexto temático da API (**Ciclo de vida** › *Restauração*), que deixou de existir:
 > a partir daí, cada decisão é um ADR. O texto é o original; só os links foram reapontados.
 
-`ProductImage` é a única tabela de domínio **sem `deletedAt`**, e as fotos de pet e os logos de
+`ProductImage` não tem **`deletedAt`** — como a `Tag` (9.6/W5) —, e as fotos de pet e os logos de
 marca são apagados do disco de verdade quando trocados ou removidos. É exceção consciente à
 regra geral, e o critério é o mesmo que justifica a regra: o soft delete existe para preservar
 **fato de negócio** (quem comprou o quê, quem tinha qual permissão quando). Imagem não é fato,

@@ -36,6 +36,8 @@ const IGNORED_DIRS = new Set([
 const SCANNED_EXTENSIONS = [
   ".md",
   ".ts",
+  // Os comentários do schema do Prisma citam ADRs e a política de log.
+  ".prisma",
   ".json",
   ".jsonc",
   ".yml",

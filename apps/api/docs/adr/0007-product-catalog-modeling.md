@@ -226,9 +226,9 @@ separa a letra do acento com `normalize("NFD")` e apaga só os diacríticos
 combinantes, que é o que faz "Ração" virar `racao` e não `ra-c-ao`.
 
 **W5 — `Tag` é hard delete.** Rótulo transversal e volátil não participa de
-venda, então não há histórico a preservar, e o nome volta a ficar livre. É a
-única tabela de domínio do projeto sem `deletedAt` (e sem `updatedAt`), no
-idioma do `Breed`; o audit log passa a ser o único registro de que a tag
+venda, então não há histórico a preservar, e o nome volta a ficar livre. Foi a
+primeira tabela de domínio do projeto sem `deletedAt` (e sem `updatedAt`), no
+idioma do `Breed` — a `ProductImage` (9.10) é a outra; o audit log passa a ser o único registro de que a tag
 existiu, e por isso o descritor não é opcional no `deleteTag` do repositório.
 
 **W6 — `name`/`slug` são unique global, o índice ignora `deletedAt`.**
@@ -455,7 +455,8 @@ decisão" do mesmo ADR:
   9.7) — sem cascata e sem reparenting; desvincular violaria o mínimo-de-uma-categoria por produto
 - **Slug derivado do nome e congelado** (W4) — renomear não muda a URL pública; o `slug` explícito é
   aceito no corpo e vence o derivado
-- **`Tag` é hard delete** (W5) — a única tabela de domínio do projeto sem `deletedAt`
+- **`Tag` é hard delete** (W5) — com a `ProductImage` (9.10), uma das duas tabelas de domínio
+  sem `deletedAt`
 - **`name`/`slug` unique global** (W6), o índice ignora `deletedAt` — recriar linha excluída é 409,
   no precedente de `Pet.microchipId`
 - **Nenhuma das três leituras pagina** (W7) — `GET /categories` devolve a árvore aninhada, as outras

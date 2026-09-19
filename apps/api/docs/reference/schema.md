@@ -35,8 +35,9 @@
 
 ## Constantes de domínio
 
-**Roles** (`role.constants.ts`): `customer` (CUSTOMER), `attendant`/`manager`/`admin` (EMPLOYEE),
-`demo` (EMPLOYEE, só leitura). `admin` tem `["*"]`. Compostas por grupos semânticos
+**Roles** (`role.constants.ts`; os nomes vêm do contrato, `ROLE_NAMES`): `customer` (CUSTOMER),
+`attendant`/`stockist`/`catalog-manager`/`manager`/`admin` (EMPLOYEE), `demo` (EMPLOYEE, só
+leitura). `admin` tem `["*"]`. Compostas por grupos semânticos
 (`SELF_MANAGEMENT`, `USER_ADMINISTRATION`, `PERMISSION_FEATURES`) deduplicados via
 `[...new Set()]`. `DEFAULT_ROLES as const satisfies readonly RoleDefinition[]`.
 
@@ -111,7 +112,7 @@ que surpreendem quem lê o `schema.prisma`.
 - **`ProductVariant` não tem `deletedAt` correlacionado com o do produto por acaso**: a
   exclusão do produto cascateia nas variantes com **um único timestamp**, o mesmo idioma da
   cascata da Fase 8.
-- **`ProductImage` é a única tabela de domínio sem `deletedAt`** — imagem é *asset*, não fato
+- **`ProductImage` não tem `deletedAt`**, como a `Tag` (9.6/W5) — imagem é *asset*, não fato
   de negócio, e a linha morre junto com o arquivo (9.10/AA16).
 
 ---

@@ -240,7 +240,7 @@ model PreviousEmail {
 // Trilha durável de ações sensíveis (quem fez o quê, em quem, quando).
 // Append-only: sem update/delete pela aplicação (só o script de retenção 7.14).
 // actorId/targetId são uuid cru SEM FK — evidência pode apontar para linha
-// soft-deleted, mesmo idioma de User.bannedBy. Regras em docs/logging-policy.md §4.
+// soft-deleted, mesmo idioma de User.bannedBy. Regras em docs/reference/logging-policy.md §4.
 model AuditLog {
   id         String   @id @default(uuid())
   actorId    String?  @map("actor_id")
@@ -265,7 +265,7 @@ model AuditLog {
 // **sem `OUTRO`** — `OUTRO` seria buraco permanente de qualidade de dado (pet
 // sem raça válida, fora de todo filtro), e a pressão seguinte seria um
 // `speciesOther` de texto livre. Espécie nova é `ALTER TYPE ... ADD VALUE`,
-// migration barata. Racional em docs/adr/pet-domain-modeling.md.
+// migration barata. Racional em docs/adr/0006-pet-domain-modeling.md.
 enum PetSpecies {
   DOG
   CAT
@@ -310,7 +310,7 @@ enum PetSex {
 // `deceasedAt` (o pet morreu) NÃO é `deletedAt` (o registro não deve mais
 // aparecer). Pet falecido continua na lista do dono e mantém legível todo o
 // histórico clínico futuro; tratar falecimento como exclusão destruiria
-// informação clinicamente relevante. Ver docs/adr/pet-domain-modeling.md.
+// informação clinicamente relevante. Ver docs/adr/0006-pet-domain-modeling.md.
 //
 // `breedId` é nullable no banco porque a obrigatoriedade é **semântica**: quem
 // exige raça é SPECIES_WITH_BREED, lida em runtime pelo pet.service (as três
@@ -355,8 +355,8 @@ model Pet {
 // Catálogo — taxonomia (9.6) e produto (9.7).
 // ---------------------------------------------------------------------------
 
-// Marca é entidade própria, não string livre no produto (ADR
-// product-catalog-modeling): filtro confiável, grafia única e página de marca
+// Marca é entidade própria, não string livre no produto
+// (docs/adr/0007-product-catalog-modeling.md): filtro confiável, grafia única e página de marca
 // no futuro. `name` e `slug` são unique **global** — o índice ignora
 // `deletedAt`, como User.email e Pet.microchipId (9.6/W6): recriar uma marca
 // excluída sai 409 pelo handler de P2002, que é o sinal correto ("isto já
@@ -429,8 +429,8 @@ model Tag {
 }
 
 // "Isto está à venda?" e "isto existe?" são perguntas diferentes, e por isso o
-// status convive com o `deletedAt` (ADR product-catalog-modeling § "Status do
-// produto coexiste com soft delete"): descontinuado some da vitrine mas
+// status convive com o `deletedAt` (docs/adr/0007-product-catalog-modeling.md
+// § "Status do produto coexiste com soft delete"): descontinuado some da vitrine mas
 // preserva o histórico de venda, enquanto excluído é erro de cadastro.
 enum ProductStatus {
   DRAFT
@@ -487,8 +487,7 @@ model Product {
 // para tabela — uma tabela sem escrita nenhuma não é economia de migration, é
 // esquema morto.
 //
-// Única tabela de domínio do projeto **sem `deletedAt`** (9.10/AA16), e é
-// consciente: o soft delete existe para preservar fato de negócio (quem comprou
+// Sem `deletedAt`, como a `Tag` (9.6/W5) — e é consciente (9.10/AA16): o soft delete existe para preservar fato de negócio (quem comprou
 // o quê), e imagem é *asset*. A linha só faz sentido enquanto o byte existe —
 // soft delete com arquivo apagado criaria a linha-apontando-para-o-nada que o
 // ADR classifica como mais grave que um órfão no disco.

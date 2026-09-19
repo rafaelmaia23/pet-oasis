@@ -116,7 +116,7 @@ contra-argumentos e os gotchas.
 - [`0043`](0043-nivel-user-perfil-deixou-correlacionar.md) O nível `User` → perfil deixou de correlacionar (K20)
 - [`0044`](0044-tres-niveis-nasceram-como-primitivas-repositorio.md) Os três níveis nasceram como primitivas de repositório (K7)
 - [`0045`](0045-grantrolestouser-nasceu-como-primitiva.md) `grantRolesToUser` nasceu como primitiva
-- [`0046`](0046-imagem-unico-hard-delete-dominio-projeto.md) Imagem é o único hard delete de domínio do projeto (9.10)
+- [`0046`](0046-imagem-unico-hard-delete-dominio-projeto.md) Imagem é hard delete, como a tag (9.10)
 - [`0047`](0047-pet-primeiro-filho-dominio-grafo.md) Pet é o primeiro filho de **domínio** do grafo (9.4)
 
 #### Perfil — os fluxos de produto

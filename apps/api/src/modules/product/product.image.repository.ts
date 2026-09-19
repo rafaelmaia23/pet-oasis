@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 /**
  * Única camada que toca o Prisma nas imagens do produto. Sem filtro de
- * `deletedAt`: `ProductImage` é a única tabela de domínio sem soft delete
+ * `deletedAt`: `ProductImage` não tem soft delete, como a `Tag`
  * (9.10/AA16) — a linha existe enquanto o byte existe.
  */
 

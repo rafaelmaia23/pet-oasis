@@ -6,4 +6,4 @@
 Destravar não concede privilégio novo, mas **remove uma proteção** sobre a conta-alvo. Um
 manager comprometido poderia destravar uma conta admin no meio de um ataque de força bruta,
 anulando o lockout bem na hora em que ele mais protege — mesmo raciocínio de escalação lateral
-de `assertAdminForBan`. Ver [authorization.md](README.md#não-escalação).
+de `assertAdminForBan`. Ver [índice de ADRs](README.md#não-escalação).

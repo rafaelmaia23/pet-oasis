@@ -61,7 +61,8 @@ Resumo do fluxo: `dev` → `fase-<n>` → `feat/fase-<n>-<NN>-<slug>` → merge 
 
 Mensagens de commit são **Conventional Commits em inglês**, `tipo(escopo): descrição`, lintadas
 pelo hook `commit-msg` (husky + commitlint, instalado por `pnpm install` na raiz — config em
-`commitlint.config.mjs`; Fase 11, issue 05) e, depois, pelo CI:
+`commitlint.config.mjs`; Fase 11, issue 05). O commitlint no CI (issue 06) é a segunda barreira,
+ainda por construir:
 
 - **Tipo** do `config-conventional`: `feat`, `fix`, `docs`, `build`, `ci`, `refactor`, `test`,
   `chore`, `perf`, `style`, `revert` — em minúsculas.
@@ -69,8 +70,11 @@ pelo hook `commit-msg` (husky + commitlint, instalado por `pnpm install` na raiz
   `biome-config`, `infra`, `ci`, `repo` (`repo` = o que é da raiz: workspace, Turbo, hooks,
   docs de sistema). Multi-escopo com vírgula (`feat(api,contracts): …`). App novo entra no enum
   quando existir.
-- **Descrição começa em minúscula**, sem ponto final; header em até 100 colunas, linhas do corpo
-  também.
+- **Descrição começa em minúscula** — mesmo quando a primeira palavra é nome próprio ou
+  arquivo (`build(repo): turbo.jsonc, and a Biome config …`, não `…: Turborepo as …`); o
+  preset recusa `sentence-case`, que para ele é só "primeira letra maiúscula". Maiúscula no
+  meio é livre, e nome próprio inicial entre crases passa. Sem ponto final. Header em até 100
+  colunas; linhas do corpo também.
 - **Merge** (`git merge --no-ff`, sem `-m`) usa a mensagem padrão do Git (`Merge branch '…'
   into …`), que o commitlint ignora. O estilo `merge: …` usado até a Fase 11 está abandonado.
 - Um worktree novo só tem o hook depois de `pnpm install` (o `.husky/_/` é gerado, não
@@ -128,7 +132,8 @@ Nunca leia os ADRs em bloco nem "para ter contexto" — os da API somam quase 20
 não foi registrada: **pergunte, não invente.**
 
 Ao **acrescentar** uma decisão: escreva um **ADR novo** (próximo número, formato de
-`ADR-FORMAT.md` da skill — título que é a decisão, contexto e porquê em 1–3 parágrafos) **e** a
+`ADR-FORMAT.md` da skill — título que é a decisão e, em 1–3 frases ou o que ela pedir, o
+contexto, o que se decidiu e por quê; um parágrafo basta) **e** a
 linha correspondente no índice do app — os dois juntos, senão a decisão fica inalcançável. Decisão
 que vale para o sistema inteiro (fronteira entre apps, o que é contrato, fluxo de trabalho) vai
 em `docs/adr/` da raiz. Decisão revertida é **reescrita** narrando a reversão, nunca duplicada

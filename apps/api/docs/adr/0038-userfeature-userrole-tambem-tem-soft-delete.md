@@ -8,4 +8,4 @@ hard delete, porque autorização não costuma precisar de histórico. A escolha
 composta por `id` próprio (para permitir múltiplos registros do mesmo par: N deletados + 1
 ativo). A unicidade do ativo nasceu controlada por código e **migrou para o banco na 8.0**
 (`@@unique([userId, roleId])` com reuso de linha — ver
-[authorization.md](0019-linha-userid-roleid-sempre.md)).
+[`0019`](0019-linha-userid-roleid-sempre.md)).

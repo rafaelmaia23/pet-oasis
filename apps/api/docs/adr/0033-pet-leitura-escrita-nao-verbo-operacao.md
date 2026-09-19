@@ -7,4 +7,4 @@
 pet andam sempre juntos — separar criaria feature morta. Do lado do staff, a fronteira que
 existe de verdade no balcão é "consultar a ficha" × "alterar a ficha", e ela justifica as duas.
 Marcar um pet como falecido é `manage:pet` comum: `deceasedAt` não destrói nada (é exatamente o
-ponto de [pet-domain.md](README.md#domínio-pet-shop)), então não merece feature própria.
+ponto de [índice de ADRs](README.md#domínio-pet-shop)), então não merece feature própria.

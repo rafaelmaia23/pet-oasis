@@ -4,5 +4,5 @@
 > a partir daí, cada decisão é um ADR. O texto é o original; só os links foram reapontados.
 
 Ela destrava o IP inteiro no audit log; o racional está em
-[observability.md](0139-read-audit-log-full-nao-role-como-ancora.md).
+[`0139`](0139-read-audit-log-full-nao-role-como-ancora.md).
 `read:log`/`read:audit-log` continuam normais, concedíveis sem ser admin.

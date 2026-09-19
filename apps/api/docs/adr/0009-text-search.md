@@ -228,7 +228,7 @@ recomendação inicial (que era começar com `ILIKE`), com motivação didática
 documentadas para não custarem uma tarde cada (`unaccent` não é `IMMUTABLE`; `CREATE EXTENSION` em
 migration à mão; sem índice GIN funciona e é lento; `websearch_to_tsquery` sobre `to_tsquery`;
 limiar do `pg_trgm` é sessão-scoped e com pool precisa ser definido por query). O SQL cru fica
-**só no repository** — ver [architecture.md](0102-sql-cru-vive-exclusivamente-repository.md).
+**só no repository** — ver [`0102`](0102-sql-cru-vive-exclusivamente-repository.md).
 
 O **kickoff da 9.9** (adendo no mesmo ADR, Z1–Z17) fechou as duas armadilhas que tinham ficado em
 aberto e trocou a estratégia de consulta que o ADR previa:

@@ -33,11 +33,13 @@
       // raiz linta `tools/` pelo mesmo motivo da de typecheck.
       "dependsOn": ["^lint", "//#lint:root"]
     },
-    // Tasks de raiz (`//#`): scripts do package.json da raiz. Só `tools/` entra
-    // no hash de cada uma (`inputs`), senão qualquer arquivo da raiz — o
-    // lockfile, um README — invalidaria o cache.
+    // Tasks de raiz (`//#`): scripts do package.json da raiz. Só `tools/` e a
+    // config que o checa entram no hash de cada uma (`inputs`), senão qualquer
+    // arquivo da raiz — o lockfile, um README — invalidaria o cache. Os presets
+    // de `packages/` entram pelo mesmo motivo do `^` no cabeçalho: preset fora
+    // do hash é cache verde depois de a régua mudar.
     "//#typecheck:root": {
-      "inputs": ["tools/**", "tsconfig.json"]
+      "inputs": ["tools/**", "tsconfig.json", "packages/tsconfig/tsconfig.*.json"]
     },
     "//#lint:root": {
       "inputs": ["tools/**", "biome.json", "packages/biome-config/biome.json"]

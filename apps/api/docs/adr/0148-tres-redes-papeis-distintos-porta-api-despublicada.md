@@ -51,7 +51,7 @@ contrato legível no próprio compose e faz o `up` falhar nomeando a causa, a me
 **A porta 3000 deixou de ser publicada no host em produção** — o nginx alcança a API por DNS de
 container, então a publicação não tinha mais função. Isso não é higiene: é a metade que torna
 segura a outra metade da decisão, o `trust proxy` por endereço privado registrado em
-[`security.md`](README.md#segurança). `API_PORT` sobrevive **só em dev**, onde publicar é como o navegador
+[`0123`](0123-trust-proxy-endereco-origem-nao-contagem-saltos.md). `API_PORT` sobrevive **só em dev**, onde publicar é como o navegador
 e o Bruno alcançam a API na máquina de quem desenvolve.
 
 Dev não herda a topologia, de propósito: lá `db` e `redis` publicam porta para o tooling do host

@@ -15,7 +15,7 @@ Três consequências, todas herdadas pelas sessões 9.6/9.8:
    um terceiro comportamento — se vier `Bearer`, identifica o ator; se não vier **ou se o token for
    ruim**, segue anônimo e nunca responde 401. É isso que faz o mesmo `GET /products` devolver a
    view pública ao visitante e a interna a quem tem `read:product:internal`. Detalhe do desenho em
-   [architecture.md](0097-optionalauthenticate-terceiro-modo-vitrine-publica.md).
+   [`0097`](0097-optionalauthenticate-terceiro-modo-vitrine-publica.md).
 2. **Não existe feature de leitura pública de catálogo.** Não há o que conceder ao cliente para
    ele ver produto — a role `customer` sai da Fase 9 só com as features de pet. O sufixo
    `:internal` já significa "acima do baseline", e o baseline aqui é o anônimo.

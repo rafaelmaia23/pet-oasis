@@ -60,7 +60,8 @@ ADR por decisão (migração de 2026-09-18, [`docs/adr/0001`](../adr/0001-domain
 ## Ao acrescentar uma decisão
 
 Escreva um **ADR novo** no app dono da decisão (próximo número em `docs/adr/`, formato de
-`ADR-FORMAT.md` da skill: título que é a decisão, 1–3 parágrafos com contexto e porquê) **e**
+`ADR-FORMAT.md` da skill: título que é a decisão e, em 1–3 frases ou o que ela pedir, contexto,
+decisão e porquê — um parágrafo basta) **e**
 acrescente a linha correspondente no índice `apps/<app>/docs/adr/README.md`, na seção do tema —
 os dois juntos, senão a decisão fica inalcançável. Decisão que atravessa apps vai em `docs/adr/`
 da raiz. Decisão revertida é **reescrita** narrando a reversão, nunca duplicada como decisão +

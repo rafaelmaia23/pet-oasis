@@ -7,4 +7,4 @@ Documentação de API é para ser lida sem credencial; travá-la atrás de `auth
 Ficam no router de topo, antes dos grupos protegidos, fora de `/api/v1`. A UI Scalar consome o
 `/openapi.json` e tem "try it" com Bearer preenchível — daí o `securitySchemes.bearerAuth` global no
 documento, com as operações públicas sobrescrevendo `security: []`. O hardening da CSP dessa página
-está em [security.md](0130-auto-hospedar-bundle-scalar-vez-allowlistar-cdn.md).
+está em [`0130`](0130-auto-hospedar-bundle-scalar-vez-allowlistar-cdn.md).

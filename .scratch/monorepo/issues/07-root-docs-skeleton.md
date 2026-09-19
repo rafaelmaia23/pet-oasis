@@ -71,3 +71,30 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       linha no índice do app — dito no `CLAUDE.md` da raiz, no da API, em `docs/agents/domain.md`
       e no próprio índice ("Como manter").
 - [x] `docs:check` + `lint` + `typecheck` verdes na raiz; suíte da API verde.
+
+Revisão (`/code-review`, dois eixos) e merge da `fase-11` no meio da issue — o que mudou depois
+do primeiro fecho:
+
+- A `fase-11` tinha recebido a issue 05 depois de esta branch nascer, e a 05 escreveu a decisão
+  dela em `docs/context/architecture.md` — arquivo que esta branch apaga. No merge, a seção
+  virou o ADR `0196-conventional-commits-escopo-obrigatorio-recusados-hook.md` (linha no índice,
+  tema *Arquitetura*), o item de backlog da 05 caiu no `docs/reference/backlog.md` da raiz, e a
+  ressalva da 05 sobre o `biome check` da raiz entrou no ADR 0104. Progresso: 6 de 14.
+- O ADR 0104 (migrado) ainda dizia que `docs:check` era task cacheada do Turbo — reescrito
+  narrando a reversão desta issue, como a regra manda. A task `//#typecheck:root` passou a ter
+  os presets de `packages/tsconfig` nos `inputs` (preset fora do hash é cache verde depois de a
+  régua mudar — o furo que o próprio `turbo.jsonc` narra).
+- 16 rótulos de link ficaram com o nome do arquivo antigo (`[lifecycle.md](0054-…)`); viraram o
+  número do ADR. O `docs:check` não vê rótulo, só alvo.
+- `CLAUDE.md` da raiz: o CI de commits é a issue 06, ainda por construir (dizia "e, depois, pelo
+  CI"); a nuance do `sentence-case` da 05 entrou; "1–3 parágrafos" virou "1–3 frases ou o que a
+  decisão pedir", que é o que o `ADR-FORMAT.md` da skill diz (também em `domain.md` e no índice).
+- `pnpm run docs:check` → `pnpm docs:check` em todo lugar; o diagrama de `docs/README.md` ganhou
+  o passo `/to-spec`; a ferramenta passou a ter o padrão de caminho num só lugar (`DOC_PATH`).
+- Issues 08 e 13 e a spec (§ "Documentação e modo de trabalho", § "Fecho") ainda diziam que o
+  `docs/context/` continuava existindo — anotadas com a revisão, no idioma já usado em "Out of
+  Scope".
+- Fora do escopo desta issue e deixado como está: o `CONTEXT-MAP.md` nomeia o glossário da API
+  como texto (a skill cria lazy; a issue pediu nomear), e a linha `Status:` da spec da Fase 10
+  aponta para seções do índice, não para ADRs individuais — as decisões dela estão espalhadas
+  por dezenas de ADRs, e o índice é o endereço honesto.

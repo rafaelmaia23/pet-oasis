@@ -16,14 +16,14 @@
   request): o access token é um JWT stateless, validado só localmente por assinatura + expiração;
   só o refresh (opaco, hash salvo) toca essa tabela, e só em `/refresh`, `/logout` e nos endpoints
   de sessão. Ver
-  [identity-and-sessions.md](../adr/0055-design-session-access-jwt-15min-refresh-opaco-rotativo.md).
+  [`0055`](../adr/0055-design-session-access-jwt-15min-refresh-opaco-rotativo.md).
 - **Customer/Employee** — id, userId @unique, deletedAt?, campos próprios (Customer: `phone`
   obrigatório, address?, birthDate?; Employee: `hiringDate @default(now())`). `onDelete: Cascade`
   no user.
 - **UserRole/UserFeature** — `id @id @default(uuid())`, **não** par composto: mudou por causa do
   soft delete, que exige N linhas mortas + 1 viva do mesmo par. `deletedAt?` nas duas. UserFeature:
   `granted`, `grantedAt @default(now())`, `updatedAt @updatedAt`. Ver
-  [lifecycle.md](../adr/0038-userfeature-userrole-tambem-tem-soft-delete.md).
+  [`0038`](../adr/0038-userfeature-userrole-tambem-tem-soft-delete.md).
 - **Role** — code-seeded, `description` obrigatória, `appliesTo ProfileKind` **NOT NULL** desde o
   Passo 0 da Sessão B da Fase 8 (o catálogo nunca produziu `null`, e três branches mortos
   sustentavam esse estado). **Feature** — code-seeded.
@@ -119,10 +119,10 @@ que surpreendem quem lê o `schema.prisma`.
 ## Invariantes que o schema não expressa sozinho
 
 - **Nenhuma coluna de "motivo de deleção" existe.** A correlação da restauração é o próprio
-  `deletedAt` (D4/D5) — ver [lifecycle.md](../adr/0041-correlacao-data-nao-coluna-motivo.md).
+  `deletedAt` (D4/D5) — ver [`0041`](../adr/0041-correlacao-data-nao-coluna-motivo.md).
 - **Um único `new Date()` por transação de cascata**, propagado por parâmetro. Se vazar, o bug é
   silencioso: só a restauração deixa de achar os filhos.
 - **Toda query de leitura filtra `deletedAt: null`**, inclusive `getUserForFeatureComputation` — é
   o que mata o token de usuário deletado e ignora overrides removidos.
 - **Valores monetários em inteiro-centavos, peso em inteiro-gramas** — nunca `Decimal`/float
-  (Fase 9). Ver [pet-domain.md](../adr/0007-product-catalog-modeling.md).
+  (Fase 9). Ver [`0007`](../adr/0007-product-catalog-modeling.md).

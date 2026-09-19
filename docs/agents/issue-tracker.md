@@ -66,7 +66,7 @@ ressurge no fecho da fase seguinte.
    em `docs/adr/` da raiz quando é de sistema) e a linha no índice. **Migrar antes de fechar**:
    decisão sem dono não é fechada; escrever o dono é o trabalho.
 2. A primeira linha do `spec.md` vira
-   `Status: fechada em <AAAA-MM-DD> — porquê promovido a <caminhos>`. O `pnpm run docs:check`
+   `Status: fechada em <AAAA-MM-DD> — porquê promovido a <caminhos>`. O `pnpm docs:check`
    exige que os caminhos nomeados existam.
 3. A fase encolhe no [`docs/todo.md`](../todo.md) para o resumo de resultado.
 

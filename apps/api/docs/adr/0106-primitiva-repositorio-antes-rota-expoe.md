@@ -5,4 +5,4 @@
 
 Quando uma mecânica serve a três níveis e só um tem rota, os três nascem juntos no repositório, com
 os sem-rota cobertos por teste de integração chamando o repositório direto. Foi assim com a
-restauração (K7) — ver [lifecycle.md](0044-tres-niveis-nasceram-como-primitivas-repositorio.md).
+restauração (K7) — ver [`0044`](0044-tres-niveis-nasceram-como-primitivas-repositorio.md).

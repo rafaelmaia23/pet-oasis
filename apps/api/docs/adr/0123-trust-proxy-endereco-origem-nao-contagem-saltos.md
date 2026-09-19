@@ -15,7 +15,7 @@ a chamar a API em nome do visitante. A partir daí duas cadeias vivem ao mesmo t
 quando a chamada não passou pelo front. Contar saltos pressupõe uma topologia só. (Na prática há
 ainda a borda da Cloudflare na frente do nginx; ela não entra na conta porque o **proxy** resolve
 o IP real do visitante a partir de `CF-Connecting-IP` antes de encaminhar — decisão da 10.6, em
-[`infrastructure.md`](README.md#infraestrutura) § "A API atende num subdomínio, e o apex fica limpo".)
+[`0160`](0160-api-atende-num-subdominio-apex-fica-limpo.md) § "A API atende num subdomínio, e o apex fica limpo".)
 
 A forma que serve as duas é confiar por **endereço**:
 

@@ -30,7 +30,7 @@ apontadores (README e a coleção Bruno) apontam para o subdomínio.
 
 **A cadeia de IP ganhou um salto, e ele é tratado no proxy.** A decisão da 10.2 descrevia duas
 cadeias, `visitante → nginx → api` e `visitante → nginx → front → api`, e o `trust proxy` por
-endereço privado ([`security.md`](README.md#segurança) § "`trust proxy` é por endereço de origem") acerta
+endereço privado ([`0123`](0123-trust-proxy-endereco-origem-nao-contagem-saltos.md) § "`trust proxy` é por endereço de origem") acerta
 as duas. Com o proxy da Cloudflare ligado, quem abre a conexão no reverse proxy é a **borda da
 Cloudflare**, e o salto a mais quebraria a decisão: o proxy anexaria o próprio `$remote_addr` ao
 `X-Forwarded-For`, a API receberia `visitante, ip-da-cloudflare`, e a caminhada da direita para a

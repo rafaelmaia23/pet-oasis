@@ -10,4 +10,4 @@ demo lê a trilha e vê IP mascarado; um admin vê inteiro), e a visibilidade de
 por override sem carregar junto o poder de banir que reusar `manage:user:status` traria. Features
 novas no singular, como o resto do catálogo: **`read:log`** (ring buffer) e **`read:audit-log`**
 (+ `:full`). Por destravar PII, `read:audit-log:full` entrou em `PRIVILEGED_FEATURES` —
-ver [authorization.md](README.md#não-escalação).
+ver [índice de ADRs](README.md#não-escalação).

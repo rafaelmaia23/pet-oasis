@@ -33,6 +33,7 @@ Hoje só a API está aqui: [`apps/api/docs/README.md`](../apps/api/docs/README.m
 ```
 ideia crua          .scratch/<slug>/               anotação, material de grilling
    ↓ /grill-with-docs — a grelha fecha as decisões, uma rodada por vez
+   ↓ /to-spec
 desenho             .scratch/<slug>/spec.md        spec: o quê e por quê
    ↓ /to-tickets
 execução            .scratch/<slug>/issues/NN-*.md uma issue = uma feat-branch = um contexto

@@ -15,7 +15,7 @@
  * é citado com o prefixo, `apps/api/docs/<arquivo>.md`, e resolve da raiz. Se o pacote
  * não tem o arquivo, a raiz é tentada — é como um app cita `docs/todo.md`.
  *
- * Uso: `pnpm run docs:check` (na raiz)
+ * Uso: `pnpm docs:check` (na raiz)
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -69,6 +69,18 @@ const DISSOLVED_DOCS = new Set(["docs/fase-8-redesign.md"]);
  * default certo — quem está no meio do trabalho não deve nada.
  */
 const CLOSED_SPEC = /^Status:\s*fechada\b/;
+
+/**
+ * Um caminho de documento como aparece em prosa: `docs/<arquivo>.md`, ou com o
+ * prefixo do pacote (`apps/api/docs/<arquivo>.md`). É a mesma forma nos dois
+ * lugares em que o script a procura — a linha `Status:` da spec fechada e
+ * qualquer menção —, e mudar a regra de prefixo tem de mudar as duas de uma vez.
+ */
+const DOC_PATH = String.raw`((?:apps|packages)\/[\w-]+\/)?(docs\/[\w./-]+\.md)`;
+const CLOSED_SPEC_DESTINATION = new RegExp(
+  String.raw`\b(?:${DOC_PATH}|CLAUDE\.md|CONTEXT\.md)`,
+);
+const DOC_MENTION = new RegExp(String.raw`(?<![\w/.-])${DOC_PATH}\b`, "g");
 
 type Problem = { file: string; line: number; message: string };
 
@@ -168,12 +180,7 @@ for (const file of collectFiles(ROOT)) {
   // permanente; a existência do caminho é coberta pela checagem de prosa abaixo.
   if (/^\.scratch\/[^/]+\/spec\.md$/.test(relativePath)) {
     const statusLine = lines.find((line) => CLOSED_SPEC.test(line));
-    if (
-      statusLine &&
-      !/\b((?:(?:apps|packages)\/[\w-]+\/)?docs\/[\w./-]+\.md|CLAUDE\.md|CONTEXT\.md)/.test(
-        statusLine,
-      )
-    ) {
+    if (statusLine && !CLOSED_SPEC_DESTINATION.test(statusLine)) {
       report(
         file,
         lines.indexOf(statusLine) + 1,
@@ -212,14 +219,17 @@ for (const file of collectFiles(ROOT)) {
     // de `docs/` casaria sozinho, e checar a existência dele aqui reprovaria um
     // documento correto. Um caminho precedido de barra não é nosso — salvo o
     // prefixo de pacote, que o próprio padrão captura.
-    for (const match of line.matchAll(
-      /(?<![\w/.-])((?:apps|packages)\/[\w-]+\/)?(docs\/[\w./-]+\.md)\b/g,
-    )) {
+    for (const match of line.matchAll(DOC_MENTION)) {
       const [target, packagePrefix, docPath] = match;
       if (!docPath || DISSOLVED_DOCS.has(docPath)) continue;
+      // Sem prefixo: o pacote do arquivo primeiro e a raiz como segunda tentativa
+      // (é como um app cita `docs/todo.md`); na raiz, os dois são o mesmo lugar.
       const candidates = packagePrefix
         ? [join(ROOT, target)]
-        : [join(packageRoot, docPath), join(ROOT, docPath)];
+        : [
+            join(packageRoot, docPath),
+            ...(packageRoot === ROOT ? [] : [join(ROOT, docPath)]),
+          ];
       if (!candidates.some(exists)) {
         report(file, lineNumber, `caminho inexistente: ${target}`);
       }

@@ -12,10 +12,11 @@ reescrito para o monorepo, `main` virando o monorepo, e o repo renomeado no GitH
       Turbo, o que é contrato e a regra dos dois donos, o que ficou de fora (deploy automático,
       remote cache, cache de `test`) e quando revisitar.
 - [ ] Tabela de rastreio decisão → destino feita e conferida: toda decisão da spec tem dono em
-      `docs/context/` (da raiz ou da API) ou em ADR; a primeira linha da spec vira
+      ADR (da raiz, para o que é de sistema; da API, `apps/api/docs/adr/`, para o que é dela —
+      o `docs/context/` não existe mais desde a 07); a primeira linha da spec vira
       `Status: fechada em <data> — porquê promovido a <caminhos>`.
 - [ ] Racionais que nasceram na execução (não estão na spec) e hoje vivem só em comentário de
-      código, a promover para `apps/api/docs/adr/README.md#infraestrutura` (ou `architecture.md`):
+      código, a promover para ADRs da API (temas *Infraestrutura* ou *Arquitetura* do índice):
       da issue 01 — Node e pnpm com fonte única (`engines` + `packageManager`, corepack; o
       Dockerfile não escreve versão nenhuma, e o pnpm recusa Node fora de `engines`); `.npmrc`
       não existe porque pnpm 12 lê `pnpm-workspace.yaml`; `allowBuilds` (por que `vue-demi`

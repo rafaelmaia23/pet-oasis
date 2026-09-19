@@ -46,7 +46,7 @@ recuperável — nas issues, que não são apagadas, e no histórico do git.
    (decisão → arquivo de destino) e conferi-la.
 3. **A spec é marcada, não apagada.** No fecho, a primeira linha do `spec.md` vira
    `Status: fechada em <AAAA-MM-DD> — porquê promovido a <caminhos>`, e o
-   `pnpm run docs:check` exige que os caminhos nomeados existam. É o marcador que repõe a
+   `pnpm docs:check` exige que os caminhos nomeados existam. É o marcador que repõe a
    força que o antigo "apagar a spec" dava à regra 2 — e é o que impede alguém de ler uma
    spec morta como corrente.
 

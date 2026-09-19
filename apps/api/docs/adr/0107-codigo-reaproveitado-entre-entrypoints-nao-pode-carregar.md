@@ -4,4 +4,4 @@
 > a partir daí, cada decisão é um ADR. O texto é o original; só os links foram reapontados.
 
 Lição do reseed compartilhado (7.14) — ver
-[infrastructure.md](0171-gotcha-reseed-compartilhado.md).
+[`0171`](0171-gotcha-reseed-compartilhado.md).

@@ -4,4 +4,4 @@
 > a partir daí, cada decisão é um ADR. O texto é o original; só os links foram reapontados.
 
 Atribuir role exige o perfil compatível já existir. Se user↔role viesse antes, dependeria de algo
-inexistente. Detalhe em [authorization.md](0024-perfis-vem-antes-user-role.md).
+inexistente. Detalhe em [`0024`](0024-perfis-vem-antes-user-role.md).

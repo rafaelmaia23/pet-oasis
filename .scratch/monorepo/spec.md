@@ -206,9 +206,12 @@ Um único repositório `pet-oasis`, gerido por **pnpm workspaces** e orquestrado
   monorepo), `CONTEXT-MAP.md`, `docs/` geral (ADRs de sistema numerados, `todo.md`, guias que
   valem para o todo), `.scratch/` único.
 - **Por app:** `CLAUDE.md` só com o específico da stack; `CONTEXT.md` (glossário puro, sem
-  racional); `docs/` com ADRs locais numerados e, na API, o `docs/context/` de hoje como
-  *porquê* indexado — que continua existindo, mas deixa de ser glossário.
-- O glossário da API é **escrito do zero** como issue própria, destilado do `docs/context/`.
+  racional); `docs/` com ADRs locais numerados ~~e, na API, o `docs/context/` de hoje como
+  *porquê* indexado — que continua existindo, mas deixa de ser glossário~~. **Revisto em
+  2026-09-18** (kickoff da issue 07, decisão do dono): o `docs/context/` foi migrado inteiro,
+  uma seção = um ADR, e deixou de existir; o índice por tema virou `apps/api/docs/adr/README.md`.
+- O glossário da API é **escrito do zero** como issue própria, destilado ~~do `docs/context/`~~
+  dos ADRs.
 - ADRs da API são renomeados para `NNNN-slug.md`; o `docs:check` denuncia todo link quebrado.
 - O `.scratch` aberto do web migra para a raiz com número de fase; a spec e as issues dele
   são mantidas como estão, só o ponteiro muda.
@@ -223,7 +226,8 @@ Um único repositório `pet-oasis`, gerido por **pnpm workspaces** e orquestrado
   contrato.
 - Rename do repo no GitHub (`pet-oasis-api` → `pet-oasis`) como **último ato do merge em
   `main`** — o GitHub redireciona o nome antigo; o remote do VPS é atualizado no mesmo passo.
-- `todo.md` destilado; decisões promovidas a `docs/context/` / ADR antes de fechar.
+- `todo.md` destilado; decisões promovidas a ADR antes de fechar (~~`docs/context/`~~ não existe
+  mais desde a issue 07).
 
 ## Testing Decisions
 

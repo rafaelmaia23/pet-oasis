@@ -5,4 +5,4 @@
 
 `assertAdminForBan`, `assertAdminForPermissionFeature` e `assertAdminForRoleAssignment`
 convergiram em `assertActorIsAdmin` (7.x). O guard da reativação é a exceção deliberada — ver
-[lifecycle.md](0054-guard-corre-sobre-roles-vao-voltar.md).
+[`0054`](0054-guard-corre-sobre-roles-vao-voltar.md).

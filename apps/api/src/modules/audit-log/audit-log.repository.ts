@@ -1,7 +1,7 @@
+import type { ListAuditLogsQuery } from "@pet-oasis/api-contracts/audit-log";
 import type { Prisma } from "@/generated/prisma/client";
 import { buildCursorFilter } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
-import type { ListAuditLogsQuery } from "./audit-log.schema";
 
 /**
  * Busca uma página de audit logs por cursor (mais recentes primeiro), aplicando

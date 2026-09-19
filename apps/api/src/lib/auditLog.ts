@@ -1,5 +1,8 @@
+import type {
+  AuditAction,
+  AuditTargetType,
+} from "@pet-oasis/api-contracts/audit-log";
 import type { Prisma } from "@/generated/prisma/client";
-import type { AuditAction, AuditTargetType } from "@/lib/auditLog.constants";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getRequestContext } from "@/lib/requestContext";

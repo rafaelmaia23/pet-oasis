@@ -1,6 +1,6 @@
-import { cursorQuerySchema } from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
-import { AUDIT_ACTIONS, AUDIT_TARGET_TYPES } from "@/lib/auditLog.constants";
+import { cursorQuerySchema } from "../pagination";
+import { AUDIT_ACTIONS, AUDIT_TARGET_TYPES } from "./audit-log.constants";
 
 /**
  * Todo `targetId` gravado é o uuid do recurso, então o filtro compara igualdade

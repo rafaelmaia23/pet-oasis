@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { auditLogViews } from "@pet-oasis/api-contracts/audit-log";
 import { createPresenter } from "@/utils/presenter";
 
 /**
@@ -24,29 +24,5 @@ export function maskIp(ip: string | null): string | null {
 
   return "***";
 }
-
-const defaultView = z
-  .object({
-    id: z.uuid(),
-    action: z.string().meta({ example: "USER_BANNED" }),
-    targetType: z.string().meta({ example: "User" }),
-    targetId: z.string().nullable(),
-    actorId: z.string().nullable(),
-    metadata: z.record(z.string(), z.unknown()).nullable(),
-    ip: z.string().nullable().meta({ example: "192.168.1.***" }),
-    userAgent: z.string().nullable(),
-    createdAt: z.coerce.date(),
-  })
-  .meta({
-    id: "AuditLog",
-    description:
-      "Linha da trilha de auditoria (ip mascarado sem read:audit-log:full)",
-  });
-
-export const auditLogViews = {
-  default: defaultView,
-} as const;
-
-export type AuditLogView = keyof typeof auditLogViews;
 
 export const auditLogPresenter = createPresenter(auditLogViews);

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AUDIT_TARGET_TYPES } from "@/lib/auditLog.constants";
-import { listAuditLogsSchema } from "@/modules/audit-log/audit-log.schema";
+import { AUDIT_TARGET_TYPES, listAuditLogsSchema } from "../src/audit-log";
 
 /**
  * Guarda de regressão da 9.4: até então a lista de tipos de alvo existia duas

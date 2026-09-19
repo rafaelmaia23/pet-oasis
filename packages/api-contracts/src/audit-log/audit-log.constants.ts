@@ -1,5 +1,7 @@
 /**
- * Taxonomia fechada de ações de auditoria (docs/reference/logging-policy.md §4.3).
+ * Taxonomia fechada de ações de auditoria (política de logging da API, §4.3).
+ * É contrato porque é o que `GET /audit-logs?action=` aceita e o que a linha
+ * devolvida carrega — o cliente que filtra ou rotula a trilha digita daqui.
  *
  * `SCREAMING_SNAKE`, no formato `RECURSO_ACAO_NO_PASSADO` — o audit registra o
  * que **já aconteceu**. A lista é a fonte única: nenhuma ação nasce fora dela

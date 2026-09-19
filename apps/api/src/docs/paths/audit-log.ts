@@ -1,6 +1,8 @@
+import {
+  auditLogViews,
+  listAuditLogsSchema,
+} from "@pet-oasis/api-contracts/audit-log";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { auditLogViews } from "@/modules/audit-log/audit-log.presenter";
-import { listAuditLogsSchema } from "@/modules/audit-log/audit-log.schema";
 import { cursorList, errorResponses, jsonResponse } from "../components";
 import { fromEnvelope } from "../helpers";
 

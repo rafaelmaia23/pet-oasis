@@ -17,7 +17,8 @@
     "./pagination": "./src/pagination/index.ts",
     "./me": "./src/me/index.ts",
     "./auth": "./src/auth/index.ts",
-    "./permission": "./src/permission/index.ts"
+    "./permission": "./src/permission/index.ts",
+    "./audit-log": "./src/audit-log/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",

@@ -1,5 +1,5 @@
+import { meViews } from "@pet-oasis/api-contracts/me";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { meViews } from "@/modules/me/me.presenter";
 import { errorResponses, jsonResponse } from "../components";
 
 export const mePaths: ZodOpenApiPathsObject = {

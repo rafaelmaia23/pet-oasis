@@ -1,4 +1,11 @@
 import {
+  type CreateCustomerInput,
+  type CreateEmployeeInput,
+  type ListUsersQuery,
+  type UpdateUserInput,
+  USER_SORT,
+} from "@pet-oasis/api-contracts/user";
+import {
   createConflictError,
   createForbiddenError,
   createNotFoundError,
@@ -19,13 +26,6 @@ import { hashPassword } from "@/lib/password";
 import { consumeEmailTargetLimit, emailTargetLimiter } from "@/lib/rateLimit";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
 import * as userRepository from "@/modules/user/user.repository";
-import {
-  type CreateCustomerInput,
-  type CreateEmployeeInput,
-  type ListUsersQuery,
-  type UpdateUserInput,
-  USER_SORT,
-} from "@/modules/user/user.schema";
 import { validateRoles } from "@/utils/validateRoles";
 import { requestAccountReactivation } from "../auth/accountReactivation.service";
 import { PASSWORD_RESET_TTL_MS } from "../auth/auth.constants";

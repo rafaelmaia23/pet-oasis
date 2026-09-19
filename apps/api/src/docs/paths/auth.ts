@@ -1,3 +1,4 @@
+import { userViews } from "@pet-oasis/api-contracts/user";
 import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
 import { sessionViews } from "@/modules/auth/auth.presenter";
@@ -14,7 +15,6 @@ import {
   signupSchema,
   verifyEmailSchema,
 } from "@/modules/auth/auth.schema";
-import { userViews } from "@/modules/user/user.presenter";
 import {
   errorResponseSchema,
   errorResponses,

@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { userViews } from "@pet-oasis/api-contracts/user";
 import { buildPet } from "@tests/factories/pet.factory";
 import {
   attachOverrides,
@@ -29,7 +30,6 @@ import app from "@/app";
 import { env } from "@/config/env";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
-import { userViews } from "@/modules/user/user.presenter";
 import {
   findDeletedUserById,
   findUserById,

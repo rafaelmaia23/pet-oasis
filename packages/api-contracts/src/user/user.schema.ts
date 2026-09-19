@@ -1,14 +1,11 @@
-import {
-  buildOffsetQuerySchema,
-  defineSortConfig,
-} from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
-import { ProfileKind, UserStatus } from "@/generated/prisma/enums";
-import { ROLE_NAMES } from "@/modules/role/role.constants";
+import { buildOffsetQuerySchema, defineSortConfig } from "../pagination";
+import { ROLE_NAMES } from "../role/role.names";
+import { profileKindSchema, userStatusSchema } from "./user.enums";
 
 /**
  * Tetos de comprimento dos campos de identidade (10.13). Nenhuma coluna do
- * schema Prisma declara tamanho, então o teto é decidido aqui, pelo que o campo
+ * banco declara tamanho, então o teto é decidido aqui, pelo que o campo
  * representa, e vale para todo schema que reutiliza a peça — `auth`, perfil de
  * cliente e reativação incluídos. O limite total de corpo protege o agregado;
  * é o teto por campo que impede 99KB dentro de um único `email`.
@@ -141,7 +138,7 @@ export const reactivateAccountSchema = z.object({
     // `.min(1)` é o D14 no schema: uma conta ativa sem nenhum perfil ativo é
     // estado proibido, então escolher zero perfis nem chega ao service.
     profiles: z
-      .array(z.enum(ProfileKind))
+      .array(profileKindSchema)
       .min(1, "Escolha ao menos um perfil para restaurar")
       .meta({
         description: "Perfis com que a conta volta",
@@ -171,8 +168,7 @@ export const USER_SORT = defineSortConfig({
 
 export const listUsersSchema = z.object({
   query: buildOffsetQuerySchema(USER_SORT, {
-    status: z
-      .enum(UserStatus)
+    status: userStatusSchema
       .optional()
       .meta({ description: "Filtra pelo status da conta", example: "ACTIVE" }),
     banned: z

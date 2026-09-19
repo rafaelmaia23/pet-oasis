@@ -1,3 +1,7 @@
+import type {
+  CreateCustomerProfileInput,
+  CreateEmployeeProfileInput,
+} from "@pet-oasis/api-contracts/user";
 import {
   createConflictError,
   createForbiddenError,
@@ -17,10 +21,6 @@ import { validateRoles } from "@/utils/validateRoles";
 import type { CascadeCounts } from "../user.lifecycle.repository";
 import { findUserById } from "../user.repository";
 import * as userProfileRepository from "./user.profile.repository";
-import type {
-  CreateCustomerProfileInput,
-  CreateEmployeeProfileInput,
-} from "./user.profile.schema";
 
 const DEFAULT_CUSTOMER_ROLES: RoleName[] = ["customer"];
 const DEFAULT_EMPLOYEE_ROLES: RoleName[] = ["attendant"];

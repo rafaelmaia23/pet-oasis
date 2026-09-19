@@ -1,7 +1,3 @@
-import type { Request, Response } from "express";
-import { offsetEnvelope } from "@/lib/pagination";
-import { getAuthUser } from "@/utils/getAuthUser";
-import { userPresenter } from "./user.presenter";
 import {
   banUserSchema,
   createEmployeeSchema,
@@ -10,7 +6,11 @@ import {
   reactivateAccountSchema,
   updateUserSchema,
   userParamsSchema,
-} from "./user.schema";
+} from "@pet-oasis/api-contracts/user";
+import type { Request, Response } from "express";
+import { offsetEnvelope } from "@/lib/pagination";
+import { getAuthUser } from "@/utils/getAuthUser";
+import { userPresenter } from "./user.presenter";
 import * as userService from "./user.service";
 import { resolveUserView } from "./user.view-resolver";
 

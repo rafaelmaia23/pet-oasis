@@ -1,6 +1,6 @@
-import { productStatusSchema } from "./catalog";
-import { petSexSchema, petSpeciesSchema } from "./pet";
-import { profileKindSchema, userStatusSchema } from "./user";
+import { productStatusSchema } from "./catalog/catalog.enums";
+import { petSexSchema, petSpeciesSchema } from "./pet/pet.enums";
+import { profileKindSchema, userStatusSchema } from "./user/user.enums";
 
 // Registro dos enums com dois donos, pela chave que o Prisma usa. É o que o
 // teste de paridade da API percorre: para cada entrada, o enum gerado pelo

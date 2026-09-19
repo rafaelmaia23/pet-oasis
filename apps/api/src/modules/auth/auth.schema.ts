@@ -1,12 +1,12 @@
-import { z } from "zod";
-import { OPAQUE_TOKEN_LENGTH } from "@/lib/token";
 import {
   createCustomerSchema,
   emailSchema,
   PASSWORD_MAX_LENGTH,
   passwordSchema,
   phoneSchema,
-} from "@/modules/user/user.schema";
+} from "@pet-oasis/api-contracts/user";
+import { z } from "zod";
+import { OPAQUE_TOKEN_LENGTH } from "@/lib/token";
 
 export const signupSchema = createCustomerSchema;
 

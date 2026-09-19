@@ -1,4 +1,10 @@
 import { faker } from "@faker-js/faker";
+import {
+  type CreateCustomerInput,
+  type CreateEmployeeInput,
+  createCustomerSchema,
+  createEmployeeSchema,
+} from "@pet-oasis/api-contracts/user";
 import { cpf } from "cpf-cnpj-validator";
 import { createInternalServerError } from "@/errors/errorFactory";
 import type { ProfileKind, UserStatus } from "@/generated/prisma/enums";
@@ -14,12 +20,6 @@ import {
   createEmployee,
   findUserById,
 } from "@/modules/user/user.repository";
-import {
-  type CreateCustomerInput,
-  type CreateEmployeeInput,
-  createCustomerSchema,
-  createEmployeeSchema,
-} from "@/modules/user/user.schema";
 import {
   DEFAULT_CUSTOMER_ROLES,
   DEFAULT_EMPLOYEE_ROLES,

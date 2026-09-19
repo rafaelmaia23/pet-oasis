@@ -1,5 +1,3 @@
-import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { userViews } from "@/modules/user/user.presenter";
 import {
   banUserSchema,
   createEmployeeSchema,
@@ -8,7 +6,9 @@ import {
   reactivateAccountSchema,
   updateUserSchema,
   userParamsSchema,
-} from "@/modules/user/user.schema";
+  userViews,
+} from "@pet-oasis/api-contracts/user";
+import type { ZodOpenApiPathsObject } from "zod-openapi";
 import {
   errorResponses,
   jsonResponse,

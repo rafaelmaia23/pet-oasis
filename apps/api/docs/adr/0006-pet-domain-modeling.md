@@ -148,7 +148,7 @@ A sub-fase 9.3 executou a parte de espécie/raça deste ADR (o `Pet` em si é a
 | # | Ponto | Escolha e por quê |
 |---|---|---|
 | T1 | Quem entra em `SPECIES_WITH_BREED` | **Só `DOG` e `CAT`.** O corpo do ADR dizia "cão e gato têm listas curadas; peixe e réptil, não" e deixava coelho, ave e roedor em aberto. Ficaram de fora: em ave e roedor o que existe não é raça, é espécie ou variedade (calopsita, periquito; hamster sírio × anão russo), e enfiar isso em `Breed` misturaria dois conceitos — além de obrigar todo dono de ave a escolher um valor que não é raça. Coelho tem raças de fato, mas entrar exigiria curar mais uma lista sem demanda que a justifique. As outras cinco espécies exigem `breedId` **ausente** (422 na 9.4). |
-| T2 | Contrato do `GET /breeds` | `?species=` **opcional** (sem ele sai o catálogo inteiro — ~140 linhas fixas, que é o que o seed fake e a coleção Bruno consomem), **sem paginação**, envelope `{ data, meta: {} }` via `listEnvelope`. Mesma classe de `GET /roles` e `GET /features` na tabela do [`pagination.md`](pagination.md). Espécie fora do enum → **422** nomeando `species`. Rota **pública**, sem `authenticate` nem feature (9.1/N15); como não tem view por capability, não depende da autenticação opcional que `/products` vai exigir na 9.6. |
+| T2 | Contrato do `GET /breeds` | `?species=` **opcional** (sem ele sai o catálogo inteiro — ~140 linhas fixas, que é o que o seed fake e a coleção Bruno consomem), **sem paginação**, envelope `{ data, meta: {} }` via `listEnvelope`. Mesma classe de `GET /roles` e `GET /features` na tabela do [`0004`](0004-pagination.md). Espécie fora do enum → **422** nomeando `species`. Rota **pública**, sem `authenticate` nem feature (9.1/N15); como não tem view por capability, não depende da autenticação opcional que `/products` vai exigir na 9.6. |
 | T3 | `Breed` é dado de referência | `clearDatabase()` **não** o trunca (como `Feature`/`Role`/`RoleFeature`), e `demo-reset` também não. Consequência prática: os testes de pet da 9.4 encontram as raças já semeadas pelo `globalSetup`, sem setup próprio. Provado por `tests/integration/clearDatabase.guard.test.ts`. |
 | T4 | Onde a constante mora | **`src/modules/breed/breed.constants.ts`**, e não `src/lib/seed/` como dizia a redação original deste ADR. O que decide é `SPECIES_WITH_BREED`: ela é lida em **runtime** pelo `pet.service` (9.4), e um service de domínio importando do diretório de seed seria arquivo no lugar errado. Também é o que o `CLAUDE.md` já manda ("constantes de domínio em `*.constants.ts`, lidas pelo seed") e o que os próprios `DEFAULT_ROLES`/`DEFAULT_FEATURES` — nomeados aqui como o padrão a seguir — fazem. `src/lib/seed/` guarda dado fake/demo e rotinas, não o catálogo canônico. |
 | T5 | Forma do seed | `createMany({ skipDuplicates: true })`, **não** `upsert` em laço. `upsert` existe para `Role`/`Feature` porque elas têm campo mutável (`description`, `appliesTo`, vínculos); `Breed` não tem **nenhum** — `species` e `name` *são* a chave, então não há o que atualizar numa linha existente. Uma ida ao banco em vez de ~140, e ainda assim exatamente "idempotente por `@@unique([species, name])`". E, deliberadamente, **sem o delete reconciliador** que `runSeed` aplica às features: a partir da 9.4 `Pet.breedId` referencia estas linhas, e apagar uma raça que ainda tem pet quebraria o seed no boot do container (que roda `migrate deploy → seed → start` a cada restart). Remover raça do catálogo é migration deliberada. |
@@ -209,3 +209,42 @@ Duas assimetrias deliberadas ficaram registradas no
   `GET /pets` não há o que separar — listar pet de terceiro *é* a rota —, então a
   feature vai na rota, como `read:user:others` em `GET /users`, e o service não
   recebe ator.
+
+---
+
+## Resumo e notas de execução (migrados do índice de contexto em 2026-09-18)
+
+> Este bloco vivia no índice temático **Domínio pet shop** como resumo deste ADR e registro do que a
+> implementação firmou além da decisão. Migrado sem edição; só os links foram reapontados.
+
+- Espécie como **enum fechado sem `OUTRO`** — por que a lista nasce mais larga que o mínimo e por
+  que `OUTRO` é buraco permanente, não flexibilidade
+- Raça como **tabela semeada por constante, nunca API em runtime** (TheDogAPI/TheCatAPI
+  descartadas: disponibilidade refém de terceiro, sem id estável para FK, cobertura ruim fora de
+  cão e gato)
+- `SPECIES_WITH_BREED` é constante **explícita**, não derivada do dado — derivar faria pets já
+  cadastrados violarem a regra retroativamente
+- **Dono único** (`Pet.customerId` obrigatório, sem N:N), com o gatilho de revisão registrado
+- **Falecimento é estado, não exclusão** (`deceasedAt` separado de `deletedAt`)
+- Peso é instantâneo, não histórico · `birthDateIsEstimated`
+- **O que a 9.3 firmou** (§ "O que a implementação (9.3) firmou além da decisão" do mesmo ADR):
+  só `DOG` e `CAT` em `SPECIES_WITH_BREED` — ave e roedor têm variedade, não raça; contrato do
+  `GET /breeds` (público, `?species=` opcional, sem paginação); `Breed` é dado de **referência**
+  (sobrevive ao `clearDatabase` e ao `demo-reset`); a constante mora em
+  `src/modules/breed/breed.constants.ts` e não em `src/lib/seed/`; e o seed usa `createMany` com
+  `skipDuplicates`, **sem** delete reconciliador — apagar raça com pet quebraria o boot
+- **O que a 9.4 firmou** (§ "O que a implementação (9.4) firmou além da decisão" do mesmo ADR):
+  `microchipId` com `@unique` **global** (U1, precedente de email/cpf/phone — o chip preso por um
+  pet excluído é o sinal certo num identificador do mundo real); pets **cascateiam e voltam por
+  correlação de data** (U2 — ver [lifecycle.md](0047-pet-primeiro-filho-dominio-grafo.md));
+  falecimento em **rota própria** e idempotente (U3); `species` editável, com a raça revalidada
+  sobre o estado resultante (U4); e o alvo inexistente **falhando fechado** em 403 quando o ator
+  não tem `:others` (U5)
+- **O que a 9.5 firmou** (§ "O que a implementação (9.5) firmou além da decisão" do mesmo ADR):
+  `GET /pets`, a listagem de balcão, traz vivos **e** falecidos por default — `?deceased=` é o
+  recorte, não o default, para que `meta.total` não minta (V1); allowlist de filtros com
+  `customerId`/`breedId` funcionando como **filtro e não resolução de recurso** (uuid inexistente
+  → lista vazia, nunca 404) e `microchipId` como busca exata de balcão (V2); allowlist de
+  ordenação `createdAt`/`name`/`species`, com `birthDate` recusado por ser anulável e estimável
+  (V3). Duas assimetrias deliberadas: só `GET /pets` pagina (a coleção do dono continua com
+  `meta {}`) e só ela exige `read:pet:others` direto na rota

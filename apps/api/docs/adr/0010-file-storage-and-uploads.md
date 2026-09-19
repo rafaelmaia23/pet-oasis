@@ -173,3 +173,14 @@ limpeza e as imagens de exemplo — são da **9.11**, na sessão que os exercita
 
 A role `demo` já não sobe arquivo (não tem `manage:product` nem
 `manage:catalog-structure`), e isso tem teste explícito, como o ADR pedia.
+
+---
+
+## Resumo e notas de execução (migrados do índice de contexto em 2026-09-18)
+
+> Este bloco vivia no índice temático **Domínio pet shop** como resumo deste ADR e registro do que a
+> implementação firmou além da decisão. Migrado sem edição; só os links foram reapontados.
+
+Disco local atrás de um adaptador (`put`/`delete`/`url`, implementação `LocalDiskStorage`), servido
+como estático pelo reverse proxy. Inclui o cuidado com o ambiente demo (role `demo` sem escrita,
+`demo-reset` limpando o diretório, rate limit e teto de tamanho próprios).

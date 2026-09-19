@@ -3,7 +3,7 @@
 > Decisão de domínio registrada no planejamento da Fase 9 (sub-fases 9.6, 9.7,
 > 9.8). Introduz o segundo bloco de recursos de domínio do projeto. A decisão
 > de produto×variante condiciona diretamente o formato de `OrderItem` na Fase
-> 10 (ver `docs/adr/product-vs-service.md`).
+> 10 (ver `docs/adr/0008-product-vs-service.md`).
 
 ## O problema
 
@@ -247,8 +247,7 @@ e estável, e a vitrine monta o menu inteiro com uma chamada. O envelope existe
 mesmo assim para que paginar amanhã seja aditivo, não breaking.
 
 Duas consequências transversais nasceram junto e estão registradas fora daqui: o
-middleware de **autenticação opcional** (`docs/context/architecture.md`
-§ "Roteamento") e o **rate limit por IP** da vitrine
+middleware de **autenticação opcional** (`docs/adr/0097-optionalauthenticate-terceiro-modo-vitrine-publica.md`) e o **rate limit por IP** da vitrine
 (`docs/reference/endpoints.md` § "Mounting").
 
 ## O que a implementação (9.7) firmou além da decisão
@@ -426,3 +425,82 @@ vazia, nunca 404, para a listagem não virar oráculo de existência.
 - Se imagem por variante virar necessidade real (ex.: cores): sair do backlog.
 - Se características fixas pararem de cobrir o catálogo (produto muito
   heterogêneo): reconsiderar EAV/JSON com dado real de volume, não hipotético.
+
+---
+
+## Resumo e notas de execução (migrados do índice de contexto em 2026-09-18)
+
+> Este bloco vivia no índice temático **Domínio pet shop** como resumo deste ADR e registro do que a
+> implementação firmou além da decisão. Migrado sem edição; só os links foram reapontados.
+
+- `Product` + `ProductVariant`, **nunca produto plano** — todo produto nasce com ≥1 variante para
+  não abrir dois caminhos de preço
+- **Categoria é função, espécie é faceta** ("o problema da cama") — por que a árvore não se
+  duplica por espécie e por que array vazio significa "serve a qualquer espécie"
+- Características da variante em **colunas fixas**, não EAV nem JSON
+- **Preço em centavos** (e por que não `Decimal`)
+- Status do produto (`DRAFT/ACTIVE/DISCONTINUED`) **coexiste** com soft delete — respondem
+  perguntas diferentes
+- Marca como entidade · views por capability (custo e estoque interno fora da view do cliente;
+  público vê **disponibilidade**, não quantidade)
+
+**Taxonomia, firmado na implementação (9.6)** — § "O que a implementação (9.6) firmou além da
+decisão" do mesmo ADR:
+
+- **Árvore de no máximo 3 níveis** (W1), validada no service por funções puras sobre uma leitura
+  única de todas as categorias ativas — não uma query por nível
+- Produto vincula a **qualquer nó**, folha ou não (W2) — o preço é herdado pela 9.8: "produtos de X"
+  vira a união de X com os descendentes
+- Excluir categoria com filha ativa **ou com produto ativo vinculado** é **409** (W3, completado na
+  9.7) — sem cascata e sem reparenting; desvincular violaria o mínimo-de-uma-categoria por produto
+- **Slug derivado do nome e congelado** (W4) — renomear não muda a URL pública; o `slug` explícito é
+  aceito no corpo e vence o derivado
+- **`Tag` é hard delete** (W5) — a única tabela de domínio do projeto sem `deletedAt`
+- **`name`/`slug` unique global** (W6), o índice ignora `deletedAt` — recriar linha excluída é 409,
+  no precedente de `Pet.microchipId`
+- **Nenhuma das três leituras pagina** (W7) — `GET /categories` devolve a árvore aninhada, as outras
+  duas a lista completa; as três com `meta {}`
+
+**Produto e variante, firmado na implementação (9.7)** — § "O que a implementação (9.7) firmou além
+da decisão" do mesmo ADR:
+
+- **`sku` unique global** (X1), valendo para a variante excluída — precedente de `Pet.microchipId` e
+  do W6; duplicata é 409 pelo P2002, sem código novo
+- **Estoque não fica negativo** (X2) — sem carrinho não há caminho legítimo para isso; a Fase 10
+  reabre a pergunta com reserva e venda
+- **`POST /products` exige `variants[]` com min 1** (X3), tudo numa transação — o invariante nunca é
+  observável violado
+- **Feature por campo presente no `PATCH /variants/:id`** (X4): `stockQuantity` é `manage:stock`, o
+  resto é `manage:product`, corpo misto exige as duas — o repositor conta prateleira sem editar o
+  catálogo, com uma rota só
+- **Exatamente uma variante default** (X5), garantida pelo service nas três escritas; excluir a
+  última variante ativa é **409** (X6)
+- **`categories[]`/`tags[]` são substituição total** no corpo do produto (X7), categoria com mínimo
+  de um; id inexistente ou excluído é 422 nomeando o campo
+- **Exclusão do produto cascateia nas variantes** com um `new Date()` único (X8), no idioma do grafo
+  do usuário; os vínculos ficam, porque aresta não é filho
+- `ProductImage` fica para a 9.10 (X9) · `description` obrigatória com teto próprio de 2000 e
+  `label` da variante informado pelo staff (X10)
+
+**Leitura do catálogo, firmado na implementação (9.8)** — § "O que a implementação (9.8) firmou além
+da decisão" do mesmo ADR:
+
+- **`?status=` é ignorado em silêncio** para quem não vê o interno (Y1) — 422 ou 403 confirmariam
+  que existe um estado escondido, e a mensagem de erro *é* a resposta
+- **`GET /products/:idOrSlug` é uma rota só** (Y2), UUID → id e resto → slug; a ambiguidade morre na
+  **escrita**, com o `slugSchema` compartilhado recusando slug com forma de UUID
+- **`?sort=price` é o menor preço entre as variantes ativas** (Y3) — o único candidato coerente com
+  a faixa de preço, que já olhava todas as variantes. Custo técnico: o Prisma não ordena relação por
+  agregado, então a listagem por preço é um segundo caminho no repository (`groupBy` de ids +
+  hidratação), sem SQL cru
+- **`inStock` derivado na variante e no produto** (Y4), presente em **todas** as views (Y10) —
+  inclusive nas respostas de escrita da 9.7
+- **`?species=X` casa também com `targetSpecies: []`** (Y5) — vazio é "qualquer espécie", e o
+  comedouro universal não some da seção de cães
+- **`?tag=` repetível é interseção** (Y6) · ordenação default `createdAt` desc, allowlist `price`,
+  `name`, `createdAt` (Y7)
+- **Produto fora do conjunto visível é 404**, não 403 (Y8) — "403 vence 404" vale para rota
+  autenticada; aqui a rota é pública e o 403 confirmaria o slug do rascunho
+- **`read:product:cost` implica a visão interna** (Y9) — três views em escada (`public` →
+  `internal` → `cost`), com o predicado `canSeeInternal` escrito **uma vez** e usado tanto no `where`
+  quanto na escolha da view, para lista e resposta nunca discordarem

@@ -8,7 +8,7 @@
 > de produção `pet-oasis-api`), com alias de rede explícito, porque o nome do serviço é o que
 > o DNS da rede publica — e portanto o endereço que o front escreve no código. Onde este
 > documento diz `app` (texto da Fase 6), leia `api`; a estrutura base+overrides não mudou.
-> Racional em [`context/infrastructure.md`](../context/infrastructure.md).
+> Racional em [`adr/README.md`](README.md#infraestrutura).
 
 ## O problema
 
@@ -64,7 +64,7 @@ Stages `build` → `runtime` (prod, intocado: bundle tsup, `pnpm prune --prod`,
 `USER node`) + novo stage **`dev`** (para no `pnpm install` completo, sem bundle/prune,
 roda `tsx watch` contra `src/` por bind-mount; **começa** root e cai para o uid
 do host antes de escrever em bind mount — ver [o container de dev escreve como o
-uid do host](../context/infrastructure.md#o-container-de-dev-escreve-como-o-uid-do-host-não-como-root-1016)).
+uid do host](0163-container-dev-escreve-como-uid-host-nao-como-root.md)).
 O client Prisma gerado no dev
 vive num **volume anônimo** em `/app/src/generated` (senão o bind-mount de
 `./src` o mascararia); o entrypoint de dev roda `prisma generate` no start, ainda

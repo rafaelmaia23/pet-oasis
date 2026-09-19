@@ -215,3 +215,37 @@ enxerga — o que ficou de fora é a imprecisão *dentro* dele.
 - Se a estratégia de consulta (full-text-depois-trigrama vs. pontuação
   combinada) escolhida na 9.9 se mostrar difícil de calibrar em produção:
   revisar aqui com dado real de busca, não hipotético.
+
+---
+
+## Resumo e notas de execução (migrados do índice de contexto em 2026-09-18)
+
+> Este bloco vivia no índice temático **Domínio pet shop** como resumo deste ADR e registro do que a
+> implementação firmou além da decisão. Migrado sem edição; só os links foram reapontados.
+
+Postgres nativo (`tsvector` + `unaccent` + `pg_trgm`), decisão do usuário explicitamente contra a
+recomendação inicial (que era começar com `ILIKE`), com motivação didática. Traz as armadilhas
+documentadas para não custarem uma tarde cada (`unaccent` não é `IMMUTABLE`; `CREATE EXTENSION` em
+migration à mão; sem índice GIN funciona e é lento; `websearch_to_tsquery` sobre `to_tsquery`;
+limiar do `pg_trgm` é sessão-scoped e com pool precisa ser definido por query). O SQL cru fica
+**só no repository** — ver [architecture.md](0102-sql-cru-vive-exclusivamente-repository.md).
+
+O **kickoff da 9.9** (adendo no mesmo ADR, Z1–Z17) fechou as duas armadilhas que tinham ficado em
+aberto e trocou a estratégia de consulta que o ADR previa:
+
+- **Erro de digitação é corrigido na query, não compensado no ranking** (Z5) — mantém-se a lista de
+  lexemas que existem no catálogo e cada palavra ausente é trocada pela mais parecida **antes** de
+  virar `tsquery`. As duas saídas previstas (fallback no vazio, pontuação combinada) falhavam no
+  mesmo ponto: uma query com uma palavra certa e uma errada. O ranking continua `ts_rank` puro.
+  **A implementação tornou a correção condicional:** a busca literal roda primeiro e a reescrita só
+  entra quando ela volta vazia — corrigir sempre escondia produto novo, cuja palavra o dicionário
+  (derivado, defasado) ainda não conhece.
+- **O SQL cru só ranqueia** (Z4) — devolve `(id, rank)`, e quem decide o que é visível continua
+  sendo o `buildProductWhere`. Uma query crua completa daria `total` exato, ao custo de uma segunda
+  definição de "produto visível" — o vazamento que a Y8 fechou, por outra porta.
+- **O corpus para onde a coluna gerada alcança** (Z1) — produto (nome peso A, descrição peso C) e
+  marca, em duas colunas geradas; tag fica de fora porque é N:N e exigiria trigger para não ficar
+  stale, duplicando um filtro (`?tag=`) que já existe.
+- **O dicionário só conhece o catálogo público** (Z17) — porque a resposta expõe a correção
+  aplicada (`meta.search`, Z15), e um dicionário completo deixaria sondar rascunho palavra a
+  palavra.

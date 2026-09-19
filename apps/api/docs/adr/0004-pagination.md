@@ -134,7 +134,7 @@ relevante o suficiente para não ficar mais pendente.
 **Allowlist por recurso.** O campo nunca vai cru para o `orderBy` do Prisma —
 cada recurso declara os campos que aceita ordenar (para `Product`: `price`,
 `name`, `createdAt`, e possivelmente relevância quando houver busca textual
-`q`, ver `docs/adr/text-search.md`). Campo fora da allowlist → **422**, mesmo
+`q`, ver `docs/adr/0009-text-search.md`). Campo fora da allowlist → **422**, mesmo
 idioma de erro por campo do resto do projeto. Um `orderBy` construído
 diretamente do query param seria uma superfície de erro (nome de coluna
 inválido vira 500) e, dependendo da implementação, de injeção.
@@ -174,3 +174,12 @@ helper, não em cada recurso, para ser impossível esquecer dele. O service trad
 com `buildOrderBy(query, config)` e entrega o `orderBy` pronto ao repository.
 Nenhum nome de campo vindo do request alcança o Prisma sem passar pela allowlist.
 
+---
+
+## Resumo e notas de execução (migrados do índice de contexto em 2026-09-18)
+
+> Este bloco vivia no índice temático **Domínio pet shop** como resumo deste ADR e registro do que a
+> implementação firmou além da decisão. Migrado sem edição; só os links foram reapontados.
+
+Adendo da Fase 9: ordenação configurável (`?sort=`) sai do backlog e entra **só no offset**; a
+limitação do cursor permanece documentada.

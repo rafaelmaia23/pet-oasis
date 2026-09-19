@@ -3,7 +3,7 @@
 > Decisão de modelo registrada no redesenho da Fase 8 (2026-08-07) e refinada
 > durante a execução — os pontos de virada estão datados no texto. Altera o
 > schema, a autorização e o significado de deletar. É o tipo de decisão que se
-> re-questiona daqui a um ano, por isso mora aqui e não só no `docs/context.md`.
+> re-questiona daqui a um ano, por isso mora aqui e não só no `docs/adr/README.md`.
 >
 > Contexto de execução: a Fase 8 foi implementada uma vez, revertida
 > (`git reset` para `d1b8478`) e refeita. Este ADR descreve o modelo **correto**;

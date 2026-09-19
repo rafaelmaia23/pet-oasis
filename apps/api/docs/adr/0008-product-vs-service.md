@@ -47,7 +47,7 @@ Prisma não declara CHECK — precisa ser SQL escrito à mão na migration.
 ### O que isso obriga agora
 
 Nada no schema da Fase 9. `Product`/`ProductVariant` nascem exatamente como
-descrito em `docs/adr/product-catalog-modeling.md`. O que muda é que a Fase 10
+descrito em `docs/adr/0007-product-catalog-modeling.md`. O que muda é que a Fase 10
 já sabe o formato que `OrderItem` vai ter, e não precisa reabrir esta discussão
 quando chegar lá.
 
@@ -72,3 +72,14 @@ quando chegar lá.
 - Quando a Fase 10 implementar `OrderItem`: confirmar que o CHECK constraint
   escrito à mão sobrevive a `prisma migrate dev` sem ser sobrescrito (Prisma
   não conhece constraints que não declarou).
+
+---
+
+## Resumo e notas de execução (migrados do índice de contexto em 2026-09-18)
+
+> Este bloco vivia no índice temático **Domínio pet shop** como resumo deste ADR e registro do que a
+> implementação firmou além da decisão. Migrado sem edição; só os links foram reapontados.
+
+Decisão tomada agora, **herdada pela Fase 10**: tabelas separadas + `OrderItem` polimórfico com
+CHECK constraint escrito à mão. Registra por que `kind` único e supertipo com PK compartilhada
+foram preteridos.

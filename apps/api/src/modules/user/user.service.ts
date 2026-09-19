@@ -1,3 +1,5 @@
+import { PERMISSION_FEATURES } from "@pet-oasis/api-contracts/feature";
+import type { RoleName } from "@pet-oasis/api-contracts/role";
 import {
   type CreateCustomerInput,
   type CreateEmployeeInput,
@@ -35,7 +37,6 @@ import {
   assertAdminForRoleAssignment,
   getRolesRestorableWithProfiles,
 } from "../permission/permission.service";
-import { PERMISSION_FEATURES, type RoleName } from "../role/role.constants";
 import { getRolesByNames } from "../role/role.repository";
 
 const log = logger.child({ module: "user" });

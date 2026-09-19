@@ -1,3 +1,4 @@
+import type { FeatureName } from "@pet-oasis/api-contracts/feature";
 import { makeAuthUser } from "@tests/factories/user.factory";
 import { describe, expect, it } from "vitest";
 import { ForbiddenError } from "@/errors";
@@ -9,7 +10,6 @@ import {
   hasFeature,
   isAdmin,
 } from "@/lib/authorization";
-import type { FeatureName } from "@/modules/feature/feature.constants";
 
 // Espelha o shape de `getUserForFeatureComputation` depois da Fase 8.0: o
 // override não pendura no user solto, mora dentro da atribuição de role (D2).

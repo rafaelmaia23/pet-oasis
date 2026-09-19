@@ -1,3 +1,4 @@
+import type { RoleName } from "@pet-oasis/api-contracts/role";
 import type {
   CreateCustomerProfileInput,
   CreateEmployeeProfileInput,
@@ -15,7 +16,6 @@ import {
   hasFeature,
 } from "@/lib/authorization";
 import { assertAdminForRoleAssignment } from "@/modules/permission/permission.service";
-import type { RoleName } from "@/modules/role/role.constants";
 import { getRolesByNames } from "@/modules/role/role.repository";
 import { validateRoles } from "@/utils/validateRoles";
 import type { CascadeCounts } from "../user.lifecycle.repository";

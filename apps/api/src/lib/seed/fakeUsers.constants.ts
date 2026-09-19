@@ -1,4 +1,4 @@
-import type { RoleName } from "@/modules/role/role.constants";
+import type { RoleName } from "@pet-oasis/api-contracts/role";
 import { seededFaker } from "./seedFaker";
 
 const FAKE_EMAIL_DOMAIN = "fake.petoasis.dev";

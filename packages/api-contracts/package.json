@@ -2,7 +2,7 @@
   "name": "@pet-oasis/api-contracts",
   "version": "0.0.0",
   "private": true,
-  "description": "O que atravessa a rede entre a API e os clientes (web, mobile): enums de domínio, nomes de role e feature, shape de erro e — nas fases seguintes — schemas de request e views de resposta. Só depende de zod; consumido do fonte TS, sem build.",
+  "description": "O que atravessa a rede entre a API e os clientes (web, mobile): schemas de request, views de resposta, enums de domínio, nomes de role e feature, paginação e shape de erro. Só depende de zod; consumido do fonte TS, sem build.",
   "license": "MIT",
   "author": "Rafael Maia da Fonseca",
   "type": "module",

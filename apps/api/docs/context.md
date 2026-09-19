@@ -171,6 +171,13 @@ completo, os contra-argumentos e os gotchas.
 
 ### [Contratos de API](context/api-contracts.md)
 
+*Onde o contrato vive*
+
+- Schemas de request e views são código do pacote `@pet-oasis/api-contracts` (11.10) — a API
+  importa tudo do contrato; o que precisa de algo além de `zod` (`resolveSlug`, helpers de
+  paginação do repository, `maskIp`, resolução de view por capability) fica na API como
+  composição; `openapi.json` idêntico antes/depois
+
 *Views (presenter)*
 
 - Whitelist e não blacklist

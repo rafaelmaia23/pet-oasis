@@ -10,8 +10,8 @@ O `/reference` (Scalar) só consome o `/openapi.json`; então **documentar o Ope
 
 Zod 4 nativo (sem monkey-patch). O `.meta()` alimenta `description`/`example` e nomeia componentes.
 
-- **Request** (`src/modules/<mod>/<mod>.schema.ts`): `.meta({ example })` nos campos que ajudam a entender o corpo/params. Manter a convenção do envelope `z.object({ body?, params?, query? })` — é dela que o helper extrai as partes (§2).
-- **Response / views** (`src/modules/<mod>/<mod>.presenter.ts`): dar `.meta({ id, description })` na view — o `id` vira o **nome do componente** no OpenAPI (ex.: `Role`, `UserOwner`). Campos com `.meta({ example })`.
+- **Request** (`packages/api-contracts/src/<domínio>/<mod>.schema.ts`): `.meta({ example })` nos campos que ajudam a entender o corpo/params. Manter a convenção do envelope `z.object({ body?, params?, query? })` — é dela que o helper extrai as partes (§2).
+- **Response / views** (`packages/api-contracts/src/<domínio>/<mod>.views.ts`): dar `.meta({ id, description })` na view — o `id` vira o **nome do componente** no OpenAPI (ex.: `Role`, `UserOwner`). Campos com `.meta({ example })`. O `*.presenter.ts` da API só aplica a whitelist sobre a view importada.
 - ⚠️ **Segurança grátis:** a view é uma *whitelist* (`.parse()` derruba o resto), então o exemplo de response nunca vaza `passwordHash`/`tokenHash`/etc. Não documente response por um schema cru do banco — sempre pela view do presenter.
 
 ```ts

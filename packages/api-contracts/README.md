@@ -1,25 +1,41 @@
 # `@pet-oasis/api-contracts`
 
-O que atravessa a rede entre a API e os clientes (web hoje; mobile e back-office amanhã):
-enums de domínio, nomes de role e feature, o shape de erro e — nas fases seguintes — os
-schemas de request e as views de resposta. **Só depende de `zod`.** Qualquer outro import é
-sinal de que a coisa não é contrato (Prisma, Express, helper de servidor), e um teste do
-próprio pacote fica vermelho se isso acontecer.
+O que atravessa a rede entre a API e os clientes (web hoje; mobile e back-office amanhã): os
+schemas de request (create, update, query, path), as views de resposta, os enums de domínio,
+os nomes de role e feature, a taxonomia de auditoria, a paginação e o shape de erro. **Só
+depende de `zod`.** Qualquer outro import é sinal de que a coisa não é contrato (Prisma,
+Express, helper de servidor), e um teste do próprio pacote fica vermelho se isso acontecer.
+
+A API não tem schema próprio: controllers, presenters, a geração do OpenAPI e os testes
+importam daqui. O que a API guarda é o que precisa de algo além de `zod` — o helper de
+whitelist que aplica a view (`createPresenter`), a resolução de view por capability, a
+derivação de slug, os helpers de paginação do repository, a máscara de IP do audit log — sempre
+como composição por cima do schema do contrato.
 
 ## O que há aqui
 
 | Entrada | Conteúdo |
 |---|---|
 | `@pet-oasis/api-contracts` | tudo abaixo, mais `DOMAIN_ENUMS` (o registro dos enums com dois donos) |
-| `…/user` | `profileKindSchema`/`ProfileKind`, `userStatusSchema`/`UserStatus` |
-| `…/pet` | `petSpeciesSchema`/`PetSpecies`, `petSexSchema`/`PetSex` |
-| `…/catalog` | `productStatusSchema`/`ProductStatus` |
-| `…/role` | `ROLE_NAMES`, `RoleName`, `roleNameSchema` |
-| `…/feature` | `FEATURE_NAMES`, `FeatureName`, `featureNameSchema`, `PERMISSION_FEATURES`, `PRIVILEGED_FEATURES` (derivado do anterior) |
+| `…/user` | `profileKindSchema`/`userStatusSchema`; peças de identidade (`emailSchema`, `cpfSchema`, `phoneSchema`, `passwordSchema` e os tetos); schemas de user e de perfil; `userViews` |
+| `…/auth` | login, verificação, reset e troca de senha/email, reativação; `OPAQUE_TOKEN_LENGTH`; `sessionViews` |
+| `…/me` | `meViews` |
+| `…/role` | `ROLE_NAMES`, `RoleName`, `roleNameSchema`; `roleParamsSchema`; `roleViews` |
+| `…/feature` | `FEATURE_NAMES`, `FeatureName`, `featureNameSchema`, `PERMISSION_FEATURES`, `PRIVILEGED_FEATURES`; `featureParamsSchema`; `featureViews` |
+| `…/permission` | params de role↔user e override; `userFeatureViews`, `effectiveFeaturesViews` |
+| `…/pet` | `petSpeciesSchema`, `petSexSchema`; schemas de pet e de raça; `petViews`, `breedViews` |
+| `…/catalog` | `productStatusSchema`; `catalogNameSchema`, `slugSchema`, `catalogDescriptionSchema`; schemas e views de marca, categoria (recursiva), tag, produto (escada `public`/`internal`/`cost`, detalhe × lista), variante e imagem; `MAX_IMAGES_PER_PRODUCT` |
+| `…/audit-log` | `AUDIT_ACTIONS`, `AUDIT_TARGET_TYPES`; `listAuditLogsSchema`; `auditLogViews` |
+| `…/log` | `listRecentLogsSchema` |
+| `…/pagination` | `offsetQuerySchema`, `cursorQuerySchema`, `buildOffsetQuerySchema`, `defineSortConfig`, `offsetMetaSchema`, `cursorMetaSchema`, `DEFAULT_LIMIT`/`MAX_LIMIT` |
 | `…/errors` | `ERROR_CODES`/`ErrorCode`, `errorResponseSchema`, `validationErrorResponseSchema` e os tipos |
 
 Cada domínio é uma entrada própria do `exports` para o consumidor importar só o que usa; o
-índice reexporta tudo. Domínio novo = pasta nova em `src/` + entrada nova no `exports`.
+índice reexporta tudo. Domínio novo = pasta nova em `src/` + entrada nova no `exports`. Dentro
+de um domínio, request vai em `*.schema.ts` e resposta em `*.views.ts`; enums e nomes vivem em
+arquivos folha (`user.enums.ts`, `role.names.ts`, …) e **todo import entre domínios aponta para a
+folha, nunca para o índice** — é o que impede um ciclo (`user → role → user`) de virar erro de
+inicialização.
 
 ## Consumido do fonte TS, sem build
 
@@ -66,7 +82,7 @@ Prisma — tudo é teste vermelho, não bug em produção.
 ```bash
 pnpm --filter @pet-oasis/api-contracts typecheck   # src como biblioteca + tests como Node
 pnpm --filter @pet-oasis/api-contracts lint
-pnpm --filter @pet-oasis/api-contracts test        # pureza + shape de erro + registro de enums
+pnpm --filter @pet-oasis/api-contracts test        # pureza, shape de erro, registro de enums, paginação, audit
 ```
 
 Os três também rodam pelo Turbo da raiz (`pnpm typecheck`, `pnpm lint`, `pnpm test`).

@@ -1,14 +1,22 @@
+import { z } from "zod";
 import {
   createCustomerSchema,
   emailSchema,
   PASSWORD_MAX_LENGTH,
   passwordSchema,
   phoneSchema,
-} from "@pet-oasis/api-contracts/user";
-import { z } from "zod";
-import { OPAQUE_TOKEN_LENGTH } from "@/lib/token";
+} from "../user/user.schema";
 
 export const signupSchema = createCustomerSchema;
+
+/**
+ * Comprimento do token opaco (verificação de email, reset de senha, troca de
+ * email, reativação) em hex — é o que viaja na URL e volta no corpo. É contrato
+ * porque é o teto dos campos `token` abaixo (10.13): um valor de outro tamanho
+ * não pode casar com hash nenhum, então recusá-lo antes do banco não muda o
+ * resultado — só o custo. Quem gera o token (na API) deriva os bytes daqui.
+ */
+export const OPAQUE_TOKEN_LENGTH = 64;
 
 /**
  * Senha *conferida* (login, troca de senha, troca de email): só o que o

@@ -1,3 +1,4 @@
+import type { LoginInput } from "@pet-oasis/api-contracts/auth";
 import type { CreateCustomerInput } from "@pet-oasis/api-contracts/user";
 import { env } from "@/config/env";
 import {
@@ -28,7 +29,6 @@ import {
   REFRESH_TOKEN_TTL_MS,
 } from "./auth.constants";
 import * as authRepository from "./auth.repository";
-import type { LoginInput } from "./auth.schema";
 
 const log = logger.child({ module: "auth" });
 

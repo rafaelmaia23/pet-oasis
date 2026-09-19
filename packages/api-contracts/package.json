@@ -15,7 +15,8 @@
     "./feature": "./src/feature/index.ts",
     "./errors": "./src/errors/index.ts",
     "./pagination": "./src/pagination/index.ts",
-    "./me": "./src/me/index.ts"
+    "./me": "./src/me/index.ts",
+    "./auth": "./src/auth/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",

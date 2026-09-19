@@ -1,7 +1,3 @@
-import { userViews } from "@pet-oasis/api-contracts/user";
-import { z } from "zod";
-import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { sessionViews } from "@/modules/auth/auth.presenter";
 import {
   changeEmailSchema,
   changePasswordSchema,
@@ -12,9 +8,13 @@ import {
   resendVerificationSchema,
   resetPasswordSchema,
   sessionParamsSchema,
+  sessionViews,
   signupSchema,
   verifyEmailSchema,
-} from "@/modules/auth/auth.schema";
+} from "@pet-oasis/api-contracts/auth";
+import { userViews } from "@pet-oasis/api-contracts/user";
+import { z } from "zod";
+import type { ZodOpenApiPathsObject } from "zod-openapi";
 import {
   errorResponseSchema,
   errorResponses,

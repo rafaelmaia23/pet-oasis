@@ -252,6 +252,7 @@ perfil o user continua existindo, só o `Customer`/`Employee` é soft-deletado.
 - [`0104`](0104-turborepo-pipeline-workspace-test-fica-fora-cache.md) O Turborepo é o pipeline do workspace; `test` fica fora do cache de propósito (11.4)
 - [`0196`](0196-conventional-commits-escopo-obrigatorio-recusados-hook.md) Conventional Commits com escopo obrigatório, recusados no hook (11.5)
 - [`0197`](0197-ci-verifica-so-afetado-services-do-job-no-lugar-do-compose.md) O CI verifica só o afetado, com os services do job no lugar do Compose (11.6)
+- [`0198`](0198-contrato-consumido-do-fonte-ts-so-depende-de-zod-enum-dois-donos.md) O contrato é consumido do fonte TS e só depende de `zod`; enum tem dois donos e um teste (11.9)
 
 #### Ordem de construção
 

@@ -1,3 +1,5 @@
+import { FEATURE_NAMES } from "@pet-oasis/api-contracts/feature";
+import { ROLE_NAMES } from "@pet-oasis/api-contracts/role";
 import { describe, expect, it } from "vitest";
 import { ProfileKind } from "@/generated/prisma/enums";
 import {
@@ -26,6 +28,10 @@ const featuresOf = (name: RoleName): readonly FeatureName[] =>
 const WRITE_VERB = /^(create|update|delete|manage|reactivate):/;
 
 describe("catálogo de features", () => {
+  it("semeia exatamente os nomes do contrato, na mesma ordem — o contrato é dono da lista, a API da descrição", () => {
+    expect(DEFAULT_FEATURES.map((f) => f.name)).toEqual([...FEATURE_NAMES]);
+  });
+
   it("não deixa feature órfã — toda feature declarada pertence a alguma role", () => {
     const granted = new Set<string>(DEFAULT_ROLES.flatMap((r) => r.features));
 
@@ -46,6 +52,12 @@ describe("catálogo de features", () => {
       "manage:permission",
       "read:audit-log:full",
     ]);
+  });
+});
+
+describe("catálogo de roles", () => {
+  it("semeia exatamente os nomes do contrato, na mesma ordem — o contrato é dono da lista, a API do que cada role carrega", () => {
+    expect(DEFAULT_ROLES.map((r) => r.name)).toEqual([...ROLE_NAMES]);
   });
 });
 

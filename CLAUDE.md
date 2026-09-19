@@ -11,7 +11,7 @@ inteiro — fluxo, regras transversais, onde mora cada documento. O que é espec
 |---|---|---|
 | `apps/api` | A API REST (Node 24/Express, Prisma 7, Zod 4, Postgres, Redis) | `apps/api/CLAUDE.md` |
 | `apps/web` | O front web (Next.js) — importado com histórico na Fase 11 (issue 11); ainda não existe aqui | — |
-| `packages/api-contracts` | Os schemas Zod que atravessam a rede (request, views, enums, nomes de role/feature, shape de erro), dependendo **só de `zod`** — nasce na Fase 11 (issue 09) | — |
+| `packages/api-contracts` | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): enums de domínio, nomes de role/feature e shape de erro como schemas Zod, dependendo **só de `zod`** e consumido do fonte TS | `packages/api-contracts/README.md` |
 | `packages/tsconfig` | Presets de TypeScript (`@pet-oasis/tsconfig`): base estrito + um por alvo (Node, Next, biblioteca) | — |
 | `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`); cada app estende e acrescenta só os ignores que são seus | — |
 | `docs/` | Documentação do **sistema**: ADRs de sistema, índice das fases, backlog, guias e config das skills | `docs/README.md` |
@@ -99,6 +99,24 @@ Antes de rodar um comando pra fazer algo que o projeto já tem um script pronto 
 Ao final de qualquer trabalho ou antes de commitar, rode na raiz `pnpm typecheck`, `pnpm lint` (ou `lint:fix` no pacote, se houver algo auto-corrigível) e `pnpm docs:check`, e confirme que os três passam limpos — igual já se faz com a suíte de testes.
 
 Se perceber a necessidade de um script que não existe — algo que você (ou o padrão do projeto) vai repetir com frequência — **pare e sugira criar o script no `package.json`** em vez de só rodar o comando direto. Para algo pontual, que não vai se repetir, tudo bem rodar direto no terminal sem propor script novo.
+
+## ⚠️ REGRA — O contrato só depende de `zod`; enum tem dois donos e um teste
+
+`packages/api-contracts` (`@pet-oasis/api-contracts`) é o que atravessa a rede entre a API e
+os clientes. **A única dependência de runtime é `zod`**, e nenhum arquivo dele importa de fora
+de `src/` — sem `@/`, sem `@prisma`, sem `apps/`. Se um schema precisa de outra coisa (Prisma,
+Express, helper de servidor), a coisa não é contrato: fica na API, como composição por cima do
+schema do contrato. A guarda é `packages/api-contracts/tests/purity.test.ts`.
+
+**Enum de domínio tem dois donos, com prova:** o Prisma é dono do banco, o contrato é dono do
+que atravessa a rede (`z.enum`, registrado em `DOMAIN_ENUMS` pelo nome do enum do Prisma). Os
+dois são editados juntos, e `apps/api/tests/unit/contracts/enumParity.test.ts` é o que garante
+o "juntos" — um valor ou um enum a mais ou a menos de qualquer lado é teste vermelho. Enum do
+Prisma que não atravessa a rede é declarado interno nesse teste, explicitamente.
+
+O contrato é consumido **do fonte TS**, sem build (`exports` → `src/**/*.ts`); o porquê e o que
+isso exige de cada consumidor (`noExternal` no tsup da API, `transpilePackages` no Next) estão
+no README do pacote; o racional em `apps/api/docs/adr/0198-contrato-consumido-do-fonte-ts-so-depende-de-zod-enum-dois-donos.md`.
 
 ---
 

@@ -1,8 +1,19 @@
+import {
+  PERMISSION_FEATURES,
+  PRIVILEGED_FEATURES,
+} from "@pet-oasis/api-contracts/feature";
+import { ROLE_NAMES, type RoleName } from "@pet-oasis/api-contracts/role";
 import { ProfileKind } from "@/generated/prisma/enums";
 import type { FeatureName } from "../feature/feature.constants";
 
+// Os **nomes** de role e os conjuntos de features de permissão e privilegiadas
+// são contrato (`@pet-oasis/api-contracts`): o web valida o nome que digita e
+// a API checa a não-escalação sobre a mesma lista. O que fica aqui é o que só
+// o seed precisa — a definição de cada role (descrição, features, a que perfil
+// se aplica) e os grupos semânticos que a compõem.
+export { PERMISSION_FEATURES, PRIVILEGED_FEATURES, ROLE_NAMES, type RoleName };
+
 type RoleDefinition = {
-  name: string;
   description: string;
   features: FeatureName[];
   appliesTo: ProfileKind;
@@ -68,23 +79,8 @@ const USER_ADMINISTRATION_FEATURES: FeatureName[] = [
   "manage:user:status",
 ];
 
-export const PERMISSION_FEATURES: FeatureName[] = [
-  "read:feature",
-  "read:role",
-  "read:permission",
-  "manage:permission",
-];
-
 // Leitura de log — features "normais" (concedíveis por override sem ser admin).
 const LOG_READ_FEATURES: FeatureName[] = ["read:log", "read:audit-log"];
-
-// Features cuja concessão via override — ou atribuição via role que as contenha —
-// exige role admin (não-escalação). Além das de permissão, `read:audit-log:full`
-// destrava o IP inteiro no audit log (dado semi-sensível), então entra aqui.
-export const PRIVILEGED_FEATURES: FeatureName[] = [
-  ...PERMISSION_FEATURES,
-  "read:audit-log:full",
-];
 
 // Combinações de features para cada Role
 const CUSTOMER_FEATURES: FeatureName[] = [
@@ -157,55 +153,49 @@ const DEMO_READ_FEATURES: FeatureName[] = [
   ]),
 ];
 
-// Definição dos Roles do sistema - cada role abaixo é o que o seed.ts irá sincronizar com o banco de dados
-export const DEFAULT_ROLES = [
-  {
-    name: "customer",
+// Definição de cada role do sistema, pela chave do contrato. `Record<RoleName,
+// …>` é a prova, no typecheck: role do contrato sem definição é chave faltando;
+// definição sem role é propriedade em excesso.
+const ROLE_DEFINITIONS: Record<RoleName, RoleDefinition> = {
+  customer: {
     description: "Cliente padrão",
     features: CUSTOMER_FEATURES,
     appliesTo: ProfileKind.CUSTOMER,
   },
-  {
-    name: "attendant",
+  attendant: {
     description: "Atendente da loja",
     features: ATTENDANT_FEATURES,
     appliesTo: ProfileKind.EMPLOYEE,
   },
-  {
-    name: "stockist",
+  stockist: {
     description: "Repositor de estoque",
     features: STOCKIST_FEATURES,
     appliesTo: ProfileKind.EMPLOYEE,
   },
-  {
-    name: "catalog-manager",
+  "catalog-manager": {
     description: "Gerente de catálogo",
     features: CATALOG_MANAGER_FEATURES,
     appliesTo: ProfileKind.EMPLOYEE,
   },
-  {
-    name: "manager",
+  manager: {
     description: "Gerente da loja",
     features: MANAGER_FEATURES,
     appliesTo: ProfileKind.EMPLOYEE,
   },
-  {
-    name: "admin",
+  admin: {
     description: "Administrador do sistema",
     features: ["*"],
     appliesTo: ProfileKind.EMPLOYEE,
   },
-  {
-    name: "demo",
+  demo: {
     description: "Usuário de demonstração (somente leitura)",
     features: DEMO_READ_FEATURES,
     appliesTo: ProfileKind.EMPLOYEE,
   },
-] as const satisfies readonly RoleDefinition[];
+};
 
-export type RoleName = (typeof DEFAULT_ROLES)[number]["name"];
-
-export const ROLE_NAMES = DEFAULT_ROLES.map((r) => r.name) as [
-  RoleName,
-  ...RoleName[],
-];
+// O catálogo que o seed sincroniza com o banco, na ordem do contrato.
+export const DEFAULT_ROLES = ROLE_NAMES.map((name) => ({
+  name,
+  ...ROLE_DEFINITIONS[name],
+}));

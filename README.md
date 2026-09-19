@@ -11,6 +11,7 @@ Monorepo do Pet Oasis — um pet shop online. Gerido por **pnpm workspaces**
 | [`apps/api`](apps/api/README.md) | A API REST (Node/Express, Prisma, Zod) — README, guias e ADRs (índice em [`apps/api/docs/adr/README.md`](apps/api/docs/adr/README.md)) vivem lá |
 | `packages/tsconfig` | Presets de TypeScript (`@pet-oasis/tsconfig`): base estrito + um por alvo (Node, Next, biblioteca) |
 | `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`): formatter, linter e estilo; cada app estende e acrescenta só os ignores que são seus |
+| [`packages/api-contracts`](packages/api-contracts/README.md) | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): enums de domínio, nomes de role/feature, shape de erro; só depende de `zod`, consumido do fonte TS |
 | [`docs/`](docs/README.md) | Documentação do **sistema**: ADRs de sistema, [índice das fases](docs/todo.md), [backlog](docs/reference/backlog.md), guias e config das skills |
 | [`.scratch/`](.scratch/README.md) | O tracker (spec + issues por esforço), único para o monorepo |
 | [`CONTEXT-MAP.md`](CONTEXT-MAP.md) | O mapa dos contextos — um por app, com o glossário (`CONTEXT.md`) de cada um |
@@ -33,7 +34,7 @@ ordem permite. `typecheck` e `lint` também rodam as tasks de raiz (`//#typechec
 | `pnpm typecheck` | `tsc --noEmit` de cada pacote | sim |
 | `pnpm lint` | `biome check .` de cada pacote — os pacotes de config antes de quem os estende | sim |
 | `pnpm build` | build de cada pacote que tem um (hoje só a API, `tsup` → `dist/`) | sim, com `dist/` restaurado do cache |
-| `pnpm test` | a suíte de cada pacote (a da API sobe Postgres e Redis via Compose e derruba ao final) | **não** |
+| `pnpm test` | a suíte de cada pacote (a da API sobe Postgres e Redis via Compose e derruba ao final; a do contrato é pura) | **não** |
 | `pnpm dev` | sobe todos os apps em dev (persistente; Ctrl+C derruba) | **não** |
 | `pnpm docs:check` | links e âncoras da documentação do monorepo inteiro (`tools/check-docs-links.ts`; script da raiz, não task do Turbo) | — |
 

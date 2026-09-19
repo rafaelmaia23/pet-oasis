@@ -1,0 +1,34 @@
+{
+  "name": "@pet-oasis/api-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "O que atravessa a rede entre a API e os clientes (web, mobile): enums de domínio, nomes de role e feature, shape de erro e — nas fases seguintes — schemas de request e views de resposta. Só depende de zod; consumido do fonte TS, sem build.",
+  "license": "MIT",
+  "author": "Rafael Maia da Fonseca",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./user": "./src/user/index.ts",
+    "./pet": "./src/pet/index.ts",
+    "./catalog": "./src/catalog/index.ts",
+    "./role": "./src/role/index.ts",
+    "./feature": "./src/feature/index.ts",
+    "./errors": "./src/errors/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@pet-oasis/biome-config": "workspace:*",
+    "@pet-oasis/tsconfig": "workspace:*",
+    "@types/node": "^25.8.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}

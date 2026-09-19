@@ -16,7 +16,7 @@ Fluxo rígido: **route → controller (Zod parse) → service (regras de negóci
 
 ## Organização de módulos
 
-Cada módulo em `src/modules/<nome>/` com: `*.route.ts`, `*.controller.ts`, `*.service.ts`, `*.repository.ts`, `*.schema.ts` (Zod), `*.presenter.ts` (views). Módulos: **user** (CRUD + perfis em subarquivos `user.profile.*`), **role** (read-only), **feature** (read-only), **permission** (overrides de feature), **auth** (login/sessão). Constantes de domínio (roles, features) em `*.constants.ts`, lidas pelo seed.
+Cada módulo em `src/modules/<nome>/` com: `*.route.ts`, `*.controller.ts`, `*.service.ts`, `*.repository.ts`, `*.schema.ts` (Zod), `*.presenter.ts` (views). Módulos: **user** (CRUD + perfis em subarquivos `user.profile.*`), **role** (read-only), **feature** (read-only), **permission** (overrides de feature), **auth** (login/sessão). Constantes de domínio (roles, features) em `*.constants.ts`, lidas pelo seed — os **nomes** vêm do contrato (`@pet-oasis/api-contracts`) e são reexportados; a API guarda só o que o seed anexa a cada nome (descrição, features por role, `appliesTo`), num `Record<Name, …>` que o typecheck prova completo.
 
 Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasFeature`/`canActOnResource`), `utils/presenter.ts` (whitelist via Zod), error handler central, `errors/errorFactory.ts` (factories `create*`).
 
@@ -30,7 +30,7 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 
 **Roles read-only via API** (definidas em código, seed). Só o vínculo user↔role é gerenciável. `appliesTo` (EMPLOYEE/CUSTOMER/null) valida compatibilidade role↔perfil.
 
-**Não-escalação:** conceder via override — ou atribuir uma role que contenha — uma feature de PRIVILEGED_FEATURES exige role **admin** (não só a feature). O conjunto é `PERMISSION_FEATURES` (read:feature, read:role, read:permission, manage:permission) **+ `read:audit-log:full`** (que destrava o IP inteiro no audit log; Fase 7.8). Definido em `role.constants.ts` (`PRIVILEGED_FEATURES`), checado no `permission.service` buscando a role do ator. `read:log`/`read:audit-log` são normais (concedíveis sem ser admin).
+**Não-escalação:** conceder via override — ou atribuir uma role que contenha — uma feature de PRIVILEGED_FEATURES exige role **admin** (não só a feature). O conjunto é `PERMISSION_FEATURES` (read:feature, read:role, read:permission, manage:permission) **+ `read:audit-log:full`** (que destrava o IP inteiro no audit log; Fase 7.8). Definido no contrato (`@pet-oasis/api-contracts/feature`, `PRIVILEGED_FEATURES`) e reexportado por `role.constants.ts`; checado no `permission.service` buscando a role do ator. `read:log`/`read:audit-log` são normais (concedíveis sem ser admin).
 
 **Soft delete** (preserva histórico para auditoria): User, Customer, Employee, UserRole, UserFeature têm `deletedAt`. TODAS as queries de leitura filtram `deletedAt: null` — incluindo `getUserForFeatureComputation` (é o que mata o token de deletado e ignora overrides removidos). Hard delete só em teardown de teste e nos scripts de faxina (`src/scripts/cleanup-*`). UserFeature/UserRole usam `id` próprio como PK (não par composto); a unicidade é do **banco** (`@@unique`), não do código.
 

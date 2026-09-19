@@ -1,0 +1,8 @@
+{
+  // O contrato roda em servidor E em navegador, então compila como biblioteca:
+  // só `esnext`, sem DOM nem tipos do Node — um `Buffer` ou `window` que
+  // escapasse para cá chegaria ao web por arrasto. Os testes precisam do Node
+  // (leem o filesystem) e têm o próprio programa em `tsconfig.test.json`.
+  "extends": "@pet-oasis/tsconfig/tsconfig.library.json",
+  "include": ["src/**/*"]
+}

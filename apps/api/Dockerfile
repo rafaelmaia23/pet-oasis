@@ -47,8 +47,10 @@ COPY apps/api/package.json apps/api/
 COPY --parents packages/*/package.json ./
 RUN pnpm install --frozen-lockfile
 # Os pacotes internos inteiros, junto do fonte: o tsconfig.json da API estende
-# o preset de `packages/tsconfig` (lido pelo `prisma generate` e pelo tsup), e
-# é para o diretório deles que os symlinks do install apontam.
+# o preset de `packages/tsconfig` (lido pelo `prisma generate` e pelo tsup), o
+# fonte da API importa `packages/api-contracts` (consumido do fonte TS, sem
+# build — o tsup o inlina no bundle), e é para o diretório deles que os
+# symlinks do install apontam.
 COPY packages packages
 COPY apps/api/prisma apps/api/prisma
 COPY apps/api/src apps/api/src

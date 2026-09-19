@@ -1,7 +1,10 @@
+import type {
+  CreateTagInput,
+  UpdateTagInput,
+} from "@pet-oasis/api-contracts/catalog";
 import { createNotFoundError } from "@/errors";
 import { resolveSlug } from "@/modules/catalog/catalog.slug";
 import * as tagRepository from "./tag.repository";
-import type { CreateTagInput, UpdateTagInput } from "./tag.schema";
 
 async function resolveTag(tagId: string) {
   const tag = await tagRepository.findTagById(tagId);

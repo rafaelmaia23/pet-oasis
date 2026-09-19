@@ -1,9 +1,9 @@
+import type { VariantInput } from "@pet-oasis/api-contracts/catalog";
 import { describe, expect, it } from "vitest";
 import {
   withAvailability,
   withResolvedDefault,
 } from "@/modules/product/product.service";
-import type { VariantInput } from "@/modules/product/product.variant.schema";
 
 const variant = (sku: string, isDefault?: boolean): VariantInput => ({
   sku,

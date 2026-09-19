@@ -1,13 +1,8 @@
-import {
-  catalogNameSchema,
-  slugSchema,
-} from "@pet-oasis/api-contracts/catalog";
-import {
-  buildOffsetQuerySchema,
-  defineSortConfig,
-} from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
-import { PetSpecies, ProductStatus } from "@/generated/prisma/enums";
+import { buildOffsetQuerySchema, defineSortConfig } from "../pagination";
+import { petSpeciesSchema } from "../pet/pet.enums";
+import { productStatusSchema } from "./catalog.enums";
+import { catalogNameSchema, slugSchema } from "./catalog.schema";
 import { variantFieldsSchema } from "./product.variant.schema";
 
 /**
@@ -67,13 +62,13 @@ const productFieldsSchema = z.object({
   slug: slugSchema.optional(),
   description: productDescriptionSchema,
   brandId: z.uuid("Invalid brand ID"),
-  status: z.enum(ProductStatus).optional().meta({
+  status: productStatusSchema.optional().meta({
     description: "DRAFT (padrão), ACTIVE ou DISCONTINUED",
-    example: ProductStatus.DRAFT,
+    example: "DRAFT",
   }),
   // Faceta, não nível da árvore (N7). Vazio significa "qualquer espécie".
   targetSpecies: z
-    .array(z.enum(PetSpecies))
+    .array(petSpeciesSchema)
     .optional()
     .meta({ description: "Espécies-alvo; vazio = qualquer espécie" }),
   // Substituição total (X7): o array enviado passa a ser o conjunto.
@@ -156,10 +151,10 @@ const priceFilter = (description: string) =>
  */
 export const listProductsSchema = z.object({
   query: buildOffsetQuerySchema(PRODUCT_SORT, {
-    species: z.enum(PetSpecies).optional().meta({
+    species: petSpeciesSchema.optional().meta({
       description:
         "Filtra pela espécie-alvo; produtos sem espécie marcada entram em qualquer uma",
-      example: PetSpecies.DOG,
+      example: "DOG",
     }),
     category: slugSchema.optional().meta({
       description: "Slug da categoria; inclui os produtos das descendentes",
@@ -175,10 +170,10 @@ export const listProductsSchema = z.object({
     maxPrice: priceFilter(
       "Preço máximo em centavos; o produto entra se alguma variante couber",
     ),
-    status: z.enum(ProductStatus).optional().meta({
+    status: productStatusSchema.optional().meta({
       description:
         "Filtra pelo status — ignorado para quem não tem read:product:internal",
-      example: ProductStatus.ACTIVE,
+      example: "ACTIVE",
     }),
     inStock: z
       .stringbool({ truthy: ["true"], falsy: ["false"] })

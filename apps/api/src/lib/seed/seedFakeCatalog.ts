@@ -1,9 +1,9 @@
+import { createProductSchema } from "@pet-oasis/api-contracts/catalog";
 import { prisma } from "@/lib/prisma";
 import { storeImage } from "@/lib/storage";
 import * as brandRepository from "@/modules/brand/brand.repository";
 import * as categoryRepository from "@/modules/category/category.repository";
 import * as productRepository from "@/modules/product/product.repository";
-import { createProductSchema } from "@/modules/product/product.schema";
 import { withResolvedDefault } from "@/modules/product/product.service";
 import * as tagRepository from "@/modules/tag/tag.repository";
 import {

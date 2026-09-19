@@ -1,3 +1,13 @@
+import type {
+  ProductView,
+  VariantInput,
+} from "@pet-oasis/api-contracts/catalog";
+import {
+  type CreateProductInput,
+  type ListProductsQuery,
+  PRODUCT_SORT,
+  type UpdateProductInput,
+} from "@pet-oasis/api-contracts/catalog";
 import { z } from "zod";
 import { createNotFoundError, createValidationError } from "@/errors";
 import { ProductStatus } from "@/generated/prisma/enums";
@@ -11,17 +21,9 @@ import * as categoryRepository from "@/modules/category/category.repository";
 import { subtreeIdsOf } from "@/modules/category/category.tree";
 import * as tagRepository from "@/modules/tag/tag.repository";
 import { definedOnly } from "@/utils/definedOnly";
-import type { ProductView } from "./product.presenter";
 import type { ProductWithRelations } from "./product.repository";
 import * as productRepository from "./product.repository";
-import {
-  type CreateProductInput,
-  type ListProductsQuery,
-  PRODUCT_SORT,
-  type UpdateProductInput,
-} from "./product.schema";
 import * as productSearchRepository from "./product.search.repository";
-import type { VariantInput } from "./product.variant.schema";
 
 /**
  * Regras **semânticas** do produto — as que precisam do banco. Sem escopo

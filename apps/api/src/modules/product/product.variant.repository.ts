@@ -1,8 +1,8 @@
+import type { UpdateVariantInput } from "@pet-oasis/api-contracts/catalog";
 import type { Prisma } from "@/generated/prisma/client";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
-import type { UpdateVariantInput } from "./product.variant.schema";
 
 /**
  * Única camada que toca o Prisma nas variantes. Toda leitura filtra

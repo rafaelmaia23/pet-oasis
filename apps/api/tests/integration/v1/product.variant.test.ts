@@ -1,3 +1,4 @@
+import { variantViews } from "@pet-oasis/api-contracts/catalog";
 import { buildEmployee } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
@@ -7,7 +8,6 @@ import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import app from "@/app";
 import { prisma } from "@/lib/prisma";
-import { variantViews } from "@/modules/product/product.presenter";
 
 afterEach(async () => {
   await clearDatabase();

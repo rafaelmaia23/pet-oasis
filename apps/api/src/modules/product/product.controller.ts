@@ -1,14 +1,14 @@
-import type { Request, Response } from "express";
-import { offsetEnvelope } from "@/lib/pagination";
-import { getAuthUser } from "@/utils/getAuthUser";
-import { productListPresenter, productPresenter } from "./product.presenter";
 import {
   createProductSchema,
   listProductsSchema,
   productDetailParamsSchema,
   productParamsSchema,
   updateProductSchema,
-} from "./product.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import type { Request, Response } from "express";
+import { offsetEnvelope } from "@/lib/pagination";
+import { getAuthUser } from "@/utils/getAuthUser";
+import { productListPresenter, productPresenter } from "./product.presenter";
 import * as productService from "./product.service";
 
 /**

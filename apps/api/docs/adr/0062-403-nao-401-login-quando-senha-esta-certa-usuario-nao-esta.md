@@ -1,11 +1,11 @@
-# 403 (não 401) no login quando a senha está certa mas a conta não está ACTIVE
+# 403 (não 401) no login quando a senha está certa mas o usuário não está ACTIVE
 
 > Decisão migrada em 2026-09-18 do contexto temático da API (**Identidade e sessões** › *Status da conta*), que deixou de existir:
 > a partir daí, cada decisão é um ADR. O texto é o original; só os links foram reapontados.
 
 Senha errada é 401 genérico (não se sabe quem é). Uma credencial correta **estabelece a
 identidade** — o que falta é permissão de entrar, semanticamente 403. Mensagens distintas (PENDING
-→ "verifique seu email"; BANNED → "conta suspensa, contate o suporte") orientam o dono. Trade-off
+→ "verifique seu email"; BANNED → "usuário suspenso, contate o suporte") orientam o dono. Trade-off
 aceito: o 403 revela que a senha estava correta, mas quem chegou até aqui provou posse da senha.
 
 **`code` por condição (10.8).** As três recusas pós-senha — `ACCOUNT_BANNED`,

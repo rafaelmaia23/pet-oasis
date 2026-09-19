@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 /**
- * View única: taxonomia não tem campo sensível nem ramo por capability — marca,
+ * View única: taxonomia não tem campo sensível nem ramo por feature efetiva — marca,
  * categoria e tag aparecem inteiras na view **pública** do produto (ADR
- * product-catalog-modeling). Quem tem corte por capability é `Product` (9.8),
+ * product-catalog-modeling). Quem tem corte por feature efetiva é `Product` (9.8),
  * por causa de custo e estoque.
  */
 /**

@@ -14,15 +14,15 @@ ela aponta para ele.
 ### Identidade
 
 **User**:
-A conta em si — credencial (email, senha), CPF, `status`, ban. Não é a pessoa no papel dela:
-o papel é o perfil.
-_Avoid_: conta, usuário final, cliente
+Quem entra: credencial (email, senha), CPF, `status`, ban. Não é a pessoa no papel dela: o
+papel é o perfil.
+_Avoid_: conta, usuário final, cliente ("usuário" em prosa é aceitável: é `User`)
 
 **Perfil**:
 O papel de um `User` no domínio, definido pela **presença** da relação (`User.customer`,
 `User.employee`), não por um campo de tipo. Só existem dois, `Customer` e `Employee`; todo
 `User` ativo tem ao menos um perfil ativo, e cada perfil tem ao menos uma role.
-_Avoid_: tipo de usuário, categoria de usuário, conta de cliente/funcionário
+_Avoid_: tipo de usuário, categoria de usuário, conta de cliente/funcionário, usuário de cliente
 
 **ProfileKind**:
 O enum que nomeia os dois perfis (`CUSTOMER`, `EMPLOYEE`). Aparece em `Role.appliesTo` e no
@@ -45,12 +45,12 @@ _Avoid_: usuário duplo, caso especial
 `User.status`: `PENDING` (email ainda não verificado) ou `ACTIVE`. Todo usuário nasce
 `PENDING`, inclusive os criados por admin. Ortogonal ao ban — ver
 [`0060`](./docs/adr/0060-status-ban-sao-ortogonais.md).
-_Avoid_: estado da conta, `BANNED` como valor de status, "ativo" para dizer "não deletado"
+_Avoid_: estado da conta, estado do usuário, `BANNED` como valor de status, "ativo" para dizer "não deletado"
 
 **Verificação de email**:
 O passo que leva o `User` de `PENDING` a `ACTIVE`: um `VerificationToken` de propósito
 `EMAIL_VERIFICATION` enviado por email e confirmado pelo dono.
-_Avoid_: ativação da conta, confirmação de cadastro
+_Avoid_: ativação da conta, ativação do usuário, confirmação de cadastro
 
 **VerificationToken**:
 Token opaco de uso único, guardado só como hash, com um `purpose`: `EMAIL_VERIFICATION`,
@@ -68,20 +68,20 @@ Histórico dos emails que um `User` já teve. Só histórico: não reserva o end
 _Avoid_: email bloqueado, email reservado
 
 **Ban**:
-A conta congelada por um admin (`bannedAt`/`bannedBy`/`banReason`): nada funciona até um admin
+O `User` congelado por um admin (`bannedAt`/`bannedBy`/`banReason`): nada funciona até um admin
 desbanir. Não altera o `status`.
-_Avoid_: bloqueio, suspensão, desativação, "conta travada" (é o lockout)
+_Avoid_: bloqueio, suspensão, desativação, "usuário travado" (é o lockout)
 
 **Lockout**:
-A conta travada temporariamente por tentativas de login erradas consecutivas; zera no login
-certo ou pelo admin. É por conta, não por IP — o rate limit é o outro mecanismo, ver
-[`0109`](./docs/adr/0109-rate-limit-ip-lockout-conta-sao-dois-mecanismos-nao.md).
-_Avoid_: bloqueio de conta, ban, "conta congelada" (é o ban), rate limit
+O `User` travado temporariamente por tentativas de login erradas consecutivas; zera no login
+certo ou pelo admin. É por usuário, não por IP — o rate limit é o outro mecanismo, ver
+[`0109`](./docs/adr/0109-rate-limit-ip-lockout-usuario-sao-dois-mecanismos-nao.md).
+_Avoid_: bloqueio de conta, ban, "usuário congelado" (é o ban), rate limit
 
 **Demo**:
 A role `demo` (`EMPLOYEE`, só leitura, sempre semeada) e o usuário demo de credencial pública,
 que só existe com `SEED_DEMO_USER`.
-_Avoid_: usuário de teste, sandbox, conta convidada
+_Avoid_: usuário de teste, sandbox, conta convidada, conta demo
 
 ### Sessão
 
@@ -137,8 +137,8 @@ _Avoid_: permissão customizada, exceção, feature do usuário
 
 **Feature efetiva**:
 O que um `User` pode de fato: `(⋃ features das roles ∪ grants) − denies`, sobre linhas vivas.
-É o `features` de `GET /me`; nos ADRs de view, a *capability* do viewer é isto.
-_Avoid_: permissões do usuário, acessos
+É o `features` de `GET /me` e o que resolve a view de um recurso.
+_Avoid_: permissões do usuário, acessos, capability
 
 **Wildcard**:
 A feature `*`: quem a tem pode tudo. Só a role `admin` a carrega.
@@ -190,7 +190,7 @@ por ser nomeado.
 _Avoid_: escopo de deleção, flag de cascata, coluna de motivo
 
 **Reativação**:
-O fluxo de produto que traz de volta uma conta (por signup ou por admin, confirmada pelo dono
+O fluxo de produto que traz de volta um `User` (por signup ou por admin, confirmado pelo dono
 com token `ACCOUNT_REACTIVATION` e senha nova) ou um perfil (pela mesma rota que o cria).
 _Avoid_: restauração (é a primitiva), reabertura, recuperação de conta
 

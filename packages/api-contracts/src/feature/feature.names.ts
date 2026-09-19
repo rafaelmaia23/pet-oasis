@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Os nomes de feature são contrato: o web esconde um botão por capability sem
+// Os nomes de feature são contrato: o web esconde um botão por feature efetiva sem
 // digitar a string, e a API os usa em `can`/`hasFeature`. A **lista** de nomes
 // mora aqui; o que cada uma significa (descrição, semeada no banco) e quais
 // roles a carregam ficam na API — é dado de seed, não contrato. A ordem é a do

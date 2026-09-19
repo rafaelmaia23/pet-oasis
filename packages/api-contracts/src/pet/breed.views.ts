@@ -2,7 +2,7 @@ import { z } from "zod";
 import { petSpeciesSchema } from "./pet.enums";
 
 // View única: raça é catálogo público, não tem campo sensível nem ramo por
-// capability. `createdAt` fica de fora de propósito — é ruído para quem só
+// feature efetiva. `createdAt` fica de fora de propósito — é ruído para quem só
 // quer popular um select.
 const defaultView = z
   .object({

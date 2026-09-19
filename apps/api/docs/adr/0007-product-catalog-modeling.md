@@ -139,7 +139,7 @@ existir motivo para uma coluna.
 O congelamento de preço é assunto da Fase 10, mas a regra já está firmada
 aqui: o item do pedido **grava** o preço no momento da compra e nunca lê do
 produto. `costCents` é dado interno — nunca aparece na view do cliente (ver
-views por capability, abaixo).
+views por feature efetiva, abaixo).
 
 ### Status do produto coexiste com soft delete
 
@@ -159,7 +159,7 @@ vende — o cliente busca "Golden", "Royal Canin", "Whiskas" pelo nome. Entidade
 dá filtro confiável, página de marca no futuro, logo próprio, e evita a
 grafia divergente que string livre garante.
 
-### Views por capability
+### Views por feature efetiva
 
 O presenter por whitelist Zod, já usado no módulo de usuário, resolve
 "cliente não vê custo/estoque interno" sem risco de vazamento:
@@ -441,7 +441,7 @@ vazia, nunca 404, para a listagem não virar oráculo de existência.
 - **Preço em centavos** (e por que não `Decimal`)
 - Status do produto (`DRAFT/ACTIVE/DISCONTINUED`) **coexiste** com soft delete — respondem
   perguntas diferentes
-- Marca como entidade · views por capability (custo e estoque interno fora da view do cliente;
+- Marca como entidade · views por feature efetiva (custo e estoque interno fora da view do cliente;
   público vê **disponibilidade**, não quantidade)
 
 **Taxonomia, firmado na implementação (9.6)** — § "O que a implementação (9.6) firmou além da

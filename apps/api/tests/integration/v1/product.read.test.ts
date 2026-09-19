@@ -18,7 +18,7 @@ import { prisma } from "@/lib/prisma";
  * `product.test.ts` já é a escrita: o que se prova aqui não é o que entra no
  * banco, é o que sai dele e para quem.
  *
- * Três eixos: a view muda com a capability do ator (Y9/Y10), o conjunto visível
+ * Três eixos: a view muda com a feature efetiva do ator (Y9/Y10), o conjunto visível
  * muda com `read:product:internal` (Y1/Y8) e os filtros compõem sem escapar
  * desse recorte.
  */
@@ -144,7 +144,7 @@ const loginAsCatalogManager = async () => {
   return loginAs(user.email, user.password);
 };
 
-describe("GET /api/v1/products — views por capability", () => {
+describe("GET /api/v1/products — views por feature efetiva", () => {
   it("should answer an anonymous visitor with the public view", async () => {
     const { brand, racaoSeca } = await seedTaxonomy();
     await seedProduct({

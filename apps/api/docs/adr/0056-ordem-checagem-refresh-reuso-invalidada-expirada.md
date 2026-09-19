@@ -14,4 +14,4 @@ dispositivo legítimo não é mais o único de posse dele.
 primeira invalida por `invalidatedAt: null, expiresAt: { gt: now }` **sem** excluir `usedAt`,
 porque numa resposta a roubo o objetivo é marcar `invalidatedAt` em toda sessão para auditoria
 completa, inclusive as já usadas. A segunda inclui `usedAt: null`, porque ali o objetivo é só
-limpar sessões que ainda poderiam ser usadas — não é resposta a incidente, é encerramento de conta.
+limpar sessões que ainda poderiam ser usadas — não é resposta a incidente, é encerramento do usuário.

@@ -124,7 +124,7 @@ contra-argumentos e os gotchas.
 - [`0048`](0048-mesma-rota-cria-reativa.md) A mesma rota cria e reativa (8.3)
 - [`0049`](0049-rolenames-roles-perfil-volta-nao-filtro.md) `roleNames` é "com que roles o perfil volta", não filtro
 
-#### Conta — deleção e reativação
+#### Usuário — deleção e reativação
 
 - [`0050`](0050-reativacao-exige-senha-nova.md) A reativação exige senha nova (K17)
 - [`0051`](0051-signup-dispara-reativacao-responde-202.md) O signup que dispara reativação responde 202 (K18)
@@ -136,7 +136,7 @@ contra-argumentos e os gotchas.
 ### Identidade e sessões
 
 > Tudo que diz respeito a *quem é o usuário e se ele pode entrar*: o desenho de sessão
-> (access JWT + refresh rotativo), o status da conta, verificação e troca de email, senha e
+> (access JWT + refresh rotativo), o status do usuário, verificação e troca de email, senha e
 > banimento. Revogação de token tem ADR próprio:
 > [`0001-auth-token-revocation.md`](0001-auth-token-revocation.md).
 
@@ -148,19 +148,19 @@ contra-argumentos e os gotchas.
 - [`0058`](0058-refresh-token-hasheado-repouso-item-virou-teste-nao.md) Refresh token hasheado em repouso — item que virou teste, não código
 - [`0059`](0059-teto-de-sessoes-vivas.md) Teto de sessões vivas
 
-#### Status da conta
+#### Status do usuário
 
 - [`0060`](0060-status-ban-sao-ortogonais.md) Status e ban são ortogonais
 - [`0061`](0061-todo-usuario-nasce-pending-inclusive-criados-admin.md) Todo usuário nasce PENDING, inclusive os criados por admin
-- [`0062`](0062-403-nao-401-login-quando-senha-esta-certa-conta-nao-esta.md) 403 (não 401) no login quando a senha está certa mas a conta não está ACTIVE
+- [`0062`](0062-403-nao-401-login-quando-senha-esta-certa-usuario-nao-esta.md) 403 (não 401) no login quando a senha está certa mas o usuário não está ACTIVE
 - [`0063`](0063-anti-enumeracao-forgot-resend-signup.md) Anti-enumeração em forgot / resend / signup
 - [`0064`](0064-relogio-login-nao-oraculo-email-desconhecido-paga-bcrypt.md) O relógio do login não é oráculo: email desconhecido paga o bcrypt (10.9)
 
-#### Ban — a conta congelada
+#### Ban — o usuário congelado
 
 - [`0065`](0065-ban-reusa-ancora-admin-nao-escalacao.md) Ban reusa a âncora admin da não-escalação
 - [`0066`](0066-guard-ban-difere-role-auto-ban-409.md) O guard do ban difere do de role, e auto-ban é 409
-- [`0067`](0067-conta-congelada-cobre-tambem-reset-change.md) "Conta congelada" cobre também reset e change
+- [`0067`](0067-usuario-congelado-cobre-tambem-reset-change.md) "Usuário congelado" cobre também reset e change
 
 #### Verificação de email
 
@@ -202,12 +202,12 @@ contra-argumentos e os gotchas.
 
 #### Views (presenter)
 
-Cada recurso tem views resolvidas pela **capability do viewer** (não pelo role). `.parse()`
+Cada recurso tem views resolvidas pela **feature efetiva do viewer** (não pelo role). `.parse()`
 derruba campos não listados → nada sensível vaza por omissão.
 
 - [`0085`](0085-whitelist-nao-blacklist.md) Whitelist e não blacklist
-- [`0086`](0086-capability-nao-role.md) Por capability, não por role
-- [`0087`](0087-user-progressao-capability.md) User — progressão por capability
+- [`0086`](0086-feature-efetiva-nao-role.md) Por feature efetiva, não por role
+- [`0087`](0087-user-progressao-feature-efetiva.md) User — progressão por feature efetiva
 - [`0088`](0088-views-dos-demais-recursos.md) Demais recursos
 - [`0089`](0089-view-de-get-me.md) `GET /me`
 
@@ -274,14 +274,14 @@ perfil o user continua existindo, só o `Customer`/`Employee` é soft-deletado.
 #### Rate limit e lockout
 
 - [`0108`](0108-redis-nao-in-memory.md) Redis, não in-memory
-- [`0109`](0109-rate-limit-ip-lockout-conta-sao-dois-mecanismos-nao.md) Rate limit por IP e lockout por conta são dois mecanismos, não um
+- [`0109`](0109-rate-limit-ip-lockout-usuario-sao-dois-mecanismos-nao.md) Rate limit por IP e lockout por usuário são dois mecanismos, não um
 - [`0110`](0110-lockout-hibrido-janela-fixa-backoff-exponencial.md) Lockout híbrido — janela fixa → backoff exponencial
 - [`0111`](0111-checagem-lockout-entra-ramo-senha-correta.md) A checagem de lockout entra no ramo da senha CORRETA
 - [`0112`](0112-configuracao-duas-env-vars-regra-nao-string-composta.md) Configuração: duas env vars por regra, não uma string composta
-- [`0113`](0113-conta-travada-responde-429-generico.md) Conta travada responde 429 genérico
+- [`0113`](0113-usuario-travado-responde-429-generico.md) Usuário travado responde 429 genérico
 - [`0114`](0114-desbloqueio-manual-pelo-admin-reset-completo.md) Desbloqueio manual pelo admin, e reset completo
 - [`0115`](0115-destravar-alvo-privilegiado-exige-ator-admin.md) Destravar alvo privilegiado exige ator admin
-- [`0116`](0116-conta-demo-isenta-lockout.md) Conta demo isenta do lockout (8.8)
+- [`0116`](0116-usuario-demo-isento-lockout.md) Usuário demo isento do lockout (8.8)
 - [`0117`](0117-rate-limit-fluxos-novos-vive-service-nao-middleware.md) Rate limit dos fluxos novos vive no service, não em middleware (8.7)
 - [`0118`](0118-admin-divide-balde-forgot-password.md) O admin divide o balde com o `forgot-password` (K27)
 - [`0119`](0119-tres-rotas-publicas-token-ganharam-limite-juntas.md) As três rotas públicas de token ganharam limite juntas (K26)

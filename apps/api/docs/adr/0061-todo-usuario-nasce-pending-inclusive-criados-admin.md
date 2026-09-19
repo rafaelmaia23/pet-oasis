@@ -6,4 +6,4 @@
 O objetivo da verificação é provar que o email é válido e pertence à pessoa. Isso vale igual para o
 funcionário criado por um admin. Uma regra única ("todo mundo verifica") evita um `status`
 condicional por origem de criação e não abre exceção que depois vira dívida. O custo — um passo de
-verificação para contas internas — é aceito.
+verificação para usuários internos — é aceito.

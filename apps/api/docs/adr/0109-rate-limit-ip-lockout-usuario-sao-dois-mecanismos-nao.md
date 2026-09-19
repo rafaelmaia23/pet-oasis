@@ -1,10 +1,10 @@
-# Rate limit por IP e lockout por conta são dois mecanismos, não um
+# Rate limit por IP e lockout por usuário são dois mecanismos, não um
 
 > Decisão migrada em 2026-09-18 do contexto temático da API (**Segurança** › *Rate limit e lockout*), que deixou de existir:
 > a partir daí, cada decisão é um ADR. O texto é o original; só os links foram reapontados.
 
 Têm alvos diferentes. **Por IP** protege contra volume (DoS, scraping, spam de criação de
-conta) sem se importar com qual conta é tentada. **Por conta** protege uma credencial
+usuário) sem se importar com qual usuário é tentado. **Por usuário** protege uma credencial
 específica contra força bruta direcionada, mesmo vinda de IPs diferentes (credential stuffing
 distribuído). Um não substitui o outro.
 

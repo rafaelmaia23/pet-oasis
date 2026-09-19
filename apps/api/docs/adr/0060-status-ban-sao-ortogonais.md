@@ -7,5 +7,5 @@
 a sobrescrever `PENDING`/`ACTIVE`, e desbanir teria que adivinhar para onde voltar (um `PENDING`
 banido volta pra quê?). Ban como timestamp-flag separado (`bannedAt`/`bannedBy`/`banReason`) —
 mesmo idioma de `deletedAt`/`usedAt`/`invalidatedAt` — mantém o `status` de verificação intacto
-durante o ban: desbanir é limpar as três colunas e a conta volta exatamente ao estado anterior. A
+durante o ban: desbanir é limpar as três colunas e o usuário volta exatamente ao estado anterior. A
 regra de login vira conjunção explícita: `status == ACTIVE && bannedAt == null`.

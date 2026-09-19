@@ -4,6 +4,6 @@
 > a partir daí, cada decisão é um ADR. O texto é o original; só os links foram reapontados.
 
 Banimento é a decisão mais severa e terminal (um humano cortou o acesso de propósito);
-`mustChangePassword` é recuperável via email. Se as duas coexistirem (conta banida **e** com reset
+`mustChangePassword` é recuperável via email. Se as duas coexistirem (usuário banido **e** com reset
 forçado pendente, ex. durante investigação), a mensagem de banido é a que aparece, porque é a
 informação dominante para quem tenta entrar.

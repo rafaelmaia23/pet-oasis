@@ -10,7 +10,7 @@ Hoje `POST /auth/login` aceita tentativas ilimitadas. As consequências são tr�
 e nenhuma é mitigada pelas defesas que já existem (bcrypt + pepper encarecem o
 ataque offline, não o online):
 
-1. **Força bruta direcionada.** Uma conta específica pode ser martelada até a
+1. **Força bruta direcionada.** Um usuário específico pode ser martelado até a
    senha cair, de um IP só ou de muitos.
 2. **Volume.** `signup`, `forgot-password` e `verify-email/resend` disparam email
    a cada chamada — um script leva a cota da Resend embora e derruba a reputação
@@ -23,11 +23,11 @@ ataque offline, não o online):
 
 ### Dois mecanismos, não um
 
-**Rate limit por IP** protege contra *volume*: não se importa com qual conta está
-sendo tentada. **Lockout por conta** protege uma *credencial específica*, mesmo
+**Rate limit por IP** protege contra *volume*: não se importa com qual usuário está
+sendo tentado. **Lockout por usuário** protege uma *credencial específica*, mesmo
 que as tentativas venham de IPs diferentes (credential stuffing distribuído).
 Um não substitui o outro — o primeiro é cego a ataque distribuído, o segundo é
-cego a scraping de rotas sem conta alvo.
+cego a scraping de rotas sem usuário alvo.
 
 **Rate limit por email destinatário** é a terceira chave, e existe só para o
 problema 3: `forgot-password` e `verify-email/resend` contam também por
@@ -59,7 +59,7 @@ silenciosa.
 
 ### Lockout híbrido: janela fixa → backoff exponencial
 
-`LOCKOUT_THRESHOLD` falhas consecutivas travam a conta por `LOCKOUT_WINDOW_MS`;
+`LOCKOUT_THRESHOLD` falhas consecutivas travam o usuário por `LOCKOUT_WINDOW_MS`;
 se a próxima tentativa depois da janela também errar, o tempo dobra a cada ciclo
 até `LOCKOUT_MAX_MS`. Login correto reseta **contador e nível de backoff**.
 
@@ -73,9 +73,9 @@ já existentes (Fase 4).
 
 ### Resposta 429 genérica
 
-Rate limit por IP e lockout por conta devolvem **o mesmo 429** ("muitas
+Rate limit por IP e lockout por usuário devolvem **o mesmo 429** ("muitas
 tentativas, tente novamente mais tarde"): mesmo `code`, mesma prosa, sem
-confirmar existência de conta. Senha errada continua **401** genérico (nenhuma
+confirmar existência de usuário. Senha errada continua **401** genérico (nenhuma
 identidade estabelecida). Mesmo espírito anti-enumeração já adotado em
 `forgot-password`/`verify-email/resend` na Fase 4.
 
@@ -88,7 +88,7 @@ arredondado para cima em segundos, pelo mesmo mecanismo do rate limit (o header
 viaja no `AppError`, o handler central aplica). A forma dos dois 429 volta a ser
 idêntica; o **valor** os distingue (segundos num, minutos a horas no outro), e
 isso é aceito: o 429 de lockout só dispara **depois** de a senha conferir, então
-quem o recebe é o dono da conta ou alguém que já tem a senha — para esse, saber
+quem o recebe é o próprio usuário ou alguém que já tem a senha — para esse, saber
 a duração não muda nada que a política por IP não trate. A prosa continua
 genérica de propósito: o número mora só no header, e o cliente renderiza "tente
 em N" a partir dele. Um `code` próprio para o lockout (`ACCOUNT_LOCKED`) seria
@@ -98,13 +98,13 @@ outra decisão, de produto, e não foi tomada.
 
 `DELETE /users/:id/lock` (feature `manage:user:status`, a mesma do ban/unban):
 limpa contador **e** nível de backoff — mesmo idioma do unban, que restaura o
-estado anterior sem deixar resíduo. **204** no sucesso, **409** se a conta não
+estado anterior sem deixar resíduo. **204** no sucesso, **409** se o usuário não
 estava travada. Registra `AUTH_LOCKOUT_CLEARED` no audit log.
 
 Destravar um alvo **privilegiado** exige ator com role `admin`, reusando o helper
 consolidado na 7.2 (`src/lib/authorization.ts`). Destravar não concede privilégio
-novo, mas *remove uma proteção* da conta-alvo: um manager comprometido poderia
-destravar uma conta admin no meio de um ataque de força bruta, anulando o lockout
+novo, mas *remove uma proteção* do usuário-alvo: um manager comprometido poderia
+destravar um usuário admin no meio de um ataque de força bruta, anulando o lockout
 bem na hora em que ele mais protege — a mesma escalação lateral que
 `assertAdminForBan` já barra.
 
@@ -151,7 +151,7 @@ Taxonomia e `metadata` de cada ação em `docs/reference/logging-policy.md` §4.
   scale-out e zera a cada deploy. Preterido.
 - **Fail-closed** (503 nas rotas de auth quando o Redis cai): Redis vira SPOF do
   login. Preterido — ver acima.
-- **Fail-open no IP + fail-closed na conta** (híbrido por mecanismo): degradaria
+- **Fail-open no IP + fail-closed no usuário** (híbrido por mecanismo): degradaria
   cada mecanismo conforme o que protege, mas o login continua caindo junto com o
   Redis, e passa a haver dois comportamentos para explicar, testar e documentar.
   Preterido: paga a complexidade sem eliminar o SPOF.
@@ -180,8 +180,8 @@ Os quatro gatilhos acima continuam de pé, sem novidade a registrar ainda.
 ## Adendo (Fase 8.7) — dois pontos de consumo novos e um balde novo
 
 A Fase 8 abriu duas superfícies que também disparam email para um endereço **sem
-que o ator prove posse da conta**: o ramo de reativação self-service dentro de
-`POST /auth/signup` (8.4, quando email+cpf batem com uma conta soft-deletada) e
+que o ator prove posse do `User`**: o ramo de reativação self-service dentro de
+`POST /auth/signup` (8.4, quando email+cpf batem com um `User` soft-deletado) e
 `POST /users/:id/reactivate` (8.5, o admin forçando o envio). É a mesma superfície
 do item 3 do problema original ("bombardeio de caixa alheia"), então os dois
 passaram a consumir o **mesmo** `RATE_LIMIT_EMAIL_TARGET_*` já usado por
@@ -217,33 +217,33 @@ dividir faria um reset legítimo comer o orçamento do outro. A decisão cobriu 
 três de uma vez porque proteger só a rota nova deixaria duas irmãs idênticas
 desprotegidas, sem razão de negócio que as distinga.
 
-## Adendo (Fase 8.8) — conta demo isenta do lockout
+## Adendo (Fase 8.8) — usuário demo isento do lockout
 
 Bug descoberto em produção pós-deploy da Fase 7 (2026-08-04): o account
 lockout conta falhas por `userId`, sem distinção de origem — ao contrário do
 rate limit por IP, que mantém baldes separados por origem. A senha do
 usuário demo é pública (`README.md`), então o lockout, ali, deixa de proteger
 qualquer credencial e vira só um vetor de negação de serviço: qualquer
-visitante que erre a senha do demo trava a conta para **todo mundo** por até
+visitante que erre a senha do demo trava o usuário demo para **todo mundo** por até
 24h (o backoff dobra a cada ciclo), derrubando a porta de entrada do projeto
 para recrutadores. O demo-reset diário (7.14) não resolve — o estado do
 lockout vive no Redis, fora do alcance do truncate/reseed do Postgres.
 
-**Decisão:** a conta demo fica isenta do lockout, mas continua sujeita ao
+**Decisão:** o usuário demo fica isento do lockout, mas continua sujeita ao
 rate limit por IP (que já é por-origem e não sofre do mesmo problema).
 Isenção identificada pela **role `demo`**, não por comparação de email
-contra uma env var — generaliza para futuras contas de demonstração e não
+contra uma env var — generaliza para futuros usuários de demonstração e não
 custa query extra: `userRepository.findUserByEmail` (usado por `login()`) já
 inclui `roles` no mesmo fetch, então o predicado (`isLockoutExempt`,
 `src/lib/lockout.ts`) roda sobre dado já em memória.
 
 **Critério simples, sem qualificação (K28):** basta *ter* a role `demo` —
 nada de "só se for a única role" nem de cruzar com features privilegiadas. A
-primeira alternativa quebra em silêncio se uma conta de demonstração futura
+primeira alternativa quebra em silêncio se um usuário de demonstração futuro
 precisar de uma segunda role; a segunda traria `computeEffectiveFeatures`
 para o caminho quente do login e misturaria lockout com não-escalação.
-Efeito colateral aceito e registrado: conceder a role `demo` a uma conta real
-isenta aquela conta do lockout — hoje inalcançável na prática, já que só o
+Efeito colateral aceito e registrado: conceder a role `demo` a um usuário real
+isenta aquele usuário do lockout — hoje inalcançável na prática, já que só o
 usuário demo semeado tem a role (o seed de dados fake não a usa).
 
 **Alternativa descartada:** fazer o demo-reset diário também limpar as

@@ -138,7 +138,7 @@ const productShape = {
  *
  * As duas famílias têm as mesmas três chaves (`public`/`internal`/`cost`), então
  * `readViewFor` continua escolhendo uma vez só e serve às duas — a escada de
- * capability e a diferença lista×detalhe são eixos independentes, e é de
+ * feature efetiva e a diferença lista×detalhe são eixos independentes, e é de
  * propósito que não se cruzem num nome composto.
  *
  * O service produz **os dois** campos (`images` e `image`) em toda resposta; a

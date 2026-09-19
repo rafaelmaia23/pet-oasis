@@ -4,6 +4,6 @@
 > a partir daí, cada decisão é um ADR. O texto é o original; só os links foram reapontados.
 
 `forgot-password` é anônimo — qualquer um poderia testar emails para descobrir quais existem, então
-a resposta é sempre genérica. `change-email` exige a senha atual da própria conta; para abusar do
-409 e enumerar, seria preciso já ter comprometido essa conta, ponto em que enumerar emails de
+a resposta é sempre genérica. `change-email` exige a senha atual do próprio usuário; para abusar do
+409 e enumerar, seria preciso já ter comprometido esse usuário, ponto em que enumerar emails de
 terceiros é o menor dos danos. Mesma lógica que já vale para o signup.

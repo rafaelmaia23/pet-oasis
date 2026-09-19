@@ -37,7 +37,7 @@ dono), e `Pet` como o primeiro filho de **domínio** da cascata de deleção da 
 catálogo (9.6–9.8):** taxonomia (marca, categoria em árvore de 3 níveis, tag), `Product` +
 `ProductVariant` com preço em centavos e nunca produto plano, espécie como **faceta** e não nível da
 árvore, status ortogonal ao soft delete, e a leitura com **três views em escada** escolhidas pela
-capability do ator — a primeira vez no projeto em que a *forma* da resposta, e não só o acesso, muda
+feature efetiva do ator — a primeira vez no projeto em que a *forma* da resposta, e não só o acesso, muda
 com quem pergunta. **Busca textual (9.9):** Postgres nativo (`tsvector` + `unaccent` + `pg_trgm`)
 por escolha didática explícita do usuário contra a recomendação inicial de `ILIKE`; erro de
 digitação corrigido por **reescrita da query** contra um dicionário de lexemas, com o SQL cru só

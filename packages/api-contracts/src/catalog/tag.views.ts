@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // View única, como a de marca: taxonomia aparece inteira na view pública do
-// produto, então não há campo a cortar por capability.
+// produto, então não há campo a cortar por feature efetiva.
 const defaultView = z
   .object({
     id: z.uuid(),

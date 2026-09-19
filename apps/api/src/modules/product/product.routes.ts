@@ -14,7 +14,7 @@ import * as variantController from "./product.variant.controller";
 /**
  * Leitura pública e escrita protegida no mesmo router, como marca e categoria
  * (9.6). O router é montado com `optionalAuthenticate` em `src/routes/index.ts`
- * — os dois `GET` respondem sem token e escolhem a view pela capability do ator
+ * — os dois `GET` respondem sem token e escolhem a view pela feature efetiva do ator
  * (9.8), e quem exige identidade no resto é o `canAccess`, que devolve 401
  * sozinho sem `req.user`.
  *

@@ -3,7 +3,7 @@ import { PetSpecies, ProductStatus } from "@/generated/prisma/enums";
 import { productPresenter } from "@/modules/product/product.presenter";
 
 /**
- * A whitelist do Zod é o corte de verdade das views por capability (9.8): quem
+ * A whitelist do Zod é o corte de verdade das views por feature efetiva (9.8): quem
  * decide o que o cliente vê não é o service, é o `.parse()` — campo que a view
  * não lista some da resposta mesmo que o service o entregue por descuido.
  *

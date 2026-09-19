@@ -66,7 +66,13 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
 - [x] Job `commitlint`, só em PR: `pnpm install --frozen-lockfile --ignore-scripts
       --filter=pet-oasis` (76 pacotes, só a raiz — medido numa cópia isolada; sem o filtro o
       `pnpm exec` puxa os 760 do workspace) e `commitlint --from <base.sha> --to <head.sha>
-      --verbose`. `HUSKY=0` no workflow inteiro: ninguém commita no runner.
+      --verbose`. `HUSKY=0` no workflow inteiro: ninguém commita no runner. **Achado do PR
+      real** (`fase-11 → main`, aberto pelo dono): o job ficou vermelho em 137 commits, dos
+      quais só 7 eram posteriores à convenção — a história anterior ao `97e98b4` (issue 05)
+      não passa e, por decisão do 11.5, não é reescrita. O job ganhou um **piso** (`FLOOR`,
+      o SHA desse commit): `--from` sobe até ele quando ele está no PR e não na base; medido
+      no host com a base real do PR (7 commits, verde) e com a `fase-11` como base (o piso
+      não interfere, 4 commits, verde). O `verify` do mesmo PR é a prova pendente abaixo.
 - [ ] **Fica para o dono** (não há `gh` nesta máquina e o push é ação externa): fazer o push
       da branch, abrir um PR de teste com um commit fora da convenção (ex.: `Feat(api): x`) ou
       uma suíte vermelha, ver o PR ficar vermelho, e fechá-lo. Depois, o badge do README da

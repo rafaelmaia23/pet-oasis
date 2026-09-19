@@ -285,7 +285,15 @@ versionado e o typecheck precisa dele.
 
 O job `commitlint` roda só em PR, instala só as dependências da raiz (`pnpm install
 --filter=pet-oasis`: 76 pacotes em vez de 760) e lê `--from <base.sha> --to <head.sha>` — só os
-commits do PR, merges ignorados pelo padrão do commitlint. Node vem de `engines.node` e pnpm de
+commits do PR, merges ignorados pelo padrão do commitlint. Com um **piso**: o primeiro PR real
+(`fase-11 → main`) ficou vermelho em 137 commits, dos quais só 7 eram posteriores à régua — a
+Fase 10 inteira e as issues 01–04 vieram antes dela, com `merge: …`, `build(pnpm)`, `chore:`
+sem escopo e os trailers que a regra depois proibiu. A frase do 11.5, "a régua vale do commit
+em que entrou em diante", precisava existir no workflow e não só no texto: `FLOOR` é o SHA do
+commit que trouxe a convenção, e quando ele está no PR mas não na base, o `--from` sobe até
+ele; quando a base já o contém — todo PR depois do primeiro merge em `dev` e `main` —, o piso
+não muda nada. Reescrever a história foi descartado de novo pelos mesmos motivos (branches
+publicadas, o SHA do commit de move no `.git-blame-ignore-revs`). Node vem de `engines.node` e pnpm de
 `packageManager`, os dois do `package.json` da raiz; não há versão escrita no workflow. O
 Dockerfile fixa a mesma major em `FROM node:24` por disciplina, não por leitura — é o
 `engines` que faz o pnpm recusar um Node fora da faixa, nos três lugares.

@@ -180,8 +180,21 @@ jobs:
 
       # `--from` é exclusivo: só os commits do PR, nunca os da base. Merges (`Merge branch …`,
       # `Merge pull request …`) o commitlint ignora por padrão.
-      - run: >-
-          pnpm exec commitlint
-          --from ${{ github.event.pull_request.base.sha }}
-          --to ${{ github.event.pull_request.head.sha }}
-          --verbose
+      #
+      # A régua vale do commit em que entrou em diante (11.5): a história anterior não é
+      # reescrita. FLOOR é o commit que trouxe a convenção; quando ele está no PR e não está
+      # na base (o primeiro PR de fase depois da issue 05 carrega 137 commits, dos quais só 7
+      # são posteriores à régua), o `--from` sobe até ele. Quando a base já o contém — todo
+      # PR depois desse —, o piso é irrelevante e o range é o do PR inteiro.
+      - env:
+          FLOOR: 97e98b4551ebef8d293d2cfbf7935c6ff7e96efa
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          from="$BASE_SHA"
+          if git merge-base --is-ancestor "$FLOOR" "$HEAD_SHA" \
+             && ! git merge-base --is-ancestor "$FLOOR" "$BASE_SHA"; then
+            from="$FLOOR"
+            echo "base predates the convention: linting from $FLOOR"
+          fi
+          pnpm exec commitlint --from "$from" --to "$HEAD_SHA" --verbose

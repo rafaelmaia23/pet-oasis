@@ -8,5 +8,5 @@ Cada nome é **restaurado** (se morreu naquela cascata — `deletedAt` casa com 
 que faz a rota se comportar igual nos dois ramos. **Omitido, vale o default do D8:** voltam
 todas as roles que morreram naquela cascata — o caminho comum ("devolve como estava") não obriga
 ninguém a enumerar nada, e escolher um subconjunto continua possível. Uma semântica só no
-projeto, no nível de perfil (K15) e no de conta (K21). Conceder role por aqui é conceder role,
+projeto, no nível de perfil (K15) e no de usuário (K21). Conceder role por aqui é conceder role,
 então roda o mesmo `assertAdminForRoleAssignment` de `POST /users/:id/roles/:roleId`.

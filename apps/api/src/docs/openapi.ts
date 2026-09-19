@@ -165,7 +165,7 @@ const documentDefinition: ZodOpenApiObject = {
       name: "Products",
       description:
         "Produtos do catálogo — a identidade comercial. Escrita sob " +
-        "`manage:product`; custo e estoque aparecem conforme a capability do " +
+        "`manage:product`; custo e estoque aparecem conforme a feature efetiva do " +
         "leitor. Todo produto tem pelo menos uma variante.",
     },
     {

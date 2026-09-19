@@ -5,7 +5,7 @@
 
 `GET /products`, `GET /products/:idOrSlug`, `/categories`, `/brands`, `/tags` e `/breeds` são
 **públicas**. O motivo é o produto, não a técnica: o e-commerce vive de alguém buscar "ração" no
-Google, cair na página do produto sem conta nenhuma e decidir se compra. Login entra só no
+Google, cair na página do produto sem usuário nenhum e decidir se compra. Login entra só no
 carrinho, na Fase 10. Toda a escrita e todas as rotas de pet continuam autenticadas.
 
 Três consequências, todas herdadas pelas sessões 9.6/9.8:

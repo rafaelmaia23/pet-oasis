@@ -4,13 +4,13 @@
 > a partir daí, cada decisão é um ADR. O texto é o original; só os links foram reapontados.
 
 Igualar status, `code` e mensagem entre senha errada e email desconhecido não bastava: o ramo sem
-conta devolvia antes de qualquer hash e o ramo com conta gastava o custo do bcrypt, e a diferença
+usuário devolvia antes de qualquer hash e o ramo com usuário gastava o custo do bcrypt, e a diferença
 era **mensurável de fora** — medida na fronteira HTTP com o custo real (12 rounds), 20 amostras
 intercaladas por tipo, mediana de **5 ms contra 172 ms**. Trinta vezes: um oráculo de existência
-de conta que anulava o anti-enumeração acima. O ramo sem conta passou a verificar a senha
+de usuário que anulava o anti-enumeração acima. O ramo sem usuário passou a verificar a senha
 recebida contra um **hash de ninguém** (`simulatePasswordVerification`, em `src/lib/password.ts`),
 e as medianas ficaram em **171 ms contra 172 ms**. O resíduo de ~1 ms é a gravação do contador
-de lockout no Redis, que só o ramo com conta faz — dentro do ruído em latência de rede local.
+de lockout no Redis, que só o ramo com usuário faz — dentro do ruído em latência de rede local.
 
 O hash de ninguém é cunhado **na carga do módulo**, uma vez por processo, pelo mesmo
 `hashPassword` dos hashes reais, a partir de um texto aleatório descartado: assim carrega o mesmo
@@ -28,5 +28,5 @@ em `tests/unit/lib/password.test.ts`, o custo de `simulatePasswordVerification` 
 `verifyPassword` contra um hash real, medianas dentro de uma razão de 2× — e fica vermelho se a
 função deixar de chamar o bcrypt (verificado sabotando-a). A prova na fronteira HTTP é a medição
 manual acima, com o custo de produção; o comando e a saída ficaram registrados na issue 09 da
-Fase 10. O resíduo de ~1 ms (o contador de lockout, só no ramo com conta) está em
+Fase 10. O resíduo de ~1 ms (o contador de lockout, só no ramo com usuário) está em
 `docs/reference/backlog.md`.

@@ -13,7 +13,7 @@
 ## O problema
 
 Dois bugs pré-existentes, das Fases 4/5, que só apareceram quando se tentou
-construir reativação de conta em cima deles.
+construir reativação de usuário em cima deles.
 
 ### 1. Deletar usuário não cascateava
 
@@ -158,19 +158,19 @@ conceder. O inline policy do AWS IAM — o análogo mais próximo no mercado —
 igualmente **destrutivo** na remoção.
 
 **Por que o nível `User` → perfil deixou de correlacionar** (Sessão D,
-2026-08-11). A regra "restaura o perfil cujo `deletedAt` bate com o da conta"
+2026-08-11). A regra "restaura o perfil cujo `deletedAt` bate com o do `User`"
 produzia um beco sem saída:
 
 ```
 T1  perfil de cliente deletado            → customer.deletedAt = T1
-T2  conta inteira deletada                → user.deletedAt = T2
+T2  `User` inteiro deletado               → user.deletedAt = T2
     self-service (signup) reclama cliente → T1 ≠ T2, não restaura
                                           → e a linha existe, então criar do
                                             zero também não é possível
-                                          → conta ativa com ZERO perfil ativo ✗
+                                          → `User` ativo com ZERO perfil ativo ✗
 ```
 
-A correlação existia para impedir carona. Só que, na reativação de conta, perfil
+A correlação existia para impedir carona. Só que, na reativação de usuário, perfil
 nenhum volta sem ser **nomeado** (o self-service nomeia `CUSTOMER` e só; o admin
 nomeia a escolha dele), então o risco que a regra cobria não existe nesse nível
 — e o preço era um usuário sem caminho de volta. O corte mudou de lugar:
@@ -237,8 +237,8 @@ pega:
 ### Do desenho revertido — não reintroduzir
 
 A primeira implementação da Fase 8 leu o estado inconsistente ("perfil vivo sob
-conta morta") como **informação** e construiu em cima. Com a cascata correta,
-todo perfil de conta morta está morto e as três coisas abaixo perdem o
+`User` morto") como **informação** e construiu em cima. Com a cascata correta,
+todo perfil de `User` morto está morto e as três coisas abaixo perdem o
 propósito:
 
 - **`resolveProfileClaimAction`** (`RESTORE`/`CREATE`/`FREEZE`/`IGNORE` decidido
@@ -250,13 +250,13 @@ propósito:
   porque o self-service podia ignorar o perfil reclamado; com "self-service só
   traz cliente" + "nunca há usuário ativo sem perfil ativo", o cenário é
   inalcançável.
-- **A validação 422 "o perfil não estava ativo quando a conta foi excluída"** —
+- **A validação 422 "o perfil não estava ativo quando o usuário foi excluído"** —
   o admin pode restaurar qualquer perfil que já existiu, e criar do zero o
   perfil de cliente que nunca existiu.
 
 Efeito colateral concreto do desenho antigo, para memória: um usuário que perdeu
-o perfil de cliente, depois teve a conta inteira deletada e depois reativou pelo
-signup terminava com a conta ativa e o perfil de **funcionário** vivo — nunca o
+o perfil de cliente, depois teve o `User` inteiro deletado e depois reativou pelo
+signup terminava com o `User` ativo e o perfil de **funcionário** vivo — nunca o
 de cliente que ele pediu.
 
 ## Quando revisitar

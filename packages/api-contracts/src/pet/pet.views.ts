@@ -2,7 +2,7 @@ import { z } from "zod";
 import { petSexSchema, petSpeciesSchema } from "./pet.enums";
 
 /**
- * View única, sem resolver por capability — a ficha do pet não tem nenhum campo
+ * View única, sem resolver por feature efetiva — a ficha do pet não tem nenhum campo
  * que o funcionário veja e o dono não. Quem separa os dois é a autorização de
  * escopo (`own` × `:others`), que decide *se* a ficha sai, não *quanto* dela.
  * Mesmo racional da view de raça.

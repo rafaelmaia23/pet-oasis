@@ -19,4 +19,4 @@ Consequência para quem escreve rota: **rota montada com `optionalAuthenticate` 
 nunca via `getAuthUser`** — o helper lança 401 quando ele falta, que é o oposto do contrato aqui. A
 escrita no mesmo router continua protegida de graça, porque `canAccess` já responde 401 sozinho sem
 `req.user`. Montado em `/brands`, `/categories` e `/tags` (9.6); `/products` (9.8) usa o mesmo
-middleware, ali para escolher a view pela capability do viewer.
+middleware, ali para escolher a view pela feature efetiva do viewer.

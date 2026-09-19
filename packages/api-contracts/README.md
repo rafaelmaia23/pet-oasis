@@ -8,7 +8,7 @@ Express, helper de servidor), e um teste do próprio pacote fica vermelho se iss
 
 A API não tem schema próprio: controllers, presenters, a geração do OpenAPI e os testes
 importam daqui. O que a API guarda é o que precisa de algo além de `zod` — o helper de
-whitelist que aplica a view (`createPresenter`), a resolução de view por capability, a
+whitelist que aplica a view (`createPresenter`), a resolução de view por feature efetiva, a
 derivação de slug, os helpers de paginação do repository, a máscara de IP do audit log — sempre
 como composição por cima do schema do contrato.
 

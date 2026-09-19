@@ -13,7 +13,7 @@ Todo schema de request (create, update, query, path) e toda view de resposta viv
 controllers, presenters, `docs/paths/*` e testes. Nenhum `*.schema.ts` sobrou em
 `apps/api/src/modules/`; os `*.presenter.ts` sobraram, mas só com o helper de whitelist aplicado
 sobre a view importada (`createPresenter(userViews)`) e o que é serialização da API (`maskIp`).
-A resolução de view por capability (`resolveUserView`, `readViewFor`) continua na API — quem sabe
+A resolução de view por feature efetiva (`resolveUserView`, `readViewFor`) continua na API — quem sabe
 o que o viewer pode é a API, não o contrato.
 
 A fronteira foi decidida caso a caso pelo mesmo critério: **o que precisa de algo que não é

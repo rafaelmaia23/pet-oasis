@@ -47,7 +47,7 @@ export const userPaths: ZodOpenApiPathsObject = {
   "/users/{id}": {
     get: {
       tags: ["Users"],
-      summary: "Busca um usuário por id (view resolvida pela capability)",
+      summary: "Busca um usuário por id (view resolvida pela feature efetiva)",
       ...fromEnvelope(userParamsSchema),
       responses: {
         200: jsonResponse("Usuário encontrado", userViews.admin),

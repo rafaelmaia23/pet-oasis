@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Views de resposta do usuário, resolvidas na API pela capability do viewer.
+// Views de resposta do usuário, resolvidas na API pela feature efetiva do viewer.
 // Cada view é uma whitelist: o presenter da API faz `.parse()` e derruba o que
 // não está listado, então nada sensível vaza por omissão.
 

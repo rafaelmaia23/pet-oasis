@@ -5,4 +5,4 @@
 
 `POST /users/:id/reactivate` só emite o token e envia o email — quem conclui é o dono, na mesma
 confirmação pública do self-service. Os dois caminhos convergem num ponto só, e a volta de uma
-conta sempre passa por alguém que prova posse do email.
+usuário sempre passa por alguém que prova posse do email.

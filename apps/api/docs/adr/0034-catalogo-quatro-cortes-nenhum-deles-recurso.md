@@ -12,4 +12,4 @@ reorganizar a árvore de categorias reclassifica a loja inteira, enquanto corrig
 de um produto não. **Estoque** é feature própria porque quem conta prateleira não é quem
 cadastra produto — e porque na Fase 10, quando `StockMovement` chegar, o nome já existe.
 **Custo** é próprio porque é o único campo do catálogo com regra social diferente: é ele que a
-view por capability consulta para decidir se `costCents` sai na resposta.
+view por feature efetiva consulta para decidir se `costCents` sai na resposta.

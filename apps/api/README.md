@@ -140,7 +140,7 @@ Agora repita o passo 1 **com** o token da conta demo do Roteiro A:
 curl -s "$BASE/products?limit=3" -H "Authorization: Bearer $TOKEN" | head -c 600
 ```
 
-A rota é a mesma e o corpo é outro: aparecem `status`, `stockQuantity` exato e `costCents`. Não é um endpoint diferente para staff — é a **mesma** rota escolhendo a view pela capability de quem pergunta, com a whitelist do presenter derrubando o que o ator não pode ver. O visitante anônimo recebe preço e um booleano `inStock`; ele nunca vê a margem.
+A rota é a mesma e o corpo é outro: aparecem `status`, `stockQuantity` exato e `costCents`. Não é um endpoint diferente para staff — é a **mesma** rota escolhendo a view pela feature efetiva de quem pergunta, com a whitelist do presenter derrubando o que o ator não pode ver. O visitante anônimo recebe preço e um booleano `inStock`; ele nunca vê a margem.
 
 ---
 
@@ -199,7 +199,7 @@ A rota é a mesma e o corpo é outro: aparecem `status`, `stockQuantity` exato e
 ### 🛒 Catálogo
 - **`Product` é identidade comercial, `ProductVariant` é o que se vende** (SKU, preço, estoque). Nunca produto plano: produto "sem variação" ganha uma variante default, e não existe o caminho duplo "produto com preço próprio × produto com variantes".
 - **Categoria é função, espécie é faceta.** Uma cama serve cão e gato, então espécie é `targetSpecies[]` no produto, não um nível da árvore que duplicaria toda folha.
-- **A vitrine é pública** e a *forma* da resposta muda com a capability: preço e `inStock` para o visitante; `status` e estoque exato com `read:product:internal`; `costCents` com `read:product:cost`.
+- **A vitrine é pública** e a *forma* da resposta muda com a feature efetiva: preço e `inStock` para o visitante; `status` e estoque exato com `read:product:internal`; `costCents` com `read:product:cost`.
 - **Busca com tolerância a erro de digitação** em Postgres puro (`tsvector` + `unaccent` + `pg_trgm`): a palavra fora do dicionário é reescrita antes da consulta, e o SQL cru só ranqueia — a visibilidade continua saindo do mesmo filtro da listagem.
 - **Upload atrás de um adaptador de storage**: o banco guarda a chave, nunca a URL; dois derivados WebP por imagem; EXIF (e geolocalização) removidos.
 
@@ -294,7 +294,7 @@ Ambos são idempotentes (`pnpm run db:seed` não duplica nada) e restaurados tod
 
 | | Fase | Entrega |
 |---|---|---|
-| ✅ | 9 | Pets ligados a Customers (CRUD, escopos *own*/*others*, falecimento ≠ exclusão) e catálogo completo: produto/variante, marca, categoria em árvore, tag, vitrine pública com view por capability, busca textual com tolerância a erro de digitação e upload de imagem — sem checkout |
+| ✅ | 9 | Pets ligados a Customers (CRUD, escopos *own*/*others*, falecimento ≠ exclusão) e catálogo completo: produto/variante, marca, categoria em árvore, tag, vitrine pública com view por feature efetiva, busca textual com tolerância a erro de digitação e upload de imagem — sem checkout |
 | 🔜 | 10 | Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) |
 
 Detalhe atômico de cada item em [`docs/todo.md`](../../docs/todo.md).

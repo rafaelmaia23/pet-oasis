@@ -5,6 +5,6 @@
 
 `forgot-password` e `verify-email/resend` respondem **sempre 200 genérico**, independentemente de o
 email existir, estar ACTIVE ou banido — senão a resposta viraria oráculo de "quais emails têm
-conta". O email real só sai quando a condição interna é satisfeita. No mesmo espírito, signup com
+usuário". O email real só sai quando a condição interna é satisfeita. No mesmo espírito, signup com
 email de um banido mantém o **409 genérico** já produzido pelo `@unique` (a linha do banido
 persiste, não é deletada), sem mensagem especial.

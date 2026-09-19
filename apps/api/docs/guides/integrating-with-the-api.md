@@ -181,7 +181,7 @@ login, não a uma tela interna.
 
 O access token é um JWT de **15 minutos**, enviado em `Authorization: Bearer`. A assinatura é
 verificada localmente, mas o **usuário é relido a cada request**: é isso que mata o token de uma
-conta deletada na hora, e que faz as capabilities do `GET /me` serem sempre as atuais — perder
+conta deletada na hora, e que faz as features efetivas do `GET /me` serem sempre as atuais — perder
 uma role vale no request seguinte, não dali a 15 minutos. Não decodifique o JWT no cliente para
 decidir nada: o conteúdo dele é da API.
 
@@ -288,6 +288,6 @@ allowlist dele.
 - **`GET /reference`** (público, também na raiz) — a UI Scalar, interativa, com "try it".
 - [`docs/reference/endpoints.md`](../reference/endpoints.md) — a lista de rotas em prosa, com
   a feature exigida por cada uma.
-- **`GET /api/v1/me`** — as capabilities efetivas do usuário. Use para **esconder afordância**, nunca
+- **`GET /api/v1/me`** — as features efetivas do usuário. Use para **esconder afordância**, nunca
   para decidir permissão: quem decide é a API, e um `can()` esquecido resulta em 403, que é
   feio, não inseguro. Honre o wildcard `*`.

@@ -23,9 +23,14 @@ da skill, sem racional, sem implementação. O *porquê* continua nos ADRs da AP
       `ProductImage` se diziam, cada uma, "a única tabela de domínio sem `deletedAt`" (ADRs
       `0007`/`0046`, `schema.md`, `schema.prisma` e dois repositórios); e os comentários de
       `prisma/schema.prisma` citavam ADRs pelos caminhos antigos — o `docs:check` passou a
-      varrer `.prisma`. Ficaram em aberto, para o dono, dois sinônimos de prosa espalhados
-      por dezenas de arquivos: "conta" onde o código diz `User` (44 ADRs) e *capability* onde
-      o código diz feature efetiva (25 arquivos, inclusive os títulos dos ADRs `0086`/`0087`).
+      varrer `.prisma`. Dois sinônimos de prosa foram
+      decididos pelo dono e alinhados ao código: "conta" virou `User`/usuário nos ADRs, no índice e
+      no `apps/api/CLAUDE.md` (92 edições em 34 arquivos, cinco ADRs renomeados; ficaram o verbo
+      "conta", "conta de terceiro" de Axiom/Sentry e as citações de proveniência das seções
+      antigas), e *capability* virou feature efetiva em todo o monorepo (ADRs `0086`/`0087`
+      renomeados), exceto na `spec.md` desta fase, que é história. O que ainda diz "conta" fora
+      dos ADRs — `apps/api/README.md`, `docs/reference/`, `docs/guides/`, `docs/` da raiz e
+      strings de `src/` (mensagens de erro e email) — não foi tocado.
 - [x] Nenhuma frase do glossário explica *por que* — se a definição precisa de racional, ela
       aponta para o ADR.
 - [x] `apps/api/docs/adr/README.md` (índice), `apps/api/CLAUDE.md`, `docs/agents/domain.md` e o

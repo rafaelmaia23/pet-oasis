@@ -25,7 +25,7 @@ export const listProducts = async (req: Request, res: Response) => {
   );
 
   const envelope = offsetEnvelope(
-    // Presenter da **lista** (9.10/AA14): mesmas três chaves de capability, mas
+    // Presenter da **lista** (9.10/AA14): mesmas três chaves de feature efetiva, mas
     // a imagem sai como capa em vez de coleção.
     productListPresenter.presentMany(
       products,

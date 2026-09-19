@@ -1,11 +1,11 @@
-# Conta travada responde 429 genérico
+# Usuário travado responde 429 genérico
 
 > Decisão migrada em 2026-09-18 do contexto temático da API (**Segurança** › *Rate limit e lockout*), que deixou de existir:
 > a partir daí, cada decisão é um ADR. O texto é o original; só os links foram reapontados.
 
 Login com senha errada continua 401 genérico (nenhuma identidade estabelecida). Rate limit por
-IP e lockout por conta devolvem o **mesmo** 429 — mesmo `code`, mesma prosa —, sem confirmar a
-existência da conta além do que as tentativas anteriores já revelam: mesmo espírito
+IP e lockout por usuário devolvem o **mesmo** 429 — mesmo `code`, mesma prosa —, sem confirmar a
+existência do usuário além do que as tentativas anteriores já revelam: mesmo espírito
 anti-enumeração de `forgot-password`/`verify-email/resend`. O que os distingue é só o **valor**
 de `Retry-After`, que ambos carregam desde a 10.22: a decisão original dizia "sem indicar qual
 disparou", e por um tempo só o rate limit mandava o header enquanto três documentos (guia de

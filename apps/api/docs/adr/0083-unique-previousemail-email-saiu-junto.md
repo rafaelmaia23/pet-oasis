@@ -6,6 +6,6 @@
 Com o reuso liberado, o unique vira bomba-relógio: B larga o endereço X; A adota X; A troca de email
 de novo → o `previousEmail.create` da confirmação estoura P2002 e a troca de A falha com 409 **para
 sempre**, sem caminho de volta e sem que o usuário entenda o porquê. Histórico se repete: o mesmo
-endereço pertence a várias contas ao longo do tempo, e uma conta pode voltar a um endereço que já
+endereço pertence a vários usuários ao longo do tempo, e um usuário pode voltar a um endereço que já
 largou. Sem `findPreviousEmailByEmail` (apagada), não sobrou nem leitura por email para o índice
 servir.

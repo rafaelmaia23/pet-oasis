@@ -4,7 +4,7 @@ import {
 } from "@pet-oasis/api-contracts/feature";
 
 // A **lista** de features é contrato (`@pet-oasis/api-contracts/feature`): é o
-// que o web usa para esconder um botão por capability. O que fica aqui é o que
+// que o web usa para esconder um botão por feature efetiva. O que fica aqui é o que
 // só o seed precisa — a descrição de cada uma. `Record<FeatureName, string>` é
 // a prova, no typecheck: feature do contrato sem descrição é chave faltando;
 // descrição sem feature é propriedade em excesso. Os dois lados não divergem

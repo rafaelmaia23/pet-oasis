@@ -38,8 +38,7 @@ Perfil de quem trabalha na loja. Carrega `hiringDate`.
 _Avoid_: funcionário admin, staff (é a gíria das rotas, não o nome do perfil), operador
 
 **Híbrido**:
-`User` com os dois perfis ativos ao mesmo tempo. Caso de primeira classe no seed e nos testes,
-não exceção.
+`User` com os dois perfis ativos ao mesmo tempo.
 _Avoid_: usuário duplo, caso especial
 
 **Status**:
@@ -54,9 +53,8 @@ O passo que leva o `User` de `PENDING` a `ACTIVE`: um `VerificationToken` de pro
 _Avoid_: ativação da conta, confirmação de cadastro
 
 **VerificationToken**:
-Token opaco de uso único (só o hash é guardado) com `purpose`, `expiresAt` e `usedAt`. Os
-propósitos são `EMAIL_VERIFICATION`, `PASSWORD_RESET`, `EMAIL_CHANGE` e
-`ACCOUNT_REACTIVATION`; `change-password` não usa token — a prova é a senha atual.
+Token opaco de uso único, guardado só como hash, com um `purpose`: `EMAIL_VERIFICATION`,
+`PASSWORD_RESET`, `EMAIL_CHANGE` ou `ACCOUNT_REACTIVATION`.
 _Avoid_: código de verificação, link mágico, OTP
 
 **Troca de email**:
@@ -70,40 +68,31 @@ Histórico dos emails que um `User` já teve. Só histórico: não reserva o end
 _Avoid_: email bloqueado, email reservado
 
 **Ban**:
-A conta congelada por um admin: `bannedAt`/`bannedBy`/`banReason` preenchidos, sessões
-derrubadas, e nada funciona — login, reset, change, resend. Reversível só por desban de um
-admin; não altera o `status`.
-_Avoid_: bloqueio (é o lockout), suspensão, desativação, "conta travada" (é o lockout)
+A conta congelada por um admin (`bannedAt`/`bannedBy`/`banReason`): nada funciona até um admin
+desbanir. Não altera o `status`.
+_Avoid_: bloqueio, suspensão, desativação, "conta travada" (é o lockout)
 
 **Lockout**:
-A conta travada por tentativas de login erradas consecutivas: janela fixa que vira backoff
-exponencial, guardada no Redis, zerada no login certo ou pelo admin. Responde 429 genérico,
-igual ao rate limit. Não é o ban.
-_Avoid_: bloqueio de conta, ban, "conta congelada" (é o ban)
-
-**Rate limit**:
-Teto de requests por chave — IP, usuário ou email destinatário — num balde do Redis. Protege
-contra volume, não contra força bruta numa credencial: isso é o lockout.
-_Avoid_: throttle, lockout
+A conta travada temporariamente por tentativas de login erradas consecutivas; zera no login
+certo ou pelo admin. É por conta, não por IP — o rate limit é o outro mecanismo, ver
+[`0109`](./docs/adr/0109-rate-limit-ip-lockout-conta-sao-dois-mecanismos-nao.md).
+_Avoid_: bloqueio de conta, ban, "conta congelada" (é o ban), rate limit
 
 **Demo**:
-A role `demo` (`EMPLOYEE`, só features de leitura, sempre semeada) e o usuário demo
-(credencial pública, atrás de `SEED_DEMO_USER`). A conta demo é isenta do lockout e o
-`demo-reset` a restaura.
+A role `demo` (`EMPLOYEE`, só leitura, sempre semeada) e o usuário demo de credencial pública,
+que só existe com `SEED_DEMO_USER`.
 _Avoid_: usuário de teste, sandbox, conta convidada
 
 ### Sessão
 
 **Session**:
-Uma linha por **refresh token emitido**: o login cria uma, cada rotação em `/refresh` marca a
-anterior como usada (`usedAt`) e cria outra. Não é uma família de dispositivo — não existe
-id agregando as rotações de um mesmo login.
+Uma linha por **refresh token emitido**: cada rotação marca a anterior (`usedAt`) e cria outra.
+Não é uma família de dispositivo — nada agrega as rotações de um mesmo login.
 _Avoid_: dispositivo, login, token (é o que ela guarda, não o que ela é)
 
 **Access token**:
-JWT de 15 minutos, validado localmente por assinatura, expiração, `iss`/`aud`. Entregue no
-header `Authorization: Bearer`; não é revogável antes de expirar — ver
-[`0001`](./docs/adr/0001-auth-token-revocation.md).
+JWT de 15 minutos, validado localmente e entregue no header `Authorization: Bearer`. Não é
+revogável antes de expirar — ver [`0001`](./docs/adr/0001-auth-token-revocation.md).
 _Avoid_: token de sessão, JWT de sessão, cookie
 
 **Refresh token**:
@@ -117,7 +106,8 @@ _Avoid_: token de renovação, token longo
 _Avoid_: sessão ativa (colide com o `status`), sessão aberta
 
 **Reuso de refresh**:
-Apresentar um refresh token que já tem `usedAt`. É tratado como sinal de roubo.
+Apresentar um refresh token que já tem `usedAt`. Dentro da janela de graça da rotação é
+concorrência; fora dela, roubo — ver [`0057`](./docs/adr/0057-janela-graca-10s-rotacao.md).
 _Avoid_: replay, refresh duplicado
 
 ### Autorização
@@ -140,17 +130,15 @@ sempre, revivida na re-concessão. É nela que o override pendura.
 _Avoid_: vínculo user↔role (aceitável em prosa, mas o recurso é a atribuição), cargo do usuário
 
 **Override**:
-Uma linha `UserFeature`: ajuste de uma feature — `granted: true` concede, `false` nega —
-pendurado numa **atribuição de role** específica, nunca no `User` solto. Perder a role mata os
-overrides dela; nenhum override ressuscita por efeito colateral — ver
+Uma linha `UserFeature`: ajuste de uma feature (`granted` concede ou nega) pendurado numa
+**atribuição de role**, nunca no `User` solto — ver
 [`0005`](./docs/adr/0005-authorization-scope-and-lifecycle.md).
 _Avoid_: permissão customizada, exceção, feature do usuário
 
 **Feature efetiva**:
-O que um `User` pode de fato: `(⋃ features das roles ∪ grants) − denies`, computado em runtime
-por `computeEffectiveFeatures` só sobre linhas vivas. É o `features` de `GET /me` e a
-*capability* pela qual o presenter escolhe a view.
-_Avoid_: permissões do usuário, acessos, capability (mesma coisa; prefira o nome do código)
+O que um `User` pode de fato: `(⋃ features das roles ∪ grants) − denies`, sobre linhas vivas.
+É o `features` de `GET /me`; nos ADRs de view, a *capability* do viewer é isto.
+_Avoid_: permissões do usuário, acessos
 
 **Wildcard**:
 A feature `*`: quem a tem pode tudo. Só a role `admin` a carrega.
@@ -160,8 +148,7 @@ _Avoid_: superusuário, root, "todas as features"
 Feature de `PRIVILEGED_FEATURES`: as quatro do próprio sistema de permissão
 (`PERMISSION_FEATURES`) mais `read:audit-log:full`. Conceder uma — por override ou por role que
 a contenha — exige que o ator tenha a role `admin`.
-_Avoid_: feature de admin, feature sensível, `read:product:cost` (é segredo comercial, não
-escalação)
+_Avoid_: feature de admin, feature sensível, `read:product:cost` (não é privilegiada)
 
 **Não-escalação**:
 A regra de que ninguém concede feature privilegiada, bane ou desbane alvo privilegiado ou destrava
@@ -181,37 +168,30 @@ _Avoid_: guest, público (é o nome da view, não do visitante)
 ### Ciclo de vida
 
 **Soft delete**:
-Marcar `deletedAt` em vez de apagar a linha. É o padrão de todo recurso com histórico
-(`User`, perfis, `UserRole`, `UserFeature`, `Pet`, `Product`, `ProductVariant`, `Brand`,
-`Category`); toda leitura filtra `deletedAt: null`.
-_Avoid_: exclusão lógica, desativação, arquivamento
-
-**Hard delete**:
-Apagar a linha. No domínio só `Tag` e `ProductImage` fazem isso; fora dele, teardown de teste e
-scripts de faxina.
-_Avoid_: exclusão física, purge
+Marcar `deletedAt` em vez de apagar a linha; toda leitura filtra `deletedAt: null`. O que não
+tem `deletedAt` (`Tag`, `ProductImage`, as junções, o dado de referência) é apagado de verdade.
+_Avoid_: exclusão lógica, desativação, arquivamento, hard delete (é a ausência disto)
 
 **Cascata**:
-A deleção descendo o grafo com **um único `new Date()`** por transação: `User` → perfis →
-`UserRole` → `UserFeature`, e `Customer` → `Pet`, `Product` → `ProductVariant`. Nunca existe
-filho ativo de pai morto.
-_Avoid_: `onDelete: Cascade` (é ação do banco em hard delete; a cascata daqui é escrita à mão)
+A deleção descendo o grafo com um único `deletedAt` por transação: `User` → perfis →
+`UserRole` → `UserFeature`, `Customer` → `Pet`, `Product` → `ProductVariant`.
+_Avoid_: `onDelete: Cascade` (é o hard delete do banco; a cascata daqui é escrita à mão)
 
 **Restauração**:
-A primitiva que desfaz o soft delete subindo **dois** níveis: o pai nomeado volta, e volta o
-filho cujo `deletedAt` é **igual** ao dele (correlação por data). Para na `UserRole` — override
-não volta — ver [`0005`](./docs/adr/0005-authorization-scope-and-lifecycle.md).
+A primitiva que desfaz o soft delete subindo dois níveis: o pai nomeado volta, e com ele o
+filho de mesmo `deletedAt`. Para na `UserRole`; override não volta — ver
+[`0005`](./docs/adr/0005-authorization-scope-and-lifecycle.md).
 _Avoid_: undelete, reativação (é o fluxo de produto que usa a restauração), rollback
 
 **Correlação por data**:
-O critério da restauração: filho volta se `filho.deletedAt == pai.deletedAt`. Não existe
-coluna de motivo.
-_Avoid_: escopo de deleção, flag de cascata
+O critério pelo qual `UserRole` volta com o perfil e `Pet` volta com o `Customer`:
+`filho.deletedAt == pai.deletedAt`. O nível `User` → perfil não correlaciona — o perfil volta
+por ser nomeado.
+_Avoid_: escopo de deleção, flag de cascata, coluna de motivo
 
 **Reativação**:
-O fluxo de produto que traz de volta uma conta ou um perfil soft-deletados. De conta: pelo
-signup ou pelo admin, sempre confirmada pelo dono por token `ACCOUNT_REACTIVATION`, com senha
-nova. De perfil: a mesma rota que cria também reativa.
+O fluxo de produto que traz de volta uma conta (por signup ou por admin, confirmada pelo dono
+com token `ACCOUNT_REACTIVATION` e senha nova) ou um perfil (pela mesma rota que o cria).
 _Avoid_: restauração (é a primitiva), reabertura, recuperação de conta
 
 **Dado de referência**:
@@ -260,9 +240,8 @@ variante.
 _Avoid_: item, SKU, produto plano, "o que se compra"
 
 **ProductVariant**:
-A unidade vendável: `sku` (único global), `label`, `priceCents`, `compareAtPriceCents`,
-`costCents`, `stockQuantity`, e o que varia (`weightGrams`, `volumeMl`, `sizeLabel`). É para
-ela que um item de pedido apontará.
+A unidade vendável de um `Product`: `sku` (único global), `label`, preço, custo, estoque e o
+que varia (`weightGrams`, `volumeMl`, `sizeLabel`).
 _Avoid_: produto, item, tamanho, opção
 
 **Variante default**:
@@ -310,11 +289,6 @@ _Avoid_: foto da variante, `isCover`, URL (o que se grava é o path)
 ativa com estoque. Presente em todas as views — é o que o público vê no lugar da quantidade.
 _Avoid_: estoque (é a quantidade exata, interna), "em estoque" como campo próprio
 
-**Preço em centavos**:
-Todo valor monetário é inteiro em centavos (`priceCents`, `compareAtPriceCents`, `costCents`);
-peso é inteiro em gramas (`weightGrams`). Moeda implícita (BRL).
-_Avoid_: `Decimal`, float, `price` sem sufixo
-
 **Busca textual**:
 `GET /products?q=`: busca no nome do produto, nome da marca e descrição com radical, sem
 acento e tolerância a erro de digitação, nativa do Postgres — ver
@@ -330,14 +304,9 @@ opcional e serve só para escolher a view.
 _Avoid_: loja, storefront, e-commerce, "rotas públicas" (também há `/auth`)
 
 **View**:
-O shape de resposta de um recurso, um schema Zod por whitelist: `.parse()` derruba o que não
-está listado. Cada recurso tem uma ou mais views, resolvidas pela feature efetiva do viewer,
-nunca pela role.
-_Avoid_: DTO, serializer, resposta, projeção
-
-**Presenter**:
-O helper que aplica a view sobre o dado do service antes de responder.
-_Avoid_: serializer, mapper, formatter
+O shape de resposta de um recurso, um schema Zod por whitelist: o que não está listado não
+sai. Resolvida pela feature efetiva do viewer, nunca pela role.
+_Avoid_: DTO, serializer, resposta, projeção, presenter (é quem aplica a view)
 
 **Escada de views do produto**:
 `public` → `internal` → `cost`: a pública sem `costCents`, sem `stockQuantity` exato e sem
@@ -346,16 +315,15 @@ _Avoid_: serializer, mapper, formatter
 _Avoid_: view de admin, view de staff, view de cliente (é a `public`)
 
 **Views do usuário**:
-`default` (id, name) → `owner` (+ email, `pendingEmail`, cpf, perfis) → `me` (+ features
-efetivas) → `admin` (+ timestamps e atribuições de role com os overrides dentro).
-_Avoid_: view completa, view resumida
+`default` (id, name) → `owner` (+ email, `pendingEmail`, cpf, perfis) → `admin` (+ timestamps
+e atribuições de role com os overrides dentro). `GET /me` tem view própria: `owner` mais as
+roles por perfil e as features efetivas.
+_Avoid_: view completa, view resumida, view `me` de user (é recurso próprio)
 
 ### Auditoria
 
 **Audit log**:
-A trilha durável de quem fez o quê, em quem, quando: `AuditLog`, append-only, gravada na mesma
-transação da ação, com `action` numa taxonomia fechada (`AUDIT_ACTIONS`) e `targetType` em
-`AUDIT_TARGET_TYPES`. `actorId`/`targetId` são uuid cru, sem FK. Não é o access log nem o
-application log — ver [`0133`](./docs/adr/0133-tres-categorias-de-log-nao-uma.md).
-_Avoid_: log, histórico, trilha de auditoria (aceitável em prosa; o termo do código é audit
-log)
+A trilha durável e append-only de quem fez o quê, em quem, quando (`AuditLog`), com `action`
+numa taxonomia fechada. Não é o access log nem o application log — ver
+[`0133`](./docs/adr/0133-tres-categorias-de-log-nao-uma.md).
+_Avoid_: log, histórico, trilha de auditoria

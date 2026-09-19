@@ -29,9 +29,11 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       docs não roda a suíte" vale para docs da raiz (README, `.github/`, `CLAUDE.md` da raiz —
       `turbo ls --affected` devolve "no packages") e **não** para `apps/api/docs/`, que roda a
       API inteira. `paths-ignore` no workflow pularia o `docs:check` junto; ficou a limitação,
-      documentada no workflow e no 11.6. Segundo achado: base inexistente (branch nova, onde
-      `before` é zero; force-push) não faz o Turbo cair para "tudo" — aborta com erro de git —,
-      então o workflow confere a base com `git cat-file -e` e, sem ela, roda sem `--affected`.
+      documentada no workflow e no 11.6. Segundo achado (corrigido na revisão): base inexistente
+      tem dois desfechos no Turbo — SHA desconhecido (`before` zero em branch nova; force-push)
+      vira warning e "tudo mudou"; ref por nome desconhecida aborta com erro de git —, então o
+      workflow não depende de nenhum: confere a base com `git cat-file -e` e, sem ela, roda sem
+      `--affected`. O `base_ref` entra por `env:`, não interpolado no shell (achado da revisão).
 - [x] `postgres:16-alpine` (a do Compose; o contrib traz `unaccent` e `pg_trgm`) e
       `redis:7-alpine` como `services` do job, publicados em 5433/6380 com as credenciais do
       `.env.test`. O `.env.test` do runner nasce do `.env.example` por `cp` + `sed`: banco e
@@ -51,6 +53,16 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       `TURBO_SCM_BASE=fase-11`): 6 tasks verdes, 1292/1292. Um dos runs intermediários teve 60
       falhas que não se reproduziram em três runs cheios seguidos (dois via Turbo, um direto) —
       não explicado; no CI, Postgres e Redis nascem zerados a cada run.
+- [x] Revisão (duas frentes, padrões e spec): o revisor de spec mediu de novo o afetado por
+      pacote e o comportamento com base inexistente — a narrativa "aborta" valia só para ref
+      por nome, corrigida no workflow, no 11.6 e aqui; "Node da mesma fonte que o Dockerfile"
+      era coincidência de major, não leitura, reescrito. Da revisão de padrões: `base_ref` por
+      `env:`; o aviso do dotenv-cli sobre `.env.development` ausente comentado no workflow; a
+      pendência dos required status checks virou item do backlog. Ficou para o dono decidir
+      (levantado pelos revisores, não decidido): `docs:check` no `turbo run` e `pull_request`
+      sem restrição de alvo são acréscimos à letra da issue; e a terceira saída para "PR só de
+      docs da API" — um step que detecta diff restrito a `apps/api/docs/**` e omite `test` do
+      `turbo run` — não foi adotada por ser lógica de caminho fora do Turbo.
 - [x] Job `commitlint`, só em PR: `pnpm install --frozen-lockfile --ignore-scripts
       --filter=pet-oasis` (76 pacotes, só a raiz — medido numa cópia isolada; sem o filtro o
       `pnpm exec` puxa os 760 do workspace) e `commitlint --from <base.sha> --to <head.sha>
@@ -60,7 +72,8 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
       uma suíte vermelha, ver o PR ficar vermelho, e fechá-lo. Depois, o badge do README da
       raiz só aparece quando o workflow tiver rodado ao menos uma vez em `main`. Proteger
       `dev`/`main` com "required status checks" (`verify (affected)` e `commitlint (PR
-      commits)`) é o passo seguinte natural, e é configuração do GitHub, não do repo.
+      commits)`) é o passo seguinte natural — está no `docs/reference/backlog.md`, com o
+      contexto, porque é configuração do GitHub, não do repo.
 - [x] README da raiz: badge e seção "CI". README da API: CI na "Disciplina de processo".
       `CLAUDE.md` da API (que a raiz importa até a 07): fase → `dev` e `dev` → `main` só por PR
       com CI verde; o commitlint do CI deixou de ser "ainda por construir"; `pnpm test` com

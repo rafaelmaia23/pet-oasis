@@ -60,6 +60,9 @@ Da Fase 11 (issue 05): a varredura do repo inteiro pelo Biome (11.4, rodada de `
 ### `.env.example` com `SENTRY_DSN=` vazio não passa no `env.ts` — **P**
 Da Fase 11 (issue 06): copiar o `.env.example` fielmente não sobe a app — `SENTRY_DSN=` vazio é recusado por `z.url().optional()` (string vazia não é URL nem ausência), enquanto `AXIOM_TOKEN=` vazio passa por ser `z.string()`. O código já trata `SENTRY_DSN` falsy como "sem Sentry" (`src/lib/sentry.ts`), então a intenção é "vazio = ausente". O workflow do CI apaga a linha ao gerar o `.env.test`; o `.env.test` local nem tem a chave. **Correção possível:** um `z.preprocess` que converte `""` em `undefined` nas variáveis opcionais de URL, ou o template deixar de listar a chave (com o comentário dizendo que ela é opcional) — decisão do dono, não tomada.
 
+### Proteger `dev` e `main` com os checks do CI como obrigatórios — **P**
+Da Fase 11 (issue 06): o CI roda em todo PR, mas hoje nada impede o merge com o PR vermelho — a barreira é a regra do `CLAUDE.md`, não o GitHub. "Branch protection" (ou ruleset) em `dev` e `main` com `verify (affected)` e `commitlint (PR commits)` como *required status checks* transforma a regra em mecanismo. É configuração do repositório no GitHub, não do código; fazer depois do primeiro PR real passar pelo workflow, quando os nomes dos jobs estiverem provados.
+
 ### CI: supply chain e segredos — **M**
 `pnpm audit` no pipeline, Dependabot ou Renovate ligado para dependências, e `gitleaks` varrendo o histórico atrás de segredo commitado por engano. Somar um `SECURITY.md` na raiz com o canal de reporte. Barato, e no contexto de portfólio comunica maturidade mais rápido que qualquer feature.
 

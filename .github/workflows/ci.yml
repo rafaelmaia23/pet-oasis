@@ -14,8 +14,8 @@
 #               tem hook).
 #
 # Node vem de `engines.node` e pnpm de `packageManager`, os dois do package.json da raiz —
-# a mesma fonte que o Dockerfile e a máquina de quem desenvolve leem. Não há versão escrita
-# aqui.
+# a fonte que a máquina de quem desenvolve lê (o Dockerfile fixa a mesma major por
+# disciplina, em `FROM node:24`). Não há versão escrita aqui.
 name: CI
 
 on:
@@ -111,7 +111,9 @@ jobs:
           sed -i '/^SENTRY_DSN=$/d' .env.test
 
       # O client do Prisma é gerado, não versionado (`src/generated/`): typecheck e suíte
-      # precisam dele. `generate` não conecta — a URL é placeholder, como no Dockerfile.
+      # precisam dele. `generate` não conecta — a URL é placeholder, como no Dockerfile. O
+      # script lê `.env.development`, que não existe no runner: o dotenv-cli só avisa e segue
+      # (o Dockerfile depende do mesmo), então o aviso no log é esperado, não é pista.
       - name: Generate Prisma client
         run: pnpm --filter api run db:generate
         env:
@@ -119,17 +121,22 @@ jobs:
 
       # A base do afetado. PR: a branch-alvo (`origin/<base>`), então o diff é exatamente o
       # do PR. Push: o commit anterior da branch (`event.before`), então o diff é o do push —
-      # num merge de fase, tudo que a fase trouxe. Quando essa base não existe no clone
-      # (branch recém-criada: `before` é zero; force-push: o commit sumiu), o Turbo não cai
-      # para "tudo" sozinho — ele aborta com erro de git —, então a queda é feita aqui: sem
-      # base, roda tudo.
+      # num merge de fase, tudo que a fase trouxe. Quando essa base não existe no clone, o
+      # Turbo se comporta de dois jeitos (medido): SHA desconhecido (branch recém-criada, onde
+      # `before` é zero; force-push) vira warning e "tudo mudou"; ref por NOME desconhecida
+      # aborta com erro de git. A queda para "tudo" é feita aqui, uniforme: sem base, roda
+      # sem `--affected`. O nome da branch entra por `env:`, não interpolado no shell — é
+      # entrada que quem abre o PR controla.
       - name: Resolve the base for --affected
         id: base
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           if [ "${{ github.event_name }}" = pull_request ]; then
-            base="origin/${{ github.base_ref }}"
+            base="origin/$BASE_REF"
           else
-            base="${{ github.event.before }}"
+            base="$BEFORE_SHA"
           fi
           if git cat-file -e "$base^{commit}" 2>/dev/null; then
             echo "base=$base" >> "$GITHUB_OUTPUT"

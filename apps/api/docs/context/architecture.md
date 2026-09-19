@@ -251,9 +251,12 @@ Logo "PR só de docs não roda a suíte" vale para docs da **raiz** (README, `.g
 `CLAUDE.md` da raiz), que não são de pacote nenhum, e não para `apps/api/docs/`. Filtrar por
 caminho no próprio workflow (`paths-ignore`) resolveria isso ao custo de pular também o
 `docs:check` — justamente o que um PR de docs precisa —, então a limitação ficou. **(2)** Base
-que não existe no clone (branch recém-criada, onde `before` é zero; force-push) não faz o Turbo
-cair para "tudo": ele aborta com erro de git. O workflow confere a base com `git cat-file -e`
-e, sem ela, roda sem `--affected`. **(3)** O modo estrito de env do Turbo deixa passar `CI` e
+que não existe no clone tem dois desfechos no Turbo: SHA desconhecido (branch recém-criada,
+onde `before` é zero; force-push) vira `WARNING unable to detect git range` e "tudo mudou";
+ref por **nome** desconhecida (`origin/xyz`) aborta com erro de git. O workflow não depende
+de nenhum dos dois: confere a base com `git cat-file -e` e, sem ela, roda sem `--affected`.
+O nome da branch-alvo entra no step por `env:`, não interpolado no `run:` — é entrada que
+quem abre o PR controla. **(3)** O modo estrito de env do Turbo deixa passar `CI` e
 `GITHUB_ACTIONS` (variáveis de vendor de CI) sem `passThroughEnv`, e uma variável própria
 (`FOO`) não — é o que permite ao `test` da API ler `CI` sem tocar o `turbo.jsonc`.
 
@@ -283,8 +286,9 @@ versionado e o typecheck precisa dele.
 O job `commitlint` roda só em PR, instala só as dependências da raiz (`pnpm install
 --filter=pet-oasis`: 76 pacotes em vez de 760) e lê `--from <base.sha> --to <head.sha>` — só os
 commits do PR, merges ignorados pelo padrão do commitlint. Node vem de `engines.node` e pnpm de
-`packageManager`, os dois do `package.json` da raiz — a mesma fonte que o Dockerfile lê; não há
-versão escrita no workflow.
+`packageManager`, os dois do `package.json` da raiz; não há versão escrita no workflow. O
+Dockerfile fixa a mesma major em `FROM node:24` por disciplina, não por leitura — é o
+`engines` que faz o pnpm recusar um Node fora da faixa, nos três lugares.
 
 ---
 

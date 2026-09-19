@@ -1,8 +1,11 @@
+import type {
+  CreateBrandInput,
+  UpdateBrandInput,
+} from "@pet-oasis/api-contracts/catalog";
 import { createConflictError, createNotFoundError } from "@/errors";
 import { deleteImage, imageUrls, storeImage } from "@/lib/storage";
-import { resolveSlug } from "@/modules/catalog/catalog.schema";
+import { resolveSlug } from "@/modules/catalog/catalog.slug";
 import * as brandRepository from "./brand.repository";
-import type { CreateBrandInput, UpdateBrandInput } from "./brand.schema";
 
 /**
  * Sem escopo `own` × `:others`: marca é dado global da loja, não de um dono. A

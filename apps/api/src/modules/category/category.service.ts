@@ -3,7 +3,7 @@ import {
   createNotFoundError,
   createValidationError,
 } from "@/errors";
-import { resolveSlug } from "@/modules/catalog/catalog.schema";
+import { resolveSlug } from "@/modules/catalog/catalog.slug";
 import * as categoryRepository from "./category.repository";
 import type {
   CreateCategoryInput,

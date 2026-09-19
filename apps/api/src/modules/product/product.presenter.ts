@@ -1,6 +1,6 @@
+import { brandViews } from "@pet-oasis/api-contracts/catalog";
 import { z } from "zod";
 import { PetSpecies, ProductStatus } from "@/generated/prisma/enums";
-import { brandViews } from "@/modules/brand/brand.presenter";
 import { tagViews } from "@/modules/tag/tag.presenter";
 import { createPresenter } from "@/utils/presenter";
 

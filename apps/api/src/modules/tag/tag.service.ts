@@ -1,5 +1,5 @@
 import { createNotFoundError } from "@/errors";
-import { resolveSlug } from "@/modules/catalog/catalog.schema";
+import { resolveSlug } from "@/modules/catalog/catalog.slug";
 import * as tagRepository from "./tag.repository";
 import type { CreateTagInput, UpdateTagInput } from "./tag.schema";
 

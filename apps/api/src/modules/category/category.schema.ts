@@ -1,9 +1,9 @@
-import { z } from "zod";
 import {
   catalogDescriptionSchema,
   catalogNameSchema,
   slugSchema,
-} from "@/modules/catalog/catalog.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import { z } from "zod";
 
 /**
  * Validação **sintática** da categoria. As regras da árvore (pai existe,

@@ -1,13 +1,13 @@
 import {
+  catalogNameSchema,
+  slugSchema,
+} from "@pet-oasis/api-contracts/catalog";
+import {
   buildOffsetQuerySchema,
   defineSortConfig,
 } from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
 import { PetSpecies, ProductStatus } from "@/generated/prisma/enums";
-import {
-  catalogNameSchema,
-  slugSchema,
-} from "@/modules/catalog/catalog.schema";
 import { variantFieldsSchema } from "./product.variant.schema";
 
 /**

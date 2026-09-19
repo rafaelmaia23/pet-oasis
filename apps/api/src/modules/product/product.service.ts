@@ -6,7 +6,7 @@ import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
 import { imageUrls } from "@/lib/storage";
 import * as brandRepository from "@/modules/brand/brand.repository";
 import { withLogo } from "@/modules/brand/brand.service";
-import { resolveSlug } from "@/modules/catalog/catalog.schema";
+import { resolveSlug } from "@/modules/catalog/catalog.slug";
 import * as categoryRepository from "@/modules/category/category.repository";
 import { subtreeIdsOf } from "@/modules/category/category.tree";
 import * as tagRepository from "@/modules/tag/tag.repository";

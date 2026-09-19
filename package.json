@@ -14,9 +14,16 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "docs:check": "turbo run docs:check"
+    "docs:check": "tsx tools/check-docs-links.ts",
+    "typecheck:root": "tsc --noEmit",
+    "lint:root": "biome check tools"
   },
   "devDependencies": {
-    "turbo": "2.10.13"
+    "@biomejs/biome": "^2.4.15",
+    "@pet-oasis/tsconfig": "workspace:*",
+    "@types/node": "^25.8.0",
+    "tsx": "^4.22.0",
+    "turbo": "2.10.13",
+    "typescript": "^6.0.3"
   }
 }

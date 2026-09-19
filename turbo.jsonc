@@ -7,8 +7,8 @@
   // ele, o hash de uma task só vê os arquivos do próprio pacote, e trocar a
   // base do Biome devolvia `lint` verde do cache (provado na 11.4).
   //
-  // Nenhuma task cacheada lê variável de ambiente — typecheck, lint, build e
-  // docs:check só leem arquivos —, então não há `env`/`globalEnv` a declarar.
+  // Nenhuma task cacheada lê variável de ambiente — typecheck, lint e build só
+  // leem arquivos —, então não há `env`/`globalEnv` a declarar.
   // Quem lê ambiente é `test` (`.env.test`, via dotenv) e `dev`, e os dois não
   // cacheiam. Um `env` aqui só faz sentido quando uma task cacheada passar a
   // depender de ambiente.
@@ -22,14 +22,29 @@
       // `^build`, e não `^typecheck`: quem consome o `dist` de outro pacote
       // precisa dele construído antes de checar tipos. Hoje nenhuma
       // dependência tem build; quando o contrato tiver, a ordem já está aqui.
-      "dependsOn": ["^build"]
+      // `//#typecheck:root` é a task de raiz que cobre `tools/` (o script que
+      // não pertence a pacote nenhum): pendurada aqui, roda em todo
+      // `pnpm typecheck`, com o cache dela próprio.
+      "dependsOn": ["^build", "//#typecheck:root"]
     },
     "lint": {
       // Os pacotes de config lintam a si mesmos antes de quem os estende, e
-      // o hash deles entra no de quem os estende (ver o cabeçalho).
-      "dependsOn": ["^lint"]
+      // o hash deles entra no de quem os estende (ver o cabeçalho). A task de
+      // raiz linta `tools/` pelo mesmo motivo da de typecheck.
+      "dependsOn": ["^lint", "//#lint:root"]
     },
-    "docs:check": {},
+    // Tasks de raiz (`//#`): scripts do package.json da raiz. Só `tools/` entra
+    // no hash de cada uma (`inputs`), senão qualquer arquivo da raiz — o
+    // lockfile, um README — invalidaria o cache.
+    "//#typecheck:root": {
+      "inputs": ["tools/**", "tsconfig.json"]
+    },
+    "//#lint:root": {
+      "inputs": ["tools/**", "biome.json", "packages/biome-config/biome.json"]
+    },
+    // `docs:check` não é task do Turbo: é um script da raiz que varre o repo
+    // inteiro de uma vez (a documentação de um app cita a do outro, e o
+    // recorte por pacote esconderia isso). Roda com `pnpm docs:check`.
     "test": {
       // Sobe Postgres e Redis via Compose e lê `.env.test`: cachear exigiria
       // declarar esses inputs, e o risco é um verde de outro ambiente.

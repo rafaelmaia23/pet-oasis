@@ -28,9 +28,13 @@ da skill, sem racional, sem implementação. O *porquê* continua nos ADRs da AP
       no `apps/api/CLAUDE.md` (92 edições em 34 arquivos, cinco ADRs renomeados; ficaram o verbo
       "conta", "conta de terceiro" de Axiom/Sentry e as citações de proveniência das seções
       antigas), e *capability* virou feature efetiva em todo o monorepo (ADRs `0086`/`0087`
-      renomeados), exceto na `spec.md` desta fase, que é história. O que ainda diz "conta" fora
-      dos ADRs — `apps/api/README.md`, `docs/reference/`, `docs/guides/`, `docs/` da raiz e
-      strings de `src/` (mensagens de erro e email) — não foi tocado.
+      renomeados), exceto na `spec.md` desta fase, que é história. Numa segunda rodada, "conta" saiu também
+      de toda a documentação restante (README da API, `docs/reference/`, `docs/guides/`, a
+      coleção Bruno, `docs/todo.md`, `docs/reference/backlog.md`, `CLAUDE.md` da raiz) e dos
+      comentários de `src/` da API e do contrato. O que a API **devolve** ao usuário final
+      (mensagens de erro, emails, descrições OpenAPI e de schema, descrições de feature) ficou
+      como está e virou item do `docs/reference/backlog.md`; o `.scratch/` de fases fechadas e os
+      testes não foram tocados.
 - [x] Nenhuma frase do glossário explica *por que* — se a definição precisa de racional, ela
       aponta para o ADR.
 - [x] `apps/api/docs/adr/README.md` (índice), `apps/api/CLAUDE.md`, `docs/agents/domain.md` e o

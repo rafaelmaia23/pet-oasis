@@ -61,7 +61,7 @@ authRouter.post(
   rateLimitByIp(tokenIpLimiter, "confirm-email-change"),
   authController.confirmEmailChange,
 );
-// Pública: o token é a credencial — quem confirma é o dono de uma conta morta,
+// Pública: o token é a credencial — quem confirma é o dono de um `User` morto,
 // que por definição não tem sessão nem consegue autenticar.
 authRouter.post(
   "/confirm-account-reactivation",

@@ -23,10 +23,10 @@ body:json {
 }
 
 docs {
-  Reativa uma conta soft-deletada. O token vem do email disparado pelo signup
-  (quando email e cpf batem com a conta excluída) ou pelo POST /users/:id/reactivate.
+  Reativa um usuário soft-deletado. O token vem do email disparado pelo signup
+  (quando email e cpf batem com o usuário excluído) ou pelo POST /users/:id/reactivate.
 
-  A senha nova é obrigatoria: a conta nunca volta com a credencial de antes.
+  A senha nova é obrigatoria: o usuário nunca volta com a credencial de antes.
   O `phone` so e exigido quando a reativacao precisa criar o perfil de cliente
   do zero — remova o campo quando o perfil ja existia e sera apenas restaurado.
 }

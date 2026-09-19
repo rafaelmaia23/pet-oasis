@@ -114,8 +114,8 @@ const envSchema = z.object({
   // 9.10: upload de imagem, contado **por usuário** (AA18) e não por IP — o
   // primeiro limiter do projeto com chave que não é IP nem email. Por IP
   // atropelaria o mutirão de cadastro inicial, em que vários funcionários
-  // saem pelo mesmo NAT; e o que este balde barra (script bugado, conta
-  // comprometida) é propriedade de uma conta, não de uma saída de rede.
+  // saem pelo mesmo NAT; e o que este balde barra (script bugado, usuário
+  // comprometido) é propriedade de um usuário, não de uma saída de rede.
   RATE_LIMIT_UPLOAD_MAX: z.coerce.number().int().positive().default(150),
   RATE_LIMIT_UPLOAD_WINDOW_MS: z.coerce
     .number()

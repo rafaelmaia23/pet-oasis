@@ -12,7 +12,7 @@ import { redis } from "@/lib/redis";
  * `docs/adr/0003-rate-limiting-and-lockout.md`.
  *
  * Fail-open (D2): qualquer falha do Redis é capturada, loga `error` e a
- * conta segue destravada — o lockout nunca impede um login por falha de infra.
+ * usuário segue destravado — o lockout nunca impede um login por falha de infra.
  */
 
 const log = logger.child({ module: "lockout" });
@@ -50,7 +50,7 @@ type UserWithRoles = { roles: { role: { name: string } }[] };
  * Isenção do lockout (8.8): a senha do usuário demo é pública (README), então
  * o lockout ali não protege credencial nenhuma — só abre um DoS contra a
  * porta de entrada do projeto. Identificado pela role `demo`, não por email,
- * para generalizar a futuras contas de demonstração. Mesmo idioma de `isAdmin`
+ * para generalizar a futuros usuários de demonstração. Mesmo idioma de `isAdmin`
  * (`src/lib/authorization.ts`).
  */
 export function isLockoutExempt(user: UserWithRoles): boolean {
@@ -70,7 +70,7 @@ export type FailureOutcome =
 /**
  * Transição de estado pura para uma tentativa de senha errada.
  *
- * - Já travado (dentro da janela atual): no-op — martelar uma conta já
+ * - Já travado (dentro da janela atual): no-op — martelar um usuário já
  *   travada não precisa escalar de novo.
  * - Nunca travou neste ciclo (`backoffLevel === 0`): conta falhas até o
  *   `threshold`; ao atingi-lo, trava pela primeira vez (`windowMs`).

@@ -9,10 +9,10 @@
 ## Segurança
 
 ### ~~Timing attack no login e enumeração de usuário~~ — ✅ resolvido (Fase 10.9)
-Medido com o custo real do bcrypt: email desconhecido respondia em 5 ms e senha errada em 172 ms. O ramo sem conta passou a verificar contra um hash de ninguém (`simulatePasswordVerification`, `src/lib/password.ts`) e as medianas ficaram em 171 ms contra 172 ms. Racional e método da medição em `apps/api/docs/adr/0064-relogio-login-nao-oraculo-email-desconhecido-paga-bcrypt.md`.
+Medido com o custo real do bcrypt: email desconhecido respondia em 5 ms e senha errada em 172 ms. O ramo sem usuário passou a verificar contra um hash de ninguém (`simulatePasswordVerification`, `src/lib/password.ts`) e as medianas ficaram em 171 ms contra 172 ms. Racional e método da medição em `apps/api/docs/adr/0064-relogio-login-nao-oraculo-email-desconhecido-paga-bcrypt.md`.
 
-### Resíduo de tempo no login: o contador de lockout só no ramo com conta — **P**
-Depois da 10.9 sobra ~1 ms entre as duas recusas: o ramo com conta grava o contador de lockout no Redis (`lockout.recordFailure`) e o ramo sem conta não. Em rede local é ruído; em Redis remoto pode voltar a ser mensurável. **Correção possível:** uma escrita dummy no Redis no ramo sem conta, ou medir com o Redis de produção antes de decidir que não vale o custo. Decisão de produto, não tomada.
+### Resíduo de tempo no login: o contador de lockout só no ramo com usuário — **P**
+Depois da 10.9 sobra ~1 ms entre as duas recusas: o ramo com usuário grava o contador de lockout no Redis (`lockout.recordFailure`) e o ramo sem usuário não. Em rede local é ruído; em Redis remoto pode voltar a ser mensurável. **Correção possível:** uma escrita dummy no Redis no ramo sem usuário, ou medir com o Redis de produção antes de decidir que não vale o custo. Decisão de produto, não tomada.
 
 ### ~~Comprimento máximo em todo campo de texto~~ — ✅ resolvido (Fase 10.13)
 Catálogo e pet já tinham teto; faltavam identidade e sessão (email 254, senha conferida 100, token 64, CPF 14 e telefone 20 medidos no texto cru com máscara, `cursor` 128, `targetId` 36). Cada teto sai como `maxLength` no `/openapi.json` e tem teste no módulo. Racional em `apps/api/docs/adr/0128-todo-campo-texto-tem-teto-teto-contrato.md`.
@@ -38,7 +38,7 @@ No signup e no change-password, consultar a API de range do Have I Been Pwned po
 ### Rotação de segredo do JWT com `kid` — **M**
 Hoje a troca do segredo invalida todas as sessões de uma vez. Suportar múltiplas chaves com `kid` no header permite rotacionar sem derrubar ninguém. Só vale quando houver usuário real; até lá, o procedimento manual de rotação documentado já basta.
 
-### Lock manual de conta pelo admin — **M**
+### Lock manual de usuário pelo admin — **M**
 A Fase 7.10 entrega só o *desbloqueio*; o lock acontece apenas automaticamente por tentativas erradas. Um lock manual (suspensão temporária sem o peso do ban) é um degrau intermediário útil, mas exige decidir como convive com `bannedAt` e `status` — o que reabre desenho de negócio já fechado.
 
 ### Auditar a leitura do audit log — **P**
@@ -126,6 +126,9 @@ A Fase 9 guarda só o preço corrente (`ProductVariant.priceCents`). O congelame
 
 ### ~~Migração de token para cookie httpOnly~~ — ✅ resolvido fora deste repo (Fase 10)
 O gatilho documentado ocorreu — o frontend próprio nasceu (`pet-oasis-web`) — e a resposta veio do lado dele, não daqui: o front adotou **BFF**, guardando a sessão num cookie `httpOnly` cifrado do **domínio dele**, de modo que o token nunca chega ao JavaScript do navegador. A API continua Bearer e continua sem CSRF no escopo, que era a contrapartida temida deste item. O ganho pretendido (armazenamento seguro, não depender do cliente fazer certo) foi obtido sem que a API trocasse de mecanismo — e é isso que a mantém universal para o app mobile planejado, que não usaria cookie. Item encerrado: se um segundo cliente de navegador aparecer sem BFF, ele reabre, mas como decisão daquele cliente.
+
+### Textos que a API entrega ao usuário final ainda dizem "conta" onde o glossário diz `User` — **M**
+O glossário da API (`apps/api/CONTEXT.md`, Fase 11, issue 08) fixou `User`/usuário e a documentação inteira foi alinhada — mas o que a API **devolve** ficou como estava: 41 strings em 15 arquivos de `src/` (`message`/`action` dos erros de login, lockout, ban e reativação; os emails de reativação; as descrições OpenAPI em `src/docs/`; as descrições de feature semeadas em `feature.constants.ts`; os `description` de schema no contrato). O guia de integração cita a resposta real (`"Conta não verificada"`) e por isso também não mudou. Mudar é decisão de produto: "conta" pode ser a palavra certa para quem lê a tela, e o custo é o mesmo em qualquer direção — os testes que afirmam mensagem, o `openapi.json` e o `mailpit` mudam juntos. Os **`code`** (`ACCOUNT_BANNED`) e o enum `ACCOUNT_REACTIVATION` são contrato e ficam fora, seja qual for a escolha.
 
 ---
 
@@ -286,5 +289,5 @@ quebra o email correspondente sem erro visível em lugar nenhum.
 
 **Ordem de execução, planejada e relaxada:** a regra era virar `APP_URL` para o apex só depois de
 o front ter as quatro rotas no ar; na demo ela foi virada antes, por decisão do dono do projeto
-(demo efêmera, sem conta real). O porquê, e por que a regra segue valendo para deploy com
+(demo efêmera, sem usuário real). O porquê, e por que a regra segue valendo para deploy com
 usuários, em `apps/api/docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md`.

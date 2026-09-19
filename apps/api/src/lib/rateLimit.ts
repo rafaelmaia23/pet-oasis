@@ -20,7 +20,7 @@ export type RateLimitRule =
   | "signup"
   | "forgot-password"
   | "verify-email-resend"
-  // 8.7: os dois pontos que disparam email sem o ator provar posse da conta.
+  // 8.7: os dois pontos que disparam email sem o ator provar posse do `User`.
   // Compartilham o balde de email-alvo com as duas rotas acima (K27) — o
   // orçamento é do email, não do ator; a `rule` só distingue a origem no audit.
   | "signup-reactivation"
@@ -83,7 +83,7 @@ export const tokenIpLimiter = new RateLimiterRedis({
 
 // Leitura pública do catálogo (9.6). Balde próprio e por IP porque aqui não há
 // identidade nenhuma: é a primeira superfície do projeto que responde em volume
-// a quem não tem conta. Cobre também `GET /breeds`, que subiu na 9.3 sem
+// a quem não tem usuário. Cobre também `GET /breeds`, que subiu na 9.3 sem
 // limiter — risco baixo e assumido na época, fechado aqui.
 export const catalogIpLimiter = new RateLimiterRedis({
   storeClient: redis,
@@ -94,8 +94,8 @@ export const catalogIpLimiter = new RateLimiterRedis({
 
 // Upload de imagem (9.10/AA18). Balde por **usuário**, não por IP: por IP ele
 // atropelaria o mutirão de cadastro inicial (vários funcionários, um NAT só),
-// e o que ele barra — script bugado, conta comprometida — é propriedade de uma
-// conta. O limite estrutural mais forte continua sendo o teto de imagens por
+// e o que ele barra — script bugado, usuário comprometido — é propriedade de uma
+// usuário. O limite estrutural mais forte continua sendo o teto de imagens por
 // produto, que é regra de domínio e não orçamento de janela.
 export const uploadUserLimiter = new RateLimiterRedis({
   storeClient: redis,

@@ -76,7 +76,7 @@ Cobertura mínima estabelecida na Fase 7.5, revisada a cada módulo novo:
 
 - **auth** — login (sucesso e falha), refresh, rotação de token, **detecção de reuso de refresh token**, logout.
 - **password** — reset solicitado e concluído, change concluído, uso de token expirado.
-- **verificação de email** — envio disparado (com `trigger`: `ACCOUNT_CREATION` na criação da conta, `RESEND` no reenvio pedido pelo usuário), falha de envio (em `email`, `error`), token inválido.
+- **verificação de email** — envio disparado (com `trigger`: `ACCOUNT_CREATION` na criação do usuário, `RESEND` no reenvio pedido pelo usuário), falha de envio (em `email`, `error`), token inválido.
 - **user** — criação, soft delete, ban e unban.
 - **permission** — grant e revoke de role e de override.
 - **ciclo de vida** — boot, SIGTERM, fechamento de conexões, execução de scripts de manutenção.
@@ -94,7 +94,7 @@ Trilha durável de ações sensíveis, em `AuditLog`. Cada linha é evidência: 
 1. **Append-only.** A aplicação não faz `UPDATE` nem `DELETE` em `AuditLog`. A única exceção é o script de retenção (§7), que remove linhas por idade.
 2. **Sem endpoint de escrita.** Nenhuma rota grava audit diretamente; a gravação nasce sempre de uma ação de negócio.
 3. **Taxonomia fechada.** Toda ação vem da tabela em §4.3. Ação nova exige entrada nesta política antes do código.
-4. **`metadata` sem PII.** Apenas ids e enums. Nunca email, nome, telefone ou endereço. **Conjunto** de enums também vale (`string[]`, aberto na 8.4): a reativação de conta precisa dizer *quais* perfis voltaram, não quantos, e um `ProfileKind[]` continua sendo enum. O que a regra proíbe é dado pessoal, não cardinalidade.
+4. **`metadata` sem PII.** Apenas ids e enums. Nunca email, nome, telefone ou endereço. **Conjunto** de enums também vale (`string[]`, aberto na 8.4): a reativação de usuário precisa dizer *quais* perfis voltaram, não quantos, e um `ProfileKind[]` continua sendo enum. O que a regra proíbe é dado pessoal, não cardinalidade.
 5. **Consistência transacional.** Ação que muda estado grava o audit na **mesma `$transaction`**: se o audit falha, a ação é desfeita. Uma trilha com buracos é pior que trilha nenhuma, porque induz a conclusões erradas. **Como (7.6):** a transação vive no **repository** (regra "só o repo toca o Prisma"); o **service** decide a semântica e passa um `AuditDescriptor` ao método de escrita, que roda a mutação e `record(descriptor, tx)` na mesma `$transaction` interativa. Com `tx`, `record` deixa o erro **propagar** — a transação inteira reverte.
 6. **Eventos sem transação** (login falho, e futuramente rate limit e lockout) gravam direto: `record` sem `tx` escreve fora de transação, **engole** a falha e emite `error` no application log — não derruba o request.
 7. **`record` é lib de observabilidade**, a mesma classe de exceção do `logger`/`AsyncLocalStorage` (§6): pode ser chamada de qualquer camada, mas nenhuma regra de negócio lê dela.
@@ -216,7 +216,7 @@ dispara sai como `PRODUCT_IMAGES_REORDERED` com `reason: "COMPACTION"`, separada
 da reordenação pedida por um humano — as duas mexem no mesmo dado, mas só uma é
 uma decisão de alguém.
 
-`actorId` é nulo quando não há ator identificado (login falho de email inexistente, script automatizado). `AUTH_LOGIN_FAILED` de conta existente registra o `targetId` do dono, mesmo sem ator.
+`actorId` é nulo quando não há ator identificado (login falho de email inexistente, script automatizado). `AUTH_LOGIN_FAILED` de usuário existente registra o `targetId` do dono, mesmo sem ator.
 
 ---
 

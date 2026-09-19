@@ -14,7 +14,7 @@ import { getUserForFeatureComputation } from "@/modules/user/user.repository";
  * - `authenticate` — falha vira 401. É o modo de tudo que não é vitrine.
  * - `optionalAuthenticate` — falha vira anônimo. Nasceu na 9.6 para a vitrine
  *   pública do catálogo (9.1/N15): o mesmo `GET /products` atende quem chegou
- *   pelo Google sem conta e o funcionário logado, e **nunca** responde 401.
+ *   pelo Google sem usuário e o funcionário logado, e **nunca** responde 401.
  *
  * Rota montada com `optionalAuthenticate` lê `req.user` direto — nunca via
  * `getAuthUser`, que lança 401 quando ele falta.

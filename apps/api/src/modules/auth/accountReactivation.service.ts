@@ -27,13 +27,13 @@ const BANNED_ACCOUNT_ERROR = {
 };
 
 /**
- * Quem pediu a reativação. O self-service é o signup reclamando a própria conta
+ * Quem pediu a reativação. O self-service é o signup reclamando o próprio `User`
  * (traz só o perfil de cliente, D11); `ADMIN` é o `POST /users/:id/reactivate`.
  */
 export type ReactivationSource = "SELF" | "ADMIN";
 
 /**
- * A escolha do ator, congelada no token: com que perfis a conta volta e, quando
+ * A escolha do ator, congelada no token: com que perfis o usuário volta e, quando
  * o ator estreitou, com que roles. `roleIds` vazio = default do D8 (todas as que
  * morreram na cascata de cada perfil).
  */
@@ -61,10 +61,10 @@ function buildAccountReactivationEmail(
 }
 
 /**
- * Emite o token de reativação e avisa o dono da conta. Os dois caminhos (signup
+ * Emite o token de reativação e avisa o dono do `User`. Os dois caminhos (signup
  * e admin) convergem aqui — o que muda é só o `source` e a escolha congelada.
  *
- * Nada da conta é tocado neste momento: quem reativa é a confirmação, com o
+ * Nada do usuário é tocado neste momento: quem reativa é a confirmação, com o
  * token na mão. Isso é o que permite ao admin iniciar a reativação sem decidir
  * a senha de outra pessoa.
  */
@@ -107,7 +107,7 @@ export async function requestAccountReactivation(
 
 /**
  * Confirma a reativação. Rota pública: o token **é** a credencial, e por isso a
- * senha nova vem junto (K17) — a conta nunca volta com a credencial de antes,
+ * senha nova vem junto (K17) — o usuário nunca volta com a credencial de antes,
  * que pode ter sido justamente o motivo da deleção.
  */
 export async function confirmAccountReactivation(
@@ -139,7 +139,7 @@ export async function confirmAccountReactivation(
   }
 
   // `findUserById` filtra `deletedAt: null` e não enxergaria o alvo. Ausente
-  // aqui = conta já reativada por um token anterior, ou apagada de vez: a
+  // aqui = usuário já reativado por um token anterior, ou apagada de vez: a
   // resposta é a mesma do token desconhecido, sem revelar qual dos dois.
   const user = await findDeletedUserById(reactivationToken.userId);
 
@@ -156,9 +156,9 @@ export async function confirmAccountReactivation(
   }
 
   // Mesmo idioma "uma rota, dois ramos" da 8.3: o estado do banco decide. Há
-  // linha do perfil (morta, porque a conta está morta) → restaura; não há →
+  // linha do perfil (morta, porque o usuário está morto) → restaura; não há →
   // nasce do zero. Criar do zero só vale para o de cliente: o de funcionário é
-  // ato próprio, com a conta viva (`POST /users/:id/employee`).
+  // ato próprio, com o usuário vivo (`POST /users/:id/employee`).
   const kinds = reactivationToken.restoreProfiles;
   const mustCreateCustomer = kinds.includes("CUSTOMER") && !user.customer;
 

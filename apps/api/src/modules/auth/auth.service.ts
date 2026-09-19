@@ -45,10 +45,10 @@ export async function login(
   const user = await userRepository.findUserByEmail(data.email);
 
   if (!user) {
-    // Paga o bcrypt mesmo sem conta: senão o relógio distingue este ramo do de
-    // senha errada, e vira oráculo de existência de conta (10.9).
+    // Paga o bcrypt mesmo sem usuário: senão o relógio distingue este ramo do de
+    // senha errada, e vira oráculo de existência de usuário (10.9).
     await simulatePasswordVerification(data.password);
-    // Sem `userId`: não há conta. O email fica de fora de propósito — a linha
+    // Sem `userId`: não há usuário. O email fica de fora de propósito — a linha
     // não precisa dele para contar a história, e ele é PII.
     log.warn({ reason: "UNKNOWN_EMAIL" }, "login failed");
     // Sem ator e sem alvo: evidência de tentativa de adivinhação de credencial.
@@ -77,10 +77,10 @@ export async function login(
     });
     // Conta as falhas mesmo sem checar o estado de travamento aqui: quem não
     // sabe a senha continua recebendo 401 igual a hoje, sem pista sobre a
-    // conta (mesmo espírito anti-enumeração do bannedAt/status abaixo). O
+    // usuário (mesmo espírito anti-enumeração do bannedAt/status abaixo). O
     // papel do lockout é impedir que uma senha eventualmente certa complete o
     // login dentro da janela de bloqueio — só precisa ser checado no ramo de
-    // senha correta. Conta demo (8.8) é isenta: a senha é pública, então o
+    // senha correta. Usuário demo (8.8) é isento: a senha é pública, então o
     // lockout ali não protege credencial nenhuma — só abriria DoS.
     if (!lockoutExempt) {
       await lockout.recordFailure(user.id);
@@ -150,7 +150,7 @@ export async function login(
   }
 
   // Login legítimo: se havia contador/backoff de tentativas erradas, limpa.
-  // Login limpo de uma conta que nunca falhou não grava nada (no-op).
+  // Login limpo de um usuário que nunca falhou não grava nada (no-op).
   await lockout.clearLockout(user.id, "SUCCESSFUL_LOGIN");
 
   const accessToken = signAccessToken(user.id);

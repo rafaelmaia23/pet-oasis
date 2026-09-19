@@ -63,7 +63,7 @@ Existe um usuário público **read-only** com permissão de leitura de *administ
 
 O ambiente demo é resetado diariamente às **04:00 UTC** (dados de teste voltam ao estado inicial) — é higiene do deploy de portfólio, não o que garante o read-only (isso é o RBAC acima).
 
-A conta demo é isenta do account lockout (a role `demo` a identifica): como a senha acima é pública, travar a conta por tentativas erradas travaria o acesso de **todo mundo**, não protegeria credencial nenhuma. O rate limit por IP continua valendo normalmente.
+O usuário demo é isento do account lockout (a role `demo` a identifica): como a senha acima é pública, travá-lo por tentativas erradas travaria o acesso de **todo mundo**, não protegeria credencial nenhuma. O rate limit por IP continua valendo normalmente.
 
 1. Abra a **[referência interativa](https://pet-oasis-api.maiahub.com.br/reference)**.
 2. Chame `POST /auth/login` com as credenciais acima e copie o `accessToken` da resposta.
@@ -94,7 +94,7 @@ curl -s -X DELETE $BASE/users/qualquer-id -H "Authorization: Bearer $TOKEN" -o /
 
 <br>
 
-### 🅱️ Roteiro B — criar sua própria conta, do zero ao `/me`
+### 🅱️ Roteiro B — criar seu próprio usuário, do zero ao `/me`
 
 O ciclo completo de onboarding funciona ponta a ponta em produção, com email real (via [Resend](https://resend.com)).
 
@@ -105,17 +105,17 @@ O ciclo completo de onboarding funciona ponta a ponta em produção, com email r
    >
    > `…/verify-email?token=`**`7ce85bee0368…`** ← é essa parte que você usa.
 
-3. **`POST /auth/verify-email`** com `{ "token": "<o token copiado>" }` → **204**. Sua conta vira **`ACTIVE`**.
+3. **`POST /auth/verify-email`** com `{ "token": "<o token copiado>" }` → **204**. Seu usuário vira **`ACTIVE`**.
 4. **`POST /auth/login`** → recebe o `accessToken` (JWT de 15 min) e um cookie httpOnly com o refresh token.
 5. **`GET /me`** → seu perfil, suas roles e a lista de features efetivas calculadas para você.
 
 Dali em diante dá para explorar o resto: `GET /auth/sessions` lista suas sessões vivas, `POST /auth/refresh` rotaciona o par de tokens, `POST /auth/change-password` troca a senha e derruba todas as sessões, `DELETE /auth/sessions/:id` revoga uma sessão específica.
 
-> Tentar `GET /users` com essa conta responde **403** — um cliente não tem `read:user:others`. É o RBAC de novo, agora do outro lado do balcão.
+> Tentar `GET /users` com esse usuário responde **403** — um cliente não tem `read:user:others`. É o RBAC de novo, agora do outro lado do balcão.
 
 <br>
 
-### 🅲 Roteiro C — a vitrine pública, sem conta nenhuma
+### 🅲 Roteiro C — a vitrine pública, sem usuário nenhum
 
 O catálogo responde **sem token**: um e-commerce vive de quem chega pelo Google antes de ter cadastro. Cole no terminal — não precisa de login:
 
@@ -134,7 +134,7 @@ curl -s "$BASE/products/racao-golden-formula-caes-adultos-frango-e-arroz" | head
 
 O passo 2 devolve `{"q":"racao golen","applied":"racao golden"}`: a palavra que não existe no dicionário do catálogo é trocada pela mais parecida antes da busca rodar — e **só** ela, porque a query é um "E" e corrigir a palavra certa estragaria o resultado. É Postgres puro (`tsvector` + `unaccent` + `pg_trgm`), sem motor de busca externo.
 
-Agora repita o passo 1 **com** o token da conta demo do Roteiro A:
+Agora repita o passo 1 **com** o token do usuário demo do Roteiro A:
 
 ```bash
 curl -s "$BASE/products?limit=3" -H "Authorization: Bearer $TOKEN" | head -c 600
@@ -174,16 +174,16 @@ A rota é a mesma e o corpo é outro: aparecem `status`, `stockQuantity` exato e
 - Perfis criados/removidos em transação; o último perfil ativo não pode ser removido.
 - Roles são validadas contra o perfil (`appliesTo`): não dá para dar a role `manager` a quem não é funcionário.
 - **Deletar cascateia** — usuário → perfis → roles → overrides, com um único timestamp por transação. Nunca sobra filho ativo de pai morto.
-- **E tem volta**: perfil e conta soft-deletados são reativáveis; as roles voltam por correlação de data, os overrides **nunca** voltam sozinhos (restaurar concede autoridade, e isso é sempre ação consciente).
+- **E tem volta**: perfil e usuário soft-deletados são reativáveis; as roles voltam por correlação de data, os overrides **nunca** voltam sozinhos (restaurar concede autoridade, e isso é sempre ação consciente).
 
 </td><td width="50%" valign="top">
 
-### ✉️ Ciclo de vida da conta
+### ✉️ Ciclo de vida do usuário
 - **Verificação de email obrigatória**: `PENDING → ACTIVE`, com reenvio.
 - **Recuperação de senha** por token de uso único, e troca de senha logado exigindo a senha atual — ambas invalidam todas as sessões.
 - **Banimento** ortogonal ao status (`bannedAt`/`bannedBy`/`banReason`), derrubando as sessões do alvo.
-- **Conta excluída pode voltar** — pelo próprio dono (o signup detecta e dispara o fluxo) ou por um admin; nos dois casos quem conclui é o dono, provando posse do email e definindo senha nova.
-- Endpoints públicos sensíveis respondem sempre igual, existindo o email ou não (sem enumeração de contas).
+- **Usuário excluído pode voltar** — pelo próprio dono (o signup detecta e dispara o fluxo) ou por um admin; nos dois casos quem conclui é o dono, provando posse do email e definindo senha nova.
+- Endpoints públicos sensíveis respondem sempre igual, existindo o email ou não (sem enumeração de usuários).
 
 </td></tr>
 <tr><td width="50%" valign="top">
@@ -269,7 +269,7 @@ Há também uma coleção [Bruno](https://www.usebruno.com/) versionada em [`api
 Além do catálogo de referência (roles/features, sempre semeado), o seed pode povoar dev e o próprio demo público com dados fictícios:
 
 - **`SEED_FAKE_DATA=true`** — 20 usuários fake (customers, employees, híbridos customer+employee, e cenários de banido/pendente-de-verificação/soft-deletado), todos com a mesma senha conhecida (`SEED_FAKE_USER_PASSWORD`, default `FakeOasis2026!`) — dá para logar como qualquer um pra explorar RBAC e soft delete na prática. Ligado por padrão em dev **e** no demo público.
-- **`SEED_ADMIN_USER=true`** — um usuário de teste com acesso total (role `admin`, diferente do usuário demo read-only), credenciais em `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`. **Só em dev** — nunca ligado no demo público, para não expor uma conta de escrita irrestrita na internet.
+- **`SEED_ADMIN_USER=true`** — um usuário de teste com acesso total (role `admin`, diferente do usuário demo read-only), credenciais em `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`. **Só em dev** — nunca ligado no demo público, para não expor um usuário de escrita irrestrita na internet.
 - **`SEED_FAKE_DATA=true`** — o domínio inteiro povoado: 9 marcas, 20 categorias em 3 níveis, 8 tags, 35 produtos (51 variantes, com imagem) e 15 pets em 12 donos, mais um funcionário por role nova. O dataset é escolhido por **cobertura de cenário**, não por volume: existe produto em rascunho, produto descontinuado, variante esgotada e categoria no terceiro nível porque cada um deles é o que faz um filtro, uma view ou um limite serem demonstráveis. Nomes e marcas são reais e em português — a busca com tolerância a erro só se demonstra sobre palavras que existem.
 
 Ambos são idempotentes (`pnpm run db:seed` não duplica nada) e restaurados todo dia pelo reset do ambiente demo.
@@ -284,11 +284,11 @@ Ambos são idempotentes (`pnpm run db:seed` não duplica nada) e restaurados tod
 |---|---|---|
 | ✅ | 2 | Autorização RBAC, CRUD de usuários e perfis |
 | ✅ | 3 | Auth com access JWT + refresh opaco rotativo |
-| ✅ | 4 | Email, status de conta, recuperação de senha e banimento |
+| ✅ | 4 | Email, status de usuário, recuperação de senha e banimento |
 | ✅ | 5 | OpenAPI + Scalar, coleção Bruno, containerização |
 | ✅ | 6 | Ambientes dev/test/prod, deploy e graceful shutdown |
 | ✅ | 7 | Hardening: rate limiting, account lockout, observabilidade (access/application/audit log), paginação e filtros, teto de sessões, troca de email, timeouts |
-| ✅ | 8 | Escopo de override, cascata de deleção e reativação de conta (por signup ou por admin, sempre confirmada pelo dono) |
+| ✅ | 8 | Escopo de override, cascata de deleção e reativação de usuário (por signup ou por admin, sempre confirmada pelo dono) |
 
 **Ciclo 2 — Domínio pet shop** 🔄 *em andamento* (a numeração das fases continua global)
 

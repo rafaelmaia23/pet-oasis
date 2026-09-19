@@ -29,7 +29,7 @@ export async function getUserFeatures(userId: string) {
  * exatamente as que a restauração traria de volta por correlação de data (D5).
  *
  * Devolve `Role` com as features (shape que `assertAdminForRoleAssignment` lê),
- * porque o único consumidor é o guard de não-escalação da reativação de conta:
+ * porque o único consumidor é o guard de não-escalação da reativação de usuário:
  * antes de emitir o token é preciso saber que autoridade vai voltar (K22).
  */
 export async function findRolesDeletedWith(
@@ -150,7 +150,7 @@ export async function addUserRole(
 /**
  * Revoga a role e cascateia para os overrides pendurados nela (D2), na mesma
  * transação e com **um único** timestamp (D4). O elo de baixo é o mesmo que a
- * cascata de perfil e de conta usam (`cascadeDeleteOverrides`). O audit é
+ * cascata de perfil e de usuário usam (`cascadeDeleteOverrides`). O audit é
  * montado pelo service, que precisa do número de overrides derrubados na
  * metadata (K6).
  */

@@ -21,9 +21,9 @@ const FEATURE_DESCRIPTIONS: Record<FeatureName, string> = {
   "read:user:others": "Ver qualquer usuário",
   "update:user:others": "Atualizar qualquer usuário",
   "delete:user:others": "Deletar qualquer usuário",
-  // Reativar uma conta soft-deletada. Sem par `:others` pelo mesmo motivo do
+  // Reativar um usuário soft-deletado. Sem par `:others` pelo mesmo motivo do
   // perfil de funcionário (D11/K13): quem está de fora não tem sessão nem
-  // token, então nunca há self-service autenticado numa conta morta — o
+  // token, então nunca há self-service autenticado num usuário morto — o
   // caminho do próprio dono é o signup, que não passa por feature nenhuma.
   "reactivate:user": "Reativar uma conta soft-deletada",
 

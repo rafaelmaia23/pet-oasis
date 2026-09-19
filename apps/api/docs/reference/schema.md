@@ -48,7 +48,7 @@ leitura). `admin` tem `["*"]`. Compostas por grupos semânticos
 
 ## O que cada fase mudou nas tabelas
 
-### Fase 4 — status de conta
+### Fase 4 — status de usuário
 
 `User` ganhou `status UserStatus @default(PENDING)` (`enum UserStatus { PENDING, ACTIVE }`) +
 `bannedAt?`/`bannedBy?`/`banReason?` — ban **ortogonal** ao status. Model `VerificationToken`

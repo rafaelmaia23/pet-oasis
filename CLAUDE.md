@@ -168,7 +168,7 @@ Quando terminar um trabalho e sobrar algo pendente para uma etapa **futura**, a 
 
 ## O que o projeto planeja ser
 
-O **Ciclo 1 (fundação) está fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de conta, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação.
+O **Ciclo 1 (fundação) está fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de usuário, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação.
 
 O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por feature efetiva), ainda **sem checkout**. A **Fase 10 está fechada** e não trouxe domínio novo: desbloqueou o front web e pagou a dívida de deploy. A **Fase 11 está aberta** e não traz domínio: transforma este repo, in-place, no monorepo `pet-oasis` — spec e issues em `.scratch/monorepo/`. A **Fase 12** é a espinha de autenticação do web. Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) — vêm na fase seguinte.
 

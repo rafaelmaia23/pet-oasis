@@ -37,7 +37,7 @@ const v1Router = Router();
 v1Router.use("/status", statusRouter);
 v1Router.use("/auth", authRouter);
 // Vitrine do catálogo (9.1): responde sem token porque o e-commerce vive de
-// quem chega pelo Google sem conta. `/breeds` fica aqui, seco: é só leitura, não
+// quem chega pelo Google sem usuário. `/breeds` fica aqui, seco: é só leitura, não
 // tem escrita nem view por feature efetiva, então não precisa nem identificar o ator.
 v1Router.use("/breeds", breedRouter);
 

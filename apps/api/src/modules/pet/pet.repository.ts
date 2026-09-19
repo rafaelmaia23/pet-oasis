@@ -52,7 +52,7 @@ export type PetListFilters = {
 };
 
 /**
- * Listagem geral (staff). Pet de conta ou perfil excluído não precisa de
+ * Listagem geral (staff). Pet de usuário ou perfil excluído não precisa de
  * cláusula própria: a cascata da 9.4 já o soft-deletou, então `deletedAt: null`
  * basta. `deceased` omitido não filtra nada — traz vivos e falecidos.
  */

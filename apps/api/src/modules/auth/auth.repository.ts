@@ -257,11 +257,11 @@ type RequestAccountReactivationData = {
 
 /**
  * Mesmo idioma do `requestEmailChange`: invalida o token de reativação pendente
- * antes de criar o novo, então há no máximo um vivo por conta e um segundo
+ * antes de criar o novo, então há no máximo um vivo por usuário e um segundo
  * pedido cancela o primeiro implicitamente.
  *
  * A escolha do ator viaja no token porque quem confirma é outra pessoa — o dono
- * da conta, que só tem o link do email.
+ * do usuário, que só tem o link do email.
  */
 export async function requestAccountReactivation(
   data: RequestAccountReactivationData,
@@ -302,12 +302,12 @@ type ConsumeAccountReactivationData = {
 };
 
 /**
- * Reativa a conta inteira numa transação. **Único ponto do projeto que escreve
+ * Reativa o `User` inteiro numa transação. **Único ponto do projeto que escreve
  * `deletedAt: null` num `User`** — a inversa exata de
  * `softDeleteUserAndInvalidateSessions`.
  *
- * Não invalida sessões: a deleção da conta já derrubou todas e nenhuma pôde
- * nascer enquanto a conta estava morta.
+ * Não invalida sessões: a deleção do usuário já derrubou todas e nenhuma pôde
+ * nascer enquanto o usuário estava morto.
  *
  * `status: ACTIVE` porque consumir o token **é** a prova de posse do email que
  * o `verify-email` exige; `mustChangePassword: false` porque a senha acabou de

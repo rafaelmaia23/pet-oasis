@@ -12,11 +12,11 @@ import {
   signupSchema,
   verifyEmailSchema,
 } from "@pet-oasis/api-contracts/auth";
+import { errorResponseSchema } from "@pet-oasis/api-contracts/errors";
 import { userViews } from "@pet-oasis/api-contracts/user";
 import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
 import {
-  errorResponseSchema,
   errorResponses,
   jsonResponse,
   noContentResponse,

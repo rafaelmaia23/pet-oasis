@@ -12,9 +12,9 @@ próprio `CONTEXT.md` (glossário) e os próprios ADRs; decisões de sistema fic
    documento — e o **`CLAUDE.md` do app** em que vai mexer ([`apps/api/CLAUDE.md`](../../apps/api/CLAUDE.md)):
    camadas, convenções e as regras de negócio **já decididas** (que não se re-decidem).
 2. **[`CONTEXT-MAP.md`](../../CONTEXT-MAP.md)** — em que contexto o assunto vive.
-3. **`CONTEXT.md` do app** — o que cada termo significa. O da API (`apps/api/CONTEXT.md`) nasce
-   na Fase 11, issue 08; até lá, o vocabulário firmado está nas regras de negócio do `CLAUDE.md`
-   da API.
+3. **`CONTEXT.md` do app** — o que cada termo significa e os sinônimos a evitar. O da API é
+   [`apps/api/CONTEXT.md`](../../apps/api/CONTEXT.md); o porquê de cada termo não está lá, está
+   no ADR que ele aponta.
 4. **[`apps/<app>/docs/adr/README.md`](../../apps/api/docs/adr/README.md)** — é um **índice**, um
    roteador: uma linha por decisão, agrupada por tema, apontando o ADR que a contém.
 5. **Só o ADR da decisão** que você precisa. Os `0001`–`0010` da API são as decisões
@@ -41,7 +41,7 @@ próprio `CONTEXT.md` (glossário) e os próprios ADRs; decisões de sistema fic
 ├── .scratch/                     ← o tracker: specs e issues, versionado, único
 └── apps/api/
     ├── CLAUDE.md                 ← o específico da stack + regras de negócio firmadas
-    ├── CONTEXT.md                ← glossário do contexto (issue 08)
+    ├── CONTEXT.md                ← glossário do contexto (o que cada termo é)
     ├── docs/
     │   ├── adr/
     │   │   ├── README.md         ← ÍNDICE por tema (leia este; é o roteador)

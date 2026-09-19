@@ -10,7 +10,7 @@ do fluxo, config das skills) mora na raiz do monorepo — o mapa de lá é
 
 | Onde | O que guarda | Vive |
 |---|---|---|
-| `../CONTEXT.md` *(nasce na issue 08; até lá, o vocabulário firmado está no [`CLAUDE.md`](../CLAUDE.md))* | O **vocabulário** do contexto: glossário puro, formato da skill `domain-modeling` | Sempre |
+| [`../CONTEXT.md`](../CONTEXT.md) | O **vocabulário** do contexto: glossário puro (o que cada termo é, sinônimos a evitar), formato da skill `domain-modeling`; o porquê fica nos ADRs | Sempre |
 | [`adr/README.md`](adr/README.md) + [`adr/`](adr/) | O **porquê** de cada decisão, **um ADR por decisão**. O `README.md` é só o índice, por tema | Sempre |
 | [`reference/`](reference/) | Consulta pontual: [rotas](reference/endpoints.md), [política de log](reference/logging-policy.md), [schema](reference/schema.md) (por que uma coluna é assim, o que cada fase mudou, invariantes), [histórico das fases](reference/history.md) | Sempre |
 | [`guides/`](guides/) | Como fazer: [dev](guides/dev.md), [deploy](guides/deploy.md), [integrar com a API](guides/integrating-with-the-api.md), [documentar endpoint](guides/documenting-endpoints.md) | Sempre |

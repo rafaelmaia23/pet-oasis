@@ -7,10 +7,11 @@ próprio glossário (`CONTEXT.md`, formato da skill `domain-modeling`) e os pró
 
 ## Contexts
 
-- **API** (`apps/api/CONTEXT.md`): o domínio do pet shop — usuários e perfis, autorização,
-  sessões, pets e catálogo (produto, variante, marca, categoria, tag, imagem). Dona dos dados e
-  das regras de negócio. O arquivo ainda não existe — nasce na Fase 11 (issue 08) e o mapa já o nomeia; até lá, o vocabulário firmado
-  está nas "regras de negócio já decididas" de `apps/api/CLAUDE.md`.
+- **API** ([`apps/api/CONTEXT.md`](./apps/api/CONTEXT.md)): o domínio do pet shop — usuários e
+  perfis, autorização, sessões, pets e catálogo (produto, variante, marca, categoria, tag,
+  imagem). Dona dos dados e das regras de negócio. O glossário diz *o que* cada termo é; o
+  *porquê* está nos ADRs da API (índice em
+  [`apps/api/docs/adr/README.md`](./apps/api/docs/adr/README.md)).
 - **Web** (`apps/web/CONTEXT.md`, importado na Fase 11, issue 11): a vitrine e a área do cliente,
   renderizadas no servidor e falando com a API por BFF. Não tem dado próprio.
 

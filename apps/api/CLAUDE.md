@@ -72,8 +72,9 @@ A API é o projeto `api` do workspace pnpm do monorepo e vive em **`apps/api`**.
 
 ## Onde está a documentação da API
 
-- **Vocabulário:** `CONTEXT.md` (glossário puro; nasce na Fase 11, issue 08). O mapa dos
-  contextos do sistema é o `CONTEXT-MAP.md` da raiz.
+- **Vocabulário:** `CONTEXT.md` (glossário puro — o que cada termo é e os sinônimos a evitar;
+  formato da skill `domain-modeling`). Termo novo entra lá, só o termo; o porquê vai para um
+  ADR. O mapa dos contextos do sistema é o `CONTEXT-MAP.md` da raiz.
 - **O porquê de cada decisão:** um ADR por decisão em `docs/adr/`, com o **índice por tema** em
   `docs/adr/README.md` — leia o índice, ache a linha, abra **só** aquele ADR. Os `0001`–`0010`
   são as decisões estruturais; do `0011` em diante estão as que viviam nos antigos arquivos

@@ -10,8 +10,8 @@
 > `docs/context/` (migradas em 2026-09-18, texto original, links reapontados). A numeração é
 > sequencial: ADR novo ganha o próximo número, e entra aqui na seção do tema dele.
 >
-> O vocabulário (o que cada termo significa) é o `CONTEXT.md` da API; o essencial acionável
-> está no `CLAUDE.md`; o estado das tarefas, no `docs/todo.md` da raiz.
+> O vocabulário (o que cada termo significa) é o [`CONTEXT.md`](../../CONTEXT.md) da API; o
+> essencial acionável está no `CLAUDE.md`; o estado das tarefas, no `docs/todo.md` da raiz.
 
 ---
 
@@ -474,7 +474,7 @@ mentira.
 - **Decisão revertida é reescrita** narrando a reversão, no mesmo ADR — nunca duplicada como
   decisão + errata. Quando a reversão é grande, o ADR antigo ganha `Status: superseded by
   ADR-NNNN` e o novo conta a história.
-- **Vocabulário não mora aqui**: termo e definição vão para o `CONTEXT.md` da API. O ADR
-  explica *por quê*; o glossário diz *o que é*.
+- **Vocabulário não mora aqui**: termo e definição vão para o [`CONTEXT.md`](../../CONTEXT.md)
+  da API. O ADR explica *por quê*; o glossário diz *o que é*.
 - Depois de mexer em doc, `pnpm docs:check` na raiz prova que todo caminho e toda âncora
   citados existem.

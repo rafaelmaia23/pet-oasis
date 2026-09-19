@@ -141,8 +141,8 @@ um **índice** (`apps/<app>/docs/adr/README.md`) com uma linha por decisão, agr
 protocolo é:
 
 1. **`CONTEXT-MAP.md`** na raiz — em que contexto (app) o assunto vive.
-2. **`CONTEXT.md` do app** — o que cada termo significa (glossário; o da API nasce na Fase 11,
-   issue 08).
+2. **`CONTEXT.md` do app** — o que cada termo significa (glossário puro; o da API é
+   `apps/api/CONTEXT.md`).
 3. **`apps/<app>/docs/adr/README.md`** — ache a linha da decisão.
 4. **Só o ADR** daquela decisão.
 

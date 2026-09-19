@@ -1,8 +1,8 @@
+import type { UpdateCategoryInput } from "@pet-oasis/api-contracts/catalog";
 import type { Prisma } from "@/generated/prisma/client";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
-import type { UpdateCategoryInput } from "./category.schema";
 
 /**
  * Única camada que toca o Prisma no módulo. Toda leitura filtra

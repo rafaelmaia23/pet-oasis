@@ -1,3 +1,7 @@
+import type {
+  CreateCategoryInput,
+  UpdateCategoryInput,
+} from "@pet-oasis/api-contracts/catalog";
 import {
   createConflictError,
   createNotFoundError,
@@ -5,10 +9,6 @@ import {
 } from "@/errors";
 import { resolveSlug } from "@/modules/catalog/catalog.slug";
 import * as categoryRepository from "./category.repository";
-import type {
-  CreateCategoryInput,
-  UpdateCategoryInput,
-} from "./category.schema";
 import {
   buildTree,
   type CategoryNode,

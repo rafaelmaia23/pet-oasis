@@ -1,11 +1,11 @@
-import type { Request, Response } from "express";
-import { listEnvelope } from "@/lib/pagination";
-import { categoryPresenter } from "./category.presenter";
 import {
   categoryParamsSchema,
   createCategorySchema,
   updateCategorySchema,
-} from "./category.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import type { Request, Response } from "express";
+import { listEnvelope } from "@/lib/pagination";
+import { categoryPresenter } from "./category.presenter";
 import * as categoryService from "./category.service";
 
 export const listCategories = async (_req: Request, res: Response) => {

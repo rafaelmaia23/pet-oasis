@@ -1,10 +1,10 @@
-import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { categoryViews } from "@/modules/category/category.presenter";
 import {
   categoryParamsSchema,
+  categoryViews,
   createCategorySchema,
   updateCategorySchema,
-} from "@/modules/category/category.schema";
+} from "@pet-oasis/api-contracts/catalog";
+import type { ZodOpenApiPathsObject } from "zod-openapi";
 import {
   errorResponses,
   jsonResponse,

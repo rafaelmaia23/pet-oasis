@@ -9,6 +9,7 @@
     "node": "24"
   },
   "scripts": {
+    "prepare": "husky",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
@@ -20,8 +21,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
     "@pet-oasis/tsconfig": "workspace:*",
     "@types/node": "^25.8.0",
+    "husky": "^9.1.7",
     "tsx": "^4.22.0",
     "turbo": "2.10.13",
     "typescript": "^6.0.3"

@@ -250,6 +250,7 @@ perfil o user continua existindo, só o `Customer`/`Employee` é soft-deletado.
 - [`0102`](0102-sql-cru-vive-exclusivamente-repository.md) SQL cru vive exclusivamente no repository
 - [`0103`](0103-tsconfig-biome-api-estendem-presets-workspace.md) O tsconfig e o Biome da API estendem presets do workspace (11.3)
 - [`0104`](0104-turborepo-pipeline-workspace-test-fica-fora-cache.md) O Turborepo é o pipeline do workspace; `test` fica fora do cache de propósito (11.4)
+- [`0196`](0196-conventional-commits-escopo-obrigatorio-recusados-hook.md) Conventional Commits com escopo obrigatório, recusados no hook (11.5)
 
 #### Ordem de construção
 
@@ -460,13 +461,14 @@ mentira.
 
 ## Como manter
 
-- **Decisão nova é ADR novo**: próximo número, título que é a decisão, 1–3 parágrafos com
-  contexto e porquê (formato em `ADR-FORMAT.md` da skill `domain-modeling`). Depois, a linha
+- **Decisão nova é ADR novo**: próximo número, título que é a decisão e, em 1–3 frases ou o
+  que ela pedir, contexto, decisão e porquê (formato em `ADR-FORMAT.md` da skill
+  `domain-modeling`; um parágrafo basta). Depois, a linha
   correspondente aqui, na seção do tema — os dois juntos, senão a decisão fica inalcançável.
 - **Decisão revertida é reescrita** narrando a reversão, no mesmo ADR — nunca duplicada como
   decisão + errata. Quando a reversão é grande, o ADR antigo ganha `Status: superseded by
   ADR-NNNN` e o novo conta a história.
 - **Vocabulário não mora aqui**: termo e definição vão para o `CONTEXT.md` da API. O ADR
   explica *por quê*; o glossário diz *o que é*.
-- Depois de mexer em doc, `pnpm run docs:check` na raiz prova que todo caminho e toda âncora
+- Depois de mexer em doc, `pnpm docs:check` na raiz prova que todo caminho e toda âncora
   citados existem.

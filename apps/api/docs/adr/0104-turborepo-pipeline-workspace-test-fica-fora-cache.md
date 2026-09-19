@@ -7,12 +7,13 @@ Com três pacotes, "rodar o `typecheck` do repo" já não é um comando: é um p
 ordem que depende de quem consome o quê. O Turborepo (`turbo.jsonc` na raiz, `turbo` pinado
 exato como devDependency da raiz) transforma isso num pipeline: cada task é o script de mesmo
 nome em cada pacote que o tiver, e os scripts da raiz (`typecheck`, `lint`, `build`, `test`,
-`dev`, `docs:check`) só delegam — `turbo run <task>`. `pnpm <task> --filter=@pet-oasis/api`
+`dev`) só delegam — `turbo run <task>`. (O `docs:check` nasceu aqui como task cacheada e
+**deixou de ser** na 11.7 — ver o fim deste ADR.) `pnpm <task> --filter=@pet-oasis/api`
 restringe a um pacote (o pnpm repassa a flag ao script; o Turbo exige o nome **com escopo**,
 ao contrário do `pnpm --filter api`). Os scripts que são de um app (`db:*`, `dev:*`, `prod:*`,
 `test:services:*`) não viram task: continuam no `package.json` dele.
 
-O que se ganha é o cache: `typecheck`, `lint`, `build` e `docs:check` guardam logs (e o
+O que se ganha é o cache: `typecheck`, `lint` e `build` guardam logs (e o
 `build`, o `dist/`) sob um hash da task, e devolvem `FULL TURBO` quando nada mudou. Dois
 detalhes do hash não são óbvios e foram provados por teste negativo. **(1)** O hash de uma task
 vê os arquivos do próprio pacote, as dependências externas no lockfile e o hash das tasks de
@@ -51,8 +52,24 @@ existe no `node_modules` dela; e exclui `.turbo`, porque o Biome não lê o `.gi
 cache do Turbo entraria na varredura. O `root: false` é exigência do Biome 2: com uma config na
 raiz, toda config aninhada sem ele é acusada como "nested root". Ele não se propaga por
 `extends` — a base o declara para lintar a si mesma, e a API continua recebendo a base (mesma
-prova negativa da 11.3). O que se ganha, além do editor, é um `biome check .` da raiz que cobre
-o repositório inteiro numa varredura só; o `lint` por pacote via Turbo continua sendo o
-caminho cacheado, e é ele que a CI vai rodar. Comentário dentro de `biome.json` não é aceito
+prova negativa da 11.3). O que se ganha, além do editor, é uma varredura do repositório inteiro num
+comando só — com uma ressalva medida na 11.5: o `extends` por nome de pacote da API só
+resolve quando o **cwd** é `apps/api` (`node_modules/.bin/biome check ../..`), porque a raiz
+não tem o pacote em `node_modules` e não tem o Biome como dependência; rodado da raiz, o nome
+não resolve e o check aborta. O `lint` por pacote via Turbo continua sendo o caminho
+cacheado, e é ele que a CI vai rodar. Comentário dentro de `biome.json` não é aceito
 (só em `biome.jsonc`, e renomear os quatro quebraria o `exports` do preset) — por isso o porquê
 está aqui e não ao lado do valor.
+
+**`docs:check` saiu do Turbo na 11.7 — reversão do que este ADR decidiu na 11.4.** Quando a
+ferramenta subiu para `tools/` da raiz e passou a varrer o monorepo inteiro (a documentação de
+um app cita a do outro, e o tracker e o `todo.md` vivem na raiz), a task por pacote deixou de
+fazer sentido: o recorte "roda o script de cada pacote que o tiver" esconderia justamente a
+citação cruzada, e a raiz não é pacote do workspace. `docs:check` virou **script da raiz**
+(`tsx tools/check-docs-links.ts`), sem cache — é uma varredura de segundos sobre arquivos, e o
+que se perde é `FULL TURBO` num comando que nunca foi o gargalo. O que sobrou de raiz no
+Turbo são duas tasks (`//#typecheck:root`, `//#lint:root`) que cobrem `tools/` e ficam
+penduradas no `dependsOn` de `typecheck` e `lint`, com `inputs` restritos a `tools/`, ao
+`tsconfig.json` da raiz e aos presets que ele estende — pelo mesmo motivo do `^` acima: preset
+fora do hash é cache verde depois de a régua mudar. O README da raiz já não lista `docs:check`
+entre as tasks cacheadas.

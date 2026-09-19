@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PetSpecies } from "@/generated/prisma/enums";
+import { petSpeciesSchema } from "./pet.enums";
 
 export const listBreedsSchema = z.object({
   query: z.object({
@@ -7,9 +7,9 @@ export const listBreedsSchema = z.object({
     // (algumas centenas de linhas fixas), que é o que o seed fake e a coleção
     // Bruno consomem. Valor fora do enum morre aqui, em 422 nomeando
     // `species` — validação sintática, sem banco.
-    species: z.enum(PetSpecies).optional().meta({
+    species: petSpeciesSchema.optional().meta({
       description: "Filtra as raças por espécie",
-      example: PetSpecies.DOG,
+      example: "DOG",
     }),
   }),
 });

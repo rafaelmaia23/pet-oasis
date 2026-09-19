@@ -1,9 +1,12 @@
 import { faker } from "@faker-js/faker";
+import {
+  type CreatePetInput,
+  createPetSchema,
+} from "@pet-oasis/api-contracts/pet";
 import { PetSpecies } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { SRD_BREED_NAME } from "@/modules/breed/breed.constants";
 import { createPet } from "@/modules/pet/pet.repository";
-import { type CreatePetInput, createPetSchema } from "@/modules/pet/pet.schema";
 
 /**
  * A raça é resolvida por **nome** no catálogo já semeado pelo `globalSetup` —

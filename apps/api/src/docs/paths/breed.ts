@@ -1,6 +1,5 @@
+import { breedViews, listBreedsSchema } from "@pet-oasis/api-contracts/pet";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { breedViews } from "@/modules/breed/breed.presenter";
-import { listBreedsSchema } from "@/modules/breed/breed.schema";
 import { errorResponses, jsonResponse, staticList } from "../components";
 import { fromEnvelope } from "../helpers";
 

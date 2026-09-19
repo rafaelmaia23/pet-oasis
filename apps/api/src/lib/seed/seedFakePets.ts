@@ -1,7 +1,7 @@
+import { createPetSchema } from "@pet-oasis/api-contracts/pet";
 import { prisma } from "@/lib/prisma";
 import { storeImage } from "@/lib/storage";
 import * as petRepository from "@/modules/pet/pet.repository";
-import { createPetSchema } from "@/modules/pet/pet.schema";
 import { fakeImageBuffer } from "./fakeImages.constants";
 import {
   FAKE_PET_ROSTER,

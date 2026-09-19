@@ -1,13 +1,13 @@
-import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { env } from "@/config/env";
-import { petViews } from "@/modules/pet/pet.presenter";
 import {
   createPetSchema,
   listCustomerPetsSchema,
   listPetsSchema,
   petParamsSchema,
+  petViews,
   updatePetSchema,
-} from "@/modules/pet/pet.schema";
+} from "@pet-oasis/api-contracts/pet";
+import type { ZodOpenApiPathsObject } from "zod-openapi";
+import { env } from "@/config/env";
 import {
   errorResponses,
   jsonResponse,

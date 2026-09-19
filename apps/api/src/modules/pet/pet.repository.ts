@@ -1,9 +1,12 @@
+import type {
+  CreatePetInput,
+  UpdatePetInput,
+} from "@pet-oasis/api-contracts/pet";
 import type { Prisma } from "@/generated/prisma/client";
 import type { PetSex, PetSpecies } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
-import type { CreatePetInput, UpdatePetInput } from "./pet.schema";
 
 /**
  * Única camada que toca o Prisma no módulo. Toda leitura filtra

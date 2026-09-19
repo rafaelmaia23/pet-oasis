@@ -1,6 +1,6 @@
+import { listRecentLogsSchema } from "@pet-oasis/api-contracts/log";
 import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { listRecentLogsSchema } from "@/modules/log/log.schema";
 import { errorResponses, jsonResponse } from "../components";
 import { fromEnvelope } from "../helpers";
 

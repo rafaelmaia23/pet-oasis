@@ -1,5 +1,5 @@
+import { listRecentLogsSchema } from "@pet-oasis/api-contracts/log";
 import type { Request, Response } from "express";
-import { listRecentLogsSchema } from "./log.schema";
 import * as logService from "./log.service";
 
 export const getRecentLogs = (req: Request, res: Response) => {

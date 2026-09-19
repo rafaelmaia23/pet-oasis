@@ -76,7 +76,7 @@ Revisão (`/code-review`, dois eixos) e merge da `fase-11` no meio da issue — 
 do primeiro fecho:
 
 - A `fase-11` tinha recebido a issue 05 depois de esta branch nascer, e a 05 escreveu a decisão
-  dela em o contexto temático de arquitetura — arquivo que esta branch apaga. No merge, a seção
+  dela no contexto temático de arquitetura — arquivo que esta branch apaga. No merge, a seção
   virou o ADR `0196-conventional-commits-escopo-obrigatorio-recusados-hook.md` (linha no índice,
   tema *Arquitetura*), o item de backlog da 05 caiu no `docs/reference/backlog.md` da raiz, e a
   ressalva da 05 sobre o `biome check` da raiz entrou no ADR 0104. Progresso: 6 de 14.

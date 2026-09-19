@@ -1,10 +1,14 @@
 /// <reference types="zod-openapi" />
+
+import {
+  cursorMetaSchema,
+  offsetMetaSchema,
+} from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
 import type {
   ZodOpenApiResponseObject,
   ZodOpenApiSecuritySchemeObject,
 } from "zod-openapi";
-import { cursorMetaSchema, offsetMetaSchema } from "@/lib/pagination";
 
 // Formato padrão de erro da API (AppError.toJson) — vira componente reusável.
 export const errorResponseSchema = z

@@ -5,6 +5,7 @@ export * from "./catalog";
 export * from "./domain-enums";
 export * from "./errors";
 export * from "./feature";
+export * from "./pagination";
 export * from "./pet";
 export * from "./role";
 export * from "./user";

@@ -1,6 +1,9 @@
+import {
+  buildOffsetQuerySchema,
+  defineSortConfig,
+} from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
 import { PetSex, PetSpecies } from "@/generated/prisma/enums";
-import { buildOffsetQuerySchema, defineSortConfig } from "@/lib/pagination";
 
 /**
  * Validação **sintática** do pet — forma, tipo e faixa, sem banco. As três

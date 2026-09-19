@@ -1,7 +1,7 @@
+import { offsetMetaSchema } from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
 import { env } from "@/config/env";
-import { offsetMetaSchema } from "@/lib/pagination";
 import {
   productImageParamsSchema,
   productImagesParamsSchema,

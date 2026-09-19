@@ -1,6 +1,9 @@
+import {
+  buildOffsetQuerySchema,
+  defineSortConfig,
+} from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
 import { ProfileKind, UserStatus } from "@/generated/prisma/enums";
-import { buildOffsetQuerySchema, defineSortConfig } from "@/lib/pagination";
 import { ROLE_NAMES } from "@/modules/role/role.constants";
 
 /**

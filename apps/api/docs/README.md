@@ -1,65 +1,42 @@
-# Documentação do pet-oasis — o mapa
+# Documentação da API — o mapa
 
 Cada pasta aqui guarda **um tipo** de documento, e o tipo decide por quanto tempo ele vive.
-Perdido? A pergunta é sempre "isto é trabalho, decisão ou consulta?".
+Perdido? A pergunta é sempre "isto é vocabulário, decisão ou consulta?". O que é **trabalho**
+(tracker, índice das fases, backlog) e o que é **do sistema** (ADRs que atravessam apps, guias
+do fluxo, config das skills) mora na raiz do monorepo — o mapa de lá é
+[`docs/README.md`](../../../docs/README.md).
 
 ## As pastas
 
 | Onde | O que guarda | Vive |
 |---|---|---|
-| [`.scratch/`](../.scratch/) | O **tracker**: uma pasta por esforço, com a spec e uma issue por arquivo | Enquanto o esforço existir; fechado, fica marcado |
-| [`todo.md`](todo.md) | O **índice** das fases: estado, ponteiro para a fase aberta, e o resumo destilado de cada fase fechada | Sempre |
-| [`reference/backlog.md`](reference/backlog.md) | Levantado e **conscientemente adiado** — sem fase, sem data | Sempre |
-| [`context.md`](context.md) + [`context/`](context/) | O **porquê** de cada decisão. O `context.md` é só o índice | Sempre |
-| [`adr/`](adr/) | Decisão **estrutural**: a que é cara de reverter | Sempre |
-| [`reference/`](reference/) | Consulta pontual: [rotas](reference/endpoints.md), [política de log](reference/logging-policy.md), backlog | Sempre |
-| [`guides/`](guides/) | Como fazer: [dev](guides/dev.md), [deploy](guides/deploy.md), [integrar com a API](guides/integrating-with-the-api.md), [documentar endpoint](guides/documenting-endpoints.md), [formas de fase](guides/todo-phases.md) | Sempre |
-| [`agents/`](agents/) | Como as skills de IA devem ler e escrever tudo isto | Sempre |
-
-## O caminho de uma ideia até o código
-
-```
-ideia crua          .scratch/<slug>/               anotação, material de grilling
-   ↓ /grill-with-docs — a grelha fecha as decisões, uma rodada por vez
-desenho             .scratch/<slug>/spec.md        spec: o quê e por quê
-   ↓ /to-tickets
-execução            .scratch/<slug>/issues/NN-*.md uma issue = uma feat-branch = um contexto
-   ↓ /implement — teste primeiro, em feat-branch por issue
-código              src/ + tests/
-   ↓ fecho da fase
-memória             docs/adr/ + docs/context/      o porquê, para sempre
-                    docs/todo.md                   o resultado, destilado
-```
-
-Duas regras seguram o desenho:
-
-1. **A fronteira tracker × memória.** O `.scratch/` responde *o quê, por quê e em que ordem*
-   enquanto o trabalho corre; o [`todo.md`](todo.md) responde *o que de fato ficou pronto*,
-   depois. Enquanto a fase está aberta, o `todo.md` **aponta** para a pasta dela em vez de
-   repeti-la — foi a duplicação entre os dois que produziu, na Fase 9, duas versões da mesma
-   decisão envelhecendo em ritmos diferentes.
-2. **Documento permanente nunca cita o tracker.** ADR, `context/`, `README`, `CLAUDE.md` e
-   comentário de `src/` não referenciam `.scratch/`. Versionar mudou a durabilidade do
-   arquivo, não a autoridade do conteúdo: uma spec é o retrato de uma negociação num
-   instante. Se algo de lá merece ser citado, é porque merece ter virado ADR ou contexto. O
-   `pnpm run docs:check` reprova quem esquecer.
+| `../CONTEXT.md` *(nasce na issue 08; até lá, o vocabulário firmado está no [`CLAUDE.md`](../CLAUDE.md))* | O **vocabulário** do contexto: glossário puro, formato da skill `domain-modeling` | Sempre |
+| [`adr/README.md`](adr/README.md) + [`adr/`](adr/) | O **porquê** de cada decisão, **um ADR por decisão**. O `README.md` é só o índice, por tema | Sempre |
+| [`reference/`](reference/) | Consulta pontual: [rotas](reference/endpoints.md), [política de log](reference/logging-policy.md), [schema](reference/schema.md) (por que uma coluna é assim, o que cada fase mudou, invariantes), [histórico das fases](reference/history.md) | Sempre |
+| [`guides/`](guides/) | Como fazer: [dev](guides/dev.md), [deploy](guides/deploy.md), [integrar com a API](guides/integrating-with-the-api.md), [documentar endpoint](guides/documenting-endpoints.md) | Sempre |
+| [`../../../.scratch/`](../../../.scratch/README.md), [`todo.md`](../../../docs/todo.md), [`backlog`](../../../docs/reference/backlog.md) | Na **raiz**: o tracker, o índice das fases e o backlog — únicos para o monorepo | — |
 
 ## Onde procurar o *porquê* de uma decisão
 
-Pelo índice, nunca pela leitura em bloco: abra [`context.md`](context.md), ache a linha da
-decisão, e abra **só** o arquivo temático que ela aponta. Juntos, os arquivos de `context/`
-passam de 25 mil tokens; uma pergunta concreta precisa de um ou dois. Se o índice não tem a
-decisão, ela não foi registrada — pergunte, não invente.
+Pelo índice, nunca pela leitura em bloco: abra [`adr/README.md`](adr/README.md), ache a linha
+da decisão, e abra **só** o ADR que ela aponta. São quase duzentos ADRs; uma pergunta concreta
+precisa de um ou dois. Se o índice não tem a decisão, ela não foi registrada — pergunte, não
+invente.
 
-Decisão estrutural (cara de reverter, surpreendente sem contexto, resultado de um trade-off
-real) vira **ADR** em [`adr/`](adr/); o contexto guarda só o ponteiro.
+Os ADRs `0001`–`0010` são as decisões **estruturais** (caras de reverter, surpreendentes sem
+contexto, resultado de um trade-off real), escritas como ADR desde a origem. Do `0011` em
+diante estão as decisões que viviam nos arquivos temáticos de `docs/context/` até 2026-09-18,
+uma por arquivo, com o texto original — o porquê da migração está no ADR de sistema
+[`0001-domain-docs-follow-the-skill.md`](../../../docs/adr/0001-domain-docs-follow-the-skill.md).
+
+Decisão nova é **ADR novo** (próximo número) mais a linha no índice, na seção do tema. Termo
+novo vai para o `CONTEXT.md`, sem racional.
 
 ## Depois de mexer em doc
 
 ```bash
-pnpm run docs:check
+pnpm docs:check    # na raiz do monorepo
 ```
 
-Ele prova que todo caminho e toda âncora citados no repositório — inclusive nos comentários
-de `src/` — existem de fato, que nenhum documento permanente cita o tracker, e que toda spec
-marcada como fechada nomeia destinos que existem.
+Ele prova que todo caminho e toda âncora citados no monorepo — inclusive nos comentários de
+`src/` — existem de fato, e que toda spec marcada como fechada nomeia destinos que existem.

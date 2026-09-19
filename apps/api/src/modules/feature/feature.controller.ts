@@ -1,7 +1,7 @@
+import { featureParamsSchema } from "@pet-oasis/api-contracts/feature";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
 import { featurePresenter } from "./feature.presenter";
-import { featureParamsSchema } from "./feature.schema";
 import * as featureService from "./feature.service";
 
 export const getAllFeatures = async (_req: Request, res: Response) => {

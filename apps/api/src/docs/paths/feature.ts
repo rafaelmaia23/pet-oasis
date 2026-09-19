@@ -1,6 +1,8 @@
+import {
+  featureParamsSchema,
+  featureViews,
+} from "@pet-oasis/api-contracts/feature";
 import type { ZodOpenApiPathsObject } from "zod-openapi";
-import { featureViews } from "@/modules/feature/feature.presenter";
-import { featureParamsSchema } from "@/modules/feature/feature.schema";
 import { errorResponses, jsonResponse, staticList } from "../components";
 import { fromEnvelope } from "../helpers";
 

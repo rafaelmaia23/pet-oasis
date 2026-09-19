@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { featureViews } from "@pet-oasis/api-contracts/feature";
 import { buildEmployee } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
@@ -10,7 +11,6 @@ import z from "zod";
 import app from "@/app";
 import { createNotFoundError } from "@/errors/errorFactory";
 import { DEFAULT_FEATURES } from "@/modules/feature/feature.constants";
-import { featureViews } from "@/modules/feature/feature.presenter";
 import { getFeatureByName } from "@/modules/feature/feature.repository";
 
 afterEach(async () => {

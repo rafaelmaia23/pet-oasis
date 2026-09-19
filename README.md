@@ -1,5 +1,7 @@
 # Pet Oasis
 
+[![CI](https://github.com/rafaelmaia23/pet-oasis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rafaelmaia23/pet-oasis/actions/workflows/ci.yml)
+
 Monorepo do Pet Oasis — um pet shop online. Gerido por **pnpm workspaces**
 (`pnpm-workspace.yaml` na raiz, um só `pnpm-lock.yaml`) e orquestrado por **Turborepo**
 (`turbo.jsonc` na raiz).
@@ -57,3 +59,16 @@ restrito ao enum do workspace — `api`, `web`, `contracts`, `tsconfig`, `biome-
 de o commit existir. Merge usa a mensagem padrão do Git, que o commitlint ignora. A regra
 completa, com o que o preset recusa (descrição em maiúscula, ponto final, header acima de 100
 colunas), está no [`CLAUDE.md`](apps/api/CLAUDE.md).
+
+## CI
+
+Todo PR e todo push em `dev`/`main` rodam o workflow [`ci.yml`](.github/workflows/ci.yml) no
+GitHub Actions. O job `verify` roda `typecheck`, `lint`, `docs:check` e `test` via Turborepo
+**só dos pacotes afetados** em relação à base (a branch-alvo do PR, ou o commit anterior no
+push) — um PR que muda só a raiz não roda nada; um que toca `apps/api` roda a API inteira, docs
+inclusive, porque o afetado é por pacote. Postgres e Redis sobem como `services` do job, nas
+portas do `.env.test` (que o workflow gera do `.env.example`; nunca é commitado), e o `test` da
+API, vendo `CI=true`, chama o Vitest direto em vez de subir o Compose. O job `commitlint` valida
+cada commit do PR contra a convenção acima. Sem deploy automático e sem remote cache do Turbo.
+Merge de fase na `dev` e de `dev` na `main` só com o CI do PR verde — a regra está no
+[`CLAUDE.md`](apps/api/CLAUDE.md).

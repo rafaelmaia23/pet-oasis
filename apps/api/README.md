@@ -243,7 +243,7 @@ Toda feature nasce de um teste que falha. A suíte tem **1193 testes** (Vitest +
 
 ### Disciplina de processo
 
-Cada fase do roadmap tem sua branch, cada feature a sua, e nada é desenvolvido direto na `main`. O estado e a ordem das tarefas vivem em [`docs/todo.md`](docs/todo.md); os commits são atômicos e descrevem a mudança, não o arquivo.
+Cada fase do roadmap tem sua branch, cada feature a sua, e nada é desenvolvido direto na `main`. O estado e a ordem das tarefas vivem em [`docs/todo.md`](docs/todo.md); os commits são atômicos, seguem Conventional Commits com escopo (lintados no hook e no CI) e descrevem a mudança, não o arquivo. Todo PR e todo push em `dev`/`main` passam pelo CI do monorepo (typecheck, lint, docs e a suíte, só do que foi afetado) — a fase só chega à `dev`, e a `dev` à `main`, com o PR verde.
 
 ---
 

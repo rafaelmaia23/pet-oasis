@@ -1,0 +1,200 @@
+# CI de verificação do monorepo. Só verifica — nada de deploy, nada de remote cache do
+# Turbo: cada um é esforço próprio, fora desta fase.
+#
+# Dois jobs, independentes:
+#
+#   verify      typecheck · lint · docs:check · test, via Turborepo, SÓ DO QUE FOI AFETADO
+#               em relação à base (a base do PR, ou o commit anterior no push). O afetado é
+#               por PACOTE: mudar só a raiz (README, este arquivo) não roda nada; mudar
+#               qualquer arquivo de `apps/api` — inclusive `apps/api/docs/` — roda a API
+#               inteira, porque o Turbo não distingue docs de fonte dentro do pacote
+#               (`inputs` de task não entram no cálculo do `--affected`; medido na 11.6).
+#   commitlint  toda mensagem de commit do PR contra `commitlint.config.mjs` — o hook local
+#               é a primeira barreira, esta é a segunda (worktree sem `pnpm install` não
+#               tem hook).
+#
+# Node vem de `engines.node` e pnpm de `packageManager`, os dois do package.json da raiz —
+# a fonte que a máquina de quem desenvolve lê (o Dockerfile fixa a mesma major por
+# disciplina, em `FROM node:24`). Não há versão escrita aqui.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+# Um run por ref: um push novo no mesmo PR cancela o anterior (a resposta que importa é a do
+# último commit). Em dev/main nada é cancelado — cada push é um verde de verdade.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # O `prepare` da raiz instalaria o hook do husky no clone do runner; ninguém commita aqui.
+  HUSKY: "0"
+
+jobs:
+  verify:
+    name: verify (affected)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Postgres e Redis sobem como services do job, nas MESMAS portas do host e com as mesmas
+    # credenciais que o `.env.test` gerado abaixo espera (5433/6380 — as do Compose de teste,
+    # que este job substitui). A imagem do Postgres é a do Compose: `postgres:16-alpine` traz
+    # o contrib inteiro, e é dele que vêm `unaccent` e `pg_trgm`, que a migration da busca
+    # textual cria com `CREATE EXTENSION`.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pet_oasis_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pet_oasis_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # O `--affected` compara a base com o HEAD via git; a base precisa estar no clone.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # O `.env.test` nunca é commitado. O do CI nasce do `.env.example` — o mesmo template
+      # que quem desenvolve copia — com só o que muda para teste por cima: o banco e o Redis
+      # de teste (nome/portas dos services acima), os dois segredos obrigatórios, gerados na
+      # hora (não são segredos de verdade: vivem só neste runner), e `LOG_LEVEL=debug`, que
+      # a suíte de logging exige (em teste o logger só escreve no ring buffer, então o nível
+      # não polui a saída — o comentário do template explica). O resto do arquivo fica como
+      # o exemplo, que é o que a suíte lê (`env.RATE_LIMIT_*`, `env.LOCKOUT_*`).
+      #
+      # A linha `SENTRY_DSN=` sai: o template a traz vazia, mas `env.ts` valida a variável
+      # como URL opcional, e string vazia não é nem URL nem ausência — a app não sobe. O
+      # `.env.test` local nem tem a chave; aqui ela é removida (está no backlog da API).
+      - name: Generate apps/api/.env.test from .env.example
+        working-directory: apps/api
+        run: |
+          cp .env.example .env.test
+          set_var() { sed -i "s|^$1=.*|$1=$2|" .env.test; }
+          set_var NODE_ENV test
+          set_var POSTGRES_DB pet_oasis_test
+          set_var POSTGRES_PORT 5433
+          set_var DATABASE_URL '"postgresql://postgres:postgres@localhost:5433/pet_oasis_test"'
+          set_var REDIS_PORT 6380
+          set_var REDIS_URL redis://localhost:6380
+          set_var LOG_LEVEL debug
+          set_var JWT_SECRET "$(openssl rand -hex 32)"
+          set_var PEPPER "$(openssl rand -hex 32)"
+          sed -i '/^SENTRY_DSN=$/d' .env.test
+
+      # O client do Prisma é gerado, não versionado (`src/generated/`): typecheck e suíte
+      # precisam dele. `generate` não conecta — a URL é placeholder, como no Dockerfile. O
+      # script lê `.env.development`, que não existe no runner: o dotenv-cli só avisa e segue
+      # (o Dockerfile depende do mesmo), então o aviso no log é esperado, não é pista.
+      - name: Generate Prisma client
+        run: pnpm --filter api run db:generate
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+
+      # A base do afetado. PR: a branch-alvo (`origin/<base>`), então o diff é exatamente o
+      # do PR. Push: o commit anterior da branch (`event.before`), então o diff é o do push —
+      # num merge de fase, tudo que a fase trouxe. Quando essa base não existe no clone, o
+      # Turbo se comporta de dois jeitos (medido): SHA desconhecido (branch recém-criada, onde
+      # `before` é zero; force-push) vira warning e "tudo mudou"; ref por NOME desconhecida
+      # aborta com erro de git. A queda para "tudo" é feita aqui, uniforme: sem base, roda
+      # sem `--affected`. O nome da branch entra por `env:`, não interpolado no shell — é
+      # entrada que quem abre o PR controla.
+      - name: Resolve the base for --affected
+        id: base
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            base="origin/$BASE_REF"
+          else
+            base="$BEFORE_SHA"
+          fi
+          if git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "base=$base" >> "$GITHUB_OUTPUT"
+            echo "flags=--affected" >> "$GITHUB_OUTPUT"
+            echo "affected against $base"
+          else
+            echo "flags=" >> "$GITHUB_OUTPUT"
+            echo "no usable base ($base): running everything"
+          fi
+
+      # `test` da API: no CI o script NÃO sobe o Compose (`pnpm run test` local sobe Postgres
+      # e Redis e derruba ao final) — ele vê `CI=true`, que o GitHub exporta e que o modo
+      # estrito de env do Turbo deixa passar por ser variável de vendor de CI, e chama o
+      # Vitest direto contra os services acima. A alternativa — o CI chamar `vitest` por fora
+      # do Turbo — perderia o filtro do afetado.
+      - name: typecheck · lint · docs:check · test
+        run: pnpm exec turbo run typecheck lint docs:check test ${{ steps.base.outputs.flags }}
+        env:
+          TURBO_SCM_BASE: ${{ steps.base.outputs.base }}
+
+  commitlint:
+    name: commitlint (PR commits)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      # Só as dependências da raiz (commitlint, o preset): o filtro pelo nome do pacote da
+      # raiz deixa Prisma, sharp e o resto do workspace fora deste job.
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter=pet-oasis
+
+      # `--from` é exclusivo: só os commits do PR, nunca os da base. Merges (`Merge branch …`,
+      # `Merge pull request …`) o commitlint ignora por padrão.
+      #
+      # A régua vale do commit em que entrou em diante (11.5): a história anterior não é
+      # reescrita. FLOOR é o commit que trouxe a convenção; quando ele está no PR e não está
+      # na base (o primeiro PR de fase depois da issue 05 carrega 137 commits, dos quais só 7
+      # são posteriores à régua), o `--from` sobe até ele. Quando a base já o contém — todo
+      # PR depois desse —, o piso é irrelevante e o range é o do PR inteiro.
+      - env:
+          FLOOR: 97e98b4551ebef8d293d2cfbf7935c6ff7e96efa
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          from="$BASE_SHA"
+          if git merge-base --is-ancestor "$FLOOR" "$HEAD_SHA" \
+             && ! git merge-base --is-ancestor "$FLOOR" "$BASE_SHA"; then
+            from="$FLOOR"
+            echo "base predates the convention: linting from $FLOOR"
+          fi
+          pnpm exec commitlint --from "$from" --to "$HEAD_SHA" --verbose

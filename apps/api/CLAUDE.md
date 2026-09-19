@@ -29,11 +29,11 @@ Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos test
 - **`dev` é a base de integração** e existe sempre. Toda branch de fase sai dela.
 - Cada fase do roadmap (ver `docs/todo.md`) tem **uma branch de fase** criada a partir da `dev`, nomeada `fase-<n>` (ex.: `fase-4`). O commit de **planejamento** da fase (a spec e as issues em `.scratch/<slug>/`) é o primeiro commit dessa branch — nunca vai direto na `dev` nem na `main`.
 - Cada **issue** da fase tem sua própria branch criada a partir da branch da fase, nomeada `feat/fase-<n>-<NN>-<slug>` (ex.: `feat/fase-10-01-rename-app-to-api`), onde `<NN>` é o número do arquivo em `.scratch/<slug>/issues/`. Ao terminar (testes + `typecheck` + `lint` verdes), **mergeia de volta na branch da fase** (`--no-ff`, com a mensagem de merge padrão do Git — sem `-m`) e apaga a branch da issue.
-- Ao concluir a **fase inteira**, a branch da fase é mergeada na `dev` (`--no-ff`).
-- Depois de a suíte completa passar na `dev`, ela é mergeada na `main` e **uma `dev` nova é aberta a partir da `main`**.
+- Ao concluir a **fase inteira**, abre-se um **PR** da branch da fase para a `dev` e espera-se o **CI verde** (`.github/workflows/ci.yml`: typecheck, lint, docs:check e testes do que a fase afetou, mais o commitlint de cada commit do PR); só então a branch da fase é mergeada na `dev` (`--no-ff`). O verde do PR é a barreira; a máquina de quem mergeia não é.
+- Depois de a suíte completa passar na `dev`, abre-se o **PR `dev` → `main`**, espera-se o CI verde de novo, e a `dev` é mergeada na `main` e **uma `dev` nova é aberta a partir da `main`**. O push em `dev` e em `main` também roda o CI: o verde fica visível fora da máquina de quem mergeou.
 - Trabalho que não pertence a nenhuma fase (correção pontual, mudança de doc, ajuste de processo) também sai da `dev`, em branch própria com nome descritivo (ex.: `docs/branch-workflow`, `fix/<slug>`), e volta pra `dev` por merge `--no-ff`.
 
-Resumo do fluxo: `dev` → `fase-<n>` → `feat/fase-<n>-<m>-<slug>` → merge na `fase-<n>` → (fim da fase) merge na `dev` → (suíte verde) merge na `main` + nova `dev`.
+Resumo do fluxo: `dev` → `fase-<n>` → `feat/fase-<n>-<m>-<slug>` → merge na `fase-<n>` → (fim da fase, PR com CI verde) merge na `dev` → (suíte verde, PR com CI verde) merge na `main` + nova `dev`.
 
 **A numeração de fase é global e nunca reinicia; a da issue é local à fase e reinicia em `01`.** O roadmap é agrupado em **ciclos** (Ciclo 1 = fundação, Fases 1–8; Ciclo 2 = domínio pet shop, Fase 9 em diante), mas o ciclo é só agrupamento de leitura no `docs/todo.md`: a fase seguinte à 9 é a 10, não "Ciclo 2 fase 2". O `<n>` do nome da branch depende disso — dois "fase-1" em ciclos diferentes tornariam o histórico ambíguo.
 
@@ -59,7 +59,8 @@ Mensagens de commit são **Conventional Commits em inglês**, `tipo(escopo): des
   ele não passa no enum de tipos.
 - Um worktree novo só tem o hook depois de `pnpm install` (o `.husky/_/` é gerado, não
   versionado) — sem ele o Git simplesmente não roda hook nenhum. O commitlint no CI (issue 06
-  da Fase 11) é a segunda barreira, ainda por construir.
+  da Fase 11) é a segunda barreira: o job `commitlint` de `.github/workflows/ci.yml` roda
+  `commitlint --from <base> --to <head>` sobre todos os commits de cada PR.
 
 **Nenhum commit, merge ou PR deste repositório leva assinatura, trailer ou crédito de agente** —
 nem `Co-Authored-By`, nem `Signed-off-by`, nem `🤖 Generated with …`, nem rodapé de nenhum tipo.
@@ -130,7 +131,7 @@ A API é o projeto `api` do workspace pnpm do monorepo e vive em **`apps/api`**.
 
 - Ambientes via Compose base + overrides (arquivos em `infra/`, junto dos entrypoints; o `Dockerfile` fica em `apps/api`, mas o **contexto de build é a raiz do monorepo** — o lockfile e o workspace vivem lá —, e o ignore dele é o `Dockerfile.dockerignore` ao lado), isolados por `-p pet-oasis-{dev,test,prod}`; env por arquivo (`.env.development`/`.env.test`/`.env.production`, em `apps/api`, fora do git; `.env.example` versionado). Racional em `docs/adr/environments-and-deploy.md` e em `docs/context/infrastructure.md`.
 - Dev: `pnpm run dev` (Compose em foreground: db + mailpit + app-em-container via tsx watch; Ctrl+C = SIGTERM gracioso) · `dev:down` · `dev:reset` · `dev:mail` · `dev:db` (só o Postgres-de-dev, detached e healthy — é o pré-requisito dos `db:*` quando não se quer a stack em foreground).
-- Teste: `pnpm test` (sobe o Postgres-de-test isolado, roda o Vitest no host e **sempre** derruba ao final, inclusive em falha) · `test:coverage` · `test:watch` · helpers `test:services:up`/`down`. Testar 1 arquivo (com o test-db de pé): `pnpm exec vitest run <nome>` · watch: `pnpm exec vitest <nome>` · 1 caso: `-t "nome"`.
+- Teste: `pnpm test` (sobe o Postgres-de-test isolado, roda o Vitest no host e **sempre** derruba ao final, inclusive em falha; com `CI=true` no ambiente pula o Compose e chama o Vitest direto — é como o GitHub Actions roda, contra os `services` do job) · `test:coverage` · `test:watch` · helpers `test:services:up`/`down`. Testar 1 arquivo (com o test-db de pé): `pnpm exec vitest run <nome>` · watch: `pnpm exec vitest <nome>` · 1 caso: `-t "nome"`.
 - Produção: `pnpm run prod:up` (build + só app + Postgres-de-prod, `migrate deploy` no entrypoint) · `prod:down` · `prod:logs`.
 - Migration dev (autoria consciente): `pnpm run db:migrate` (roda com `.env.development`, já gera o client) · `db:generate` · `db:seed` · `db:studio`.
 - Typecheck: `pnpm run typecheck` · Lint: `pnpm run lint` · Lint com fix: `pnpm run lint:fix` · Format: `pnpm run format`

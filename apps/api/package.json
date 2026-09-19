@@ -15,7 +15,7 @@
     "prod:up": "docker compose -p pet-oasis-prod --env-file .env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up --build --wait -d --remove-orphans",
     "prod:down": "docker compose -p pet-oasis-prod --env-file .env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml down --remove-orphans",
     "prod:logs": "docker compose -p pet-oasis-prod --env-file .env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml logs -f",
-    "test": "bash -c 'trap \"pnpm run test:services:down\" EXIT; pnpm run test:services:up && vitest run'",
+    "test": "bash -c 'if [ \"$CI\" = true ]; then exec vitest run; fi; trap \"pnpm run test:services:down\" EXIT; pnpm run test:services:up && vitest run'",
     "test:coverage": "bash -c 'trap \"pnpm run test:services:down\" EXIT; pnpm run test:services:up && vitest run --coverage'",
     "test:watch": "bash -c 'trap \"pnpm run test:services:down\" EXIT; pnpm run test:services:up && vitest'",
     "test:services:up": "docker compose -p pet-oasis-test --env-file .env.test -f infra/docker-compose.yml -f infra/docker-compose.test.yml up --wait -d db redis",

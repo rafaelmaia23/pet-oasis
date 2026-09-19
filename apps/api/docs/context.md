@@ -230,6 +230,12 @@ completo, os contra-argumentos e os gotchas.
   instala o hook no `pnpm install` (sem `.git` — Docker — sai com 0; worktree novo só tem hook
   depois de instalar); descrição começa em minúscula mesmo com nome próprio (`sentence-case` é
   só "primeira letra"); merge usa a mensagem padrão do Git, que o commitlint ignora
+- O CI verifica só o afetado, com os services do job no lugar do Compose (11.6) — GitHub
+  Actions em todo PR e push em `dev`/`main`: `turbo run typecheck lint docs:check test
+  --affected` contra a base do PR (ou o commit anterior no push), Postgres e Redis como
+  `services`, `.env.test` gerado do `.env.example`, `test` da API pula o Compose com `CI=true`,
+  commitlint sobre os commits do PR; afetado é por pacote (docs da API rodam a suíte); merge de
+  fase na `dev` e de `dev` na `main` só com o PR verde
 
 *Documentação e processo*
 

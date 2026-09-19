@@ -230,7 +230,61 @@ mensagem padrão do Git já diz (`Merge branch 'feat/…' into fase-11`). A part
 `git merge --no-ff <branch>`, sem `-m`.
 
 O histórico anterior não é reescrito: a régua vale do commit em que entrou em diante, e o
-`--from`/`--to` que o CI vai rodar cobre só os commits do PR.
+`--from`/`--to` que o CI roda (11.6) cobre só os commits do PR.
+
+### O CI verifica só o afetado, com os services do job no lugar do Compose (11.6)
+
+Até aqui "verde" era um fato da máquina de quem mergeava: `pnpm test`, `typecheck` e `lint`
+rodavam no host e ninguém mais via o resultado. O `.github/workflows/ci.yml` põe esse verde
+fora da máquina — em todo PR e em todo push em `dev`/`main` — e o `CLAUDE.md` passa a exigir
+o CI do PR verde antes de mergear fase na `dev` e `dev` na `main`. É só verificação: deploy
+automático e remote cache do Turbo continuam sendo esforços próprios, não efeitos colaterais
+de um workflow.
+
+O job `verify` é um `turbo run typecheck lint docs:check test --affected`: o Turbo compara a
+base (`TURBO_SCM_BASE`) com o HEAD e roda as tasks só dos pacotes com arquivo mudado. A base é
+a branch-alvo no PR (`origin/<base_ref>`, com `fetch-depth: 0` para ela existir no clone) e o
+commit anterior no push (`event.before`). Três coisas foram medidas antes de escrever o
+workflow. **(1)** O afetado é por **pacote**, e `inputs` de task não entram no cálculo — um
+`inputs: ["!docs/**"]` no `test` não impede que mudar `apps/api/docs/` rode a suíte da API.
+Logo "PR só de docs não roda a suíte" vale para docs da **raiz** (README, `.github/`, o
+`CLAUDE.md` da raiz), que não são de pacote nenhum, e não para `apps/api/docs/`. Filtrar por
+caminho no próprio workflow (`paths-ignore`) resolveria isso ao custo de pular também o
+`docs:check` — justamente o que um PR de docs precisa —, então a limitação ficou. **(2)** Base
+que não existe no clone (branch recém-criada, onde `before` é zero; force-push) não faz o Turbo
+cair para "tudo": ele aborta com erro de git. O workflow confere a base com `git cat-file -e`
+e, sem ela, roda sem `--affected`. **(3)** O modo estrito de env do Turbo deixa passar `CI` e
+`GITHUB_ACTIONS` (variáveis de vendor de CI) sem `passThroughEnv`, e uma variável própria
+(`FOO`) não — é o que permite ao `test` da API ler `CI` sem tocar o `turbo.jsonc`.
+
+O `test` da API sobe Postgres e Redis via Compose e derruba ao final; no CI os dois já estão de
+pé como `services` do job (a mesma `postgres:16-alpine` do Compose — o contrib dela traz
+`unaccent` e `pg_trgm`, que a migration da busca cria com `CREATE EXTENSION` — e `redis:7-alpine`,
+publicados em 5433/6380 como no host). Das duas saídas que a issue admitia — o script pular o
+Compose ou o CI chamar o `vitest` por fora —, ficou a primeira: com `CI=true` (que o GitHub
+exporta) o script faz `exec vitest run` e nada mais; chamar o Vitest por fora do Turbo perderia
+o filtro do afetado, que é o ponto do job. Provado por negativo: com os serviços derrubados,
+`CI=true pnpm run test` falha em `P1001: Can't reach database server` sem subir container
+nenhum.
+
+O `.env.test` do runner nasce do `.env.example` (`cp` + `sed` no workflow), nunca de arquivo
+commitado nem de secret: o que muda é o banco e o Redis de teste, `LOG_LEVEL=debug` (a suíte de
+logging exige, e em teste o logger só escreve no ring buffer) e `JWT_SECRET`/`PEPPER`, gerados
+com `openssl rand` na hora — não são segredos, vivem só naquele runner. Dois achados dessa
+derivação, medidos rodando a suíte inteira com o arquivo gerado: o template traz `SENTRY_DSN=`
+vazio, e `env.ts` valida a variável como `z.url().optional()`, que recusa string vazia — a app
+não sobe com uma cópia fiel do `.env.example` (o workflow apaga a linha; a correção de fundo
+está no [backlog](../reference/backlog.md#envexample-com-sentry_dsn-vazio-não-passa-no-envts--p)); e os tetos de rate limit do
+template (15 min de janela, contra 60 s no `.env.test` local) passam na suíte porque os testes
+leem `env.RATE_LIMIT_*` em vez de fixar o número. O client do Prisma é gerado no runner
+(`db:generate` com `DATABASE_URL` placeholder, como no Dockerfile) porque `src/generated/` não é
+versionado e o typecheck precisa dele.
+
+O job `commitlint` roda só em PR, instala só as dependências da raiz (`pnpm install
+--filter=pet-oasis`: 76 pacotes em vez de 760) e lê `--from <base.sha> --to <head.sha>` — só os
+commits do PR, merges ignorados pelo padrão do commitlint. Node vem de `engines.node` e pnpm de
+`packageManager`, os dois do `package.json` da raiz — a mesma fonte que o Dockerfile lê; não há
+versão escrita no workflow.
 
 ---
 

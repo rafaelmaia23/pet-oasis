@@ -8,6 +8,7 @@ export * from "./errors";
 export * from "./feature";
 export * from "./me";
 export * from "./pagination";
+export * from "./permission";
 export * from "./pet";
 export * from "./role";
 export * from "./user";

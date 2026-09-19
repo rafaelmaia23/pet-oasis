@@ -1,18 +1,16 @@
-import { roleViews } from "@pet-oasis/api-contracts/role";
-import type { ZodOpenApiPathsObject } from "zod-openapi";
-import {
-  effectiveFeaturesViews,
-  userFeatureViews,
-} from "@/modules/permission/permission.presenter";
 import {
   deleteUserRoleParamsSchema,
+  effectiveFeaturesViews,
   getPermissionParamsSchema,
   getUserPermissionsParamsSchema,
   getUserRolesParamsSchema,
   postUserRoleParamsSchema,
   removePermissionParamsSchema,
   upsertPermissionParamsSchema,
-} from "@/modules/permission/permission.schema";
+  userFeatureViews,
+} from "@pet-oasis/api-contracts/permission";
+import { roleViews } from "@pet-oasis/api-contracts/role";
+import type { ZodOpenApiPathsObject } from "zod-openapi";
 import {
   errorResponses,
   jsonResponse,

@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { roleViews } from "@pet-oasis/api-contracts/role";
 import { buildEmployee } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
 import { loginAs } from "@tests/helpers/auth";
@@ -10,7 +11,6 @@ import z from "zod";
 import app from "@/app";
 import { createNotFoundError } from "@/errors/errorFactory";
 import { DEFAULT_ROLES } from "@/modules/role/role.constants";
-import { roleViews } from "@/modules/role/role.presenter";
 import { getRoleByName } from "@/modules/role/role.repository";
 
 afterEach(async () => {

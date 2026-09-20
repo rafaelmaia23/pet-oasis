@@ -10,7 +10,7 @@ página.
 A rota `/verify-email` é contrato com a API — ela monta esse endereço nos emails. **Renomeá-la
 quebra o email sem erro visível em lugar nenhum.**
 
-**Blocked by:** 08
+**Blocked by:** 00, 08
 
 **Status:** ready-for-agent
 

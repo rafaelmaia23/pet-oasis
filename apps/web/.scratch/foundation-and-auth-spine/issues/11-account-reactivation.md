@@ -3,7 +3,7 @@
 **What to build:** quem excluiu a conta e voltou recupera o que era seu, em vez de recomeçar
 do zero — e ninguém descobre, pelo cadastro, que um email pertence a uma conta excluída.
 
-**Blocked by:** 09
+**Blocked by:** 00, 09
 
 **Status:** ready-for-agent
 

@@ -2,7 +2,7 @@
 
 **What to build:** quem esqueceu a senha recupera o acesso sozinho, sem falar com ninguém.
 
-**Blocked by:** 09
+**Blocked by:** 00, 09
 
 **Status:** ready-for-agent
 

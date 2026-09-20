@@ -8,6 +8,14 @@ A fatia 0 não tem valor visível para o usuário e a fatia 1a não existe sem e
 Decisões estruturais desta spec já estão registradas em ADR-0001 a ADR-0005. A linguagem
 segue o glossário em `CONTEXT.md`. A direção visual segue `docs/design-system.md`.
 
+> **Revisto em 2026-09-19**, antes de o repositório congelar para o import no monorepo
+> (issue 11 da Fase 11 da API): alinhada ao guia de integração atualizado da API
+> (`apps/api/docs/guides/integrating-with-the-api.md`) e às decisões já fechadas na spec do
+> monorepo — pnpm, Turborepo, stack Compose único e o pacote `@pet-oasis/api-contracts`. O
+> domínio não mudou; mudaram o contrato de sessão (refresh em cookie), a origem dos tipos (o
+> contrato, não o OpenAPI) e o ambiente. O que a API ainda precisa expor para esta fatia está
+> na issue `00`, que bloqueia todas as demais. Esta fatia é a **Fase 12** do sistema.
+
 ---
 
 ## Problem Statement
@@ -59,8 +67,9 @@ entrar.
    escuro nunca precise ser retrofitado sobre uma paleta já espalhada.
 5. Como desenvolvedor, quero as fontes auto-hospedadas no build, para que nenhuma requisição
    saia para um terceiro em tempo de execução.
-6. Como desenvolvedor, quero os tipos da API gerados a partir da especificação OpenAPI dela e
-   versionados no repositório, para que o build nunca dependa da API estar de pé.
+6. Como desenvolvedor, quero importar os schemas de request, as views de resposta e as rotas
+   da API do pacote de contratos compartilhado, para que uma mudança de contrato quebre o
+   `typecheck` do web no mesmo PR — e nunca em runtime.
 7. Como desenvolvedor, quero um único cliente HTTP tipado para falar com a API, para que
    autenticação, escolha de endereço e tratamento de erro existam num lugar só.
 8. Como desenvolvedor, quero lint e formatação numa ferramenta só, para que não haja duas
@@ -223,8 +232,20 @@ entrar.
 - A autenticação é proxyada por Route Handlers do próprio front. O navegador nunca fala
   diretamente com a API para autenticar.
 - A sessão vive num cookie `httpOnly` criptografado do domínio do front, gerido por
-  `iron-session`. O cookie contém **apenas** os tokens e o identificador do `User` — nunca a
-  **capability efetiva**, que é sempre buscada fresca.
+  `iron-session`. O cookie contém **apenas** o access token, o refresh token, a validade do
+  access token e o identificador do `User` — nunca a **capability efetiva**, que é sempre
+  buscada fresca.
+- **O refresh token nunca sai do BFF.** A API o entrega em `Set-Cookie` (`refresh_token`,
+  `Path=/api/v1/auth`, `HttpOnly`, 7 dias deslizantes), não no corpo — `POST /auth/login` e
+  `POST /auth/refresh` devolvem só o access token no JSON. O guia de integração oferece duas
+  saídas para um BFF, e a escolhida é a segunda: o módulo de sessão lê o `Set-Cookie` da
+  resposta, guarda o refresh na sessão própria e o reenvia como `Cookie` em `/auth/refresh` e
+  `/auth/logout`. O navegador nunca recebe o cookie da API (ADR-0001).
+- **A validade do access token vem da resposta da API**, tipada pelo contrato — nunca de
+  decodificar o JWT (o conteúdo dele é da API) e nunca de um TTL configurado no web (duas
+  configurações para uma verdade só). É pré-requisito do lado da API: issue `00`.
+- O cookie do web vale **7 dias deslizantes**, renovado junto com o refresh: o cookie do
+  front e o refresh da API expiram juntos, e "por que fui deslogado" tem uma resposta só.
 - O módulo de sessão é a fronteira única dessa responsabilidade. Sua interface pública é
   estreita de propósito, e é o contrato do seam de teste:
 
@@ -261,30 +282,48 @@ entrar.
 
 ### Cliente da API
 
-- Um único cliente HTTP tipado, que resolve o endereço da API por ambiente: **rede interna do
-  Docker** para chamadas do servidor, endereço público apenas para URL de imagem.
-- O cliente repassa o endereço IP do visitante em `X-Forwarded-For`. Isso é preparação para o
-  item correspondente no backlog da API; enquanto ela não confiar em dois saltos, o cabeçalho
-  é ignorado e nada quebra.
-- Os tipos vêm da especificação OpenAPI da API, gerados e versionados, com um script de
-  regeneração. Zod valida **formulário**, nunca resposta (ADR-0003).
+- Um único cliente HTTP tipado (`apiFetch`), que resolve o endereço da API por ambiente:
+  **rede interna do Docker** (`http://api:3000/api/v1`) para chamadas do servidor, endereço
+  público apenas para URL de imagem. A rede interna não isenta de rate limit — o que decide o
+  balde é o `X-Forwarded-For` abaixo.
+- O cliente repassa o endereço IP do visitante em `X-Forwarded-For` em **toda chamada feita em
+  nome de um visitante** — é o que mantém o rate limit, o account lockout e o audit log da API
+  chaveados na pessoa certa em vez de no container do front. Chamada que não é de visitante
+  (job, health check) **não** manda o header. A API confia por endereço de origem, não por
+  contagem de saltos: copiar o header recebido ou acrescentar o próprio salto dá no mesmo.
+- **Os tipos vêm do pacote `@pet-oasis/api-contracts`** (ADR-0003): schemas de request, views
+  de resposta, enums, nomes de role e feature, `ERROR_CODES` e a **tabela de rotas** — path e
+  verbo ligados ao schema de request e às views de resposta. É essa tabela que tipa o
+  `apiFetch`: nenhum path é escrito à mão no web, e uma mudança de contrato quebra o
+  `typecheck` no mesmo PR. Não há geração de tipos a partir do OpenAPI nem `.d.ts` commitado.
+- Zod valida **formulário**, nunca resposta (ADR-0003): o formulário usa o schema de request
+  do contrato, e as views entram só como tipo (`z.infer`) — resposta da API não passa por
+  `.parse()`.
+- **CORS não se aplica**: o navegador fala com o próprio front, e o front fala com a API pelo
+  servidor. Nenhuma origem do web entra em `CORS_ALLOWED_ORIGINS` da API.
 
 ### Tratamento de erro
 
 | Resposta da API | Tratamento na interface |
 |---|---|
 | 400 (token imprestável) | Estado próprio da página: explica que o link é inválido ou expirou e oferece pedir outro. **Não é erro de sistema** |
-| 401 no login | Mensagem por condição: credencial inválida, conta pendente, banida, ou troca de senha forçada |
+| 401 no login | Credencial inválida, e só isso: email desconhecido e senha errada são indistinguíveis de propósito |
 | 401 em rota autenticada | Redirect ao login preservando o destino, sem mensagem de erro |
-| 403 | Aviso destacado — é sinal de `can()` esquecido |
+| 403 no login | Estado próprio da tela, não erro de sistema: conta banida, troca de senha forçada ou conta não verificada, cada uma com sua explicação e seu caminho de volta |
+| 403 em rota autenticada | Aviso destacado — é sinal de `can()` esquecido |
 | 409 | Inline no campo quando a resposta o nomeia; aviso quando não |
 | 422 | Inline por campo |
+| 429 no login | Muitas tentativas: mostra quanto tempo esperar, lido do `Retry-After`. Lockout da conta e rate limit por IP respondem o **mesmo** `code` (`TOO_MANY_REQUESTS`), então a mensagem não afirma qual dos dois foi |
 | 429 | Mensagem com o tempo de espera, nunca genérica |
+| 503 na renovação da sessão | Retentável, e **não** destrói sessão nenhuma. Tratar como falha de sistema desloga alguém à toa |
 | 5xx | Página de erro com opção de tentar de novo |
 
-O 400 é a linha nova em relação à tabela do `CLAUDE.md`: a API responde 400 genérico para
-token inexistente, expirado ou já usado, sem revelar qual dos três. Os quatro fluxos por
-link dependem disso.
+O 400 é a linha que esta fatia estreia: a API responde 400 genérico para token inexistente,
+expirado ou já usado, sem revelar qual dos três. Os quatro fluxos por link dependem disso.
+
+**A ramificação é sempre pelo `code` do envelope de erro, nunca pela `message`** — a mensagem
+é prosa em pt-BR e pode ser reescrita do lado da API a qualquer momento. Isso vale
+especialmente no login, onde três condições diferentes compartilham o mesmo status 403.
 
 ### Design system
 
@@ -298,13 +337,31 @@ link dependem disso.
   demais compostos previstos nascem na fatia que os usa.
 - Todo par de cor precisa atingir WCAG AA. Contraste é medido, não estimado.
 
-### Ambiente
+### Ambiente e tooling
 
-- Desenvolvimento roda no host, na porta 3001, contra a API em Docker. Isso exige apontar o
-  `APP_URL` do ambiente de desenvolvimento da API para essa porta — é ela que monta os links
-  dos emails.
-- Produção é um container próprio, no mesmo VPS e no mesmo network Docker da API.
-- Lint e formatação por uma ferramenta só, com as regras específicas do framework ativas.
+Esta fatia é implementada **dentro do monorepo** `pet-oasis`, como Fase 12, depois do import
+deste repositório para `apps/web`. O que a spec do monorepo já fechou vale aqui e não se
+rediscute:
+
+- **pnpm workspaces + Turborepo.** Scripts pela raiz (`pnpm typecheck`, `pnpm lint`,
+  `pnpm test`); `@pet-oasis/api-contracts` por `workspace:*`, consumido do fonte TS com
+  `transpilePackages`. Versões compartilhadas (TypeScript, Biome, `@types/node`, Zod, Vitest)
+  vêm do `catalog:`; `tsconfig` e `biome.json` estendem os presets de `packages/`.
+- **Desenvolvimento: o web roda no host, na porta 3001** (`pnpm dev --filter web`); API,
+  Postgres, Redis e Mailpit sobem pelo stack de dev da raiz (`infra/`). É expectativa do web
+  que a issue 11 do monorepo executa — o motivo de a API rodar dev em container (Prisma e
+  client gerado em volume) não existe aqui, e HMR no host é mais rápido. O `APP_URL` de
+  desenvolvimento da API aponta para `http://localhost:3001`: é ela que monta os links dos
+  emails.
+- **Produção: container próprio no stack Compose único da raiz**, no mesmo VPS da API,
+  alcançando-a por `http://api:3000` pela rede do stack. A imagem é buildada com contexto na
+  raiz e `pnpm deploy --filter web`; não contém a API. `prod:up web` reconstrói só o front.
+  Servido no apex `pet-oasis.maiahub.com.br`; a API fica em `pet-oasis-api.maiahub.com.br`
+  (ADR-0004).
+- **Branches:** `feat/fase-12-<NN>-<slug>` a partir de `fase-12`, que sai de `dev`. Commits
+  Conventional em inglês com escopo `web`.
+- Lint e formatação por uma ferramenta só (Biome), com as regras específicas do framework
+  ativas.
 
 ## Testing Decisions
 
@@ -322,15 +379,19 @@ um seam novo, que precisa de justificativa explícita.
 ### Os dois seams
 
 **Seam 1 — navegador, aplicação e API real.** Playwright contra a aplicação rodando e a API
-subida pelo Docker Compose do repositório da API, com banco, Redis e servidor de email reais.
-Nada é falsificado.
+subida pelo stack de teste da raiz do monorepo (`infra/`, override `test`), com banco, Redis e
+servidor de email reais. Nada é falsificado.
 
 Cobre os fluxos ponta a ponta: cadastro, verificação por email, entrada, guarda de rota,
 saída, recuperação de senha e reativação de conta. Cobre também os quatro estados que travam
 a entrada, o redirect com destino preservado, e o erro 422 aparecendo no campo certo.
 
 O link de verificação é lido programaticamente do servidor de email de desenvolvimento, que
-já faz parte do Compose da API. Os dados de teste vêm dos seeds que a API já oferece.
+já faz parte do stack. Os dados de teste vêm dos seeds que a API já oferece.
+
+A API mantém no máximo **5 sessões vivas por `User`**: o sexto login derruba a mais antiga.
+Workers paralelos do Playwright entrando com o mesmo usuário do seed derrubam a sessão uns dos
+outros — teste que afirma sobre a sessão sobreviver usa usuário próprio ou roda em série.
 
 **Seam 2 — a fronteira do módulo de sessão.** Testes rápidos, sem navegador e sem rede, com
 relógio e cliente da API injetados.
@@ -340,9 +401,11 @@ Existe por um motivo específico e único: o access token vive quinze minutos, e
 duas travas mais importantes — *single-flight* e prefetch — também não são determinísticas
 através de um navegador.
 
-Cobre: renovação proativa na margem; chamadas concorrentes produzindo **uma** renovação;
-requisição de prefetch nunca renovando; recusa da API destruindo a sessão; e o conteúdo do
-cookie, provando que a **capability efetiva** não é persistida.
+Cobre: renovação proativa na margem, com a validade lida da resposta da API; chamadas
+concorrentes produzindo **uma** renovação; requisição de prefetch nunca renovando; recusa da
+API destruindo a sessão e **503 não destruindo** (retentado dentro da janela); o par devolvido
+sobrescrevendo o que havia; e o conteúdo do cookie, provando que a **capability efetiva** não
+é persistida e que o refresh nunca sai do BFF.
 
 ### Alvos que não são seams
 
@@ -363,7 +426,7 @@ e o Seam 2 usa injeção. Duas formas de falsificar a mesma coisa seriam uma a m
 ### Prior art
 
 Este repositório está vazio, então não há precedente interno. O precedente de **forma** está
-nos testes de integração do repositório da API: preparar dado real, exercitar a fronteira
+nos testes de integração da API (`apps/api/tests`): preparar dado real, exercitar a fronteira
 pública, afirmar sobre a resposta observável. A ferramenta é diferente; a postura é a mesma.
 
 ## Out of Scope
@@ -379,25 +442,49 @@ pública, afirmar sobre a resposta observável. A ferramenta é diferente; a pos
 - **Compostos do design system que esta fatia não usa**: tabela de dados, formatação
   monetária, estado vazio.
 - **Internacionalização.** A interface é pt-BR sem biblioteca de tradução.
-- **Deploy automático e branch de integração.** O deploy é manual; a branch `dev` nasce no
-  dia em que houver automação.
-- **Os três itens no backlog da API.** Nenhum deles bloqueia esta fatia. O item do endereço
-  IP bloqueia a Vitrine com busca, que é a fatia 3.
+- **Deploy automático.** O deploy é manual, pelo `prod:up` da raiz do monorepo.
+- **Trabalho do lado da API, exceto o da issue `00`.** O repasse do IP do visitante, o cookie
+  de refresh, a janela de graça e o envelope de erro já estão no ar — o contrato de
+  integração vive no guia da API, não aqui. O que **falta** lá (tabela de rotas e resposta de
+  login no contrato) está na issue `00`, e é o único trabalho de API que esta fatia carrega.
 - **Otimização de imagem.** Não há imagem de domínio nesta fatia.
 
 ## Further Notes
 
-**Uma conta pendente não consegue entrar.** Confirmado no serviço de autenticação da API: a
-verificação de status acontece durante o login, junto com banimento e troca de senha forçada,
-e as três recusam a entrada. A consequência de desenho é direta: **não existe** um aviso de
-"verifique seu email" dentro da aplicação, porque a pessoa nunca chega lá. Esse aviso, e a
-ação de reenviar a verificação, precisam viver na **tela de login**. Um desenho que assuma o
-contrário terá de ser refeito.
+**Uma conta pendente não consegue entrar.** A verificação de status acontece durante o login,
+junto com banimento e troca de senha forçada, e as três recusam a entrada. A consequência de
+desenho é direta: **não existe** um aviso de "verifique seu email" dentro da aplicação, porque
+a pessoa nunca chega lá. Esse aviso, e a ação de reenviar a verificação, precisam viver na
+**tela de login**. Um desenho que assuma o contrário terá de ser refeito.
 
-**A ordem das recusas no login importa e não é nossa.** A API verifica banimento primeiro,
-depois troca de senha forçada, depois status pendente. Uma conta que esteja em mais de uma
-dessas condições exibe a mensagem da mais severa. A interface reflete a ordem da API; não
-tenta recompô-la.
+**A ordem das recusas no login importa e não é nossa.** São cinco condições, nesta ordem, e
+cada uma tem um `code` estável no envelope de erro — é por ele que a interface ramifica:
+
+| Condição | Status | `code` |
+|---|---|---|
+| Email desconhecido ou senha errada | 401 | `UNAUTHORIZED` |
+| Conta travada por tentativas erradas | 429 | `TOO_MANY_REQUESTS` (com `Retry-After`) |
+| Conta banida | 403 | `ACCOUNT_BANNED` |
+| Troca de senha forçada | 403 | `PASSWORD_RESET_REQUIRED` |
+| Conta não verificada | 403 | `EMAIL_NOT_VERIFIED` |
+
+Uma conta em mais de uma dessas condições exibe a mensagem da primeira que a API alcança. A
+interface reflete a ordem da API; não tenta recompô-la. As duas primeiras condições são
+indistinguíveis entre si de propósito; as três de 403 só disparam depois de a senha conferir,
+então distingui-las não vaza nada para quem não é o dono da conta.
+
+O 429 do login é um só `code` para duas causas — lockout da conta (só com a senha certa) e
+rate limit por IP (antes de qualquer verificação). A tela não sabe qual foi e não finge saber:
+mostra o tempo do `Retry-After` e nada mais.
+
+**A renovação da sessão tem uma resposta que não é falha.** A API aceita o refresh
+imediatamente anterior por dez segundos a partir do uso, devolvendo **o par atual** daquela
+corrente de rotação — não necessariamente o que aquela rotação emitiu; quem chega atrasado
+recebe o mais recente, e o módulo sobrescreve o que tinha. Quando não consegue reproduzi-lo,
+responde 503: retentável, **não** destrói sessão, e o primeiro 503 abre uma janela própria de
+**30 segundos** para a retentativa daquele mesmo token, mesmo que os dez da rotação já tenham
+passado — retentar imediatamente, com backoff curto; depois dos 30s a reapresentação é
+indistinguível de roubo. Só a recusa explícita da renovação derruba a sessão e leva ao login.
 
 **O telefone é normalizado pela API**, que descarta tudo que não é dígito e exige dez ou onze
 dígitos com DDD. O formulário pode oferecer máscara livremente.

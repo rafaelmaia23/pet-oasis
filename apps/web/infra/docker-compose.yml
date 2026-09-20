@@ -19,4 +19,8 @@ services:
       # lá e o `npm ci` trava. Buildar na rede do host contorna isso sem mexer
       # no DNS global do daemon. Mesmo motivo do repo da API.
       network: host
+    # Declara a porta de escuta sem publicá-la no host: quem alcança o front é o
+    # nginx, pela rede `proxy`.
+    expose:
+      - "3001"
     restart: unless-stopped

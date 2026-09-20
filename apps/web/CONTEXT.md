@@ -48,6 +48,21 @@ _Avoid_: funcionário admin, staff, operador
 tem telas, tem troca de contexto explícita e alcança as duas superfícies autenticadas.
 _Avoid_: usuário duplo, caso especial
 
+### Sessão
+
+**Session**:
+Termo da API: um elo de uma corrente de rotação, um por refresh token emitido. Cada renovação
+cria um elo novo; o anterior deixa de valer. Não é o que a interface chama de `Dispositivo`,
+e não sobrevive a uma renovação.
+_Avoid_: sessão como sinônimo de dispositivo, login, token
+
+**Dispositivo**:
+O nome, na interface, de uma **`Sessão viva`** da API — o que a lista de acessos ativos de um
+`User` mostra: um navegador ou aplicativo por onde ele entrou e continua entrado. A API não
+tem esse conceito; o que ela lista é o elo vivo de cada corrente, e o identificador dele muda
+a cada renovação.
+_Avoid_: sessão, aparelho, acesso
+
 ### Catálogo
 
 **Product**:

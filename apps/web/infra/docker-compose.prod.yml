@@ -1,24 +1,37 @@
-# Override de produção — o container do front no MESMO network Docker da API
-# (ADR-0004), para que toda chamada server-side vá pela rede interna e nunca
-# pela URL pública.
+# Override de produção — o container do front em DUAS redes (ADR-0004):
 #
-# O network é criado pelo compose de produção da API (`-p pet-oasis-prod`, sem
-# bloco `networks:` → default do projeto), então aqui ele entra como externo:
-# este compose se junta a um network que já existe, nunca o cria. Se a API não
-# estiver de pé, o `up` falha dizendo que o network não existe — o que é a
-# mensagem certa.
+#   pet-oasis  para falar com a API, server-side, pela rede interna do Docker,
+#              nunca pela URL pública.
+#   proxy      para o nginx da frente alcançar o front por DNS de container.
+#
+# As duas entram como externas: este compose se junta a redes que já existem,
+# nunca as cria. As duas são criadas UMA VEZ no host, fora de qualquer repositório
+# (`docker network create pet-oasis` / `proxy`) — rede que liga stacks diferentes
+# vive mais que qualquer uma delas, então o front sobe com a API fora e vice-versa.
+# Se o `up` disser que a rede não existe, é o host que ainda não a criou. O nome
+# da `proxy` é o do nginx, que não é versionado em repositório nenhum: por isso é
+# variável, e não literal.
+#
+# Postgres e Redis vivem numa terceira rede, interna, que o front não alcança de
+# propósito.
+#
+# A porta NÃO é publicada no host: todo tráfego público entra pelo nginx, que
+# alcança `web:3001` pela rede `proxy`. Publicar a porta abriria um caminho que
+# desvia do TLS e do rate limit da frente.
 services:
   web:
     build:
       target: runtime
     container_name: pet-oasis-web
     env_file: ../.env.production
-    ports:
-      - "${WEB_PORT:-3001}:3001"
     networks:
-      - api
+      - petoasis
+      - proxy
 
 networks:
-  api:
+  petoasis:
     external: true
-    name: ${API_NETWORK:-pet-oasis-prod_default}
+    name: ${API_NETWORK:-pet-oasis}
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-proxy}

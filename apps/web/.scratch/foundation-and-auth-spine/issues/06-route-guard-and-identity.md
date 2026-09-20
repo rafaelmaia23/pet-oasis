@@ -4,7 +4,7 @@
 foi barrado volta exatamente para onde ia depois de entrar. A interface passa a saber quem é
 o `User` e o que ele pode.
 
-**Blocked by:** 05
+**Blocked by:** 00, 05
 
 **Status:** ready-for-agent
 
@@ -14,8 +14,8 @@ o `User` e o que ele pode.
       usuário
 - [ ] O middleware decide **apenas** se há sessão. Não consulta capability e não autoriza por
       feature
-- [ ] Identidade e **capability efetiva** lidas da API por requisição, memoizadas dentro da
-      requisição para não repetir a chamada
+- [ ] Identidade e **capability efetiva** lidas de `GET /me` por requisição (view `me` do
+      contrato), memoizadas dentro da requisição para não repetir a chamada
 - [ ] O resultado **nunca** é persistido no cookie
 - [ ] `can()` honra o **wildcard** de administrador — sem isso o administrador não vê nada
 - [ ] `can()` respeita negação explícita sobrepondo concessão

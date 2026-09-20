@@ -3,11 +3,12 @@
 **What to build:** um visitante cria a própria conta e sai sabendo que o processo ainda não
 terminou — falta verificar o email.
 
-**Blocked by:** 05
+**Blocked by:** 00, 05
 
 **Status:** ready-for-agent
 
-- [ ] Formulário com os campos que o schema de cadastro da API exige
+- [ ] Formulário com os campos que o `signupSchema` do contrato exige — e validado por ele,
+      antes do envio; a validação que decide continua sendo o 422 da API
 - [ ] O telefone aceita máscara livremente; a API normaliza descartando o que não é dígito
 - [ ] Os requisitos da senha são visíveis **antes** de a pessoa errar
 - [ ] Erro de validação aparece no campo correspondente, nunca em aviso flutuante

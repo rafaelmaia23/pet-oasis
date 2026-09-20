@@ -4,6 +4,12 @@ Frontend web do Pet Oasis, uma loja de pet shop. Consome a API REST do repo irm�
 `pet-oasis-api` (`../pet-oasis-api`), que é a **autoridade de todo o domínio**: aqui não há
 banco, não há regra de negócio e não há validação que decide.
 
+> **Congelado em 2026-09-19.** Este repositório está num ponto verde à espera do import para
+> o monorepo `pet-oasis` (`apps/web`; issue 11 da Fase 11 da API, em
+> `../pet-oasis-api/.scratch/monorepo/`). Nada de código aqui até lá. A espinha de
+> autenticação (`.scratch/foundation-and-auth-spine/`) é a **Fase 12** do sistema e será
+> implementada no monorepo, começando pela issue `00` — dois pedidos ao pacote de contratos.
+
 ---
 
 ## ⚠️ REGRA CRÍTICA — NUNCA decida regra de negócio nem de produto
@@ -24,14 +30,40 @@ Nenhuma regra de negócio é reimplementada aqui. Em particular:
   403 — feio, não inseguro. E ele **tem** que honrar o wildcard `*`, senão o admin não vê
   nada.
 - **Zod valida formulário, nunca resposta** (ADR-0003). A validação que decide é a da API.
-- Dúvida sobre comportamento da API se resolve **lendo a API**, não inferindo:
-  `../pet-oasis-api/docs/reference/endpoints.md` e o índice `../pet-oasis-api/docs/context.md`.
+- **Os schemas vêm de `@pet-oasis/api-contracts`**, nunca de cópia (ADR-0003): request,
+  views de resposta, enums, `ERROR_CODES` e a tabela de rotas que tipa o `apiFetch`.
+- **Não decodifique o JWT para decidir nada.** O conteúdo dele é da API; a validade do
+  access token vem da resposta de login/refresh, tipada pelo contrato.
+- Dúvida sobre comportamento da API se resolve **lendo o guia de integração dela**, nunca
+  inferindo: `../pet-oasis-api/apps/api/docs/guides/integrating-with-the-api.md`. Ele é
+  escrito para este cliente e responde quase tudo — endereço, `X-Forwarded-For`, envelope de
+  erro, sessão e cookie de refresh, as rotas que são contrato. **O que faltar lá é buraco no
+  guia**: avise que ele precisa crescer, em vez de garimpar em
+  `apps/api/docs/reference/endpoints.md` (lista de rotas) ou nos ADRs da API
+  (`apps/api/docs/adr/`), que são o racional interno dela e não foram escritos para quem
+  consome.
 
-**Conta pendente não entra.** O login da API recusa em três condições, nesta ordem: banido →
-troca de senha forçada → status pendente. Todas respondem 401 e **nenhuma** deixa a pessoa
-alcançar o interior da aplicação. Consequência de desenho: não existe aviso de "verifique seu
-email" dentro da aplicação, porque ninguém pendente chega lá — esse aviso e o reenvio da
-verificação vivem **na tela de login**. Interface que assuma o contrário será refeita.
+**Conta pendente não entra.** O login da API recusa em **cinco** condições, nesta ordem, e a
+interface **ramifica pelo `code` do envelope de erro** — nunca pela `message`, que é prosa em
+pt-BR e pode ser reescrita a qualquer momento:
+
+| Condição | Status | `code` |
+|---|---|---|
+| Email desconhecido ou senha errada | 401 | `UNAUTHORIZED` |
+| Conta travada por tentativas erradas | 429 | `TOO_MANY_REQUESTS` (com `Retry-After`) |
+| Conta banida | 403 | `ACCOUNT_BANNED` |
+| Troca de senha forçada | 403 | `PASSWORD_RESET_REQUIRED` |
+| Conta não verificada | 403 | `EMAIL_NOT_VERIFIED` |
+
+As duas primeiras são deliberadamente indistinguíveis entre si. As três de 403 só disparam
+**depois** de a senha conferir — quem as recebe é o dono da conta, então distingui-las não
+vaza nada. O 429 é **um só `code`** para lockout da conta e para rate limit por IP: a tela
+mostra o `Retry-After` e não afirma qual dos dois foi.
+
+**Nenhuma** delas deixa a pessoa alcançar o interior da aplicação. Consequência de desenho:
+não existe aviso de "verifique seu email" dentro da aplicação, porque ninguém pendente chega
+lá — esse aviso e o reenvio da verificação vivem **na tela de login**. Interface que assuma o
+contrário será refeita.
 
 ## ⚠️ REGRA — Toda cor e todo componente nasce com a versão dark
 
@@ -44,8 +76,9 @@ Sem exceção, e vale para cada peça nova. Detalhe e racional em
 
 Next 16 (App Router) · React 19 · TypeScript strict · Tailwind 4 (CSS-first: os tokens vivem
 em `@theme`, **não existe `tailwind.config.js`**) · shadcn 4 · `iron-session` 9 ·
-`openapi-typescript` · Motion 13 · Biome · Vitest + Testing Library + Playwright · npm,
-Node 24.
+`@pet-oasis/api-contracts` (schemas Zod, views, `ERROR_CODES`, tabela de rotas — do
+monorepo) · Motion 13 · Biome · Vitest + Testing Library + Playwright · Node 24. npm até o
+import; pnpm workspaces + Turborepo no monorepo.
 
 **Biome sozinho**, sem ESLint: o domínio `next` do Biome auto-ativa ao detectar `next@>=14`
 e cobre `noImgElement`, `noSyncScripts`, `noNextAsyncClientComponent`, `useInlineScriptId`,
@@ -57,7 +90,11 @@ entre outras. A única regra do `eslint-config-next` sem equivalente é
 - **BFF** (ADR-0001): a sessão vive num cookie `httpOnly` criptografado do domínio do front;
   o token nunca chega ao JavaScript. Rotação **proativa no middleware**, com as três travas
   contra falso positivo de reuso descritas no ADR — mexer nelas sem ler o ADR desloga
-  usuários de todos os dispositivos.
+  usuários de todos os dispositivos. A janela de graça de 10s da API é rede de segurança para
+  a corrida que sobra, **não licença** para renovar em paralelo: as travas ficam. O refresh
+  token da API viaja em cookie (`Path=/api/v1/auth`) e **nunca chega ao navegador**: o BFF lê
+  o `Set-Cookie`, guarda na sessão própria (7 dias deslizantes, como o refresh) e reenvia
+  como `Cookie` em `/auth/refresh` e `/auth/logout`.
 - **Server-first** (ADR-0002): máximo de Server Components. `"use client"` só quando a
   interação exigir. Leitura por RSC com `searchParams` como estado de lista; escrita por
   Server Actions.
@@ -86,12 +123,15 @@ header.
 | Resposta | Tratamento |
 |---|---|
 | **400** (token imprestável) | **Estado esperado da página**, não erro de sistema: explica que o link é inválido ou expirou e oferece pedir outro. A API responde 400 genérico para token inexistente, expirado **ou** já usado, sem revelar qual — é anti-enumeração dela, não descuido |
-| 401 **no login** | Mensagem por condição: credencial inválida, conta pendente, banida, ou troca de senha forçada |
+| 401 **no login** | Credencial inválida (`UNAUTHORIZED`) — e só isso: email desconhecido e senha errada são indistinguíveis de propósito |
 | 401 **em rota autenticada** | Redirect pro login preservando `?next=`, sem mensagem de erro — expirar não é falha do usuário |
-| 403 | Toast barulhento — é sinal de `can()` esquecido |
+| 403 **no login** | **Estado esperado da tela**, não erro de sistema: ramifica por `code` (`ACCOUNT_BANNED`, `PASSWORD_RESET_REQUIRED`, `EMAIL_NOT_VERIFIED`), cada um com sua explicação e seu caminho de volta |
+| 403 **em rota autenticada** | Toast barulhento — é sinal de `can()` esquecido |
 | 409 | Inline quando a resposta nomeia o campo; toast quando não |
 | 422 | Inline por campo, via `useActionState` — nunca toast |
-| 429 | Mensagem com o tempo de espera, nunca genérica |
+| 429 **no login** | Muitas tentativas: mostra **quanto tempo esperar**, lido do `Retry-After`. Lockout da conta e rate limit por IP respondem o mesmo `code` — a mensagem não afirma qual foi |
+| 429 | Mensagem com o tempo de espera do `Retry-After`, nunca genérica |
+| 503 **no `/auth/refresh`** | **Retentável, e não destrói sessão nenhuma**: é a API dizendo que não conseguiu reproduzir o par dentro da janela de graça, em vez de decidir entre concorrência e roubo. Tratar como falha de sistema desloga alguém à toa |
 | 5xx | `error.tsx` com retry |
 
 Carregamento por streaming com Suspense e skeleton espelhando o layout real. Nunca spinner
@@ -129,8 +169,9 @@ injeção; uma terceira forma de falsificar a mesma coisa seria uma a mais.
 - **Commits**: conventional commits (`feat:`, `fix:`, `docs:`, `merge:`), em inglês.
   **Nunca assinar o commit** — sem `Co-Authored-By`, sem rodapé de agente.
 - **Branches**: `main` + `feat/<NN>-<slug>`, onde `<NN>` é o número do ticket em
-  `.scratch/`. Merge `--no-ff`. Nada direto na `main`. Não existe `dev` — ela nasce no dia
-  em que houver deploy automático.
+  `.scratch/`. Merge `--no-ff`. Nada direto na `main`. Não existe `dev` aqui — no monorepo o
+  fluxo é o da raiz (`main` ← `dev` ← `fase-<n>` ← `feat/fase-<n>-<NN>-<slug>`, commits com
+  escopo `web`), e este repo não o antecipa.
 - **Mergeou, apaga a branch.** `git branch -d <branch>` faz parte do merge, não é uma
   faxina para depois: o histórico do merge já guarda tudo que a branch guardava, e branch
   mergeada que fica só acumula ruído na listagem. O `-d` minúsculo é de propósito — ele
@@ -142,10 +183,11 @@ injeção; uma terceira forma de falsificar a mesma coisa seria uma a mais.
 
 ## Ambientes
 
-Dev roda **no host, na porta 3001** (a API ocupa a 3000) contra a API dockerizada. Produção
-é container próprio no mesmo VPS e no mesmo network da API. O apex
-`pet-oasis.maiahub.com.br` serve este front; a API fica em `api.pet-oasis.maiahub.com.br`
-(ADR-0004).
+Dev roda **no host, na porta 3001** (a API ocupa a 3000) contra a API dockerizada — no
+monorepo, `pnpm dev --filter web` contra o stack de dev da raiz. Produção é container próprio
+no mesmo VPS da API, alcançando-a por `http://api:3000` — hoje por uma rede externa criada no
+host; no monorepo, pela rede do stack único. O apex `pet-oasis.maiahub.com.br` serve este
+front; a API fica em `pet-oasis-api.maiahub.com.br` (ADR-0004).
 
 ## Onde mora cada documento
 

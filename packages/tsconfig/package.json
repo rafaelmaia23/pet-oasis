@@ -15,7 +15,7 @@
     "lint": "biome check ."
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
+    "@biomejs/biome": "catalog:",
     "@pet-oasis/biome-config": "workspace:*"
   }
 }

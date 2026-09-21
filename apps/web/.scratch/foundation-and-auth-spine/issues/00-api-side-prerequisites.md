@@ -1,8 +1,8 @@
-# 00: Pré-requisitos do lado da API — o contrato precisa de mais duas peças
+# 00: Pré-requisitos do lado da API — o contrato precisa de mais duas peças, e o guia de uma
 
 **What to build:** nada neste repositório. Esta issue existe para que dois buracos do
-`@pet-oasis/api-contracts`, descobertos ao alinhar a spec ao guia de integração da API, não
-sejam esquecidos — e para que nenhuma issue desta fatia comece antes de eles estarem
+`@pet-oasis/api-contracts` e um do guia de integração, descobertos ao alinhar a spec ao guia
+da API, não sejam esquecidos — e para que nenhuma issue desta fatia comece antes de eles estarem
 fechados. O primeiro ato dela, já dentro do monorepo, é abrir as issues correspondentes no
 `.scratch/` da raiz, do lado da API.
 
@@ -35,7 +35,17 @@ monorepo existe para eliminar.
    pacote — o web não teria de onde tipar a resposta do login. E a resposta não diz quando o
    access token expira: o BFF renova 60 segundos antes, e o guia proíbe decodificar o JWT para
    decidir. O nome do campo é da API (`expiresIn`, `expiresAt`, o que ela preferir); o contrato
-   o tipa e o guia de integração o documenta.
+   o tipa.
+
+## O buraco no guia de integração
+
+O guia (`apps/api/docs/guides/integrating-with-the-api.md`, § 5 "Sessão e renovação") diz
+que o access token vive 15 minutos e que o cliente **não deve decodificar o JWT para decidir
+nada** — mas não diz **como** o cliente descobre quando o token expira. Hoje a única saída
+seria justamente decodificar o `exp`, ou duplicar o `JWT_EXPIRES_IN` da API no cliente. É o
+caso que o `CLAUDE.md` do web chama de "o que faltar lá é buraco no guia": o guia precisa
+crescer junto com a peça 2 — documentar o campo de validade na resposta de login/refresh e
+dizer que é dele, e não do JWT, que o cliente lê a expiração.
 
 ## O que isto pede da spec do monorepo
 
@@ -44,8 +54,8 @@ rotas. Isto a alarga — é revisão dela (entrada "Revisto em"), não adição 
 
 - [ ] Issue aberta no `.scratch/` da raiz para a tabela de rotas no contrato, com OpenAPI
       derivado dela e teste de paridade com o router
-- [ ] Issue aberta para a resposta de login/refresh (com validade) no contrato e no guia de
-      integração
+- [ ] Issue aberta para a resposta de login/refresh (com validade) no contrato
+- [ ] O guia de integração documenta o campo de validade e a regra "leia daqui, não do JWT"
 - [ ] Spec da Fase 11 revista na fronteira do contrato
 - [ ] As duas fechadas: o `typecheck` do web passa importando a tabela de rotas e a view de
       login do contrato

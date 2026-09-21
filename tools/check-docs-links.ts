@@ -95,23 +95,25 @@ const CLOSED_SPEC_DESTINATION = new RegExp(
 const DOC_MENTION = new RegExp(String.raw`(?<![\w/.-])${DOC_PATH}\b`, "g");
 
 /**
- * Uma menção ao tracker como aparece em prosa: a pasta de uma fase
- * (`.scratch/fase-11-monorepo/`) ou um arquivo dela
- * (`.scratch/fase-11-monorepo/issues/07-root-docs-skeleton.md`). Placeholder
- * (`.scratch/<slug>/`, `.scratch/fase-<n>-…/`) não casa: o `<` não é caractere de
- * nome de pasta, e é isso que deixa o molde dos guias fora da checagem.
+ * Uma menção ao tracker como aparece em prosa: a pasta de uma fase, com ou sem a
+ * barra final (`.scratch/fase-11-monorepo/`), ou um caminho dentro dela
+ * (`.scratch/fase-11-monorepo/issues/07-root-docs-skeleton.md`). O que vier depois
+ * é resolvido inteiro contra a raiz, então um segmento com erro de digitação
+ * também reprova. Um ponto final de frase colado ao caminho é aparado; uma
+ * menção interrompida por `<` é placeholder de guia (`.scratch/fase-<n>-<slug>/`)
+ * e é ignorada.
  */
-const SCRATCH_MENTION = /(?<![\w/.-])\.scratch\/[\w-]+\/(?:[\w./-]+\.md)?/g;
+const SCRATCH_MENTION = /(?<![\w/.-])\.scratch\/[\w.-]+(?:\/[\w./-]*)?/g;
+
+/** O tracker só existe na raiz; toda menção a ele resolve daqui. */
+const SCRATCH_DIR = join(ROOT, ".scratch");
 
 /**
- * A forma de uma pasta do tracker: **pasta = fase**, `fase-<n>-<slug>`, flat, com o
- * número global da fase sem zero à esquerda — é o que faz o `ls` sair em ordem
- * cronológica e a pasta casar 1:1 com a branch (`fase-11` ↔ `fase-11-monorepo/`).
- * Não existe pasta sem número: trabalho fora de fase é branch solta, entrada no
- * backlog ou issue na fase aberta. O porquê está em
- * `docs/adr/0002-tracker-folders-are-phases.md`.
+ * A forma de uma pasta do tracker: **pasta = fase**, `fase-<n>-<slug>`, com o
+ * número global da fase sem zero à esquerda (o mesmo da branch `fase-<n>`) e o
+ * slug em kebab-case. O porquê — e para onde vai o trabalho que não é fase —
+ * está em `docs/adr/0002-tracker-folders-are-phases.md`.
  */
-const SCRATCH_DIR = join(ROOT, ".scratch");
 const PHASE_FOLDER = /^fase-[1-9]\d*-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** `line` é `null` quando o problema é de um diretório, não de uma linha de arquivo. */
@@ -243,6 +245,14 @@ for (const file of collectFiles(ROOT)) {
 
     // Links markdown relativos: [texto](caminho.md#ancora)
     if (isMarkdown) {
+      // Link para uma pasta (`](../.scratch/fase-12-web-auth-spine/)`): só a
+      // existência, não há âncora.
+      for (const match of line.matchAll(/]\(([^)\s:]+\/)\)/g)) {
+        const target = match[1];
+        if (target && !exists(resolve(dirname(file), target))) {
+          report(file, lineNumber, `pasta inexistente: ${target}`);
+        }
+      }
       for (const match of line.matchAll(/]\(([^)\s]+\.md)(#[^)\s]*)?\)/g)) {
         const [, target, hash] = match;
         if (!target || /^[a-z]+:\/\//.test(target)) continue;
@@ -284,10 +294,11 @@ for (const file of collectFiles(ROOT)) {
       }
     }
 
-    // Menções ao tracker: `.scratch/fase-11-monorepo/` ou um arquivo dela. Só
-    // existe um tracker, na raiz, então resolve sempre de lá — e é o que prova
-    // que renomear uma pasta de fase não deixou ponteiro para trás.
-    for (const [target] of line.matchAll(SCRATCH_MENTION)) {
+    // Menções ao tracker: `.scratch/fase-11-monorepo/` ou um caminho dentro dela.
+    // É o que prova que renomear uma pasta de fase não deixou ponteiro para trás.
+    for (const match of line.matchAll(SCRATCH_MENTION)) {
+      if (line[match.index + match[0].length] === "<") continue;
+      const target = match[0].replace(/\.$/, "");
       if (!exists(join(ROOT, target))) {
         report(file, lineNumber, `caminho inexistente: ${target}`);
       }
@@ -296,11 +307,11 @@ for (const file of collectFiles(ROOT)) {
 }
 
 if (problems.length > 0) {
-  console.error(`✗ ${problems.length} link(s) quebrado(s) na documentação:\n`);
+  console.error(`✗ ${problems.length} problema(s) na documentação:\n`);
   for (const { file, line, message } of problems) {
     console.error(`  ${line === null ? file : `${file}:${line}`} — ${message}`);
   }
   process.exit(1);
 }
 
-console.log("✓ documentação: todos os caminhos e âncoras existem");
+console.log("✓ documentação: caminhos, âncoras e pastas do tracker em ordem");

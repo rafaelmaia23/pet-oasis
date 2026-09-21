@@ -68,8 +68,8 @@ dele vira a Fase 12 no `todo.md` da raiz. Pré-condição: o web está congelado
       lista como importers, e cada `Dockerfile.dockerignore` exclui `apps/*` menos o próprio
       app e os manifestos — um app novo não muda nenhuma dessas linhas (revisão da issue). Três targets buildados
       e inspecionados: nenhum `next`/`react` na imagem da API, nenhum Prisma na do web.
-- [x] A pasta `.scratch/foundation-and-auth-spine` do web migra para o `.scratch/` da raiz
-      (renomeada para `fase-12-web-auth-spine/` na issue 15); o
+- [x] A pasta `foundation-and-auth-spine/` do `.scratch/` do web migra para o `.scratch/` da
+      raiz (renomeada para `fase-12-web-auth-spine/` na issue 15); o
       `todo.md` da raiz ganha a **Fase 12** (espinha de autenticação do web) na forma aberta,
       apontando para ela; a spec e as issues do web não mudam de conteúdo — a única edição foi
       de caminho: cinco menções ao design system do web, que de fora do app só resolvem com o

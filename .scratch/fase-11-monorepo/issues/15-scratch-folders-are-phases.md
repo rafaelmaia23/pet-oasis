@@ -9,7 +9,7 @@ consciente do que a skill de setup prescreve (`<feature-slug>` sem ordem), depoi
 
 **Blocked by:** None (can start immediately).
 
-**Status:** done (2026-09-21)
+**Status:** fechada em 2026-09-21
 
 - [x] `monorepo/` virou `fase-11-monorepo/` e `foundation-and-auth-spine/` virou
       `fase-12-web-auth-spine/` (`git mv`, histórico preservado); `fase-10-frontline/` já
@@ -21,7 +21,9 @@ consciente do que a skill de setup prescreve (`<feature-slug>` sem ordem), depoi
       citação à issue 07 pelo caminho antigo da pasta passava em branco, apesar de o ADR `0001`
       dizer que era provada. Ele passou a checar toda menção a `.scratch/<pasta>/` ou a um
       arquivo dela (resolvida da raiz; placeholder `<slug>` não casa), e foi essa checagem que
-      listou as dez citações a corrigir.
+      listou as dez citações a corrigir. A revisão achou a brecha da menção **sem barra final**
+      (`.scratch/<pasta>` solto no texto passava) e o link markdown para pasta, que nenhum
+      check cobria; os dois entraram.
 - [x] `docs:check` ganhou a regra: cada diretório de `.scratch/` casa com
       `fase-[1-9]\d*-<kebab>` e contém `spec.md`; violação sai vermelha com o nome da pasta
       (provado com `checkout/`, `fase-013-x/` e `fase-13-no-spec/`).

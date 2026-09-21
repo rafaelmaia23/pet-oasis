@@ -1,0 +1,37 @@
+# Override de produção — o container do front em DUAS redes (ADR-0004):
+#
+#   pet-oasis  para falar com a API, server-side, pela rede interna do Docker,
+#              nunca pela URL pública.
+#   proxy      para o nginx da frente alcançar o front por DNS de container.
+#
+# As duas entram como externas: este compose se junta a redes que já existem,
+# nunca as cria. As duas são criadas UMA VEZ no host, fora de qualquer repositório
+# (`docker network create pet-oasis` / `proxy`) — rede que liga stacks diferentes
+# vive mais que qualquer uma delas, então o front sobe com a API fora e vice-versa.
+# Se o `up` disser que a rede não existe, é o host que ainda não a criou. O nome
+# da `proxy` é o do nginx, que não é versionado em repositório nenhum: por isso é
+# variável, e não literal.
+#
+# Postgres e Redis vivem numa terceira rede, interna, que o front não alcança de
+# propósito.
+#
+# A porta NÃO é publicada no host: todo tráfego público entra pelo nginx, que
+# alcança `web:3001` pela rede `proxy`. Publicar a porta abriria um caminho que
+# desvia do TLS e do rate limit da frente.
+services:
+  web:
+    build:
+      target: runtime
+    container_name: pet-oasis-web
+    env_file: ../.env.production
+    networks:
+      - petoasis
+      - proxy
+
+networks:
+  petoasis:
+    external: true
+    name: ${API_NETWORK:-pet-oasis}
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-proxy}

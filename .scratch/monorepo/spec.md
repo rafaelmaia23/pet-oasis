@@ -10,7 +10,9 @@ Status: ready-for-agent
 > (`grill-with-docs → to-spec → to-tickets → implement`). Carrinho, pedido e pagamento,
 > antes "Fase 11", passam a ser fase posterior; a espinha de autenticação do web vira a Fase 12.
 >
-> Decisões fechadas em três rodadas de grelha (6 + 8 + 6 perguntas). O projeto é de estudo e
+> Decisões fechadas em três rodadas de grelha (6 + 8 + 6 perguntas), mais duas (7 + 5) em
+> 2026-09-21, depois do import do web, que alargaram a fronteira do contrato e deram
+> forma ao tracker (issues 15–17). O projeto é de estudo e
 > portfólio: **aprender monorepo é entrega**, não efeito colateral — por isso a migração é
 > por camadas, uma tecnologia por issue, cada uma com critério de aceite próprio.
 
@@ -147,6 +149,30 @@ Um único repositório `pet-oasis`, gerido por **pnpm workspaces** e orquestrado
 - **Compatibilidade de `exactOptionalPropertyTypes`/`noUncheckedIndexedAccess`:** o contrato
   compila sob o preset mais estrito do workspace, para que nenhum consumidor seja menos estrito
   que a fonte.
+- **Revisto em 2026-09-21** (grelha pós-import, a partir da issue `00` da Fase 12): a fronteira
+  acima não bastava para um cliente consumir o pacote, e o pacote é que cresce — não o web. Duas
+  peças a mais são contrato:
+  - **A tabela de rotas.** Uma entrada por operação, aninhada por domínio e nomeada pela
+    operação (`routes.auth.login`), com `method`, `path` no estilo Express (`:id`), o schema de
+    request (o envelope `body`/`query`/`params` já do contrato), as respostas por status (a view,
+    ou a lista de views na ordem da escada de capability — `public`/`internal`/`cost`), o shape de
+    erro por status, se a rota é pública ou exige bearer, **e a prosa do OpenAPI** (`summary`,
+    `description`, descrição de cada resposta). Documentação é contrato: a descrição do login diz
+    exatamente o que o cliente tem de tratar. Só-zod continua valendo — string não é dependência.
+    O `src/docs/` da API vira **adaptador**: deriva o OpenAPI da tabela (`:id` → `{id}`, lista de
+    views → `oneOf`, nome da operação → `operationId`), e nada de prosa fica em sidecar. Uma tabela
+    de rotas escrita no web seria a terceira cópia do mesmo path (router, OpenAPI, web).
+  - **A resposta de sessão.** Login e refresh respondem `{ accessToken, expiresIn }` — `expiresIn`
+    em segundos, contados do recebimento (convenção OAuth2, imune a diferença de relógio entre a
+    API e o BFF, que renova 60 s antes). Derivado da mesma configuração que assina o token; o
+    formato dela (`"15m"`) não muda. O guia de integração passa a mandar ler `expiresIn`, nunca
+    decodificar o JWT.
+  - Alternativas rejeitadas: tabela só com schemas e prosa em sidecar na API (duas estruturas
+    com a mesma chave a sincronizar, e o teste de paridade teria de cobrir as duas); chave plana
+    `"POST /auth/login"` (o cliente digita o path que a tabela existe para evitar); `expiresAt`
+    (instante absoluto, sensível a skew); migrar a tabela domínio a domínio com allowlist de
+    "ainda não migrado" (rejeitado em favor de um refactor largo numa issue só, sem duas fontes de
+    verdade convivendo).
 
 ### Gestor de pacotes e versões
 
@@ -222,6 +248,16 @@ Um único repositório `pet-oasis`, gerido por **pnpm workspaces** e orquestrado
 - ADRs da API são renomeados para `NNNN-slug.md`; o `docs:check` denuncia todo link quebrado.
 - O `.scratch` aberto do web migra para a raiz com número de fase; a spec e as issues dele
   são mantidas como estão, só o ponteiro muda.
+- **Revisto em 2026-09-21** (grelha pós-import): o tracker ganha forma. **Pasta = fase**, sempre
+  `fase-<n>-<slug>/`, flat, sem zero à esquerda — o número global da fase ordena o `ls`
+  cronologicamente e casa 1:1 com a branch (`fase-11` ↔ `fase-11-monorepo/`). Não existe pasta
+  sem número: trabalho fora de fase é branch solta, entrada no backlog ou issue na fase aberta;
+  o termo "esforço" sai do vocabulário do tracker. Subpasta por app foi rejeitada porque uma fase
+  atravessa apps (a 11 e a 12 são as provas) — o app aparece no slug quando a fase é de um só
+  (`fase-12-web-auth-spine`). O `docs:check` prova o padrão, e o porquê vira ADR de sistema — o
+  segundo desvio consciente do que a skill prescreve (`<feature-slug>` sem ordem), depois do
+  `docs/adr/0001`. Renomear `monorepo/` e `foundation-and-auth-spine/` corrige toda citação
+  existente no mesmo passo; o `docs:check` é a prova.
 - Pipeline de trabalho de qualquer fase daqui em diante: `grill-with-docs → to-spec →
   to-tickets → implement`, com `.scratch/` da raiz como tracker. O que a API já adaptava das
   skills (tracker em markdown, labels de triagem, domain docs) é mantido, adaptado só ao que
@@ -255,6 +291,14 @@ Um único repositório `pet-oasis`, gerido por **pnpm workspaces** e orquestrado
   `mass-assignment.test.ts`, que existe para que um `.strict()` perdido fique vermelho.
 - **Verificação que é a própria entrega:** o workflow de CI rodando as costuras acima +
   commitlint; o `typecheck` do web importando um schema do contrato.
+- **Costura nova 3 — paridade de rotas** (na API, porque precisa do router; revisto em
+  2026-09-21): o router stack do Express e a tabela de rotas do contrato têm o mesmo conjunto de
+  `method + path` — rota registrada sem entrada, ou entrada sem rota, é vermelho. Molde do
+  `enumParity`. O oráculo de "o OpenAPI derivado é o mesmo documento" é o teste de integração
+  do `/openapi.json` que já existe (público/protegido por rota, `code`s do 403, `Retry-After`,
+  `maxLength`, multipart): ele não é tocado e continua verde. A validade do access token é
+  provada no teste HTTP de login/refresh. A regra de layout do tracker é provada pelo
+  `docs:check`.
 - **Não se testa:** o cache do Turbo, o hook do husky, o `filter-repo` — verificados por uso
   na issue, não por teste que fica. Os testes de schema existentes continuam na API, onde
   estão.

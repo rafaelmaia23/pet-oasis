@@ -52,10 +52,12 @@ dizer que é dele, e não do JWT, que o cliente lê a expiração.
 A seção "O que é contrato" da spec da Fase 11 fecha a fronteira do pacote sem a tabela de
 rotas. Isto a alarga — é revisão dela (entrada "Revisto em"), não adição silenciosa.
 
-- [ ] Issue aberta no `.scratch/` da raiz para a tabela de rotas no contrato, com OpenAPI
-      derivado dela e teste de paridade com o router
-- [ ] Issue aberta para a resposta de login/refresh (com validade) no contrato
+- [x] Issue aberta no `.scratch/` da raiz para a tabela de rotas no contrato, com OpenAPI
+      derivado dela e teste de paridade com o router — é a issue 17 da Fase 11
+      (2026-09-21)
+- [x] Issue aberta para a resposta de login/refresh (com validade) no contrato — é a
+      issue 16 da Fase 11, com `expiresIn` em segundos (2026-09-21)
 - [ ] O guia de integração documenta o campo de validade e a regra "leia daqui, não do JWT"
-- [ ] Spec da Fase 11 revista na fronteira do contrato
+- [x] Spec da Fase 11 revista na fronteira do contrato ("Revisto em 2026-09-21")
 - [ ] As duas fechadas: o `typecheck` do web passa importando a tabela de rotas e a view de
       login do contrato

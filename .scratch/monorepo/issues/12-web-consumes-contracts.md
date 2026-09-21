@@ -6,7 +6,8 @@ exemplo, o schema de login e a view `me`). É o smoke que prova o objetivo da fa
 de contrato na API quebra o `typecheck` do web no mesmo PR. Nenhuma tela é construída — isso é
 a Fase 12.
 
-**Blocked by:** 11.
+**Blocked by:** 11, 16, 17 — a view de sessão e a tabela de rotas precisam existir no contrato
+para que o smoke seja real (revisto em 2026-09-21).
 
 **Status:** ready-for-agent
 

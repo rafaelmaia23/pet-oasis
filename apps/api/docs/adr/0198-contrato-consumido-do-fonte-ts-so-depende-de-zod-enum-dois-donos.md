@@ -4,7 +4,7 @@
 > API (**Arquitetura**) enquanto ele era migrado para ADRs (issue 07), e por isso entrou aqui já
 > como ADR, no fim da numeração. A regra acionável está no `CLAUDE.md` da raiz; o README do
 > pacote (`packages/api-contracts/README.md`) diz o que cada consumidor precisa fazer.
-> Contexto de execução em `.scratch/monorepo/issues/09-api-contracts-foundation.md`.
+> Contexto de execução em `.scratch/fase-11-monorepo/issues/09-api-contracts-foundation.md`.
 
 `packages/api-contracts` (`@pet-oasis/api-contracts`) é o que atravessa a rede entre a API e os
 clientes: nasceu com o que **não depende de nenhum schema da API** — os enums de domínio como

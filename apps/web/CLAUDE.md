@@ -192,7 +192,7 @@ delegam ao Turborepo e cobrem o web junto dos outros pacotes — para o web só,
 - **Direção visual:** `docs/design-system.md` — tokens, contrastes medidos, o que foi editado
   nos componentes gerados pelo shadcn.
 - **Tracker e índice das fases:** na raiz — `.scratch/` (a espinha de autenticação é
-  `.scratch/foundation-and-auth-spine/`, a Fase 12) e `docs/todo.md`.
+  `.scratch/fase-12-web-auth-spine/`, a Fase 12) e `docs/todo.md`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

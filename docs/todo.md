@@ -1,11 +1,11 @@
 # pet-oasis — TODO
 
 > O **índice** das fases: estado de cada uma, ponteiro para a fase aberta, resumo destilado
-> das fechadas. O caderno de trabalho — spec e issues — vive em `.scratch/<slug>/`.
+> das fechadas. O caderno de trabalho — spec e issues — vive em `.scratch/fase-<n>-<slug>/`.
 > Detalhes de decisões em `apps/api/docs/adr/README.md`. Regras de negócio firmadas no `CLAUDE.md`.
 >
-> **Forma de registro:** fase aberta fica em poucas linhas, com o ponteiro para a pasta do
-> esforço; fase fechada é **destilada** em bullets de resultado. O molde das duas formas e as
+> **Forma de registro:** fase aberta fica em poucas linhas, com o ponteiro para a pasta da
+> fase; fase fechada é **destilada** em bullets de resultado. O molde das duas formas e as
 > regras da transição estão em [`guides/todo-phases.md`](guides/todo-phases.md); o mapa da
 > documentação inteira, em [`README.md`](README.md).
 
@@ -155,23 +155,25 @@
 > que atravessam a rede, dependendo só de `zod`), presets de tsconfig/biome compartilhados,
 > Conventional Commits com lint, CI de verificação, stack Compose único, docs de domínio no
 > formato da skill (`CONTEXT-MAP.md` + `CONTEXT.md` por app). Spec e issues em
-> `.scratch/monorepo/`.
-- Progresso: 11 de 17 issues fechadas (01–11). As issues 15–17 nasceram da grelha de
-  2026-09-21: forma do tracker, e as duas peças de contrato que a issue `00` da Fase 12 pedia.
+> `.scratch/fase-11-monorepo/`.
+- Progresso: 12 de 17 issues fechadas (01–11 e 15). As issues 15–17 nasceram da grelha de
+  2026-09-21: forma do tracker (15, fechada: pasta = fase, `docs/adr/0002`), e as duas peças de
+  contrato que a issue `00` da Fase 12 pedia (16 e 17).
 
 ## ⬜ Fase 12 — Espinha de autenticação do web
 > Herdada do `pet-oasis-web` no import (Fase 11, issue 11): a spec e as issues dele vivem em
-> `.scratch/foundation-and-auth-spine/`, com o conteúdo com que o web congelou. Do bootstrap
+> `.scratch/fase-12-web-auth-spine/`, com o conteúdo com que o web congelou. Do bootstrap
 > ao fluxo completo de conta — sessão em BFF, login e os estados bloqueados, guarda de rota,
 > renovação automática, signup, verificação de email, recuperação de senha e reativação —,
-> consumindo os schemas do contrato compartilhado. Começa pela issue `00`, dois pedidos ao
-> contrato.
+> consumindo os schemas do contrato compartilhado. Os dois pedidos ao contrato que a issue `00`
+> dela fazia foram absorvidos pela Fase 11, como as issues 16 (`expiresIn` na resposta de
+> sessão) e 17 (tabela de rotas no contrato) de `.scratch/fase-11-monorepo/issues/`.
 - Progresso: 2 de 12 issues fechadas (01 e 02, ainda no repositório de origem).
 
 ## ⬜ Carrinho, pedido e pagamento (fase seguinte, ainda sem número)
 
 Ainda **não planejada**. O caminho está em [`docs/README.md`](README.md): a ideia crua nasce em
-`.scratch/`, é grelhada, vira spec e issues na pasta do esforço, e só então desce para cá como
+`.scratch/`, é grelhada, vira spec e issues na pasta da fase, e só então desce para cá como
 resultado. O que já se sabe, decidido na Fase 9 e herdado por esta: `OrderItem` é
 **polimórfico** com CHECK constraint escrito à mão (ADR `apps/api/docs/adr/0008-product-vs-service.md`), e o
 item do pedido **grava** o preço em vez de lê-lo do produto. Do backlog, `StockMovement` é

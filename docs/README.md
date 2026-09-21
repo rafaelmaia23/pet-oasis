@@ -9,10 +9,10 @@ Perdido? A pergunta é sempre "isto é trabalho, decisão, vocabulário ou consu
 
 | Onde | O que guarda | Vive |
 |---|---|---|
-| [`../.scratch/`](../.scratch/README.md) | O **tracker**: uma pasta por esforço, com a spec e uma issue por arquivo — único para o monorepo | Enquanto o esforço existir; fechado, fica marcado |
+| [`../.scratch/`](../.scratch/README.md) | O **tracker**: uma pasta por fase (`fase-<n>-<slug>/`), com a spec e uma issue por arquivo — único para o monorepo | Enquanto a fase existir; fechada, fica marcada |
 | [`todo.md`](todo.md) | O **índice** das fases: estado, ponteiro para a fase aberta, e o resumo destilado de cada fase fechada | Sempre |
 | [`reference/backlog.md`](reference/backlog.md) | Levantado e **conscientemente adiado** — sem fase, sem data | Sempre |
-| [`adr/`](adr/) | Decisões **de sistema**, numeradas `NNNN-slug.md`: fronteira entre apps, o que é contrato, modo de trabalho | Sempre |
+| [`adr/`](adr/) | Decisões **de sistema**, numeradas `NNNN-slug.md`: fronteira entre apps, o que é contrato, modo de trabalho ([docs seguem a skill](adr/0001-domain-docs-follow-the-skill.md), [pasta do tracker = fase](adr/0002-tracker-folders-are-phases.md)) | Sempre |
 | [`../CONTEXT-MAP.md`](../CONTEXT-MAP.md) | O mapa dos contextos: um por app, com o caminho do `CONTEXT.md` (glossário) de cada um | Sempre |
 | [`guides/`](guides/) | Como fazer, no que vale para o todo: [formas de fase](guides/todo-phases.md) | Sempre |
 | [`agents/`](agents/) | Como as skills de IA devem ler e escrever tudo isto | Sempre |
@@ -33,12 +33,12 @@ mais o [`design-system.md`](../apps/web/docs/design-system.md).
 ## O caminho de uma ideia até o código
 
 ```
-ideia crua          .scratch/<slug>/               anotação, material de grilling
+ideia crua          .scratch/fase-<n>-<slug>/                anotação, material de grilling
    ↓ /grill-with-docs — a grelha fecha as decisões, uma rodada por vez
    ↓ /to-spec
-desenho             .scratch/<slug>/spec.md        spec: o quê e por quê
+desenho             .scratch/fase-<n>-<slug>/spec.md         spec: o quê e por quê
    ↓ /to-tickets
-execução            .scratch/<slug>/issues/NN-*.md uma issue = uma feat-branch = um contexto
+execução            .scratch/fase-<n>-<slug>/issues/NN-*.md  uma issue = uma feat-branch = um contexto
    ↓ /implement — teste primeiro, em feat-branch por issue
 código              apps/<app>/src + tests, packages/<pkg>/src
    ↓ fecho da fase

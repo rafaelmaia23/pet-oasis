@@ -4,7 +4,7 @@
 > API (**Arquitetura**) enquanto ele era migrado para ADRs (issue 07), e por isso entrou aqui já
 > como ADR, no fim da numeração. O workflow é `.github/workflows/ci.yml`; a regra acionável (PR
 > com CI verde antes de mergear fase na `dev` e `dev` na `main`) está no `CLAUDE.md` da raiz.
-> Contexto de execução em `.scratch/monorepo/issues/06-ci-verification.md`.
+> Contexto de execução em `.scratch/fase-11-monorepo/issues/06-ci-verification.md`.
 
 Até aqui "verde" era um fato da máquina de quem mergeava: `pnpm test`, `typecheck` e `lint`
 rodavam no host e ninguém mais via o resultado. O `.github/workflows/ci.yml` põe esse verde

@@ -5,7 +5,7 @@
 > aqui já como ADR, no fim da numeração. É o "contract" do refactor cujo "expand" está no
 > [`0198`](0198-contrato-consumido-do-fonte-ts-so-depende-de-zod-enum-dois-donos.md). A regra
 > acionável está no `CLAUDE.md` da API (*Organização de módulos*). Contexto de execução em
-> `.scratch/monorepo/issues/10-api-contracts-migrate-schemas.md`.
+> `.scratch/fase-11-monorepo/issues/10-api-contracts-migrate-schemas.md`.
 
 Todo schema de request (create, update, query, path) e toda view de resposta vivem em
 `packages/api-contracts/src/<domínio>/` — `user`, `auth`, `me`, `role`, `feature`, `permission`,

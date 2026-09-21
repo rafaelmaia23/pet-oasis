@@ -15,6 +15,11 @@
  * é citado com o prefixo, `apps/api/docs/<arquivo>.md`, e resolve da raiz. Se o pacote
  * não tem o arquivo, a raiz é tentada — é como um app cita `docs/todo.md`.
  *
+ * O tracker (`.scratch/`) só existe na raiz, então uma menção a ele — a pasta de
+ * uma fase ou um arquivo dela — resolve sempre da raiz. E a forma das pastas do
+ * tracker também é regra checada aqui: pasta = fase, `fase-<n>-<slug>/`, com
+ * `spec.md` dentro (`docs/adr/0002-tracker-folders-are-phases.md`).
+ *
  * Uso: `pnpm docs:check` (na raiz)
  */
 
@@ -65,7 +70,7 @@ const PACKAGE_ROOTS = [
 const DISSOLVED_DOCS = new Set(["docs/fase-8-redesign.md"]);
 
 /**
- * Spec de esforço fechado. O fecho não apaga a pasta — marca a spec, e o
+ * Spec de fase fechada. O fecho não apaga a pasta — marca a spec, e o
  * marcador nomeia para onde o *porquê* foi promovido:
  *
  *   Status: fechada em 2026-09-30 — porquê promovido a apps/api/docs/adr/0196-<slug>.md
@@ -89,7 +94,30 @@ const CLOSED_SPEC_DESTINATION = new RegExp(
 );
 const DOC_MENTION = new RegExp(String.raw`(?<![\w/.-])${DOC_PATH}\b`, "g");
 
-type Problem = { file: string; line: number; message: string };
+/**
+ * Uma menção ao tracker como aparece em prosa: a pasta de uma fase, com ou sem a
+ * barra final (`.scratch/fase-11-monorepo/`), ou um caminho dentro dela
+ * (`.scratch/fase-11-monorepo/issues/07-root-docs-skeleton.md`). O que vier depois
+ * é resolvido inteiro contra a raiz, então um segmento com erro de digitação
+ * também reprova. Um ponto final de frase colado ao caminho é aparado; uma
+ * menção interrompida por `<` é placeholder de guia (`.scratch/fase-<n>-<slug>/`)
+ * e é ignorada.
+ */
+const SCRATCH_MENTION = /(?<![\w/.-])\.scratch\/[\w.-]+(?:\/[\w./-]*)?/g;
+
+/** O tracker só existe na raiz; toda menção a ele resolve daqui. */
+const SCRATCH_DIR = join(ROOT, ".scratch");
+
+/**
+ * A forma de uma pasta do tracker: **pasta = fase**, `fase-<n>-<slug>`, com o
+ * número global da fase sem zero à esquerda (o mesmo da branch `fase-<n>`) e o
+ * slug em kebab-case. O porquê — e para onde vai o trabalho que não é fase —
+ * está em `docs/adr/0002-tracker-folders-are-phases.md`.
+ */
+const PHASE_FOLDER = /^fase-[1-9]\d*-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** `line` é `null` quando o problema é de um diretório, não de uma linha de arquivo. */
+type Problem = { file: string; line: number | null; message: string };
 
 function listDirs(dir: string): string[] {
   if (!exists(dir)) return [];
@@ -173,8 +201,24 @@ function packageRootOf(file: string): string {
 
 const problems: Problem[] = [];
 
-function report(file: string, line: number, message: string): void {
+function report(file: string, line: number | null, message: string): void {
   problems.push({ file: relative(ROOT, file), line, message });
+}
+
+// A forma do tracker: cada diretório de `.scratch/` é uma fase, nomeado
+// `fase-<n>-<slug>`, e tem a `spec.md` dela.
+for (const dir of listDirs(SCRATCH_DIR)) {
+  const name = relative(SCRATCH_DIR, dir);
+  if (!PHASE_FOLDER.test(name)) {
+    report(
+      dir,
+      null,
+      `pasta do tracker fora do padrão \`fase-<n>-<slug>\` (número da fase sem zero à esquerda, slug em kebab-case): ${name}`,
+    );
+  }
+  if (!exists(join(dir, "spec.md"))) {
+    report(dir, null, `pasta do tracker sem spec.md: ${name}`);
+  }
 }
 
 for (const file of collectFiles(ROOT)) {
@@ -201,6 +245,14 @@ for (const file of collectFiles(ROOT)) {
 
     // Links markdown relativos: [texto](caminho.md#ancora)
     if (isMarkdown) {
+      // Link para uma pasta (`](../.scratch/fase-12-web-auth-spine/)`): só a
+      // existência, não há âncora.
+      for (const match of line.matchAll(/]\(([^)\s:]+\/)\)/g)) {
+        const target = match[1];
+        if (target && !exists(resolve(dirname(file), target))) {
+          report(file, lineNumber, `pasta inexistente: ${target}`);
+        }
+      }
       for (const match of line.matchAll(/]\(([^)\s]+\.md)(#[^)\s]*)?\)/g)) {
         const [, target, hash] = match;
         if (!target || /^[a-z]+:\/\//.test(target)) continue;
@@ -241,15 +293,25 @@ for (const file of collectFiles(ROOT)) {
         report(file, lineNumber, `caminho inexistente: ${target}`);
       }
     }
+
+    // Menções ao tracker: `.scratch/fase-11-monorepo/` ou um caminho dentro dela.
+    // É o que prova que renomear uma pasta de fase não deixou ponteiro para trás.
+    for (const match of line.matchAll(SCRATCH_MENTION)) {
+      if (line[match.index + match[0].length] === "<") continue;
+      const target = match[0].replace(/\.$/, "");
+      if (!exists(join(ROOT, target))) {
+        report(file, lineNumber, `caminho inexistente: ${target}`);
+      }
+    }
   });
 }
 
 if (problems.length > 0) {
-  console.error(`✗ ${problems.length} link(s) quebrado(s) na documentação:\n`);
+  console.error(`✗ ${problems.length} problema(s) na documentação:\n`);
   for (const { file, line, message } of problems) {
-    console.error(`  ${file}:${line} — ${message}`);
+    console.error(`  ${line === null ? file : `${file}:${line}`} — ${message}`);
   }
   process.exit(1);
 }
 
-console.log("✓ documentação: todos os caminhos e âncoras existem");
+console.log("✓ documentação: caminhos, âncoras e pastas do tracker em ordem");

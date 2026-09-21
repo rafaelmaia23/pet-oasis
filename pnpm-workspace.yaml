@@ -5,6 +5,24 @@ packages:
   - apps/*
   - packages/*
 
+# Uma versão por dependência que aparece em mais de um projeto do workspace: o
+# package.json de cada um escreve `catalog:` no lugar do range, e o range vive
+# só aqui. É o que impede "funciona no web, quebra no contrato" por diferença
+# de versão — e é o que faz um bump ser uma linha, não uma caça por pacote.
+# Regra de escolha: a mais nova sem breaking grande. Duas exceções, com o porquê:
+#   typescript   6, não 7 — o 7 é a reescrita nativa (Go), que ainda não passou
+#                pelo crivo de "sem breaking grande" (11.11).
+#   @types/node  24, casando com `engines.node` da raiz, e não a 25 que a API
+#                tinha: tipo acima do runtime compila código que quebra em
+#                produção (11.11).
+catalog:
+  "@biomejs/biome": ^2.5.14
+  "@types/node": ^24.13.6
+  tsx: ^4.22.0
+  typescript: ^6.0.3
+  vitest: ^4.1.7
+  zod: ^4.4.3
+
 fetchTimeout: 60000
 fetchRetries: 2
 fetchRetryMintimeout: 2000

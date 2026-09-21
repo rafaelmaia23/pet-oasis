@@ -27,14 +27,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "zod": "^4.4.3"
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
+    "@biomejs/biome": "catalog:",
     "@pet-oasis/biome-config": "workspace:*",
     "@pet-oasis/tsconfig": "workspace:*",
-    "@types/node": "^25.8.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.7"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

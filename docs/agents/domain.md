@@ -9,11 +9,13 @@ próprio `CONTEXT.md` (glossário) e os próprios ADRs; decisões de sistema fic
 ## Antes de explorar, leia nesta ordem
 
 1. **[`CLAUDE.md`](../../CLAUDE.md)** da raiz — fluxo, regras transversais, onde mora cada
-   documento — e o **`CLAUDE.md` do app** em que vai mexer ([`apps/api/CLAUDE.md`](../../apps/api/CLAUDE.md)):
-   camadas, convenções e as regras de negócio **já decididas** (que não se re-decidem).
+   documento — e o **`CLAUDE.md` do app** em que vai mexer ([`apps/api/CLAUDE.md`](../../apps/api/CLAUDE.md),
+   [`apps/web/CLAUDE.md`](../../apps/web/CLAUDE.md)): camadas, convenções e as regras de negócio
+   **já decididas** (que não se re-decidem).
 2. **[`CONTEXT-MAP.md`](../../CONTEXT-MAP.md)** — em que contexto o assunto vive.
 3. **`CONTEXT.md` do app** — o que cada termo significa e os sinônimos a evitar. O da API é
-   [`apps/api/CONTEXT.md`](../../apps/api/CONTEXT.md); o porquê de cada termo não está lá, está
+   [`apps/api/CONTEXT.md`](../../apps/api/CONTEXT.md), o do web é
+   [`apps/web/CONTEXT.md`](../../apps/web/CONTEXT.md); o porquê de cada termo não está lá, está
    no ADR que ele aponta.
 4. **[`apps/<app>/docs/adr/README.md`](../../apps/api/docs/adr/README.md)** — é um **índice**, um
    roteador: uma linha por decisão, agrupada por tema, apontando o ADR que a contém.
@@ -39,18 +41,20 @@ próprio `CONTEXT.md` (glossário) e os próprios ADRs; decisões de sistema fic
 │   ├── reference/backlog.md
 │   └── agents/                   ← este diretório
 ├── .scratch/                     ← o tracker: specs e issues, versionado, único
-└── apps/api/
-    ├── CLAUDE.md                 ← o específico da stack + regras de negócio firmadas
-    ├── CONTEXT.md                ← glossário do contexto (o que cada termo é)
-    ├── docs/
-    │   ├── adr/
-    │   │   ├── README.md         ← ÍNDICE por tema (leia este; é o roteador)
-    │   │   ├── 0001-auth-token-revocation.md
-    │   │   ├── …
-    │   │   └── 0195-ultima-variante-ativa-decidida-sob-lock.md
-    │   ├── reference/            ← endpoints, política de log, schema, histórico
-    │   └── guides/
-    └── src/
+├── apps/api/
+│   ├── CLAUDE.md                 ← o específico da stack + regras de negócio firmadas
+│   ├── CONTEXT.md                ← glossário do contexto (o que cada termo é)
+│   ├── docs/
+│   │   ├── adr/
+│   │   │   ├── README.md         ← ÍNDICE por tema (leia este; é o roteador)
+│   │   │   ├── 0001-auth-token-revocation.md
+│   │   │   ├── …
+│   │   │   └── 0195-ultima-variante-ativa-decidida-sob-lock.md
+│   │   ├── reference/            ← endpoints, política de log, schema, histórico
+│   │   └── guides/
+│   └── src/
+└── apps/web/                     ← mesmo desenho (CLAUDE.md, CONTEXT.md, docs/adr/ com o
+                                    README.md-índice), mais a direção visual em design-system.md
 ```
 
 Não existe `CONTEXT.md` na raiz — o repo tem mais de um contexto, então o que existe na raiz é

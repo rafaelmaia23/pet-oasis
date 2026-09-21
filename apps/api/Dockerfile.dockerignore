@@ -18,12 +18,19 @@
 .claude
 .learning
 
-# O que a API tem mas a imagem não precisa. Os entrypoints em infra/ SÃO
-# copiados pelo Dockerfile — excluir infra/ inteiro quebraria o build. Só os
-# Compose ficam de fora (orquestram a imagem, não entram nela).
+# Todo outro app, inteiro — só o package.json de cada um entra (o Dockerfile
+# copia `apps/*/package.json`, porque o lockfile os lista como importers). As
+# negações reabrem este app e os manifestos; um app novo não muda estas linhas.
+apps/*
+!apps/api
+!apps/*/package.json
+# Os Compose da raiz orquestram a imagem, não entram nela.
+infra
+
+# O que a API tem mas a imagem não precisa. Os entrypoints em apps/api/infra/
+# SÃO copiados pelo Dockerfile — excluir o diretório inteiro quebraria o build.
 apps/api/src/generated
 apps/api/tests
-apps/api/infra/docker-compose*.yml
 apps/api/infra/cron
 apps/api/api-collection
 apps/api/docs

@@ -16,7 +16,9 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      // `dist/` é o bundle da API (tsup); `.next/` é o do web — menos o
+      // `.next/cache`, que é cache do próprio Next entre builds e não saída.
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "typecheck": {
       // `^build`, e não `^typecheck`: quem consome o `dist` de outro pacote

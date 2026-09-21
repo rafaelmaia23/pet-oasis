@@ -16,18 +16,21 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "docs:check": "tsx tools/check-docs-links.ts",
+    "prod:up": "docker compose -p pet-oasis-prod --env-file apps/api/.env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up --build --wait -d --remove-orphans",
+    "prod:down": "docker compose -p pet-oasis-prod --env-file apps/api/.env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml down --remove-orphans",
+    "prod:logs": "docker compose -p pet-oasis-prod --env-file apps/api/.env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml logs -f",
     "typecheck:root": "tsc --noEmit",
     "lint:root": "biome check tools"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
+    "@biomejs/biome": "catalog:",
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
     "@pet-oasis/tsconfig": "workspace:*",
-    "@types/node": "^25.8.0",
+    "@types/node": "catalog:",
     "husky": "^9.1.7",
-    "tsx": "^4.22.0",
+    "tsx": "catalog:",
     "turbo": "2.10.13",
-    "typescript": "^6.0.3"
+    "typescript": "catalog:"
   }
 }

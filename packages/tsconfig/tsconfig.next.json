@@ -1,9 +1,11 @@
 {
   // Alvo Next.js: o base mais o que o `create-next-app` gera. `jsx: preserve`
   // porque quem compila o JSX é o SWC do Next, não o tsc; `noEmit` porque o tsc
-  // aqui só checa; o plugin `next` liga o language service ao roteador. Nasce
-  // sem consumidor no workspace (o web só chega na importação do app) — a
-  // primeira validação real é dele, e o que o Next 16 recusar ajusta-se lá.
+  // aqui só checa; o plugin `next` liga o language service ao roteador. O
+  // consumidor é `apps/web` (Next 16), que o validou na importação: `next
+  // typegen`, `tsc` e `next build` aceitam o preset como está, inclusive o
+  // `jsx: preserve` (o create-next-app de hoje gera `react-jsx`; o Next aceita
+  // os dois e não reescreve o arquivo).
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {

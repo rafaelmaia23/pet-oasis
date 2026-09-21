@@ -22,7 +22,15 @@ reescrito para o monorepo, `main` virando o monorepo, e o repo renomeado no GitH
       não existe porque pnpm 12 lê `pnpm-workspace.yaml`; `allowBuilds` (por que `vue-demi`
       entra e `sharp` não); e o gotcha do bundle do Scalar (caminho real em
       `node_modules/.pnpm/…` × `sendFile` recusando segmento com ponto → `root` + arquivo
-      relativo, em `src/docs/reference.ts`).
+      relativo, em `src/docs/reference.ts`). Da issue 11 — o `catalog:` do pnpm e as duas
+      exceções à regra "mais nova" (TS 6, não 7; `@types/node` casando com `engines.node`,
+      em `pnpm-workspace.yaml`); o stack Compose único e o que ele fixou (o `web` só no
+      override de produção porque em dev roda no host; sem `depends_on: api`; `prod:*` na
+      raiz, `dev*`/`test:services:*` na API; env por app, o da API como `--env-file` de
+      interpolação — comentários em `infra/docker-compose*.yml`); e as imagens construídas
+      da raiz com install filtrado e o outro app fora (`pnpm deploy` antes do `next build`
+      no web; `Dockerfile.dockerignore` por app — comentários nos dois Dockerfiles). O tema
+      é *Infraestrutura* na API para o que é dela; o que é do sistema vai no ADR da raiz.
 - [ ] `docs/todo.md` da raiz: Fase 11 destilada na forma fechada; a fase de carrinho/pedido/
       pagamento reaparece como "a fazer" com número novo, sem perder o que a Fase 9 já decidiu
       para ela (`OrderItem` polimórfico, preço gravado, `StockMovement`).

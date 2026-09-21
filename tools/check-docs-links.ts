@@ -30,12 +30,17 @@ const IGNORED_DIRS = new Set([
   "dist",
   "coverage",
   "generated",
+  // O build e o cache do Next (apps/web): gerado, fora do git.
+  ".next",
   // Notas pessoais de estudo, fora do git (.gitignore): não são documentação.
   ".learning",
 ]);
 const SCANNED_EXTENSIONS = [
   ".md",
   ".ts",
+  // Os componentes do web citam a documentação dele em comentário, como a API.
+  ".tsx",
+  ".mjs",
   // Os comentários do schema do Prisma citam ADRs e a política de log.
   ".prisma",
   ".json",

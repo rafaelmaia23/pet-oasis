@@ -1,6 +1,9 @@
-# Dev override — db + mailpit + api (tsx watch in-container against bind-mounted
-# src/). Distinct container names / volume / ports from test so both can run at
-# once. Bring up in FOREGROUND (`pnpm run dev`); Ctrl+C → graceful SIGTERM.
+# Dev override — db + redis + mailpit + api (tsx watch in-container against
+# bind-mounted src/). Distinct container names / volume / ports from test so both
+# can run at once. Bring up in FOREGROUND (`pnpm run dev` in apps/api, or
+# `pnpm dev` at the root, which also starts the web on the host); Ctrl+C →
+# graceful SIGTERM. No `web` service: in dev the web runs on the host, port
+# 3001, against this stack (see the base compose).
 services:
   db:
     image: postgres:16-alpine
@@ -46,7 +49,7 @@ services:
     build:
       target: dev
     container_name: pet-oasis-dev-api
-    env_file: ../.env.development
+    env_file: ../apps/api/.env.development
     environment:
       # env_file keeps localhost/1025 for host tooling; inside the compose network
       # the container reaches the services by name.
@@ -59,7 +62,7 @@ services:
       # sobem o `api` (`dev:down`, `dev:mail`, `dev:db`) não avisarem variável
       # vazia — não é cobertura: quem invocar o Compose por fora do pnpm com
       # outro uid recebe uma árvore de 1000, e o EACCES volta.
-      # Ver o comentário do mount de ../uploads.
+      # Ver o comentário do mount de ../apps/api/uploads.
       HOST_UID: ${HOST_UID:-1000}
       HOST_GID: ${HOST_GID:-1000}
     depends_on:
@@ -88,8 +91,8 @@ services:
     # fica em /workspace/node_modules, então o app não pode viver num /app raso
     # como em produção.
     volumes:
-      - ../src:/workspace/apps/api/src
-      - ../prisma:/workspace/apps/api/prisma
+      - ../apps/api/src:/workspace/apps/api/src
+      - ../apps/api/prisma:/workspace/apps/api/prisma
       # Bind mount e não volume nomeado (9.10/AA2): o arquivo fica visível no
       # filesystem do host, que é o pré-requisito para um nginx passar a servi-lo
       # direto. De brinde, backup vira `rsync` de um diretório em vez de
@@ -107,7 +110,7 @@ services:
       # que nasce aqui tem o dono do host. Trocar o caminho por uma variável
       # custaria um passo de setup a quem clona, sem resolver problema que dev
       # tenha.
-      - ../uploads:/workspace/apps/api/uploads
+      - ../apps/api/uploads:/workspace/apps/api/uploads
       # Anonymous volume: keeps the container's generated Prisma client from being
       # masked by the host's src/ bind-mount (entrypoint runs `prisma generate`).
       - /workspace/apps/api/src/generated

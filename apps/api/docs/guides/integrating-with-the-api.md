@@ -19,35 +19,32 @@ http://api:3000/api/v1
 ```
 
 `api` é o nome do serviço no Compose de produção e o alias de rede que ele carrega nas redes
-**do projeto** (`backend` e `pet-oasis`) — na `proxy`, compartilhada com outros projetos atrás
+**do projeto** (`backend` e `frontend`) — na `proxy`, compartilhada com outros projetos atrás
 do nginx (Nginx Proxy Manager), o alias é omitido de propósito (o porquê está em
 [`0148`](../adr/0148-tres-redes-papeis-distintos-porta-api-despublicada.md)). Para o cliente na
-`pet-oasis`, `api` resolve. Sem TLS, sem sair do host, sem passar pelo nginx.
+`frontend`, `api` resolve. Sem TLS, sem sair do host, sem passar pelo nginx.
 
-O cliente precisa entrar na rede **`pet-oasis`**, declarada como externa no compose dele:
+O cliente entra na rede **`frontend`** do stack — e o stack é um só para o sistema inteiro
+(`infra/docker-compose.prod.yml`, na raiz do monorepo): o `web` já é declarado lá, com
+`networks: [frontend, proxy]`, e um cliente interno novo entra do mesmo jeito, como serviço
+do mesmo arquivo. A rede é do stack, não do host: nasce no `up`, morre no `down`, e um serviço
+que entra nela não depende de passo manual nenhum. (Enquanto o front vivia em outro
+repositório, a rede era a `pet-oasis`, externa e criada uma vez no host — a história está no
+ADR `0148`.)
 
-```yaml
-networks:
-  petoasis:
-    external: true
-    name: pet-oasis
-```
+O cliente sobe com a API fora e vice-versa — o que falha, nesse caso, é a chamada, não o `up`:
+não declare `depends_on: api` no serviço cliente, porque `up --build <cliente>` construiria
+a API por arrasto e o deploy de um passaria a ser o deploy dos dois.
 
-A rede é do **host**, não da API: criada uma vez, fora dos dois repositórios (o passo está no
-[guia de deploy](deploy.md#redes), ao lado da `proxy`), e nenhuma das stacks a apaga ao descer.
-O cliente sobe com a API fora e vice-versa — o que falha, nesse caso, é a chamada, não o `up`.
-Se o `up` do cliente disser que a rede não existe, é o host que ainda não a criou.
-
-Há três redes; duas são compartilhadas com outras stacks, e só uma delas é a que o cliente
-precisa:
+Há três redes, e só uma delas é a que o cliente precisa:
 
 | Rede | Quem entra | Alcança |
 |---|---|---|
 | `backend` (`internal: true`) | `db`, `redis`, `api` | Postgres e Redis, que não têm rota para a internet |
-| `pet-oasis` | `api` + clientes internos | a API pela porta 3000 |
-| `proxy` | `api` + clientes internos + nginx | o nginx, para ser servido ao público |
+| `frontend` | `api` + clientes internos | a API pela porta 3000 |
+| `proxy` (externa, do nginx) | `api` + clientes internos + nginx | o nginx, para ser servido ao público |
 
-Um cliente na `pet-oasis` **não** alcança Postgres nem Redis. É de propósito.
+Um cliente na `frontend` **não** alcança Postgres nem Redis. É de propósito.
 
 ### Pela URL pública
 

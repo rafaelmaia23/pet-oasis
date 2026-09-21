@@ -18,7 +18,7 @@ como composição por cima do schema do contrato.
 |---|---|
 | `@pet-oasis/api-contracts` | tudo abaixo, mais `DOMAIN_ENUMS` (o registro dos enums com dois donos) |
 | `…/user` | `profileKindSchema`/`userStatusSchema`; peças de identidade (`emailSchema`, `cpfSchema`, `phoneSchema`, `passwordSchema` e os tetos); schemas de user e de perfil; `userViews` |
-| `…/auth` | login, verificação, reset e troca de senha/email, reativação; `OPAQUE_TOKEN_LENGTH`; `sessionViews` |
+| `…/auth` | login, verificação, reset e troca de senha/email, reativação; `OPAQUE_TOKEN_LENGTH`; `accessTokenViews` (o `{ accessToken, expiresIn }` de login e refresh), `sessionViews` |
 | `…/me` | `meViews` |
 | `…/role` | `ROLE_NAMES`, `RoleName`, `roleNameSchema`; `roleParamsSchema`; `roleViews` |
 | `…/feature` | `FEATURE_NAMES`, `FeatureName`, `featureNameSchema`, `PERMISSION_FEATURES`, `PRIVILEGED_FEATURES`; `featureParamsSchema`; `featureViews` |

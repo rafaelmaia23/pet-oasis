@@ -13,6 +13,7 @@ import {
 } from "@pet-oasis/api-contracts/auth";
 import type { Request, Response } from "express";
 import { env } from "@/config/env";
+import { ACCESS_TOKEN_TTL_SECONDS } from "@/lib/accessToken";
 import { listEnvelope } from "@/lib/pagination";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user/user.presenter";
@@ -22,7 +23,7 @@ import {
   REFRESH_TOKEN_COOKIE_PATH,
   REFRESH_TOKEN_TTL_MS,
 } from "./auth.constants";
-import { sessionPresenter } from "./auth.presenter";
+import { accessTokenPresenter, sessionPresenter } from "./auth.presenter";
 import * as authService from "./auth.service";
 import * as emailChangeService from "./emailChange.service";
 import * as passwordService from "./password.service";
@@ -133,6 +134,19 @@ export const confirmEmailChange = async (req: Request, res: Response) => {
   res.status(204).send();
 };
 
+/**
+ * O corpo de login e de refresh (11.16): o token e por quantos segundos ele
+ * vale. `expiresIn` é o TTL configurado, não `exp - agora`: o par replicado
+ * pela janela de graça anuncia o mesmo prazo que o par emitido, e o cliente
+ * conta do recebimento — é a convenção OAuth2, imune a diferença de relógio.
+ */
+function presentAccessToken(accessToken: string) {
+  return accessTokenPresenter.present(
+    { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS },
+    "default",
+  );
+}
+
 export const login = async (req: Request, res: Response) => {
   const { body } = loginSchema.parse({ body: req.body });
 
@@ -149,7 +163,7 @@ export const login = async (req: Request, res: Response) => {
     maxAge: REFRESH_TOKEN_TTL_MS,
   });
 
-  res.status(200).json({ accessToken });
+  res.status(200).json(presentAccessToken(accessToken));
 };
 
 export const refresh = async (req: Request, res: Response) => {
@@ -171,7 +185,7 @@ export const refresh = async (req: Request, res: Response) => {
     maxAge: REFRESH_TOKEN_TTL_MS,
   });
 
-  res.status(200).json({ accessToken });
+  res.status(200).json(presentAccessToken(accessToken));
 };
 
 export const logout = async (req: Request, res: Response) => {

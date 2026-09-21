@@ -19,3 +19,30 @@ const defaultView = z
 export const sessionViews = { default: defaultView } as const;
 
 export type SessionView = keyof typeof sessionViews;
+
+// O que `POST /auth/login` e `POST /auth/refresh` respondem (11.16). O refresh
+// token não está aqui de propósito: ele viaja em cookie, nunca no corpo.
+const accessTokenView = z
+  .object({
+    accessToken: z
+      .string()
+      .meta({ example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }),
+    expiresIn: z
+      .int()
+      .positive()
+      .meta({
+        example: 900,
+        description:
+          "Validade do access token em **segundos**, contada do recebimento " +
+          "(convenção OAuth2). É daqui que o cliente lê quando renovar — nunca " +
+          "do `exp` do JWT, que é da API",
+      }),
+  })
+  .meta({
+    id: "AccessToken",
+    description: "Access token recém-emitido e por quanto tempo ele vale",
+  });
+
+export const accessTokenViews = { default: accessTokenView } as const;
+
+export type AccessTokenView = keyof typeof accessTokenViews;

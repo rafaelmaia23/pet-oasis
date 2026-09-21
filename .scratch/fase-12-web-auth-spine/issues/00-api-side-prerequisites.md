@@ -9,7 +9,7 @@ fechados. O primeiro ato dela, já dentro do monorepo, é abrir as issues corres
 **Blocked by:** None — mas só existe depois do import (issue 11 do monorepo), porque o
 trabalho é no pacote, e o pacote vive lá.
 
-**Status:** ready-for-human
+**Status:** fechada em 2026-09-21 — o trabalho vive nas issues 16 e 17 da Fase 11
 
 ## Por que é da API, e não do web
 
@@ -57,7 +57,11 @@ rotas. Isto a alarga — é revisão dela (entrada "Revisto em"), não adição 
       (2026-09-21)
 - [x] Issue aberta para a resposta de login/refresh (com validade) no contrato — é a
       issue 16 da Fase 11, com `expiresIn` em segundos (2026-09-21)
-- [ ] O guia de integração documenta o campo de validade e a regra "leia daqui, não do JWT"
+- [x] O guia de integração documenta o campo de validade e a regra "leia daqui, não do JWT" —
+      feito na issue 16 da Fase 11 (§ 5 do guia; racional em `apps/api/docs/adr/0200`)
+      (2026-09-21)
 - [x] Spec da Fase 11 revista na fronteira do contrato ("Revisto em 2026-09-21")
-- [ ] As duas fechadas: o `typecheck` do web passa importando a tabela de rotas e a view de
-      login do contrato
+- [x] As duas fechadas: o `typecheck` do web passa importando a tabela de rotas e a view de
+      login do contrato — a view (`accessTokenViews`) existe desde a issue 16; a tabela e a
+      prova no web são critério da issue 17 da Fase 11, que é quem fecha este item de fato
+      (2026-09-21)

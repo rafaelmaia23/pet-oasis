@@ -1,4 +1,4 @@
-import { sessionViews } from "@pet-oasis/api-contracts/auth";
+import { accessTokenViews, sessionViews } from "@pet-oasis/api-contracts/auth";
 import { userViews } from "@pet-oasis/api-contracts/user";
 import {
   buildCustomer,
@@ -16,6 +16,7 @@ import {
 } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
 import { flushRedis } from "@tests/helpers/redis";
+import jwt from "jsonwebtoken";
 import request from "supertest";
 import {
   afterEach,
@@ -143,6 +144,24 @@ afterEach(async () => {
   await clearDatabase();
   await flushRedis();
 });
+
+/**
+ * `expiresIn` é contrato (11.16): inteiro, positivo, e igual ao que o próprio
+ * token diz (`exp - iat`). Decodificar aqui é legítimo — o teste é da emissora;
+ * é o **cliente** que o guia proíbe de decodificar.
+ */
+function expectExpiresInToMatchToken(body: {
+  accessToken: string;
+  expiresIn: number;
+}) {
+  const payload = jwt.decode(body.accessToken) as jwt.JwtPayload;
+
+  expect(Number.isInteger(body.expiresIn)).toBe(true);
+  expect(body.expiresIn).toBeGreaterThan(0);
+  expect(body.expiresIn).toBe(
+    (payload.exp as number) - (payload.iat as number),
+  );
+}
 
 describe("POST /api/v1/auth/signup", () => {
   it("should reject a phone above 20 characters with 422 naming phone (10.13)", async () => {
@@ -344,7 +363,7 @@ describe("POST /api/v1/auth/login", () => {
     expectValidationError(response, ["password"]);
   });
 
-  it("should return 200 with only the access token in the body", async () => {
+  it("should return 200 with the access token and its validity in seconds, nothing else (11.16)", async () => {
     const user = await buildCustomer();
 
     const response = await request(app).post("/api/v1/auth/login").send({
@@ -353,7 +372,12 @@ describe("POST /api/v1/auth/login", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ accessToken: expect.any(String) });
+    expect(response.body).toEqual({
+      accessToken: expect.any(String),
+      expiresIn: expect.any(Number),
+    });
+    expect(response.body).toMatchView(accessTokenViews.default);
+    expectExpiresInToMatchToken(response.body);
   });
 
   it("should set the refresh token as an httpOnly, non-secure cookie scoped to /api/v1/auth", async () => {
@@ -718,7 +742,12 @@ describe("POST /api/v1/auth/refresh", () => {
       .set("Cookie", refreshCookie);
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ accessToken: expect.any(String) });
+    expect(response.body).toEqual({
+      accessToken: expect.any(String),
+      expiresIn: expect.any(Number),
+    });
+    expect(response.body).toMatchView(accessTokenViews.default);
+    expectExpiresInToMatchToken(response.body);
 
     const newRefreshCookie = extractRefreshCookie(response);
     expect(newRefreshCookie).not.toBe(refreshCookie);
@@ -761,6 +790,8 @@ describe("POST /api/v1/auth/refresh", () => {
     expect(replayResponse.body.accessToken).toBe(
       rotateResponse.body.accessToken,
     );
+    // O par replicado é o mesmo, e o prazo anunciado também (11.16).
+    expect(replayResponse.body.expiresIn).toBe(rotateResponse.body.expiresIn);
     expect(extractRefreshCookie(replayResponse)).toBe(
       extractRefreshCookie(rotateResponse),
     );

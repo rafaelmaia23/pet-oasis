@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import type { StringValue } from "ms";
+import ms, { type StringValue } from "ms";
 import { env } from "@/config/env";
 
 /**
@@ -34,6 +34,26 @@ export const ACCESS_TOKEN_AUDIENCE = "pet-oasis-api";
  * ela é curta de propósito.
  */
 export const ACCESS_TOKEN_CLOCK_TOLERANCE_SECONDS = 5;
+
+/**
+ * A validade que `signAccessToken` grava no `exp`, na forma em que o cliente a
+ * recebe (11.16): a string de `JWT_EXPIRES_IN` continua sendo a única
+ * configuração, e o número que sai em `expiresIn` é lido dela pelo **mesmo**
+ * parser (`ms`) e com o mesmo arredondamento que o `jsonwebtoken` aplica ao
+ * assinar. Não existe uma segunda constante para desalinhar. Uma string que o
+ * parser não entende derruba o boot aqui, em vez de quebrar no primeiro login.
+ */
+const ACCESS_TOKEN_TTL_MS: number | undefined = ms(
+  env.JWT_EXPIRES_IN as StringValue,
+);
+
+if (ACCESS_TOKEN_TTL_MS === undefined || ACCESS_TOKEN_TTL_MS <= 0) {
+  throw new Error(
+    `Invalid JWT_EXPIRES_IN: "${env.JWT_EXPIRES_IN}" is not a positive timespan`,
+  );
+}
+
+export const ACCESS_TOKEN_TTL_SECONDS = Math.floor(ACCESS_TOKEN_TTL_MS / 1000);
 
 export function signAccessToken(userId: string): string {
   return jwt.sign({ sub: userId }, env.JWT_SECRET, {

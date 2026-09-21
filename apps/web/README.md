@@ -79,7 +79,7 @@ pnpm prod:up web
   [`CONTEXT-MAP.md`](../../CONTEXT-MAP.md) da raiz)
 - [`docs/adr/`](docs/adr/README.md) — decisões estruturais
 - [`docs/design-system.md`](docs/design-system.md) — direção visual, tokens e contrastes medidos
-- [`.scratch/foundation-and-auth-spine/`](../../.scratch/foundation-and-auth-spine/) — a spec
+- [`.scratch/fase-12-web-auth-spine/`](../../.scratch/fase-12-web-auth-spine/) — a spec
   e as issues da Fase 12 (espinha de autenticação), no tracker da raiz
 - [`integrating-with-the-api.md`](../api/docs/guides/integrating-with-the-api.md) —
   o guia da API para quem a consome: endereço, envelope de erro, sessão e as rotas que são

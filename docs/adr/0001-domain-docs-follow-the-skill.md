@@ -2,7 +2,7 @@
 
 > Decisão de sistema, tomada em 2026-09-18 na revisão da issue 02 da Fase 11 e executada na
 > issue 07. Vale para todo app do monorepo. Contexto de execução em
-> `.scratch/monorepo/issues/07-root-docs-skeleton.md`.
+> `.scratch/fase-11-monorepo/issues/07-root-docs-skeleton.md`.
 
 A API guardava o *porquê* das decisões em onze arquivos temáticos (`docs/context/`, mais de 25
 mil tokens, indexados por um `context.md`) e proibia um `CONTEXT.md` na raiz — a convenção era

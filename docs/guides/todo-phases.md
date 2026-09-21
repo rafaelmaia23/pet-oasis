@@ -1,7 +1,7 @@
 # As duas formas de uma fase no `todo.md`
 
 O [`todo.md`](../todo.md) é o **índice** das fases, não o caderno de trabalho — o caderno é a
-pasta do esforço em [`.scratch/`](../../.scratch/). Cada fase aparece no índice de **uma de
+pasta da fase em [`.scratch/`](../../.scratch/) (`fase-<n>-<slug>/`). Cada fase aparece no índice de **uma de
 duas formas**, e qual delas depende só de a fase estar aberta ou fechada.
 
 ## Fase aberta — enquanto está em execução
@@ -11,8 +11,8 @@ nas issues.
 
 ```markdown
 ## 🔄 Fase <n> — <título>
-> O recorte da fase em uma ou duas linhas, e o **ponteiro** para a pasta do esforço:
-> `.scratch/<slug>/`, onde vivem a spec e as issues.
+> O recorte da fase em uma ou duas linhas, e o **ponteiro** para a pasta da fase:
+> `.scratch/fase-<n>-<slug>/`, onde vivem a spec e as issues.
 - Progresso: <k> de <total> issues fechadas.
 ```
 

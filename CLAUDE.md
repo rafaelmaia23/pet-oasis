@@ -15,7 +15,7 @@ inteiro — fluxo, regras transversais, onde mora cada documento. O que é espec
 | `packages/tsconfig` | Presets de TypeScript (`@pet-oasis/tsconfig`): base estrito + um por alvo (Node, Next, biblioteca) | — |
 | `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`); cada app estende e acrescenta só os ignores que são seus | — |
 | `docs/` | Documentação do **sistema**: ADRs de sistema, índice das fases, backlog, guias e config das skills | `docs/README.md` |
-| `.scratch/` | O **tracker**: uma pasta por esforço, com a spec e uma issue por arquivo | `.scratch/README.md` |
+| `.scratch/` | O **tracker**: uma pasta por fase (`fase-<n>-<slug>/`, provado pelo `docs:check`), com a spec e uma issue por arquivo | `.scratch/README.md` |
 | `infra/` | O stack Compose do **sistema** (base + overrides `dev`/`test`/`prod`, projeto `pet-oasis-{dev,test,prod}`): API, web, Postgres, Redis, mailpit. Os `prod:*` da raiz o sobem inteiro ou um serviço só; em dev e teste quem o invoca é a API (o web roda no host) | — |
 | `tools/` | Scripts da raiz que não pertencem a pacote nenhum (hoje o `docs:check`) | — |
 
@@ -50,8 +50,8 @@ Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos test
 **Hierarquia de branches (git-flow por fase), uma só para o monorepo inteiro:**
 - **`main` é produção.** **NENHUM** commit é feito direto nela — nunca, em hipótese alguma, nem mesmo commit de documentação ou de planejamento. `main` só recebe merge vindo de `dev`. No futuro esse merge dispara **deploy automático**, então tratar `main` como intocável não é preciosismo: é o que impede um commit de doc de virar um deploy.
 - **`dev` é a base de integração** e existe sempre. Toda branch de fase sai dela.
-- Cada fase do roadmap (ver `docs/todo.md`) tem **uma branch de fase** criada a partir da `dev`, nomeada `fase-<n>` (ex.: `fase-11`). O commit de **planejamento** da fase (a spec e as issues em `.scratch/<slug>/`) é o primeiro commit dessa branch — nunca vai direto na `dev` nem na `main`.
-- Cada **issue** da fase tem sua própria branch criada a partir da branch da fase, nomeada `feat/fase-<n>-<NN>-<slug>` (ex.: `feat/fase-11-07-root-docs-skeleton`), onde `<NN>` é o número do arquivo em `.scratch/<slug>/issues/`. Ao terminar (testes + `typecheck` + `lint` + `docs:check` verdes), **mergeia de volta na branch da fase** (`--no-ff`, com a mensagem de merge padrão do Git — sem `-m`) e apaga a branch da issue.
+- Cada fase do roadmap (ver `docs/todo.md`) tem **uma branch de fase** criada a partir da `dev`, nomeada `fase-<n>` (ex.: `fase-11`). O commit de **planejamento** da fase (a spec e as issues em `.scratch/fase-<n>-<slug>/`) é o primeiro commit dessa branch — nunca vai direto na `dev` nem na `main`.
+- Cada **issue** da fase tem sua própria branch criada a partir da branch da fase, nomeada `feat/fase-<n>-<NN>-<slug>` (ex.: `feat/fase-11-07-root-docs-skeleton`), onde `<NN>` é o número do arquivo em `.scratch/fase-<n>-<slug>/issues/`. Ao terminar (testes + `typecheck` + `lint` + `docs:check` verdes), **mergeia de volta na branch da fase** (`--no-ff`, com a mensagem de merge padrão do Git — sem `-m`) e apaga a branch da issue.
 - Ao concluir a **fase inteira**, abre-se um **PR** da branch da fase para a `dev` e espera-se o **CI verde** (`.github/workflows/ci.yml`: typecheck, lint e testes do que a fase afetou, `docs:check` do repo inteiro, mais o commitlint de cada commit do PR); só então a branch da fase é mergeada na `dev` (`--no-ff`). O verde do PR é a barreira; a máquina de quem mergeia não é.
 - Depois de a suíte completa passar na `dev`, abre-se o **PR `dev` → `main`**, espera-se o CI verde de novo, e a `dev` é mergeada na `main` e **uma `dev` nova é aberta a partir da `main`**. O push em `dev` e em `main` também roda o CI: o verde fica visível fora da máquina de quem mergeou.
 - Trabalho que não pertence a nenhuma fase (correção pontual, mudança de doc, ajuste de processo) também sai da `dev`, em branch própria com nome descritivo (ex.: `docs/branch-workflow`, `fix/<slug>`), e volta pra `dev` por merge `--no-ff`.
@@ -125,11 +125,11 @@ no README do pacote; o racional em `apps/api/docs/adr/0198-contrato-consumido-do
 
 ## TODO, roadmap e o pipeline de trabalho
 
-O trabalho em execução vive em **`.scratch/<slug>/`** (na raiz, único para o monorepo): a `spec.md` do esforço e uma **issue por arquivo** em `issues/NN-<slug>.md`. O **`docs/todo.md` é o índice das fases** — estado, ponteiro para a pasta da fase aberta, e o resumo destilado de cada fase fechada. Consulte o índice para saber onde está o trabalho; consulte as issues para saber o que fazer.
+O trabalho em execução vive em **`.scratch/fase-<n>-<slug>/`** (na raiz, único para o monorepo): **pasta = fase**, nomeada pelo número global da fase sem zero à esquerda (a mesma da branch `fase-<n>`), com a `spec.md` e uma **issue por arquivo** em `issues/NN-<slug>.md`. Não existe pasta sem número — trabalho que não é fase é branch solta, backlog ou issue na fase aberta; o `docs:check` reprova pasta fora do padrão (`docs/adr/0002-tracker-folders-are-phases.md`). O **`docs/todo.md` é o índice das fases** — estado, ponteiro para a pasta da fase aberta, e o resumo destilado de cada fase fechada. Consulte o índice para saber onde está o trabalho; consulte as issues para saber o que fazer.
 
 **Toda fase, daqui em diante, nasce e corre pelo pipeline das skills:** `grill-with-docs` (a grelha fecha as decisões, uma rodada por vez) → `to-spec` (a `spec.md`) → `to-tickets` (as issues, uma fatia vertical cada) → `implement` (teste primeiro, uma feat-branch por issue, `code-review` no fim). O `.scratch/` da raiz é o tracker de todas elas.
 
-**Forma de registro:** a fase **aberta** ocupa poucas linhas no `docs/todo.md`, com o ponteiro para a pasta do esforço — o passo-a-passo vive nas issues, não ali. A fase **fechada** é destilada num resumo de poucos bullets, no fecho da **própria** fase. Essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas viram **ADR** (no app dono da decisão, ou na raiz quando é de sistema) **antes** de a fase fechar — decisão sem dono permanente não fecha. A spec **não é apagada**: ganha a linha `Status: fechada em <data> — porquê promovido a <caminhos>`, que o `pnpm docs:check` verifica. O molde das duas formas está em `docs/guides/todo-phases.md`.
+**Forma de registro:** a fase **aberta** ocupa poucas linhas no `docs/todo.md`, com o ponteiro para a pasta da fase — o passo-a-passo vive nas issues, não ali. A fase **fechada** é destilada num resumo de poucos bullets, no fecho da **própria** fase. Essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas viram **ADR** (no app dono da decisão, ou na raiz quando é de sistema) **antes** de a fase fechar — decisão sem dono permanente não fecha. A spec **não é apagada**: ganha a linha `Status: fechada em <data> — porquê promovido a <caminhos>`, que o `pnpm docs:check` verifica. O molde das duas formas está em `docs/guides/todo-phases.md`.
 
 **Onde mora cada tipo de documento:**
 - `.scratch/` é o **tracker versionado** (spec + issues). Spec e issue são arquivos fixos, com endereço estável — **podem ser citados** de um ADR, de um `CLAUDE.md` ou de um comentário de `src/` (a regra antiga "permanente não cita o tracker" caiu na Fase 11; o porquê está em `docs/adr/0001-domain-docs-follow-the-skill.md`). O `docs:check` prova que o caminho citado existe.
@@ -167,13 +167,13 @@ Depois de mexer em doc, rode **`pnpm docs:check`** na raiz: ele prova que todo c
 
 ## ⚠️ REGRA — Anotação de pendência vai no LOCAL DA EXECUÇÃO, nunca para trás
 
-Quando terminar um trabalho e sobrar algo pendente para uma etapa **futura**, a pendência vira **uma issue nova** em `.scratch/<slug>/issues/` — **nunca** uma nota ao fim da issue que você acabou de fechar. Anotar para trás garante que, ao chegar na etapa futura, ninguém lê a nota e a pendência se perde. Regra prática: antes de escrever "fica para depois", crie o arquivo de issue que vai resolvê-la. Se a pendência não pertence a nenhum esforço planejado, ela vai para `docs/reference/backlog.md`, com o problema que resolve e o esforço estimado.
+Quando terminar um trabalho e sobrar algo pendente para uma etapa **futura**, a pendência vira **uma issue nova** em `.scratch/fase-<n>-<slug>/issues/` — **nunca** uma nota ao fim da issue que você acabou de fechar. Anotar para trás garante que, ao chegar na etapa futura, ninguém lê a nota e a pendência se perde. Regra prática: antes de escrever "fica para depois", crie o arquivo de issue que vai resolvê-la. Se a pendência não pertence a nenhuma fase planejada, ela vai para `docs/reference/backlog.md`, com o problema que resolve e o esforço estimado.
 
 ## O que o projeto planeja ser
 
 O **Ciclo 1 (fundação) está fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de usuário, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação.
 
-O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por feature efetiva), ainda **sem checkout**. A **Fase 10 está fechada** e não trouxe domínio novo: desbloqueou o front web e pagou a dívida de deploy. A **Fase 11 está aberta** e não traz domínio: transforma este repo, in-place, no monorepo `pet-oasis` — spec e issues em `.scratch/monorepo/`. A **Fase 12** é a espinha de autenticação do web — spec e issues, herdadas do `pet-oasis-web`, em `.scratch/foundation-and-auth-spine/`. Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) — vêm na fase seguinte.
+O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por feature efetiva), ainda **sem checkout**. A **Fase 10 está fechada** e não trouxe domínio novo: desbloqueou o front web e pagou a dívida de deploy. A **Fase 11 está aberta** e não traz domínio: transforma este repo, in-place, no monorepo `pet-oasis` — spec e issues em `.scratch/fase-11-monorepo/`. A **Fase 12** é a espinha de autenticação do web — spec e issues, herdadas do `pet-oasis-web`, em `.scratch/fase-12-web-auth-spine/`. Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) — vêm na fase seguinte.
 
 ---
 
@@ -189,7 +189,7 @@ Fecha um assunto antes de abrir outro (um loop por vez; não introduza tópicos 
 
 ### Issue tracker
 
-Specs e issues vivem em **markdown versionado no próprio repo**, não em tracker externo: `.scratch/<slug>/spec.md` + `.scratch/<slug>/issues/NN-<slug>.md`, na raiz do monorepo. O `docs/todo.md` é o índice das fases, e `docs/reference/backlog.md` guarda o levantado e não agendado. Não existe GitHub Issues em uso. Ver `docs/agents/issue-tracker.md`.
+Specs e issues vivem em **markdown versionado no próprio repo**, não em tracker externo: `.scratch/fase-<n>-<slug>/spec.md` + `.scratch/fase-<n>-<slug>/issues/NN-<slug>.md`, na raiz do monorepo. O `docs/todo.md` é o índice das fases, e `docs/reference/backlog.md` guarda o levantado e não agendado. Não existe GitHub Issues em uso. Ver `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

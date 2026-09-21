@@ -166,15 +166,22 @@ Um único repositório `pet-oasis`, gerido por **pnpm workspaces** e orquestrado
   o consome (`dependsOn: ["^build"]`) — ou o contrato é consumido direto do fonte via
   `exports` apontando para TS, decisão de implementação da issue do contrato.
 - Scripts da raiz delegam ao Turbo; `dev` na raiz sobe tudo, `pnpm dev --filter=<app>` sobe
-  um. Os scripts de `db:*`, `prod:*`, `dev:*` da API continuam no `package.json` dela, pois
-  são dela. `docs:check` vira task da raiz e cobre o repo inteiro.
+  um. Os scripts de `db:*`, ~~`prod:*`~~, `dev:*` da API continuam no `package.json` dela, pois
+  são dela. `docs:check` vira task da raiz e cobre o repo inteiro. **Revisto em 2026-09-21**
+  (kickoff da issue 11, decisão do dono): os `prod:*` são da **raiz**, porque o stack de
+  produção é do sistema (`pnpm prod:up` sobe tudo, `pnpm prod:up api` só um serviço); `dev*` e
+  `test:services:*` ficam na API apontando para o `infra/` da raiz, porque em dev e teste o
+  stack é o dela — o web roda no host.
 
 ### Docker e Compose
 
 - **Dockerfile por app**, com o contexto de build na **raiz do monorepo** (o lockfile e o
   workspace vivem lá). A imagem de produção contém só as dependências daquele app, podadas
   por `pnpm deploy --filter <app> --prod`. As três stages da API (build, runtime, dev) e o
-  OpenSSL antes do install sobrevivem.
+  OpenSSL antes do install sobrevivem. **Revisto em 2026-09-21** (issue 11): no web o
+  `pnpm deploy` é **sem** `--prod` e vem **antes** do `next build`, que roda dentro do
+  diretório do deploy — o recorte de produção é o standalone do Next, e é só ele que o runtime
+  copia; o deploy existe para o build acontecer fora do workspace, sem enxergar a API.
 - **Compose unificado** em `infra/` da raiz: base + overrides por ambiente, projeto
   `pet-oasis-{dev,test,prod}`, serviços `api`, `web`, `db`, `redis`, `mailpit` conforme o
   ambiente. Subir tudo ou um serviço é escolha de argumento, não de arquivo. A rede que hoje

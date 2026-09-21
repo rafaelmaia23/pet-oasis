@@ -29,13 +29,12 @@ WORKDIR /workspace
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 # Os manifestos do workspace primeiro, para a camada do install só invalidar
-# quando uma dependência muda. O da API também entra: o lockfile o lista como
-# importer, e um install que só funciona por tolerância a manifesto ausente é
-# acidente esperando bump (o mesmo motivo do `--parents packages/*` na API).
+# quando uma dependência muda. O de TODO projeto (`apps/*`, `packages/*`): o
+# lockfile os lista como importers, e um install que só funciona por tolerância
+# a manifesto ausente é acidente esperando bump (o mesmo `--parents` da API; um
+# app ou pacote novo não muda esta linha).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/web/package.json apps/web/
-COPY apps/api/package.json apps/api/
-COPY --parents packages/*/package.json ./
+COPY --parents apps/*/package.json packages/*/package.json ./
 # `--filter web...`: o web e o que ele depende no workspace. A API fica de fora
 # do install — Prisma, bcrypt e sharp não têm o que fazer nesta imagem.
 RUN pnpm install --frozen-lockfile --filter web...

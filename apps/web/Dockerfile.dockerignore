@@ -21,10 +21,12 @@
 .claude
 .learning
 
-# O outro app, inteiro — só o package.json dele entra (o Dockerfile o copia
-# nomeado, porque o lockfile o lista como importer). A negação reabre só ele.
-apps/api
-!apps/api/package.json
+# Todo outro app, inteiro — só o package.json de cada um entra (o Dockerfile
+# copia `apps/*/package.json`, porque o lockfile os lista como importers). As
+# negações reabrem este app e os manifestos; um app novo não muda estas linhas.
+apps/*
+!apps/web
+!apps/*/package.json
 # Os Compose orquestram a imagem, não entram nela.
 infra
 

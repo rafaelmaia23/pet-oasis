@@ -2,7 +2,7 @@
 # sistema inteiro (API, web e os serviços de apoio), e os overrides por ambiente
 # completam o que cada ambiente sobe:
 #   dev  → docker-compose.dev.yml   (db + redis + mailpit + api via tsx watch;
-#                                    o web roda NO HOST, `pnpm dev --filter web`)
+#                                    o web roda NO HOST, `pnpm --filter web dev`)
 #   prod → docker-compose.prod.yml  (db + redis + api + web; sem mailpit)
 #   test → docker-compose.test.yml  (db + redis [+ mailpit via `--profile mail`];
 #                                    NEM api NEM web: o Vitest roda a API

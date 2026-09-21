@@ -52,7 +52,7 @@ services:
     # precisa casar com o dono do UPLOAD_HOST_DIR no host. Um bump da base que
     # mudasse o uid do usuário `node` viraria EACCES no primeiro upload — e o
     # sintoma (500 ao enviar imagem) não aponta para a causa. 1000:1000 é o que
-    # a node:22-bookworm-slim usa hoje; o guia de deploy manda chownar o
+    # a node:24-bookworm-slim usa hoje; o guia de deploy manda chownar o
     # diretório para o mesmo par, e os dois números mudam juntos ou nenhum.
     user: "1000:1000"
     env_file: ../apps/api/.env.production

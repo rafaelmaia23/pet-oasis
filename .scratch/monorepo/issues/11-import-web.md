@@ -63,8 +63,10 @@ dele vira a Fase 12 no `todo.md` da raiz. Pré-condição: o web está congelado
       contém a API. O `next build` roda **dentro** do diretório do deploy, fora do workspace,
       e por isso o standalone sai raso (`server.js` na raiz) — o runtime é o mesmo de antes. O
       install é `--filter web...` (a API fica fora), e o Dockerfile da API ganhou o simétrico
-      (`--filter api...`, com o manifesto do web copiado nomeado, porque o lockfile o lista
-      como importer). Cada `Dockerfile.dockerignore` exclui o outro app. Três targets buildados
+      (`--filter api...`). Os manifestos de todo projeto entram por um glob só
+      (`COPY --parents apps/*/package.json packages/*/package.json`), porque o lockfile os
+      lista como importers, e cada `Dockerfile.dockerignore` exclui `apps/*` menos o próprio
+      app e os manifestos — um app novo não muda nenhuma dessas linhas (revisão da issue). Três targets buildados
       e inspecionados: nenhum `next`/`react` na imagem da API, nenhum Prisma na do web.
 - [x] A pasta `.scratch/foundation-and-auth-spine` do web migra para o `.scratch/` da raiz; o
       `todo.md` da raiz ganha a **Fase 12** (espinha de autenticação do web) na forma aberta,

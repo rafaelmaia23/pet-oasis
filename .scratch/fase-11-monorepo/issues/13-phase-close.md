@@ -11,6 +11,12 @@ reescrito para o monorepo, `main` virando o monorepo, e o repo renomeado no GitH
 - [ ] ADR de sistema na raiz (numerado): por que monorepo, por que in-place, por que pnpm +
       Turbo, o que é contrato e a regra dos dois donos, o que ficou de fora (deploy automático,
       remote cache, cache de `test`) e quando revisitar.
+- [ ] Índice dos ADRs de sistema criado: um `README.md` em `docs/adr/` da raiz, por tema, no molde
+      do `apps/api/docs/adr/README.md` (uma linha por decisão): com o ADR acima serão três
+      (`0001` docs seguem a skill, `0002` pasta do tracker = fase), e a linha de `adr/` na
+      tabela de `docs/README.md`, que hoje os lista entre parênteses, passa a apontar só para o
+      índice. Pedido pela revisão da issue 15; o protocolo "leia o índice, abra um arquivo" do
+      `CLAUDE.md` vale também para a raiz.
 - [ ] Tabela de rastreio decisão → destino feita e conferida: toda decisão da spec tem dono em
       ADR (da raiz, para o que é de sistema; da API, `apps/api/docs/adr/`, para o que é dela —
       o `docs/context/` não existe mais desde a 07); a primeira linha da spec vira

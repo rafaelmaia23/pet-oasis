@@ -78,8 +78,8 @@ sudo systemctl enable --now pet-oasis-cleanup-sessions.timer
 sudo systemctl enable --now pet-oasis-cleanup-audit-log.timer
 sudo systemctl enable --now pet-oasis-demo-reset.timer     # só no deploy demo
 
-# 4. Fazer o deploy que renomeia o container
-pnpm run prod:up
+# 4. Fazer o deploy que renomeia o container (na raiz do monorepo; `api` = só a API)
+pnpm prod:up api
 
 # 5. Só agora, com o container novo de pé: provar que funcionam, sem esperar o agendamento
 sudo systemctl start pet-oasis-cleanup-sessions.service

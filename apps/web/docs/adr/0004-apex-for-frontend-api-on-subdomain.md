@@ -1,7 +1,9 @@
 # O apex passa a servir o front; a API vai para um subdomínio
 
 > Revisto em 2026-09-19 contra o guia de integração e o ADR 0160 da API: o nome do
-> subdomínio, o dono da rede compartilhada e os 301 mudaram do lado dela.
+> subdomínio, o dono da rede compartilhada e os 301 mudaram do lado dela. Revisto de novo em
+> 2026-09-21, no import para o monorepo: a rede entre o front e a API deixou de ser externa e
+> passou a ser do stack Compose único da raiz.
 
 `pet-oasis.maiahub.com.br` servia a API, redirecionando a raiz para a referência Scalar.
 Passa a servir este front, e a API migra para **`pet-oasis-api.maiahub.com.br`**. O motivo é
@@ -10,13 +12,15 @@ O nome é de primeiro nível por correção da API (ADR 0160 dela): a primeira e
 `api.pet-oasis.maiahub.com.br`, não tem certificado na borda da Cloudflare, cujo Universal
 SSL cobre só o apex e `*.maiahub.com.br`.
 
-Os dois rodam em containers Docker separados no mesmo VPS, numa rede compartilhada, nomeada
-e dedicada (`pet-oasis`), **criada uma vez no host, fora dos dois repositórios** — rede que
-liga stacks diferentes vive mais que qualquer uma delas, e nenhuma das duas a apaga ao
-descer. Toda chamada que o front faz no servidor vai pela **rede interna**
-(`http://api:3000/api/v1`), nunca pela URL pública — sem TLS, sem sair do host. Apenas as
-URLs de imagem são públicas, porque quem as carrega é o navegador. No monorepo a rede passa a
-pertencer ao stack Compose único da raiz; o que não muda é o endereço.
+Os dois rodam em containers Docker separados no mesmo VPS, numa rede dedicada entre eles
+(`frontend`, do stack Compose único da raiz — `infra/docker-compose.prod.yml`). Enquanto
+eram dois repositórios, essa rede era a `pet-oasis`, **criada uma vez no host, fora dos
+dois** — rede que liga stacks diferentes vive mais que qualquer um deles; com os dois
+serviços no mesmo stack, a rede é dele: nasce no `up`, morre no `down`, e "o up do web
+falhou porque a rede da API não existe" deixou de ser possível por construção. Toda chamada
+que o front faz no servidor vai por essa **rede interna** (`http://api:3000/api/v1`), nunca
+pela URL pública — sem TLS, sem sair do host. Apenas as URLs de imagem são públicas, porque
+quem as carrega é o navegador.
 
 ## Consequences
 
@@ -24,12 +28,15 @@ pertencer ao stack Compose único da raiz; o que não muda é o endereço.
   para que link publicado não morresse; a API descartou (a demo era pouco divulgada, e o custo
   era manter dois `location` para sempre num host que não é dela). O apex vai direto para o
   front; quem tinha o link antigo troca a base.
-- **O front deixa de publicar porta no host e passa a viver em duas redes**: `pet-oasis`, para
-  alcançar a API server-side, e `proxy`, para ser alcançado pelo nginx por DNS de container.
-  É a mesma topologia da API, pelo mesmo motivo: enquanto houver porta publicada existe um
-  caminho até a aplicação que desvia do TLS e do rate limit da frente. As duas redes entram
-  como externas, criadas uma vez no host: o front sobe com a API fora e vice-versa — o que
-  falha, nesse caso, é a chamada, não o `up`.
+- **O front deixa de publicar porta no host e passa a viver em duas redes**: `frontend`, para
+  alcançar a API server-side, e `proxy`, para ser alcançado pelo nginx por DNS de container
+  (`pet-oasis-web`). É a mesma topologia da API, pelo mesmo motivo: enquanto houver porta
+  publicada existe um caminho até a aplicação que desvia do TLS e do rate limit da frente.
+  Só a `proxy` é externa (o nginx não é versionado aqui); a outra é do stack. O que fica é
+  a independência entre os dois serviços: o `web` não declara `depends_on: api` — o front
+  sobe com a API fora e vice-versa, e o que falha nesse caso é a chamada, não o `up`. (E
+  `up --build web` construiria as dependências declaradas, o que faria o deploy só do web
+  reconstruir a API por arrasto.)
 - **`APP_URL` da API passa a apontar para o front**, e é ela que monta os links de quatro
   emails. Virar `APP_URL` antes de o front ter `/verify-email`, `/reset-password`,
   `/confirm-email-change` e `/confirm-account-reactivation` transforma verificação de conta

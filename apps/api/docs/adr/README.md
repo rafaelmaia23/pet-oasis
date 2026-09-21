@@ -348,7 +348,7 @@ perfil o user continua existindo, só o `Customer`/`Employee` é soft-deletado.
 - [`0145`](0145-dois-bugs-motivaram-reformulacao.md) Os dois bugs que motivaram a reformulação (Fase 6)
 - [`0146`](0146-compose-base-overrides.md) Compose base + overrides
 - [`0147`](0147-servico-compose-chama-api-alias-rede-explicito.md) O serviço do Compose se chama `api`, com alias de rede explícito (10.1)
-- [`0148`](0148-tres-redes-papeis-distintos-porta-api-despublicada.md) Três redes com papéis distintos, e a porta da API despublicada (10.2, revisto na 10.17)
+- [`0148`](0148-tres-redes-papeis-distintos-porta-api-despublicada.md) Três redes com papéis distintos, e a porta da API despublicada (10.2, revisto na 10.17 e na 11.11 — a rede API↔web é do stack único desde o monorepo)
 - [`0149`](0149-envs-arquivo-dotenv-cli.md) Envs por arquivo + dotenv-cli
 - [`0150`](0150-graceful-shutdown-nativo-compose-nao-script-spawn.md) Graceful shutdown nativo do Compose, não script com `spawn`
 - [`0151`](0151-client-prisma-dev-num-volume-anonimo.md) O client Prisma do dev num volume anônimo

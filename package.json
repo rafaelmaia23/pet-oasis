@@ -16,6 +16,9 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "docs:check": "tsx tools/check-docs-links.ts",
+    "prod:up": "docker compose -p pet-oasis-prod --env-file apps/api/.env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up --build --wait -d --remove-orphans",
+    "prod:down": "docker compose -p pet-oasis-prod --env-file apps/api/.env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml down --remove-orphans",
+    "prod:logs": "docker compose -p pet-oasis-prod --env-file apps/api/.env.production -f infra/docker-compose.yml -f infra/docker-compose.prod.yml logs -f",
     "typecheck:root": "tsc --noEmit",
     "lint:root": "biome check tools"
   },

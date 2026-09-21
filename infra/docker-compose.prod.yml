@@ -1,9 +1,16 @@
-# Prod override — api (runtime bundle) + Postgres-de-prod ONLY. No mailpit, no
-# dev/test DB. SMTP comes entirely from .env.production (e.g. Resend).
+# Prod override — o sistema inteiro: api (runtime bundle) + web (standalone do
+# Next) + Postgres-de-prod + Redis. No mailpit, no dev/test DB. SMTP comes
+# entirely from apps/api/.env.production (e.g. Resend).
+#
+# Um stack, dois tempos de deploy: `pnpm prod:up` (na raiz) sobe tudo;
+# `pnpm prod:up api` (ou `web`) reconstrói e reinicia só aquele serviço — o
+# outro continua rodando a imagem que já tinha. Monorepo não é monólito: a API
+# anda à frente do front, e o deploy de um não derruba o outro.
 #
 # NENHUMA porta é publicada no host: nem a do banco, nem a do cache, nem a da
-# API. O nginx alcança a API por DNS de container na rede `proxy`, e manutenção
-# de banco é `docker exec`. Ver o bloco `networks:` no fim do arquivo.
+# API, nem a do web. O nginx alcança os dois por DNS de container na rede
+# `proxy`, e manutenção de banco é `docker exec`. Ver o bloco `networks:` no fim
+# do arquivo.
 services:
   db:
     image: postgres:16-alpine
@@ -48,7 +55,7 @@ services:
     # a node:22-bookworm-slim usa hoje; o guia de deploy manda chownar o
     # diretório para o mesmo par, e os dois números mudam juntos ou nenhum.
     user: "1000:1000"
-    env_file: ../.env.production
+    env_file: ../apps/api/.env.production
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
       REDIS_URL: "redis://redis:6379"
@@ -67,7 +74,7 @@ services:
       backend:
         aliases:
           - api
-      pet-oasis:
+      frontend:
         aliases:
           - api
       # Sem alias `api` aqui, de propósito: a `proxy` é compartilhada com o NPM
@@ -97,8 +104,46 @@ services:
       # E **absoluto**, porque fonte relativa resolve contra o diretório do
       # projeto do Compose — o do primeiro `-f`, este `infra/` —, não contra a
       # raiz do repo: `./uploads` aqui era `<repo>/infra/uploads`, não
-      # `<repo>/uploads`. É o mesmo motivo de o compose de dev pedir `../uploads`.
+      # `<repo>/apps/api/uploads`. É o mesmo motivo de o compose de dev pedir
+      # `../apps/api/uploads`.
       - "${UPLOAD_HOST_DIR:?obrigatorio - caminho absoluto FORA do working tree, ex. /srv/pet-oasis-data/uploads}:/app/uploads"
+
+  # O front: o bundle standalone do Next, servido por `node server.js` como
+  # usuário não-root. Declarado inteiro aqui (e não na base) porque só existe
+  # como container em produção — em dev roda no host. Ver a base.
+  web:
+    build:
+      # A raiz do monorepo, pelo mesmo motivo da API (o workspace vive lá); o
+      # ignore que vale é `apps/web/Dockerfile.dockerignore`, que exclui a API.
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      target: runtime
+      # Mesmo motivo do `network: host` da API na base (MagicDNS do Tailscale).
+      network: host
+    container_name: pet-oasis-web
+    restart: unless-stopped
+    # As variáveis do web (hoje nenhuma; a sessão e o endereço interno da API
+    # nascem nas issues da Fase 12 que os introduzem). O arquivo precisa
+    # existir, mesmo vazio: é a garantia de que quem faz deploy leu o
+    # `.env.example` dele.
+    env_file: ../apps/web/.env.production
+    # Sem `depends_on: api`, de propósito (ADR-0004 do web): o front sobe com a
+    # API fora e vice-versa — o que falha nesse caso é a chamada, não o `up`. E
+    # `up --build web` também construiria as dependências declaradas, o que
+    # faria o deploy só do web reconstruir a API por arrasto.
+    # Declara a porta de escuta sem publicá-la: quem alcança o web é o nginx,
+    # pela rede `proxy`. Publicar a porta abriria um caminho que desvia do TLS e
+    # do rate limit da frente.
+    expose:
+      - "3001"
+    # Duas redes, e a `backend` não é uma delas, de propósito: o web fala com a
+    # API (`http://api:3000`, server-side, pela `frontend`) e é servido pelo
+    # nginx (pela `proxy`); Postgres e Redis ele não alcança.
+    networks:
+      frontend: {}
+      # Sem alias genérico na `proxy`, pelo mesmo motivo da API: o proxy host
+      # aponta para `pet-oasis-web`.
+      proxy: {}
 
 # Três redes, três papéis. A API é o único serviço nas três — é ela que atravessa
 # a fronteira entre os dados e quem os pede.
@@ -110,20 +155,20 @@ networks:
   backend:
     internal: true
 
-  # Dedicada, compartilhada com clientes internos que rodam no mesmo host (hoje
-  # o `pet-oasis-web`). Quem entra aqui alcança a API e **não** alcança Postgres
-  # nem Redis, de propósito.
+  # Entre a API e os clientes internos dela (hoje o `web`). Quem entra aqui
+  # alcança a API e **não** alcança Postgres nem Redis.
   #
-  # `external: true`, como a `proxy` e pelo mesmo motivo: rede compartilhada
-  # entre stacks vive mais que qualquer uma delas, então nenhuma delas a cria
-  # nem a apaga (ver docs/adr/0148-tres-redes-papeis-distintos-porta-api-despublicada.md). Criada uma vez no host,
-  # junto da `proxy`. O `name:` é contrato: é o que o compose do cliente escreve.
-  pet-oasis:
-    external: true
-    name: pet-oasis
+  # Do stack, não `external:` — a diferença em relação à `pet-oasis` que a
+  # antecedeu (Fase 10). Aquela era externa porque ligava DOIS stacks (o da API
+  # e o do front, cada um no seu repositório), e rede que liga stacks vive mais
+  # que qualquer um deles. Com os dois serviços no mesmo stack, a rede é dele:
+  # nasce no `up`, morre no `down`, e o "up do web falhou porque a rede da API
+  # não existe" deixa de ser possível por construção. Ver
+  # apps/api/docs/adr/0148-tres-redes-papeis-distintos-porta-api-despublicada.md.
+  frontend: {}
 
   # A rede do reverse proxy, criada fora deste repositório (o nginx do servidor
-  # não é versionado aqui — ver docs/adr/0161-reverse-proxy-upload-existe-nao-neste-repositorio.md). Declarada, e não
+  # não é versionado aqui — ver apps/api/docs/adr/0161-reverse-proxy-upload-existe-nao-neste-repositorio.md). Declarada, e não
   # mais conectada à mão com `docker network connect` depois de cada deploy:
   # passo manual esquecido é a API inalcançável pelo público, com o container de
   # pé e o healthcheck verde.

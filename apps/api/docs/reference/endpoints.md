@@ -62,8 +62,8 @@ Coluna **Auth**: `público` = sem token; `authenticate` = só exige estar logado
 | Método + Path | Auth | Descrição |
 |---|---|---|
 | POST `/api/v1/auth/signup` | público | Auto-cadastro; cria um usuário (customer), 201. Email de usuário soft-deletado com o **cpf batendo** → dispara reativação e responde **202** genérico (nada é criado); cpf não batendo, usuário banido ou usuário ativo → 409 genérico |
-| POST `/api/v1/auth/login` | público | Autentica; seta cookie httpOnly de refresh, retorna access token. Recusa, nesta ordem: 401 (credencial errada — email desconhecido e senha errada indistinguíveis) · 429 (lockout, com `Retry-After`) · 403 com `code` por condição: `ACCOUNT_BANNED`, `PASSWORD_RESET_REQUIRED`, `EMAIL_NOT_VERIFIED` (10.8) |
-| POST `/api/v1/auth/refresh` | público (usa cookie de refresh) | Rotaciona o refresh e emite novo access token |
+| POST `/api/v1/auth/login` | público | Autentica; seta cookie httpOnly de refresh, retorna `{ accessToken, expiresIn }` (validade em segundos, contada do recebimento — 11.16). Recusa, nesta ordem: 401 (credencial errada — email desconhecido e senha errada indistinguíveis) · 429 (lockout, com `Retry-After`) · 403 com `code` por condição: `ACCOUNT_BANNED`, `PASSWORD_RESET_REQUIRED`, `EMAIL_NOT_VERIFIED` (10.8) |
+| POST `/api/v1/auth/refresh` | público (usa cookie de refresh) | Rotaciona o refresh e emite novo access token, no mesmo `{ accessToken, expiresIn }` do login |
 | POST `/api/v1/auth/logout` | `manage:session` | Revoga a sessão do cookie de refresh, limpa o cookie |
 | GET `/api/v1/auth/sessions` | `read:session` | Lista as sessões vivas do próprio usuário |
 | DELETE `/api/v1/auth/sessions/:id` | `manage:session` | Revoga uma sessão específica do próprio usuário |

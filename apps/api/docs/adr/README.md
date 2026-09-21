@@ -147,6 +147,7 @@ contra-argumentos e os gotchas.
 - [`0057`](0057-janela-graca-10s-rotacao.md) A janela de graça de 10s na rotação (10.7)
 - [`0058`](0058-refresh-token-hasheado-repouso-item-virou-teste-nao.md) Refresh token hasheado em repouso — item que virou teste, não código
 - [`0059`](0059-teto-de-sessoes-vivas.md) Teto de sessões vivas
+- [`0200`](0200-login-e-refresh-anunciam-expires-in-em-segundos.md) Login e refresh anunciam `expiresIn`, em segundos, derivado do `JWT_EXPIRES_IN` (11.16) — a view é do contrato; o cliente lê a expiração daí, nunca do JWT
 
 #### Status do usuário
 

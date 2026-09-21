@@ -1,4 +1,5 @@
 import {
+  accessTokenViews,
   changeEmailSchema,
   changePasswordSchema,
   confirmAccountReactivationSchema,
@@ -23,14 +24,6 @@ import {
   staticList,
 } from "../components";
 import { fromEnvelope } from "../helpers";
-
-const accessTokenSchema = z
-  .object({
-    accessToken: z
-      .string()
-      .meta({ example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }),
-  })
-  .meta({ id: "AccessToken" });
 
 const messageSchema = z
   .object({ message: z.string() })
@@ -69,7 +62,7 @@ export const authPaths: ZodOpenApiPathsObject = {
       security: [],
       ...fromEnvelope(loginSchema),
       responses: {
-        200: jsonResponse("Autenticado", accessTokenSchema),
+        200: jsonResponse("Autenticado", accessTokenViews.default),
         401: errorResponses[401],
         // 10.8: a senha conferiu, o *usuário* é que está recusado — e o
         // cliente ramifica a tela pelo `code`, nunca pela prosa de `message`.
@@ -99,7 +92,7 @@ export const authPaths: ZodOpenApiPathsObject = {
         "mesmo depois de os 10s terem passado; fora dela, reuso é roubo.",
       security: [],
       responses: {
-        200: jsonResponse("Token renovado", accessTokenSchema),
+        200: jsonResponse("Token renovado", accessTokenViews.default),
         401: errorResponses[401],
         503: errorResponses[503],
       },

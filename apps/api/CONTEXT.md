@@ -92,7 +92,9 @@ _Avoid_: dispositivo, login, token (é o que ela guarda, não o que ela é)
 
 **Access token**:
 JWT de 15 minutos, validado localmente e entregue no header `Authorization: Bearer`. Não é
-revogável antes de expirar — ver [`0001`](./docs/adr/0001-auth-token-revocation.md).
+revogável antes de expirar — ver [`0001`](./docs/adr/0001-auth-token-revocation.md). Login e
+refresh o devolvem com `expiresIn`, a validade em segundos contada do recebimento — é daí que o
+cliente lê a expiração, nunca do JWT.
 _Avoid_: token de sessão, JWT de sessão, cookie
 
 **Refresh token**:

@@ -182,11 +182,22 @@ usuário deletado na hora, e que faz as features efetivas do `GET /me` serem sem
 uma role vale no request seguinte, não dali a 15 minutos. Não decodifique o JWT no cliente para
 decidir nada: o conteúdo dele é da API.
 
+**Quando o token expira, a resposta diz.** `POST /auth/login` e `POST /auth/refresh` devolvem
+`{ "accessToken", "expiresIn" }`, e `expiresIn` é a validade em **segundos**, inteira, contada
+do momento em que o cliente recebe a resposta (a convenção do OAuth2). É **desse campo**, e só
+dele, que o cliente descobre quando renovar: um BFF calcula `recebidoEm + expiresIn − 60 s` e
+renova aí. Decodificar o `exp` do JWT para isso é proibido, e copiar o `JWT_EXPIRES_IN` da API
+para o cliente também — os dois são configuração da API, e o valor pode mudar sem aviso; o campo
+é o contrato. A escolha de um prazo relativo, e não de um instante absoluto, é deliberada:
+`expiresIn` não depende de o relógio do BFF concordar com o da API. O par que a janela de graça
+replica (abaixo) anuncia o **mesmo** `expiresIn` do par emitido — trate-o como o token, contando
+do recebimento.
+
 O refresh é um token opaco, rotativo: cada uso emite um novo e marca o anterior como usado.
 
 **Ele viaja em cookie, nunca no corpo.** `POST /auth/login` e `POST /auth/refresh` devolvem
-**só** `{ "accessToken" }` no JSON; o refresh vai no `Set-Cookie`, e `/auth/refresh` e
-`/auth/logout` o leem de lá. O contrato do cookie:
+**só** `{ "accessToken", "expiresIn" }` no JSON; o refresh vai no `Set-Cookie`, e
+`/auth/refresh` e `/auth/logout` o leem de lá. O contrato do cookie:
 
 | Atributo | Valor | Consequência para o cliente |
 |---|---|---|

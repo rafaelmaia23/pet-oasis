@@ -7,6 +7,7 @@ import {
   ACCESS_TOKEN_AUDIENCE,
   ACCESS_TOKEN_CLOCK_TOLERANCE_SECONDS,
   ACCESS_TOKEN_ISSUER,
+  ACCESS_TOKEN_TTL_SECONDS,
   signAccessToken,
   verifyAccessToken,
 } from "@/lib/accessToken";
@@ -46,6 +47,27 @@ describe("accessToken", () => {
         iss: ACCESS_TOKEN_ISSUER,
         aud: ACCESS_TOKEN_AUDIENCE,
       });
+    });
+  });
+
+  describe("the advertised TTL is the one the token carries (11.16)", () => {
+    it("derives ACCESS_TOKEN_TTL_SECONDS from JWT_EXPIRES_IN, in whole seconds", () => {
+      // `.env.test` fixa `15m`; o número que a API anuncia em `expiresIn` sai
+      // dessa string, não de uma segunda constante.
+      expect(env.JWT_EXPIRES_IN).toBe("15m");
+      expect(ACCESS_TOKEN_TTL_SECONDS).toBe(15 * 60);
+      expect(Number.isInteger(ACCESS_TOKEN_TTL_SECONDS)).toBe(true);
+    });
+
+    it("matches exp - iat of a token signAccessToken just issued", () => {
+      const token = signAccessToken(userId);
+      const payload = jwt.decode(token) as jwt.JwtPayload;
+
+      expect(payload.exp).toBeDefined();
+      expect(payload.iat).toBeDefined();
+      expect((payload.exp as number) - (payload.iat as number)).toBe(
+        ACCESS_TOKEN_TTL_SECONDS,
+      );
     });
   });
 

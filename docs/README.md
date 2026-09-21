@@ -26,7 +26,9 @@ Perdido? A pergunta é sempre "isto é trabalho, decisão, vocabulário ou consu
 | `apps/<app>/docs/adr/` | O **porquê** de cada decisão do app, um ADR por decisão, com índice por tema em `README.md` |
 | `apps/<app>/docs/reference/`, `guides/` | Consulta pontual e como-fazer daquele app |
 
-Hoje só a API está aqui: [`apps/api/docs/README.md`](../apps/api/docs/README.md) é o mapa dela.
+A API tem um mapa próprio, [`apps/api/docs/README.md`](../apps/api/docs/README.md); o web,
+menor, cabe no índice de ADRs dele ([`apps/web/docs/adr/README.md`](../apps/web/docs/adr/README.md))
+mais o [`design-system.md`](../apps/web/docs/design-system.md).
 
 ## O caminho de uma ideia até o código
 

@@ -6,7 +6,7 @@ Cobre a **fatia 0** (bootstrap do projeto) e a **fatia 1a** (espinha de autentic
 A fatia 0 não tem valor visível para o usuário e a fatia 1a não existe sem ela.
 
 Decisões estruturais desta spec já estão registradas em ADR-0001 a ADR-0005. A linguagem
-segue o glossário em `CONTEXT.md`. A direção visual segue `docs/design-system.md`.
+segue o glossário em `CONTEXT.md`. A direção visual segue `apps/web/docs/design-system.md`.
 
 > **Revisto em 2026-09-19**, antes de o repositório congelar para o import no monorepo
 > (issue 11 da Fase 11 da API): alinhada ao guia de integração atualizado da API
@@ -328,7 +328,7 @@ especialmente no login, onde três condições diferentes compartilham o mesmo s
 ### Design system
 
 - Tokens em custom properties, no espaço de cor do Tailwind 4. Direção "Eucalipto & Creme",
-  conforme `docs/design-system.md`.
+  conforme `apps/web/docs/design-system.md`.
 - **Cada token e cada componente nasce com a versão escura.** Não é uma etapa final.
 - Seletor de tema com três estados: claro, escuro e o do sistema. A escolha explícita
   persiste entre visitas.

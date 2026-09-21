@@ -65,7 +65,7 @@
    Toda cor do projeto nasce aqui. `.dark` só sobrescreve: nenhuma cor tem sua
    única definição dentro de um bloco de tema. O hex ao lado é o valor canônico
    do documento de design; o oklch é a conversão. Os contrastes estão medidos e
-   registrados em docs/design-system.md — `npm run contrast` refaz a medição.
+   registrados em docs/design-system.md — `pnpm run contrast` refaz a medição.
 
    `.light` acompanha `:root` na mesma regra, sem repetir um único valor: é o
    que o next-themes escreve no <html> e é o que permite forçar o tema claro num

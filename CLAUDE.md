@@ -10,17 +10,20 @@ inteiro — fluxo, regras transversais, onde mora cada documento. O que é espec
 | Caminho | O quê | Guia |
 |---|---|---|
 | `apps/api` | A API REST (Node 24/Express, Prisma 7, Zod 4, Postgres, Redis) | `apps/api/CLAUDE.md` |
-| `apps/web` | O front web (Next.js) — importado com histórico na Fase 11 (issue 11); ainda não existe aqui | — |
+| `apps/web` | O front web (Next 16/React 19/Tailwind 4), importado com histórico do `pet-oasis-web` na Fase 11 (issue 11) | `apps/web/CLAUDE.md` |
 | `packages/api-contracts` | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): schemas Zod de request, views de resposta, enums de domínio, nomes de role/feature e shape de erro, dependendo **só de `zod`** e consumido do fonte TS | `packages/api-contracts/README.md` |
 | `packages/tsconfig` | Presets de TypeScript (`@pet-oasis/tsconfig`): base estrito + um por alvo (Node, Next, biblioteca) | — |
 | `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`); cada app estende e acrescenta só os ignores que são seus | — |
 | `docs/` | Documentação do **sistema**: ADRs de sistema, índice das fases, backlog, guias e config das skills | `docs/README.md` |
 | `.scratch/` | O **tracker**: uma pasta por esforço, com a spec e uma issue por arquivo | `.scratch/README.md` |
+| `infra/` | O stack Compose do **sistema** (base + overrides `dev`/`test`/`prod`, projeto `pet-oasis-{dev,test,prod}`): API, web, Postgres, Redis, mailpit. Os `prod:*` da raiz o sobem inteiro ou um serviço só; em dev e teste quem o invoca é a API (o web roda no host) | — |
 | `tools/` | Scripts da raiz que não pertencem a pacote nenhum (hoje o `docs:check`) | — |
 
 Escopo `@pet-oasis/*`, nunca publicado; dependência interna por `workspace:*`; um só
-`pnpm-lock.yaml`. Os comandos da raiz (`typecheck`, `lint`, `build`, `test`, `dev`,
-`docs:check`) estão na tabela do `README.md`.
+`pnpm-lock.yaml`; **uma versão** por dependência compartilhada, fixada no `catalog:` do
+`pnpm-workspace.yaml` (TypeScript, Biome, `@types/node`, Zod, tsx, Vitest — cada
+`package.json` escreve `catalog:` no lugar do range). Os comandos da raiz (`typecheck`,
+`lint`, `build`, `test`, `dev`, `docs:check`, `prod:*`) estão na tabela do `README.md`.
 
 ---
 
@@ -170,7 +173,7 @@ Quando terminar um trabalho e sobrar algo pendente para uma etapa **futura**, a 
 
 O **Ciclo 1 (fundação) está fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de usuário, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação.
 
-O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por feature efetiva), ainda **sem checkout**. A **Fase 10 está fechada** e não trouxe domínio novo: desbloqueou o front web e pagou a dívida de deploy. A **Fase 11 está aberta** e não traz domínio: transforma este repo, in-place, no monorepo `pet-oasis` — spec e issues em `.scratch/monorepo/`. A **Fase 12** é a espinha de autenticação do web. Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) — vêm na fase seguinte.
+O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por feature efetiva), ainda **sem checkout**. A **Fase 10 está fechada** e não trouxe domínio novo: desbloqueou o front web e pagou a dívida de deploy. A **Fase 11 está aberta** e não traz domínio: transforma este repo, in-place, no monorepo `pet-oasis` — spec e issues em `.scratch/monorepo/`. A **Fase 12** é a espinha de autenticação do web — spec e issues, herdadas do `pet-oasis-web`, em `.scratch/foundation-and-auth-spine/`. Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) — vêm na fase seguinte.
 
 ---
 

@@ -39,12 +39,12 @@ subárvore.
 próprio `globals.css`, mede 101 pares e **sai com erro** se algum cair abaixo do alvo — 4,5:1
 para texto de corpo, 3:1 para elemento de interface. O mesmo comando também falha se algum
 token existir num tema e não no outro. A saída está registrada no fim de
-`docs/design-system.md`.
+`apps/web/docs/design-system.md`.
 
 A lista de pares é **o que os componentes desenham**, não o produto cartesiano dos tokens:
 todos contra todos produziria falha em combinação que ninguém renderiza — `destructive` como
 texto sobre a superfície de hover de menu, por exemplo — e torceria a paleta por uma
-exigência imaginária. O critério está escrito no `docs/design-system.md`, junto com o que
+exigência imaginária. O critério está escrito no `apps/web/docs/design-system.md`, junto com o que
 fica de fora e por quê.
 
 Quatro cores do documento original não passaram e foram puxadas o mínimo necessário, com o
@@ -63,7 +63,7 @@ pintaria de coral todo hover de menu da aplicação, então o coral entrou como 
 com uma variante `highlight` no `Button` e no `Badge` para que a chamada não repita o par de
 classes. E `primary-hover` não é conceito do shadcn (que resolve hover com `bg-primary/80`):
 o token existe porque o documento nomeia uma cor para o estado. Ambas registradas em
-`docs/design-system.md`, junto com a tabela do que foi mexido nos componentes gerados.
+`apps/web/docs/design-system.md`, junto com a tabela do que foi mexido nos componentes gerados.
 
 **Algarismos tabulares: verificado, não presumido.** As duas fontes têm `tnum` — conferido
 lendo a tabela `GSUB` dos `.woff2` que o build de fato serve, não a documentação delas. Não

@@ -1,7 +1,7 @@
 # Pet Oasis Web
 
-Frontend web do Pet Oasis, uma loja de pet shop. Consome a API REST do repo
-`pet-oasis-api` e não tem banco nem regra de negócio própria — o que existe aqui é
+Frontend web do Pet Oasis, uma loja de pet shop. Consome a API REST do app
+`apps/api` do monorepo e não tem banco nem regra de negócio própria — o que existe aqui é
 apresentação, navegação e sessão.
 
 Este glossário fixa a linguagem da interface. A maior parte dos termos é herdada da API;

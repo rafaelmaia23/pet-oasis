@@ -1,26 +1,14 @@
-# pet-oasis-web — Guia para o Claude Code
+# pet-oasis — web: guia para o Claude Code
 
-Frontend web do Pet Oasis, uma loja de pet shop. Consome a API REST do repo irmão
-`pet-oasis-api` (`../pet-oasis-api`), que é a **autoridade de todo o domínio**: aqui não há
+Este arquivo guarda **só o que é específico do web**: stack, arquitetura (BFF, server-first),
+superfícies, tratamento de erro, testes, design system e comandos. Tudo que vale para o
+monorepo inteiro — a regra de nunca decidir regra de negócio nem de produto, TDD, o fluxo de
+branches por fase, a convenção de commits (escopo `web`, e a proibição de trailer de agente),
+como ler o contexto, onde mora cada documento, o pipeline das skills — está no **`CLAUDE.md`
+da raiz**, e vale aqui integralmente.
+
+O web consome a API REST de `apps/api`, que é a **autoridade de todo o domínio**: aqui não há
 banco, não há regra de negócio e não há validação que decide.
-
-> **Congelado em 2026-09-19.** Este repositório está num ponto verde à espera do import para
-> o monorepo `pet-oasis` (`apps/web`; issue 11 da Fase 11 da API, em
-> `../pet-oasis-api/.scratch/monorepo/`). Nada de código aqui até lá. A espinha de
-> autenticação (`.scratch/foundation-and-auth-spine/`) é a **Fase 12** do sistema e será
-> implementada no monorepo, começando pela issue `00` — dois pedidos ao pacote de contratos.
-
----
-
-## ⚠️ REGRA CRÍTICA — NUNCA decida regra de negócio nem de produto
-
-Quando aparecer uma escolha de domínio, de UX que muda o que o usuário pode fazer, ou de
-recorte de escopo: **pare e delegue**. Apresente 2-4 caminhos, a consequência de cada um, e
-uma recomendação fundamentada — mas espere a decisão. Inventar regra em silêncio é o pior
-erro possível.
-
-O que **não** é decisão de negócio (pode agir): sintaxe, bug óbvio, aplicar padrão já
-firmado aqui, seguir decisão já registrada num ADR ou no ticket.
 
 ## ⚠️ REGRA — A API é a autoridade
 
@@ -30,18 +18,18 @@ Nenhuma regra de negócio é reimplementada aqui. Em particular:
   403 — feio, não inseguro. E ele **tem** que honrar o wildcard `*`, senão o admin não vê
   nada.
 - **Zod valida formulário, nunca resposta** (ADR-0003). A validação que decide é a da API.
-- **Os schemas vêm de `@pet-oasis/api-contracts`**, nunca de cópia (ADR-0003): request,
-  views de resposta, enums, `ERROR_CODES` e a tabela de rotas que tipa o `apiFetch`.
+- **Os schemas vêm de `@pet-oasis/api-contracts`** (`packages/api-contracts`), nunca de cópia
+  (ADR-0003): request, views de resposta, enums, `ERROR_CODES` e a tabela de rotas que tipa o
+  `apiFetch`.
 - **Não decodifique o JWT para decidir nada.** O conteúdo dele é da API; a validade do
   access token vem da resposta de login/refresh, tipada pelo contrato.
 - Dúvida sobre comportamento da API se resolve **lendo o guia de integração dela**, nunca
-  inferindo: `../pet-oasis-api/apps/api/docs/guides/integrating-with-the-api.md`. Ele é
-  escrito para este cliente e responde quase tudo — endereço, `X-Forwarded-For`, envelope de
-  erro, sessão e cookie de refresh, as rotas que são contrato. **O que faltar lá é buraco no
-  guia**: avise que ele precisa crescer, em vez de garimpar em
-  `apps/api/docs/reference/endpoints.md` (lista de rotas) ou nos ADRs da API
-  (`apps/api/docs/adr/`), que são o racional interno dela e não foram escritos para quem
-  consome.
+  inferindo: `apps/api/docs/guides/integrating-with-the-api.md`. Ele é escrito para este
+  cliente e responde quase tudo — endereço, `X-Forwarded-For`, envelope de erro, sessão e
+  cookie de refresh, as rotas que são contrato. **O que faltar lá é buraco no guia**: avise
+  que ele precisa crescer, em vez de garimpar em `apps/api/docs/reference/endpoints.md`
+  (lista de rotas) ou nos ADRs da API (`apps/api/docs/adr/`), que são o racional interno dela
+  e não foram escritos para quem consome.
 
 **Conta pendente não entra.** O login da API recusa em **cinco** condições, nesta ordem, e a
 interface **ramifica pelo `code` do envelope de erro** — nunca pela `message`, que é prosa em
@@ -74,11 +62,13 @@ Sem exceção, e vale para cada peça nova. Detalhe e racional em
 
 ## Stack
 
-Next 16 (App Router) · React 19 · TypeScript strict · Tailwind 4 (CSS-first: os tokens vivem
-em `@theme`, **não existe `tailwind.config.js`**) · shadcn 4 · `iron-session` 9 ·
-`@pet-oasis/api-contracts` (schemas Zod, views, `ERROR_CODES`, tabela de rotas — do
-monorepo) · Motion 13 · Biome · Vitest + Testing Library + Playwright · Node 24. npm até o
-import; pnpm workspaces + Turborepo no monorepo.
+Next 16 (App Router) · React 19 · TypeScript strict (o `tsconfig.json` estende o preset Next
+de `@pet-oasis/tsconfig`, em `packages/tsconfig`, e guarda só o `paths` do diretório; mesmo
+desenho para o Biome, base em `packages/biome-config` mais os domínios `next`/`react` e o
+parser de Tailwind, que são só deste app) · Tailwind 4 (CSS-first: os tokens vivem em
+`@theme`, **não existe `tailwind.config.js`**) · shadcn 4 · `iron-session` 9 ·
+`@pet-oasis/api-contracts` (schemas Zod, views, `ERROR_CODES`, tabela de rotas) · Motion 13 ·
+Biome · Vitest + Testing Library + Playwright · Node 24 · pnpm (o do workspace).
 
 **Biome sozinho**, sem ESLint: o domínio `next` do Biome auto-ativa ao detectar `next@>=14`
 e cobre `noImgElement`, `noSyncScripts`, `noNextAsyncClientComponent`, `useInlineScriptId`,
@@ -166,50 +156,43 @@ injeção; uma terceira forma de falsificar a mesma coisa seria uma a mais.
 
 - **Idioma**: interface e documentação em **pt-BR**; código, identificadores, nomes de
   arquivo e mensagens de commit em **inglês**.
-- **Commits**: conventional commits (`feat:`, `fix:`, `docs:`, `merge:`), em inglês.
-  **Nunca assinar o commit** — sem `Co-Authored-By`, sem rodapé de agente.
-- **Branches**: `main` + `feat/<NN>-<slug>`, onde `<NN>` é o número do ticket em
-  `.scratch/`. Merge `--no-ff`. Nada direto na `main`. Não existe `dev` aqui — no monorepo o
-  fluxo é o da raiz (`main` ← `dev` ← `fase-<n>` ← `feat/fase-<n>-<NN>-<slug>`, commits com
-  escopo `web`), e este repo não o antecipa.
-- **Mergeou, apaga a branch.** `git branch -d <branch>` faz parte do merge, não é uma
-  faxina para depois: o histórico do merge já guarda tudo que a branch guardava, e branch
-  mergeada que fica só acumula ruído na listagem. O `-d` minúsculo é de propósito — ele
-  recusa apagar o que não foi mergeado, então serve de conferência. Vale também para a
-  branch que já estava mergeada quando você chegou.
 - **Dinheiro em centavos inteiros**, peso em gramas: como vêm da API. Formatação só pelo
   componente `Money`.
-- Antes de commitar: `npm run typecheck` e `npm run lint` limpos.
 
-## Ambientes
+## Comandos
 
-Dev roda **no host, na porta 3001** (a API ocupa a 3000) contra a API dockerizada — no
-monorepo, `pnpm dev --filter web` contra o stack de dev da raiz. Produção é container próprio
-no mesmo VPS da API, alcançando-a por `http://api:3000` — hoje por uma rede externa criada no
-host; no monorepo, pela rede do stack único. O apex `pet-oasis.maiahub.com.br` serve este
-front; a API fica em `pet-oasis-api.maiahub.com.br` (ADR-0004).
+O web é o projeto `web` do workspace pnpm e vive em **`apps/web`**. Todo script abaixo é dele:
+roda de dentro de `apps/web` (`pnpm run <script>`) ou da raiz com `pnpm --filter web <script>`.
+O `pnpm install` é um só, o do workspace. A raiz tem `typecheck`, `lint`, `build` e `dev`, que
+delegam ao Turborepo e cobrem o web junto dos outros pacotes — para o web só,
+`pnpm <task> --filter=@pet-oasis/web` (nome completo; o Turbo não aceita `web` sem escopo).
 
-## Onde mora cada documento
+- Dev: `pnpm run dev` — **no host, na porta 3001** (a API ocupa a 3000), contra a API
+  dockerizada (`pnpm run dev` em `apps/api`, ou `pnpm dev` na raiz, que sobe os dois). Não há
+  serviço `web` no Compose de dev, de propósito: HMR nativo, sem container.
+- Build: `pnpm run build` (emite o bundle standalone) · `pnpm start` serve o build na 3001.
+- Typecheck: `pnpm run typecheck` (gera os tipos de rota do Next e roda `tsc --noEmit`) ·
+  Lint: `pnpm run lint` · com fix: `lint:fix` · Format: `format`.
+- Contraste: `pnpm run contrast` mede cada par de cor do `globals.css` e falha abaixo de AA
+  (ver `docs/design-system.md`).
+- Produção: **na raiz**, `pnpm prod:up` (o stack inteiro) ou `pnpm prod:up web` (só este
+  serviço; a API continua rodando a imagem que já tinha). O container entra em duas redes do
+  stack unificado (`infra/` da raiz): a que o liga à API (`http://api:3000`) e a `proxy` do
+  nginx, externa (ADR-0004). As variáveis dele vivem em `apps/web/.env.production` (fora do
+  git; `.env.example` versionado).
+- Doc: `pnpm docs:check` **na raiz** — varre o monorepo inteiro, este app incluído.
 
-`CONTEXT.md` é o glossário — só linguagem, nenhum detalhe de implementação. Decisão
-estrutural vira **ADR** em `docs/adr/`. Direção visual em `docs/design-system.md`. Rascunho,
-spec em negociação e tickets vivem em `.scratch/`.
+## Onde está a documentação do web
 
----
-
-## Agent skills
-
-### Issue tracker
-
-Issues e specs vivem como arquivos markdown em `.scratch/<feature-slug>/` neste repo. Ver `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Os cinco papéis canônicos de triagem, cada label igual ao próprio nome. Ver `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: `CONTEXT.md` e `docs/adr/` na raiz do repo. Ver `docs/agents/domain.md`.
+- **Vocabulário:** `CONTEXT.md` (glossário puro; formato da skill `domain-modeling`). Termo
+  novo entra lá, só o termo; o porquê vai para um ADR. O mapa dos contextos do sistema é o
+  `CONTEXT-MAP.md` da raiz.
+- **O porquê de cada decisão:** um ADR por decisão em `docs/adr/`, índice em
+  `docs/adr/README.md`. Decisão nova = ADR novo + linha no índice.
+- **Direção visual:** `docs/design-system.md` — tokens, contrastes medidos, o que foi editado
+  nos componentes gerados pelo shadcn.
+- **Tracker e índice das fases:** na raiz — `.scratch/` (a espinha de autenticação é
+  `.scratch/foundation-and-auth-spine/`, a Fase 12) e `docs/todo.md`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

@@ -12,8 +12,10 @@ próprio glossário (`CONTEXT.md`, formato da skill `domain-modeling`) e os pró
   imagem). Dona dos dados e das regras de negócio. O glossário diz *o que* cada termo é; o
   *porquê* está nos ADRs da API (índice em
   [`apps/api/docs/adr/README.md`](./apps/api/docs/adr/README.md)).
-- **Web** (`apps/web/CONTEXT.md`, importado na Fase 11, issue 11): a vitrine e a área do cliente,
-  renderizadas no servidor e falando com a API por BFF. Não tem dado próprio.
+- **Web** ([`apps/web/CONTEXT.md`](./apps/web/CONTEXT.md)): a vitrine, a área do cliente e o
+  back-office, renderizados no servidor e falando com a API por BFF. Não tem dado próprio. O
+  *porquê* está nos ADRs do web (índice em
+  [`apps/web/docs/adr/README.md`](./apps/web/docs/adr/README.md)).
 
 ## Relationships
 

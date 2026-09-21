@@ -156,11 +156,16 @@
 > Conventional Commits com lint, CI de verificação, stack Compose único, docs de domínio no
 > formato da skill (`CONTEXT-MAP.md` + `CONTEXT.md` por app). Spec e issues em
 > `.scratch/monorepo/`.
-- Progresso: 9 de 14 issues fechadas (01–07, 09 e 10).
+- Progresso: 11 de 14 issues fechadas (01–11).
 
 ## ⬜ Fase 12 — Espinha de autenticação do web
-> Herdada do `pet-oasis-web` no import (Fase 11, issue 11): a spec e as issues dele passam a
-> viver no `.scratch/` da raiz com este número. Consome os schemas do contrato compartilhado.
+> Herdada do `pet-oasis-web` no import (Fase 11, issue 11): a spec e as issues dele vivem em
+> `.scratch/foundation-and-auth-spine/`, com o conteúdo com que o web congelou. Do bootstrap
+> ao fluxo completo de conta — sessão em BFF, login e os estados bloqueados, guarda de rota,
+> renovação automática, signup, verificação de email, recuperação de senha e reativação —,
+> consumindo os schemas do contrato compartilhado. Começa pela issue `00`, dois pedidos ao
+> contrato.
+- Progresso: 2 de 12 issues fechadas (01 e 02, ainda no repositório de origem).
 
 ## ⬜ Carrinho, pedido e pagamento (fase seguinte, ainda sem número)
 

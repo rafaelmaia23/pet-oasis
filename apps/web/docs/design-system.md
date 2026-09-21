@@ -22,7 +22,7 @@ inteira. Se o seletor de tema nunca for exposto ao usuário, nada foi perdido.
 
 Valores canônicos em hex; os tokens são **escritos em `oklch`** nas custom properties (é o
 espaço de cor que o Tailwind 4 e o shadcn 4 usam, e é o que faz clarear/escurecer preservar
-o croma). O hex de cada linha abaixo é o que aquele `oklch` de fato renderiza; `npm run
+o croma). O hex de cada linha abaixo é o que aquele `oklch` de fato renderiza; `pnpm run
 contrast` imprime o hex de cada token que mede, o que é como esta tabela é conferida contra
 o `src/app/globals.css`.
 
@@ -114,7 +114,7 @@ teto imposto pelo piso de 3:1 contra o card branco; no escuro entre 0,575 e 0,87
 pelo mesmo 3:1 contra o fundo. As matizes que colapsam juntas sob a mesma dicromacia são as
 que recebem os L mais afastados.
 
-`npm run contrast` mede as duas coisas: 3:1 de cada série contra fundo e card, e a menor
+`pnpm run contrast` mede as duas coisas: 3:1 de cada série contra fundo e card, e a menor
 distância entre duas séries sob visão normal, deuteranopia, protanopia e tritanopia, com piso
 de 0,05. A tabela está no fim deste documento.
 
@@ -182,7 +182,7 @@ Os tokens vivem em [`src/app/globals.css`](../src/app/globals.css), em duas regr
   aqui. `.light` divide a mesma declaração com `:root` sem repetir um único valor: é a classe
   que o `next-themes` escreve no `<html>`, e é o que permite forçar o tema claro numa
   subárvore (a amostra lado a lado em `/design`).
-- **`.dark`** — só sobrescreve. Nenhuma cor tem sua única definição aqui, e `npm run contrast`
+- **`.dark`** — só sobrescreve. Nenhuma cor tem sua única definição aqui, e `pnpm run contrast`
   falha se alguma tiver.
 
 Acima delas, um bloco `@theme inline` que só faz ponte: `--color-x: var(--x)`, para que as
@@ -237,7 +237,7 @@ depender de qual está ativo.
 
 ## Contraste medido
 
-Gerado por `npm run contrast`, que lê os tokens do próprio `globals.css`, mede cada par e
+Gerado por `pnpm run contrast`, que lê os tokens do próprio `globals.css`, mede cada par e
 **sai com erro** se algum cair abaixo do alvo. Alvo de 4,5:1 para texto de corpo e 3:1 para
 elemento de interface — borda de campo, anel de foco e superfície de destaque. O mesmo
 comando falha se algum token existir num tema e não no outro.

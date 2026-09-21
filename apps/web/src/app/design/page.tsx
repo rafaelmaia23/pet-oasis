@@ -264,7 +264,7 @@ export default function DesignSystemPage() {
             Amostra viva dos tokens. Todo token tem par claro e escuro, e
             nenhuma cor é definida só dentro de um tema. Os contrastes estão
             medidos —{" "}
-            <code className="font-mono text-xs">npm run contrast</code> refaz a
+            <code className="font-mono text-xs">pnpm run contrast</code> refaz a
             medição e falha se algum par cair abaixo de AA.
           </p>
         </div>

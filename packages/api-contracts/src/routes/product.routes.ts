@@ -1,4 +1,3 @@
-import { z } from "zod";
 import {
   productImageParamsSchema,
   productImagesParamsSchema,
@@ -19,8 +18,7 @@ import {
 import {
   productImageListSchema,
   productImageViews,
-  productListMetaSchema,
-  productListViews,
+  productListSchema,
   productViews,
   variantViews,
 } from "../catalog/product.views";
@@ -66,13 +64,9 @@ export const productRoutes = {
     responses: {
       200: {
         description: "Catálogo",
-        // Sem escada aqui, ao contrário do detalhe: o degrau é escolhido uma
-        // vez para a página inteira, e um `oneOf` de três envelopes esconderia
-        // o `meta` da paginação de quem lê a spec.
-        view: z.object({
-          data: z.array(productListViews.public),
-          meta: productListMetaSchema,
-        }),
+        // Sem escada aqui, ao contrário do detalhe — o porquê está no
+        // `productListSchema`.
+        view: productListSchema,
       },
     },
     errors: { 422: errorResponses[422], 429: errorResponses[429] },

@@ -34,3 +34,12 @@ a comparação existe para pegar. **Montar a URL é do cliente**, não do contra
 precisa decidir encoding, query string e base URL, e nada disso atravessa a rede. E a escada de
 capability vira `anyOf`, não `oneOf`: os degraus se contêm, e `oneOf` acusaria como inválido o
 corpo que a API realmente devolve.
+
+**A escada vale para o recurso, não para a listagem.** Onde a resposta é um recurso, `view` é a
+escada e o documento publica a união — são dez rotas (produto: detalhe, criação e atualização;
+variante: criação e atualização; usuário: criação, leitura e atualização; perfil: criação de
+customer e de employee), e antes desta issue as dez publicavam **uma** view, embora a API já
+resolvesse a forma pela feature efetiva do ator. Numa listagem, não: o degrau é escolhido uma
+vez para a página inteira, e uma união de três envelopes tiraria o `meta` da paginação do
+alcance de quem lê a spec ou gera cliente. A listagem da vitrine declara o degrau público e
+descreve a escada na prosa da rota — o envelope mora em `productListSchema`, ao lado das views.

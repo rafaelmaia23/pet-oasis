@@ -8,15 +8,9 @@ import {
   updateUserSchema,
   userParamsSchema,
 } from "../user/user.schema";
-import { userViews } from "../user/user.views";
+import { userViewLadder, userViews } from "../user/user.views";
 import { errorResponses, noContent } from "./responses";
 import type { RouteGroup } from "./route.types";
-
-// A escada de quem lê um usuário: `owner` é o que o dono vê de si; quem tem
-// `read:user:others` recebe `admin`, que acrescenta roles e overrides. A view
-// é escolhida pelo **ator**, não pela rota — por isso as respostas abaixo
-// declaram as duas, na ordem da escada.
-const userLadder = [userViews.owner, userViews.admin] as const;
 
 export const userRoutes = {
   create: {
@@ -26,7 +20,7 @@ export const userRoutes = {
     auth: "bearer",
     summary: "Cria um usuário (employee) — exige create:user",
     request: createEmployeeSchema,
-    responses: { 201: { description: "Usuário criado", view: userLadder } },
+    responses: { 201: { description: "Usuário criado", view: userViewLadder } },
     errors: {
       401: errorResponses[401],
       403: errorResponses[403],
@@ -63,7 +57,9 @@ export const userRoutes = {
     auth: "bearer",
     summary: "Busca um usuário por id (view resolvida pela feature efetiva)",
     request: userParamsSchema,
-    responses: { 200: { description: "Usuário encontrado", view: userLadder } },
+    responses: {
+      200: { description: "Usuário encontrado", view: userViewLadder },
+    },
     errors: {
       401: errorResponses[401],
       403: errorResponses[403],
@@ -77,7 +73,9 @@ export const userRoutes = {
     auth: "bearer",
     summary: "Atualiza campos do usuário (apenas name)",
     request: updateUserSchema,
-    responses: { 200: { description: "Usuário atualizado", view: userLadder } },
+    responses: {
+      200: { description: "Usuário atualizado", view: userViewLadder },
+    },
     errors: {
       401: errorResponses[401],
       403: errorResponses[403],

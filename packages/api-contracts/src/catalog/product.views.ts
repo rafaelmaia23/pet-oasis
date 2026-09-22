@@ -259,3 +259,16 @@ export const productListMetaSchema = offsetMetaSchema
 export const productImageListSchema = z.object({
   data: z.array(productImageView),
 });
+
+/**
+ * O envelope da vitrine. Não sai de `offsetList` porque o `meta` é o desta
+ * listagem, com o eco da busca — e é justamente por isso que ele mora aqui, ao
+ * lado das views, e não montado na entrada da tabela de rotas.
+ *
+ * A listagem não tem escada: o degrau é escolhido uma vez para a página
+ * inteira, e uma união de três envelopes esconderia o `meta` de quem lê a spec.
+ */
+export const productListSchema = z.object({
+  data: z.array(publicListView),
+  meta: productListMetaSchema,
+});

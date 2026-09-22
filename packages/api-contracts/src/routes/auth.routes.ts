@@ -16,7 +16,6 @@ import {
   messageViews,
   sessionViews,
 } from "../auth/auth.views";
-import { errorResponseSchema } from "../errors/index";
 import { staticList } from "../pagination/list-envelope";
 import { userViews } from "../user/user.views";
 import { errorResponses, noContent } from "./responses";
@@ -66,12 +65,12 @@ export const authRoutes = {
       // 10.8: a senha conferiu, o *usuário* é que está recusado — e o cliente
       // ramifica a tela pelo `code`, nunca pela prosa de `message`.
       403: {
+        ...errorResponses[403],
         description:
           "Conta recusada após a senha conferir. `code` distingue a condição: " +
           "`ACCOUNT_BANNED` (banida), `PASSWORD_RESET_REQUIRED` (troca de " +
           "senha forçada — o link chega por email) ou `EMAIL_NOT_VERIFIED` " +
           "(ainda pendente de verificação)",
-        schema: errorResponseSchema,
       },
       422: errorResponses[422],
       429: errorResponses[429],

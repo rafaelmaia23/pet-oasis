@@ -11,6 +11,7 @@ import { petRoutes } from "./pet.routes";
 import { productRoutes, variantRoutes } from "./product.routes";
 import { profileRoutes } from "./profile.routes";
 import { roleRoutes } from "./role.routes";
+import type { RouteTable } from "./route.types";
 import { statusRoutes } from "./status.routes";
 import { tagRoutes } from "./tag.routes";
 import { userRoutes } from "./user.routes";
@@ -46,4 +47,4 @@ export const routes = {
   pet: petRoutes,
   auditLog: auditLogRoutes,
   log: logRoutes,
-} as const;
+} as const satisfies RouteTable;

@@ -58,13 +58,21 @@ async function loadRouterWithMounts() {
   }
 }
 
-function collectExpressRoutes(stack: RouterLayer[], prefix: string): string[] {
+type RouteEntry = { method: string; path: string };
+
+const format = ({ method, path }: RouteEntry) => `${method} ${path}`;
+
+function collectExpressRoutes(
+  stack: RouterLayer[],
+  prefix: string,
+): RouteEntry[] {
   return stack.flatMap((layer) => {
     if (layer.route) {
       const path = `${prefix}${layer.route.path}`.replace(/\/$/, "") || "/";
-      return Object.keys(layer.route.methods).map(
-        (method) => `${method.toUpperCase()} ${path}`,
-      );
+      return Object.keys(layer.route.methods).map((method) => ({
+        method: method.toUpperCase(),
+        path,
+      }));
     }
     if (layer.handle?.stack) {
       const mount = layer.__mount === "/" ? "" : (layer.__mount ?? "");
@@ -74,45 +82,47 @@ function collectExpressRoutes(stack: RouterLayer[], prefix: string): string[] {
   });
 }
 
-function collectContractRoutes(): string[] {
+function collectContractRoutes(): RouteEntry[] {
   return Object.values(routes).flatMap((group) =>
-    Object.values(group).map((route) => `${route.method} ${route.path}`),
+    Object.values(group).map(({ method, path }) => ({ method, path })),
   );
 }
 
 const router = await loadRouterWithMounts();
 const allExpressRoutes = collectExpressRoutes(router.stack, "");
 
+// Sob `/api/v1` — o `/` (ou o fim da string) evita que um `/api/v1x` futuro
+// entre por engano, e o corte é feito pelo tamanho do prefixo, não por busca.
+const isUnderApi = ({ path }: RouteEntry) =>
+  path === API_PREFIX || path.startsWith(`${API_PREFIX}/`);
+
 const expressRoutes = allExpressRoutes
-  .filter((entry) => entry.includes(` ${API_PREFIX}`))
-  .map((entry) => entry.replace(` ${API_PREFIX}`, " "))
+  .filter(isUnderApi)
+  .map((entry) =>
+    format({ ...entry, path: entry.path.slice(API_PREFIX.length) }),
+  )
   .sort();
 
-const contractRoutes = collectContractRoutes().sort();
+const contractRoutes = collectContractRoutes().map(format).sort();
+
+// A união dos dois lados: é sobre ela que a comparação é gerada, para que um
+// par presente em só um dos lados vire um `it()` vermelho **com o par no
+// nome** — o mesmo desenho do teste de paridade dos enums, ao lado.
+const allPairs = [...new Set([...expressRoutes, ...contractRoutes])].sort();
 
 describe("paridade das rotas: contrato × router do Express", () => {
   it("não deixa rota fora de /api/v1 sem ser declarada", () => {
     const outside = allExpressRoutes
-      .filter((entry) => !entry.includes(` ${API_PREFIX}`))
+      .filter((entry) => !isUnderApi(entry))
+      .map(format)
       .sort();
 
     expect(outside).toEqual([...SERVER_ROUTES].sort());
   });
 
-  it("toda rota do Express tem entrada na tabela do contrato", () => {
-    const missing = expressRoutes.filter(
-      (entry) => !contractRoutes.includes(entry),
-    );
-
-    expect(missing).toEqual([]);
-  });
-
-  it("toda entrada da tabela do contrato tem rota no Express", () => {
-    const missing = contractRoutes.filter(
-      (entry) => !expressRoutes.includes(entry),
-    );
-
-    expect(missing).toEqual([]);
+  it("compara um conjunto não-vazio dos dois lados", () => {
+    expect(expressRoutes.length).toBeGreaterThan(0);
+    expect(contractRoutes.length).toBe(expressRoutes.length);
   });
 
   it("não repete o par método + path na tabela", () => {
@@ -122,4 +132,17 @@ describe("paridade das rotas: contrato × router do Express", () => {
 
     expect(duplicated).toEqual([]);
   });
+
+  for (const pair of allPairs) {
+    it(`${pair}: está no router e na tabela`, () => {
+      expect(
+        expressRoutes.includes(pair),
+        `${pair} está na tabela do contrato, mas não no router do Express`,
+      ).toBe(true);
+      expect(
+        contractRoutes.includes(pair),
+        `${pair} está no router do Express, mas não na tabela do contrato`,
+      ).toBe(true);
+    });
+  }
 });

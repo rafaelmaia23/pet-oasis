@@ -69,7 +69,8 @@ O que um cliente faz com isso, em ordem de utilidade:
 - **Não digitar path.** `routes.product.get.path` é `/products/:idOrSlug`; trocar o path na API
   quebra o `typecheck` de quem o usa, em vez de virar 404 em produção.
 - **Tipar os dois lados de uma chamada.** `z.infer<typeof routes.auth.login.request.shape.body>`
-  é o corpo; `z.infer<typeof routes.auth.login.responses[200].view>` é a resposta.
+  é o corpo; `z.infer<(typeof routes.auth.login.responses)[200]["view"]>` é a resposta (o
+  índice numérico pede o `typeof` entre parênteses).
 - **Saber o que tratar.** `Object.keys(route.errors)` é a lista fechada de status que aquela
   rota devolve, cada um com o envelope que carrega (o 422 acrescenta `errors` por campo).
 - **Decidir se precisa de token** antes de chamar: `route.auth === "public"`.

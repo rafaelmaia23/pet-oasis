@@ -5,12 +5,12 @@
 **API REST de um pet shop online - autenticação, autorização RBAC e gestão de usuários construídas do zero, com TDD.**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Node](https://img.shields.io/badge/Node-22-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/Node-24-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)](https://expressjs.com/)
 [![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Zod](https://img.shields.io/badge/Zod-4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/)
-[![Vitest](https://img.shields.io/badge/Vitest-1193%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-1367%20testes-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](https://spec.openapis.org/oas/v3.1.0)
 [![License](https://img.shields.io/badge/license-MIT-blue)](#licença)
@@ -295,13 +295,21 @@ Ambos são idempotentes (`pnpm run db:seed` não duplica nada) e restaurados tod
 | | Fase | Entrega |
 |---|---|---|
 | ✅ | 9 | Pets ligados a Customers (CRUD, escopos *own*/*others*, falecimento ≠ exclusão) e catálogo completo: produto/variante, marca, categoria em árvore, tag, vitrine pública com view por feature efetiva, busca textual com tolerância a erro de digitação e upload de imagem — sem checkout |
-| 🔜 | 10 | Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) |
+| ✅ | 10 | Desbloqueio do front web e dívida de deploy: janela de graça no refresh, `code`s estáveis de login, redes e domínio, seed fail-open por classe de dado |
+| ✅ | 11 | O repositório vira o monorepo `pet-oasis`: `apps/api` + `apps/web` + o contrato compartilhado `@pet-oasis/api-contracts`, pnpm workspaces, Turborepo, Conventional Commits e CI |
+| ⬜ | 12 | Espinha de autenticação do web (fase do `apps/web`) |
+| 🔜 | 13 | Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) |
 
 Detalhe atômico de cada item em [`docs/todo.md`](../../docs/todo.md).
 
 ---
 
 ## Documentação do projeto
+
+Esta é a documentação **da API**. O que vale para o sistema inteiro — o mapa do monorepo, os
+comandos da raiz, o Turborepo, a convenção de commit, o CI e o fluxo de branches — está no
+[README do monorepo](../../README.md) e no [`CLAUDE.md`](../../CLAUDE.md) da raiz; as decisões
+de sistema, no [índice de ADRs da raiz](../../docs/adr/README.md).
 
 | Arquivo | Conteúdo |
 |---|---|

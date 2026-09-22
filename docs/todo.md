@@ -117,9 +117,10 @@
 > ciclo é agrupamento de leitura, não reinício de contagem — a convenção de branch do
 > `CLAUDE.md` (`fase-<n>`, `feat/fase-<n>-<NN>-<slug>`) depende de um número único por fase.
 > A Fase 9 (fechada) trouxe pets e catálogo, ainda **sem checkout**. A Fase 10 (fechada)
-> desbloqueou o front web e pagou a dívida de deploy. A Fase 11 (aberta) transforma o repo no
-> monorepo `pet-oasis` — a API desce para `apps/api`, o web entra com histórico, e nasce o
-> pacote de contratos compartilhado; carrinho, pedido e pagamento vêm na fase seguinte.
+> desbloqueou o front web e pagou a dívida de deploy. A Fase 11 (fechada) transformou o repo no
+> monorepo `pet-oasis` — a API em `apps/api`, o web importado com histórico, e o pacote de
+> contratos compartilhado. A Fase 12 (aberta) é a espinha de autenticação do web; carrinho,
+> pedido e pagamento são a Fase 13.
 
 ## Fase 9 — Domínio pet shop: pets e catálogo ✅
 > Abriu o Ciclo 2 com duas agregações quase independentes — pets (ligados a `Customer`) e catálogo (marca, categoria, tag, produto, variante) —, que só se tocam na faceta "para qual espécie este produto serve". **Sem checkout**: carrinho, pedido e pagamento ficam para uma fase posterior (no fecho da 9 eram "a Fase 11"; o número foi tomado pelo monorepo). 12 sessões (9.1–9.12), cada uma 1:1 com sua sub-fase e em feat-branch própria; as três últimas de kickoff em grelha (17, 19 e 13 decisões fechadas antes de qualquer linha). Racional em `apps/api/docs/adr/README.md#domínio-pet-shop` (índice) e nos ADRs `0006-pet-domain-modeling.md`, `0007-product-catalog-modeling.md`, `0008-product-vs-service.md`, `0009-text-search.md`, `0010-file-storage-and-uploads.md` e no adendo de `0004-pagination.md`; o que ficou de fora, com o motivo, em `docs/reference/backlog.md`.
@@ -149,19 +150,19 @@
 
 ---
 
-## 🔄 Fase 11 — Monorepo: pnpm workspaces, Turborepo e o primeiro contrato compartilhado
-> Nenhum domínio novo. O repositório vira, in-place, o monorepo `pet-oasis`: API em `apps/api`,
-> `pet-oasis-web` importado com histórico em `apps/web`, `packages/api-contracts` (schemas Zod
-> que atravessam a rede, dependendo só de `zod`), presets de tsconfig/biome compartilhados,
-> Conventional Commits com lint, CI de verificação, stack Compose único, docs de domínio no
-> formato da skill (`CONTEXT-MAP.md` + `CONTEXT.md` por app). Spec e issues em
-> `.scratch/fase-11-monorepo/`.
-- Progresso: 16 de 18 issues fechadas (01–12 e 15–18). As issues 15–17 nasceram da grelha de
-  2026-09-21: forma do tracker (15: pasta = fase, `docs/adr/0002`), e as duas peças de
-  contrato que a issue `00` da Fase 12 pedia (16: `expiresIn` na resposta de login e refresh,
-  `apps/api/docs/adr/0200`; 17: tabela de rotas no contrato, `docs/adr/0003`). A 18 nasceu do
-  code-review da 12: nome de feature atravessa a rede como enum (`docs/adr/0004`), que é o que
-  faz a user story 3 da fase valer no cliente. Faltam a 13 (fecho) e a 14.
+## Fase 11 — Monorepo: pnpm workspaces, Turborepo e o primeiro contrato compartilhado ✅
+> Nenhum domínio novo: o repositório virou, **in-place**, o monorepo `pet-oasis` — a API desceu para `apps/api`, o `pet-oasis-web` entrou com histórico em `apps/web`, e nasceu `packages/api-contracts`, a fronteira tipada que justifica o monorepo (mudança de contrato na API quebra o `typecheck` do web no mesmo PR). 18 issues: 14 planejadas em três rodadas de grelha, 15–17 nascidas de duas rodadas pós-import (2026-09-21), a 18 do code-review da 12, a 14 da revisão de padrões da 02. Cada uma em feat-branch própria, mergeada na `fase-11`. Racional em `docs/adr/README.md` (o índice de sistema, nascido neste fecho: [`0005`](adr/0005-monorepo-in-place-pnpm-turborepo.md) o porquê do todo, [`0006`](adr/0006-one-source-for-node-pnpm-and-one-version-per-dependency.md) a fonte única de versões, [`0007`](adr/0007-single-compose-stack-one-image-per-app.md) o stack e as imagens, mais `0001`–`0004`) e em `apps/api/docs/adr/README.md` (`0103`, `0104`, `0156`, `0157`, `0196`–`0202`).
+- **A estratégia que definiu a fase: uma camada por issue, e o pnpm antes do move (01–04).** A ordem não foi arrumação — foi oráculo. O pnpm entrou com a API ainda como pacote único (01) para que a estritez dele aparecesse com a suíte inteira verde, sem confundir "quebrou pelo pnpm" com "quebrou pelo move": expôs duas dependências fantasma (`@types/ms`, `@types/express-serve-static-core`) e um gotcha que só se vê sob pnpm — o caminho real do bundle do Scalar passa por `node_modules/.pnpm/…`, e o `sendFile` recusa segmento com ponto (ADR `0202`). Só então o move (02): **um commit mecânico** de 498 arquivos, registrado no `.git-blame-ignore-revs` para o `blame` continuar apontando o autor real. Depois os presets compartilhados (03, o pacote interno mais barato possível, provando `workspace:*` antes de o contrato depender disso) e o Turborepo (04), com `test` **fora do cache** de propósito — a suíte depende de Compose e `.env.test`, e cachear sem declarar esses inputs é risco de falso-verde.
+- **O contrato, que é o motivo da fase (09, 10):** `@pet-oasis/api-contracts` nasceu em dois movimentos — "expand" com o que não dependia de schema nenhum (enums de domínio, nomes de role e feature, shape de erro) e "contract" com os schemas de request e as views inteiros, até nenhum `*.schema.ts` sobrar em `apps/api/src/modules/`. A fronteira é uma frase: **o que precisa de algo além de `zod` não é contrato** e fica na API como composição (o helper de whitelist do presenter, a tradução de paginação em `skip`/`take`, `resolveSlug`). Duas guardas, não duas boas intenções: pureza (teste no pacote) e paridade de enum (teste na API, `DOMAIN_ENUMS` contra o Prisma). O `openapi.json` saiu **byte a byte idêntico** em cada commit da migração — o oráculo de que foi refactor.
+- **O que a grelha pós-import acrescentou ao contrato (16, 17, 18), e por quê:** a issue `00` da Fase 12 mostrou que a fronteira desenhada não bastava para um cliente consumir o pacote, e **quem cresce é o pacote, não o cliente**. `expiresIn` em segundos na resposta de login e refresh (16) — convenção OAuth2, imune a diferença de relógio, e o cliente para de decodificar o JWT. A **tabela de rotas** virou contrato (17), com a prosa do OpenAPI junto, e o `src/docs/` da API virou adaptador que a deriva: uma tabela escrita no web seria a terceira cópia do mesmo path. E nome de feature atravessa a rede como **enum** (18), achado do code-review da 12: sem isso `can(me, "raed:pet")` compilava, e a user story "esconder botão por capability" não valia no cliente.
+- **O import do web (11), a issue mais larga:** `git filter-repo --to-subdirectory-filter apps/web` + merge com `--allow-unrelated-histories` — 14 commits entraram, nenhum perdido, `git log --follow` atravessando. As mensagens foram **reescritas no mesmo passo** (escopo `web` nos reais, forma padrão do Git nos merges), porque o `commitlint` do CI alcança a segunda raiz do histórico e reprovaria o PR da fase. O `catalog:` fixou uma versão por dependência com **duas exceções escritas no arquivo**: TS fica no 6 (o 7 é a reescrita nativa) e `@types/node` no 24, casando com `engines.node` — tipo acima do runtime compila código que quebra em produção. O medo da spec (Next 16 não aceitar TS 6) foi verificado e não se confirmou.
+- **O smoke que prova o objetivo (12), e a ressalva que ficou registrada:** `apps/web/src/lib/api-contract.ts` tem **uma ponta por export** — request, view e tabela de rotas —, e a prova negativa foi feita e desfeita nas três (`TS2322`, `TS2339`, `TS2339`). A primeira versão tinha só `parseLoginForm` e **não provava nada**: `safeParse` recebe `unknown`, então renomear um campo do contrato deixava o web verde — daí o `LOGIN_FIELDS` amarrado a `keyof LoginBody`. O code-review pegou o que faltava e foi registrado em vez de maquiado: no estado commitado ninguém importa o módulo de prova, então quem cobre o contrato no `next build` é o `tsc`, não o bundler — virou critério na issue 03 da Fase 12.
+- **Commits e CI (05, 06), as duas barreiras:** Conventional Commits em inglês com **escopo obrigatório** e enum do monorepo, recusados pelo hook `commit-msg` na máquina de quem commita (05) e de novo pelo job `commitlint` sobre todos os commits do PR (06) — o hook local não pode ser a única barreira, porque worktree novo só o tem depois de `pnpm install`. O `verify` roda `typecheck`, `lint` e `test` **só do afetado** em relação à base, com Postgres e Redis como `services` do job em vez do Compose, e o `docs:check` do repo inteiro sempre. `main` e `dev` passaram a ter um verde verificável fora da máquina de quem mergeia.
+- **A documentação virou a da skill, sem adaptação (07, 08, 15):** o `docs/context/` da API — o arquivão temático — foi **migrado inteiro**, uma seção = um ADR, e deixou de existir; o índice por tema virou `apps/api/docs/adr/README.md`, e a numeração `NNNN-slug.md` passou a ser uma só (`docs/adr/0001`). O `CONTEXT.md` da API foi escrito do zero como glossário **puro** (08), e o `CLAUDE.md` se partiu em raiz (fluxo, branches, commits, regras transversais) + um por app. Caiu junto a regra "documento permanente não cita `.scratch/`": spec e issue são arquivos fixos do tracker versionado, e o `docs:check` prova que o caminho citado existe. O tracker ganhou forma (15): **pasta = fase**, `fase-<n>-<slug>/`, provado pelo `docs:check`, e o termo "esforço" saiu do vocabulário.
+- **A infra virou uma só (11, 14):** um stack Compose em `infra/` da raiz, projeto por ambiente, com os `prod:*` na **raiz** (o stack de produção é do sistema) e `dev*`/`test:services:*` na API (em dev e teste o stack é dela — o web roda no host). A rede API↔web deixou de ser externa: com os dois serviços no mesmo stack, "o up do web falhou porque a rede da API não existe" deixou de ser possível por construção. `pnpm prod:up api` reconstrói só a API, provado à mão nas duas direções — e é por isso que o `web` **não** tem `depends_on: api`. Cada imagem é construída da raiz com install filtrado e o outro app excluído pelo `Dockerfile.dockerignore`; no web o `pnpm deploy` vem **antes** do `next build`, que roda fora do workspace. A 14 tirou do Dockerfile da API a duplicação entre `build` e `dev`, com um estágio `base` que os dois estendem.
+- **Fechos (13):** o rastreio decisão → destino achou os racionais que tinham nascido na execução e viviam só em comentário de código — a fonte única de Node/pnpm/versões e o stack Compose com as imagens —, e eles viraram ADRs de sistema (`0006`, `0007`) junto com o ADR do todo (`0005`) e o índice `docs/adr/README.md`, que faltava desde a 07. O guia de deploy foi reescrito para o monorepo (clone da raiz, `.env.production` por app, deploy de um serviço só, a rede externa que sumiu, o segundo proxy host) e conferiu-se que `container_name: pet-oasis-api` não mudou — as units systemd sobrevivem sem reinstalação. Suíte (**1367** na API + **50** no contrato) + `typecheck` + `lint` + `docs:check` verdes.
+
+---
 
 ## ⬜ Fase 12 — Espinha de autenticação do web
 > Herdada do `pet-oasis-web` no import (Fase 11, issue 11): a spec e as issues dele vivem em
@@ -173,10 +174,11 @@
 > sessão) e 17 (tabela de rotas no contrato) de `.scratch/fase-11-monorepo/issues/`.
 - Progresso: 2 de 12 issues fechadas (01 e 02, ainda no repositório de origem).
 
-## ⬜ Carrinho, pedido e pagamento (fase seguinte, ainda sem número)
+## ⬜ Fase 13 — Carrinho, pedido e pagamento
 
-Ainda **não planejada**. O caminho está em [`docs/README.md`](README.md): a ideia crua nasce em
-`.scratch/`, é grelhada, vira spec e issues na pasta da fase, e só então desce para cá como
+Ainda **não planejada** — tem número (o próximo depois da 12) e não tem pasta: a pasta nasce
+com o planejamento. O caminho está em [`docs/README.md`](README.md): a ideia crua nasce em
+`.scratch/fase-13-<slug>/`, é grelhada, vira spec e issues, e só então desce para cá como
 resultado. O que já se sabe, decidido na Fase 9 e herdado por esta: `OrderItem` é
 **polimórfico** com CHECK constraint escrito à mão (ADR `apps/api/docs/adr/0008-product-vs-service.md`), e o
 item do pedido **grava** o preço em vez de lê-lo do produto. Do backlog, `StockMovement` é

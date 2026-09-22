@@ -139,14 +139,16 @@ O trabalho em execução vive em **`.scratch/fase-<n>-<slug>/`** (na raiz, únic
 
 ## ⚠️ REGRA — Como ler o contexto: pelo mapa e pelo índice, nunca inteiro
 
-O *porquê* de cada decisão do projeto vive em **ADRs**, um arquivo por decisão, e cada app tem
-um **índice** (`apps/<app>/docs/adr/README.md`) com uma linha por decisão, agrupada por tema. O
-protocolo é:
+O *porquê* de cada decisão do projeto vive em **ADRs**, um arquivo por decisão, e cada dono tem
+um **índice** com uma linha por decisão, agrupada por tema: `docs/adr/README.md` na raiz para o
+que é de sistema, `apps/<app>/docs/adr/README.md` para o que é de um app. O protocolo é:
 
 1. **`CONTEXT-MAP.md`** na raiz — em que contexto (app) o assunto vive.
 2. **`CONTEXT.md` do app** — o que cada termo significa (glossário puro; o da API é
    `apps/api/CONTEXT.md`).
-3. **`apps/<app>/docs/adr/README.md`** — ache a linha da decisão.
+3. **O índice de ADRs do dono** — `apps/<app>/docs/adr/README.md`, ou `docs/adr/README.md` da
+   raiz quando o assunto atravessa apps (o monorepo, o contrato, a infra, o modo de trabalho).
+   Ache a linha da decisão.
 4. **Só o ADR** daquela decisão.
 
 Nunca leia os ADRs em bloco nem "para ter contexto" — os da API somam quase 200 e passam de
@@ -156,9 +158,10 @@ não foi registrada: **pergunte, não invente.**
 Ao **acrescentar** uma decisão: escreva um **ADR novo** (próximo número, formato de
 `ADR-FORMAT.md` da skill — título que é a decisão e, em 1–3 frases ou o que ela pedir, o
 contexto, o que se decidiu e por quê; um parágrafo basta) **e** a
-linha correspondente no índice do app — os dois juntos, senão a decisão fica inalcançável. Decisão
-que vale para o sistema inteiro (fronteira entre apps, o que é contrato, fluxo de trabalho) vai
-em `docs/adr/` da raiz. Decisão revertida é **reescrita** narrando a reversão, nunca duplicada
+linha correspondente **no índice do dono** — os dois juntos, senão a decisão fica inalcançável.
+Decisão que vale para o sistema inteiro (o monorepo e o tooling, a fronteira entre apps, o que é
+contrato, a infra do sistema, o fluxo de trabalho) vai em `docs/adr/` da raiz, com a linha em
+`docs/adr/README.md`. Decisão revertida é **reescrita** narrando a reversão, nunca duplicada
 como decisão + errata. Termo novo vai para o `CONTEXT.md` do app — e só o termo: o ADR explica
 *por quê*, o glossário diz *o que é*.
 

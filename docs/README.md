@@ -14,7 +14,7 @@ Perdido? A pergunta é sempre "isto é trabalho, decisão, vocabulário ou consu
 | [`reference/backlog.md`](reference/backlog.md) | Levantado e **conscientemente adiado** — sem fase, sem data | Sempre |
 | [`adr/`](adr/README.md) | Decisões **de sistema**, numeradas `NNNN-slug.md`: o monorepo e o tooling, a infra do sistema, a fronteira entre apps, o modo de trabalho. Uma linha por decisão no **índice**, agrupada por tema — ache a linha, abra só aquele ADR | Sempre |
 | [`../CONTEXT-MAP.md`](../CONTEXT-MAP.md) | O mapa dos contextos: um por app, com o caminho do `CONTEXT.md` (glossário) de cada um | Sempre |
-| [`guides/`](guides/) | Como fazer, no que vale para o todo: [formas de fase](guides/todo-phases.md). O **deploy do stack de produção** (que é do sistema) mora em [`apps/api/docs/guides/deploy.md`](../apps/api/docs/guides/deploy.md), porque quase todo o detalhe operacional é da API | Sempre |
+| [`guides/`](guides/) | Como fazer, no que vale para o todo: [deploy do stack de produção](guides/deploy.md) (o de um app só vive no `docs/guides/` dele), [formas de fase](guides/todo-phases.md) | Sempre |
 | [`agents/`](agents/) | Como as skills de IA devem ler e escrever tudo isto | Sempre |
 
 ## As pastas de cada app

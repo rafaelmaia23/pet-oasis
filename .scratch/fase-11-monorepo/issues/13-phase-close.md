@@ -45,14 +45,19 @@ reescrito para o monorepo, `main` virando o monorepo, e o repo renomeado no GitH
 - [x] `docs/todo.md` da raiz: Fase 11 destilada na forma fechada (9 bullets); a fase de
       carrinho/pedido/pagamento reaparece como **Fase 13**, "a fazer", com o que a Fase 9 já
       decidiu para ela preservado (`OrderItem` polimórfico, preço gravado, `StockMovement`).
-- [x] Guia de deploy reescrito (`apps/api/docs/guides/deploy.md`): clone da **raiz** do
-      monorepo, `.env.production` por app (o do web precisa existir mesmo vazio), `prod:up` da
-      raiz, deploy de um serviço só nas duas direções com o `docker inspect` que confere,
-      a rede API↔web que deixou de ser externa (só a `proxy` sobrou), os **dois** proxy hosts,
-      o `chown` de uploads mantido, e a confirmação de que `container_name: pet-oasis-api` não
-      mudou — as units systemd sobrevivem sem reinstalação. O guia ficou onde estava, no
-      `docs/` da API, porque quase todo o detalhe operacional é dela; o `docs/README.md` da
-      raiz passou a apontar para ele na linha de `guides/`.
+- [x] Guia de deploy reescrito **e dividido em três**, por decisão do dono: o do **stack**
+      vive em `docs/guides/deploy.md` da raiz (preparar o host, clone da raiz, os
+      `.env.production` por app, as três redes, os **dois** proxy hosts, `prod:up`/`down`/
+      `logs`, o aviso do ARM, verificar o stack), e cada app ganha o deploy **só dele** —
+      `apps/api/docs/guides/deploy.md` (`prod:up api`, as variáveis da API, o diretório de
+      uploads com o `chown`, o que no seed derruba o boot, os timers systemd, a verificação da
+      cadeia de IP) e `apps/web/docs/guides/deploy.md`, **novo** (`prod:up web`, o
+      `.env.production` vazio que precisa existir, o standalone do Next, o proxy host do apex,
+      a verificação). Nenhum dos três repete o outro: cada um aponta. Conferido que
+      `container_name: pet-oasis-api` não mudou — as units systemd sobrevivem sem
+      reinstalação. A regra de geografia ("guia que atravessa apps fica na raiz; o recorte de
+      um app fica no app") subiu para o `CLAUDE.md` da raiz, e `docs/README.md`,
+      `apps/api/docs/README.md`, os dois READMEs e os ADRs `0148`/`0160` foram reapontados.
 - [x] `README.md` da raiz apresenta o monorepo (já apresentava, desde a 07/11; o fecho
       corrigiu a linha do tracker, que ainda dizia "issues por esforço", e os dois links de
       `CLAUDE.md` que apontavam para o da API em vez do da raiz). O do web já apontava para

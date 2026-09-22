@@ -13,7 +13,7 @@ do fluxo, config das skills) mora na raiz do monorepo — o mapa de lá é
 | [`../CONTEXT.md`](../CONTEXT.md) | O **vocabulário** do contexto: glossário puro (o que cada termo é, sinônimos a evitar), formato da skill `domain-modeling`; o porquê fica nos ADRs | Sempre |
 | [`adr/README.md`](adr/README.md) + [`adr/`](adr/) | O **porquê** de cada decisão, **um ADR por decisão**. O `README.md` é só o índice, por tema | Sempre |
 | [`reference/`](reference/) | Consulta pontual: [rotas](reference/endpoints.md), [política de log](reference/logging-policy.md), [schema](reference/schema.md) (por que uma coluna é assim, o que cada fase mudou, invariantes), [histórico das fases](reference/history.md) | Sempre |
-| [`guides/`](guides/) | Como fazer: [dev](guides/dev.md), [deploy](guides/deploy.md), [integrar com a API](guides/integrating-with-the-api.md), [documentar endpoint](guides/documenting-endpoints.md) | Sempre |
+| [`guides/`](guides/) | Como fazer: [dev](guides/dev.md), [deploy **da API**](guides/deploy.md) (o do stack inteiro é o [da raiz](../../../docs/guides/deploy.md)), [integrar com a API](guides/integrating-with-the-api.md), [documentar endpoint](guides/documenting-endpoints.md) | Sempre |
 | [`../../../.scratch/`](../../../.scratch/README.md), [`todo.md`](../../../docs/todo.md), [`backlog`](../../../docs/reference/backlog.md) | Na **raiz**: o tracker, o índice das fases e o backlog — únicos para o monorepo | — |
 
 ## Onde procurar o *porquê* de uma decisão

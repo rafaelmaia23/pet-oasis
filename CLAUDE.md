@@ -14,7 +14,7 @@ inteiro — fluxo, regras transversais, onde mora cada documento. O que é espec
 | `packages/api-contracts` | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): schemas Zod de request, views de resposta, enums de domínio, nomes de role/feature e shape de erro, dependendo **só de `zod`** e consumido do fonte TS | `packages/api-contracts/README.md` |
 | `packages/tsconfig` | Presets de TypeScript (`@pet-oasis/tsconfig`): base estrito + um por alvo (Node, Next, biblioteca) | — |
 | `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`); cada app estende e acrescenta só os ignores que são seus | — |
-| `docs/` | Documentação do **sistema**: ADRs de sistema, índice das fases, backlog, guias e config das skills | `docs/README.md` |
+| `docs/` | Documentação do **sistema**: ADRs de sistema (índice em `docs/adr/README.md`), índice das fases, backlog, guias do sistema (o **deploy do stack** é `docs/guides/deploy.md`) e config das skills | `docs/README.md` |
 | `.scratch/` | O **tracker**: uma pasta por fase (`fase-<n>-<slug>/`, provado pelo `docs:check`), com a spec e uma issue por arquivo | `.scratch/README.md` |
 | `infra/` | O stack Compose do **sistema** (base + overrides `dev`/`test`/`prod`, projeto `pet-oasis-{dev,test,prod}`): API, web, Postgres, Redis, mailpit. Os `prod:*` da raiz o sobem inteiro ou um serviço só; em dev e teste quem o invoca é a API (o web roda no host) | — |
 | `tools/` | Scripts da raiz que não pertencem a pacote nenhum (hoje o `docs:check`) | — |
@@ -135,6 +135,7 @@ O trabalho em execução vive em **`.scratch/fase-<n>-<slug>/`** (na raiz, únic
 - `.scratch/` é o **tracker versionado** (spec + issues). Spec e issue são arquivos fixos, com endereço estável — **podem ser citados** de um ADR, de um `CLAUDE.md` ou de um comentário de `src/` (a regra antiga "permanente não cita o tracker" caiu na Fase 11; o porquê está em `docs/adr/0001-domain-docs-follow-the-skill.md`). O `docs:check` prova que o caminho citado existe.
 - `docs/` da raiz é a memória permanente do **sistema**: `adr/` (decisões de sistema, `NNNN-slug.md`), `todo.md`, `reference/backlog.md`, `guides/`, `agents/`. O mapa está em `docs/README.md`.
 - `docs/` de cada app é a memória permanente **daquele app**: `adr/` (numeração própria, índice em `adr/README.md`), `reference/`, `guides/`.
+- **Guia que atravessa apps fica na raiz; o recorte de um app fica no app.** O deploy é o caso vivo: `docs/guides/deploy.md` descreve o stack (host, redes, proxy hosts, `prod:up`), e `apps/<app>/docs/guides/deploy.md` descreve o deploy **só daquele app** (`pnpm prod:up <app>`, as variáveis dele, o que quebra só nele). Nenhum dos três repete o outro — cada um aponta.
 - **Vocabulário** vive em `CONTEXT.md` por app (glossário puro, sem racional), e o `CONTEXT-MAP.md` da raiz lista os contextos — formato da skill `domain-modeling`, sem adaptação.
 
 ## ⚠️ REGRA — Como ler o contexto: pelo mapa e pelo índice, nunca inteiro

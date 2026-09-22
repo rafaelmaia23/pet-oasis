@@ -343,7 +343,8 @@ perfil o user continua existindo, só o `Customer`/`Employee` é soft-deletado.
 
 > Nenhuma regra de negócio vive aqui: é empacotamento, ambiente e dado de demonstração. O ADR
 > [`0002-environments-and-deploy.md`](0002-environments-and-deploy.md) detalha a estrutura de
-> Compose; o procedimento operacional está em [`guides/deploy.md`](../guides/deploy.md).
+> Compose; o procedimento operacional da API está em [`guides/deploy.md`](../guides/deploy.md),
+> e o do stack inteiro em [`docs/guides/deploy.md`](../../../../docs/guides/deploy.md) da raiz.
 
 #### Ambientes
 

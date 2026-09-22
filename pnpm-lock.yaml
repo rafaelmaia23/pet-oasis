@@ -383,6 +383,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.8.0
         version: 1.8.0(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@pet-oasis/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -404,6 +407,9 @@ importers:
       react-dom:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       '@biomejs/biome':
         specifier: 'catalog:'

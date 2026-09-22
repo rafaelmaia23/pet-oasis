@@ -25,7 +25,11 @@
       // precisa dele construído antes de checar tipos. Hoje nenhuma
       // dependência tem build — o contrato é consumido do fonte TS (ver o
       // README dele) —, então o `^build` é um nó vazio; se o contrato um dia
-      // ganhar `dist`, a ordem já está aqui.
+      // ganhar `dist`, a ordem já está aqui. Vazio **não** quer dizer inútil:
+      // o nó carrega os arquivos da dependência para dentro do hash, e é por
+      // isso que tocar o contrato tira o `typecheck` do web do cache
+      // (medido na 11.12, os dois lados: `cache hit` antes, `cache miss`
+      // depois).
       // `//#typecheck:root` é a task de raiz que cobre `tools/` (o script que
       // não pertence a pacote nenhum): pendurada aqui, roda em todo
       // `pnpm typecheck`, com o cache dela próprio.

@@ -10,10 +10,10 @@ feita de uma vez para os 16 domínios (refactor largo, sem duas fontes de verdad
 
 **Blocked by:** 16.
 
-**Status:** ready-for-human
+**Status:** fechada em 2026-09-22
 
-> Fechada em 2026-09-22. A escada de capability foi aplicada às 10 rotas em que a API já
-> resolve a view pela feature efetiva do ator (produto: detalhe, criação e atualização;
+> A escada de capability foi aplicada às 10 rotas em que a API já resolve a view pela feature
+> efetiva do ator (produto: detalhe, criação e atualização;
 > variante: criação e atualização; usuário: criação, leitura e atualização; perfil: criação de
 > customer e de employee) — decisão do dono do projeto, tomada durante a execução. O
 > `/openapi.json` passa a publicar a união nessas 10 e ganha `operationId` nas 79 operações;

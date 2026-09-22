@@ -1,6 +1,31 @@
 import "dotenv/config";
 
+import ms, { type StringValue } from "ms";
 import { z } from "zod";
+
+/**
+ * Prazo no formato do `ms` (`"15m"`, `"7d"`), validado aqui e não em quem o
+ * consome: o limite do env é onde todas as outras restrições de boot vivem, e
+ * atravessá-lo com o tipo já estreitado poupa o `as StringValue` de cada
+ * leitor. A saída é a mesma string — quem precisa do número chama `ms` sobre
+ * ela, sem ter de tratar o caso que este schema já recusou.
+ */
+export const timespanSchema = z
+  .string()
+  .refine(
+    (value) => {
+      try {
+        // `ms` devolve `undefined` para o que não sabe ler, mas **lança** para
+        // string vazia — as duas recusas são a mesma daqui de fora.
+        const milliseconds = ms(value as StringValue);
+        return typeof milliseconds === "number" && milliseconds > 0;
+      } catch {
+        return false;
+      }
+    },
+    { error: 'não é um prazo positivo no formato do `ms` (ex.: "15m", "7d")' },
+  )
+  .transform((value) => value as StringValue);
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
@@ -12,7 +37,7 @@ const envSchema = z.object({
   DATABASE_URL: z.url(),
 
   JWT_SECRET: z.string().min(32),
-  JWT_EXPIRES_IN: z.string().default("15m"),
+  JWT_EXPIRES_IN: timespanSchema.default("15m"),
 
   PEPPER: z.string().min(32),
 

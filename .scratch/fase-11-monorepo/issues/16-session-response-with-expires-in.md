@@ -28,7 +28,10 @@ absorvida aqui porque o pacote é que cresce, não o cliente.
 - [x] `expiresIn` deriva da **mesma** fonte que assina o token — `ACCESS_TOKEN_TTL_SECONDS`
       em `lib/accessToken.ts`, lido de `JWT_EXPIRES_IN` pelo mesmo parser (`ms`, agora
       dependência direta da API) e com o mesmo `floor` do `jsonwebtoken`; string inválida
-      derruba o boot. Racional em `apps/api/docs/adr/0200`.
+      derruba o boot. Racional em `apps/api/docs/adr/0200`. A revisão moveu a conferência do
+      formato para o limite do env (`timespanSchema`, com teste próprio em
+      `tests/unit/config/env.test.ts`): um sítio só de falha de boot, e nenhum consumidor
+      precisa de `as StringValue`.
 - [x] Guia de integração, seção de sessão e renovação: documenta `expiresIn`, diz que o BFF
       calcula o prazo a partir dele (renovando 60 s antes) e que decodificar o JWT para isso é
       proibido; `reference/endpoints.md` atualizado nas linhas de login e refresh; glossário

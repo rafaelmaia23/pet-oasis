@@ -61,7 +61,8 @@ rotas. Isto a alarga — é revisão dela (entrada "Revisto em"), não adição 
       feito na issue 16 da Fase 11 (§ 5 do guia; racional em `apps/api/docs/adr/0200`)
       (2026-09-21)
 - [x] Spec da Fase 11 revista na fronteira do contrato ("Revisto em 2026-09-21")
-- [x] As duas fechadas: o `typecheck` do web passa importando a tabela de rotas e a view de
-      login do contrato — a view (`accessTokenViews`) existe desde a issue 16; a tabela e a
-      prova no web são critério da issue 17 da Fase 11, que é quem fecha este item de fato
-      (2026-09-21)
+- [ ] As duas fechadas: o `typecheck` do web passa importando a tabela de rotas e a view de
+      login do contrato — a view (`accessTokenViews`) existe desde a issue 16 (2026-09-21); a
+      tabela e a prova no web são critério da issue 17 da Fase 11, que é quem marca este item.
+      Esta issue está fechada porque seu trabalho — abrir as duas issues e o item do guia —
+      terminou; este critério sobrevive a ela, na 17.

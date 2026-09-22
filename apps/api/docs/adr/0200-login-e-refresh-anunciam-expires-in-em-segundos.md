@@ -25,7 +25,12 @@ número anunciado sai dela em `src/lib/accessToken.ts` (`ACCESS_TOKEN_TTL_SECOND
 **mesmo** parser (`ms`, que virou dependência direta) e com o mesmo `Math.floor` que o
 `jsonwebtoken` aplica ao gravar o `exp`. Não existe segunda constante para desalinhar; o teste
 unitário prova `expiresIn === exp − iat` do token recém-assinado, e o HTTP prova o mesmo na
-borda. Uma string que o parser não entende derruba o boot, em vez de quebrar no primeiro login.
+borda. O **formato** é conferido no limite do env (`timespanSchema`, em `src/config/env.ts`),
+junto de todas as outras restrições de boot e com a mesma mensagem de recusa: uma string que o
+parser não entende derruba o processo, em vez de quebrar no primeiro login, e quem lê
+`env.JWT_EXPIRES_IN` recebe o tipo já estreitado — nenhum consumidor precisa de `as`. A revisão
+da issue derrubou a versão anterior, em que a guarda vivia na `lib` como efeito de import: era
+um segundo sítio de falha de boot, com formato de erro próprio.
 
 **O TTL configurado, não `exp − agora`.** O par que a janela de graça replica
 ([`0057`](0057-janela-graca-10s-rotacao.md)) já pode ter alguns segundos de vida, e mesmo assim

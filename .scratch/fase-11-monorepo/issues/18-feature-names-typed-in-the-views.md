@@ -10,23 +10,36 @@ Decisão do dono do projeto (2026-09-22), tomada sobre o achado do code-review d
 
 **Blocked by:** 12 — o achado veio de lá, e é o `featuresOf` do web que colhe o ganho.
 
-**Status:** ready-for-agent
+**Status:** fechada em 2026-09-22
 
-- [ ] O catálogo é fixo no código: features e roles são **somente leitura** na rede (não há
-      `POST /features`), e o seed é chaveado por `FeatureName`. Confirmar que segue assim —
-      se um dia a feature virar dado criável em runtime, esta decisão cai junto.
-- [ ] `featureNameSchema` no lugar de `z.string()` em toda view que carrega nome de feature:
-      a lista plana de `me`, a lista plana de `GET /users/:id/effective-features`, o override
-      de `userFeatureViews`, o `adminView` de usuário, as features de `roleViews` e o nome em
-      `featureViews`. O wildcard `*` já está em `FEATURE_NAMES`, então o admin sobrevive.
-- [ ] Teste que prova os dois lados em cada view tocada: nome do catálogo (inclusive `*`)
-      passa, nome fora dele é recusado. É teste novo, escrito antes da mudança.
-- [ ] O `createPresenter` faz `safeParse` em runtime: estreitar transforma "nome fora do
-      catálogo" em erro de apresentação (500), não em resposta torta. Decidir e registrar se
-      isso é o desejado — é o preço da checagem, e o que o torna aceitável é o catálogo ser
-      fixo no código.
-- [ ] O `/openapi.json` passa a publicar `enum` no lugar de `string` nesses campos; conferir
-      que o adaptador deriva isso sozinho e que a suíte de OpenAPI segue verde.
-- [ ] `featuresOf` do web devolve `readonly FeatureName[]`, e a prova negativa continua de pé.
-- [ ] ADR registrando a decisão e o trade-off (cliente velho × API que ganha feature nova).
-- [ ] Suíte inteira, `typecheck`, `lint` e `docs:check` verdes.
+O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
+
+- [x] Catálogo confirmado fixo no código: `GET /features` e `GET /features/:id` são as únicas
+      rotas de feature (não há `POST`), e o seed é `Record<FeatureName, string>` — nome fora
+      da lista não chega ao banco. As factories de teste conectam por nome
+      (`feature: { connect: { name } }`), então nem a suíte consegue inventar um.
+- [x] `featureNameSchema` nas **seis** views que carregam nome de feature: `me`,
+      `effectiveFeatures`, o override de `userFeatureViews`, o `adminView` de usuário,
+      `roleViews` e `featureViews`. O wildcard `*` já é membro de `FEATURE_NAMES`, então o
+      admin continua passando — provado por teste próprio, não por inspeção.
+- [x] Teste escrito **antes** (`packages/api-contracts/tests/feature-names-in-views.test.ts`):
+      três casos por view — nome do catálogo passa, `*` passa, `raed:pet` (o erro de digitação
+      que o enum existe para pegar) é recusado. Vermelho exato na primeira rodada: os 6 casos
+      de recusa falharam e os 12 positivos passaram.
+- [x] O `safeParse` do `createPresenter` transforma nome fora do catálogo em erro de
+      apresentação (500). **É o desejado**, e o ADR diz por quê: falhar alto na API é melhor
+      que entregar ao cliente uma capability que ele não sabe interpretar — e o catálogo fixo
+      mantém o caso fora de alcance.
+- [x] `/openapi.json` publica `enum` sem o adaptador mudar uma linha — verificado no documento
+      gerado (`Me`, `EffectiveFeatures` e `Feature` saem com a lista inteira). A suíte de
+      OpenAPI seguiu verde.
+- [x] `featuresOf` do web devolve `readonly FeatureName[]`, e as três provas negativas da
+      issue 12 continuam de pé.
+- [x] `docs/adr/0004-feature-names-cross-the-wire-as-enum.md`, indexado em `docs/README.md`,
+      com o trade-off e a condição que derruba a decisão (feature virar dado criável em
+      runtime).
+- [x] **Fora de escopo por decisão:** a autorização interna da API (`hasFeature`,
+      `computeEffectiveFeatures`, `makeAuthUser`) segue em `string` — ali o valor vem do banco
+      e é comparado, não digitado por quem escreve cliente. Está dito no ADR.
+- [x] Suíte inteira (1367 da API + 50 do pacote, 18 deles novos), `typecheck`, `lint` e
+      `docs:check` verdes.

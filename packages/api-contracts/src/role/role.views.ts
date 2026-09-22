@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { featureNameSchema } from "../feature/feature.names";
 import { profileKindSchema } from "../user/user.enums";
 
 const defaultView = z
@@ -10,7 +11,7 @@ const defaultView = z
     features: z.array(
       z.object({
         id: z.uuid(),
-        name: z.string().meta({ example: "read:user:others" }),
+        name: featureNameSchema.meta({ example: "read:user:others" }),
         description: z.string(),
       }),
     ),

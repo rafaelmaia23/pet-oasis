@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { featureNameSchema } from "../feature/feature.names";
 
 // Views de resposta do usuário, resolvidas na API pela feature efetiva do viewer.
 // Cada view é uma whitelist: o presenter da API faz `.parse()` e derruba o que
@@ -61,7 +62,7 @@ const adminView = ownerView
             grantedAt: z.coerce.date(),
             feature: z.object({
               id: z.uuid(),
-              name: z.string(),
+              name: featureNameSchema,
             }),
           }),
         ),

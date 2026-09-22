@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { featureNameSchema } from "../feature/feature.names";
 import { profileKindSchema } from "../user/user.enums";
 
 const roleSummaryView = z
@@ -38,7 +39,7 @@ const defaultView = z
       })
       .nullable(),
     features: z
-      .array(z.string())
+      .array(featureNameSchema)
       .meta({ example: ["read:user", "update:user"] }),
   })
   .meta({

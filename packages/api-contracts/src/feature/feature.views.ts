@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { featureNameSchema } from "./feature.names";
 
 const defaultView = z
   .object({
     id: z.uuid(),
-    name: z.string().meta({ example: "read:user" }),
+    name: featureNameSchema.meta({ example: "read:user" }),
     description: z.string().meta({ example: "Ver o próprio perfil" }),
   })
   .meta({

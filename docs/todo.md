@@ -156,10 +156,12 @@
 > Conventional Commits com lint, CI de verificação, stack Compose único, docs de domínio no
 > formato da skill (`CONTEXT-MAP.md` + `CONTEXT.md` por app). Spec e issues em
 > `.scratch/fase-11-monorepo/`.
-- Progresso: 13 de 17 issues fechadas (01–11, 15 e 16). As issues 15–17 nasceram da grelha de
-  2026-09-21: forma do tracker (15, fechada: pasta = fase, `docs/adr/0002`), e as duas peças de
-  contrato que a issue `00` da Fase 12 pedia (16, fechada: `expiresIn` na resposta de login e
-  refresh, `apps/api/docs/adr/0200`; e 17).
+- Progresso: 16 de 18 issues fechadas (01–12 e 15–18). As issues 15–17 nasceram da grelha de
+  2026-09-21: forma do tracker (15: pasta = fase, `docs/adr/0002`), e as duas peças de
+  contrato que a issue `00` da Fase 12 pedia (16: `expiresIn` na resposta de login e refresh,
+  `apps/api/docs/adr/0200`; 17: tabela de rotas no contrato, `docs/adr/0003`). A 18 nasceu do
+  code-review da 12: nome de feature atravessa a rede como enum (`docs/adr/0004`), que é o que
+  faz a user story 3 da fase valer no cliente. Faltam a 13 (fecho) e a 14.
 
 ## ⬜ Fase 12 — Espinha de autenticação do web
 > Herdada do `pet-oasis-web` no import (Fase 11, issue 11): a spec e as issues dele vivem em

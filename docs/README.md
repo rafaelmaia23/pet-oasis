@@ -12,7 +12,7 @@ Perdido? A pergunta é sempre "isto é trabalho, decisão, vocabulário ou consu
 | [`../.scratch/`](../.scratch/README.md) | O **tracker**: uma pasta por fase (`fase-<n>-<slug>/`), com a spec e uma issue por arquivo — único para o monorepo | Enquanto a fase existir; fechada, fica marcada |
 | [`todo.md`](todo.md) | O **índice** das fases: estado, ponteiro para a fase aberta, e o resumo destilado de cada fase fechada | Sempre |
 | [`reference/backlog.md`](reference/backlog.md) | Levantado e **conscientemente adiado** — sem fase, sem data | Sempre |
-| [`adr/`](adr/) | Decisões **de sistema**, numeradas `NNNN-slug.md`: fronteira entre apps, o que é contrato, modo de trabalho ([docs seguem a skill](adr/0001-domain-docs-follow-the-skill.md), [pasta do tracker = fase](adr/0002-tracker-folders-are-phases.md), [tabela de rotas é contrato](adr/0003-route-table-is-contract-openapi-is-derived.md)) | Sempre |
+| [`adr/`](adr/) | Decisões **de sistema**, numeradas `NNNN-slug.md`: fronteira entre apps, o que é contrato, modo de trabalho ([docs seguem a skill](adr/0001-domain-docs-follow-the-skill.md), [pasta do tracker = fase](adr/0002-tracker-folders-are-phases.md), [tabela de rotas é contrato](adr/0003-route-table-is-contract-openapi-is-derived.md), [nome de feature é enum na rede](adr/0004-feature-names-cross-the-wire-as-enum.md)) | Sempre |
 | [`../CONTEXT-MAP.md`](../CONTEXT-MAP.md) | O mapa dos contextos: um por app, com o caminho do `CONTEXT.md` (glossário) de cada um | Sempre |
 | [`guides/`](guides/) | Como fazer, no que vale para o todo: [formas de fase](guides/todo-phases.md) | Sempre |
 | [`agents/`](agents/) | Como as skills de IA devem ler e escrever tudo isto | Sempre |

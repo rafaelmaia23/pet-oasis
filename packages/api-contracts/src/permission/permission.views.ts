@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { featureNameSchema } from "../feature/feature.names";
 
 const userFeatureDefaultView = z
   .object({
@@ -13,7 +14,7 @@ const userFeatureDefaultView = z
     }),
     feature: z.object({
       id: z.uuid(),
-      name: z.string().meta({ example: "manage:permission" }),
+      name: featureNameSchema.meta({ example: "manage:permission" }),
       description: z.string(),
     }),
   })
@@ -27,7 +28,7 @@ export const userFeatureViews = { default: userFeatureDefaultView } as const;
 
 export type UserFeatureView = keyof typeof userFeatureViews;
 
-const effectiveFeaturesDefaultView = z.array(z.string()).meta({
+const effectiveFeaturesDefaultView = z.array(featureNameSchema).meta({
   id: "EffectiveFeatures",
   description: "Lista plana das features efetivas de um usuário",
   example: ["read:user", "update:user", "read:session"],

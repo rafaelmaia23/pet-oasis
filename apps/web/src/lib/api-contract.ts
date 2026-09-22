@@ -13,6 +13,7 @@
  * de rotas**. Some uma delas e a prova deixa de cobrir aquela ponta.
  */
 import { loginSchema } from "@pet-oasis/api-contracts/auth";
+import type { FeatureName } from "@pet-oasis/api-contracts/feature";
 import type { meViews } from "@pet-oasis/api-contracts/me";
 import { routes } from "@pet-oasis/api-contracts/routes";
 import type { z } from "zod";
@@ -56,8 +57,13 @@ export const LOGIN_FIELDS = [
  * As features efetivas de quem está logado, lidas da view `me`. É por este
  * campo que a Fase 12 esconde afordância — aqui ele prova que o tipo da
  * resposta é o do contrato, e não uma cópia.
+ *
+ * Devolve `FeatureName`, não `string`: o nome de feature atravessa a rede como
+ * o enum do catálogo (11.18), então `can(me, "raed:pet")` não compila. O
+ * wildcard `*` é um nome do catálogo como os outros — quem o ignorar esconde
+ * tudo do admin.
  */
-export function featuresOf(me: Me): readonly string[] {
+export function featuresOf(me: Me): readonly FeatureName[] {
   return me.features;
 }
 

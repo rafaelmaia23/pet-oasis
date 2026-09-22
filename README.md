@@ -14,7 +14,7 @@ Monorepo do Pet Oasis — um pet shop online. Gerido por **pnpm workspaces**
 | `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`): formatter, linter e estilo; cada app estende e acrescenta só os ignores que são seus |
 | [`packages/api-contracts`](packages/api-contracts/README.md) | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): schemas Zod de request, views de resposta, enums de domínio, nomes de role/feature e shape de erro; só depende de `zod`, consumido do fonte TS |
 | [`docs/`](docs/README.md) | Documentação do **sistema**: ADRs de sistema, [índice das fases](docs/todo.md), [backlog](docs/reference/backlog.md), guias e config das skills |
-| [`.scratch/`](.scratch/README.md) | O tracker (spec + issues por esforço), único para o monorepo |
+| [`.scratch/`](.scratch/README.md) | O tracker, único para o monorepo: uma pasta por fase (`fase-<n>-<slug>/`), com a spec e uma issue por arquivo |
 | [`CONTEXT-MAP.md`](CONTEXT-MAP.md) | O mapa dos contextos — um por app, com o glossário (`CONTEXT.md`) de cada um |
 | `infra/` | O stack Compose do **sistema** (base + overrides `dev`/`test`/`prod`): API, web, Postgres, Redis e mailpit num projeto só por ambiente |
 | `tools/` | Scripts da raiz que não pertencem a pacote nenhum (o `docs:check`) |
@@ -62,7 +62,7 @@ cacheia de propósito (a suíte depende de Compose e `.env.test`, que o Turbo n�
 um servidor, não um resultado. O que entra no hash, por que cada task tem o `dependsOn` que tem
 e o porquê de `test` ficar fora estão em
 [`apps/api/docs/adr/0104`](apps/api/docs/adr/0104-turborepo-pipeline-workspace-test-fica-fora-cache.md);
-cachear `test` está no backlog da API.
+cachear `test` está no [backlog](docs/reference/backlog.md).
 
 ## Commits
 
@@ -72,7 +72,7 @@ restrito ao enum do workspace — `api`, `web`, `contracts`, `tsconfig`, `biome-
 (husky), que roda o commitlint (`commitlint.config.mjs`) e recusa a mensagem fora da régua antes
 de o commit existir. Merge usa a mensagem padrão do Git, que o commitlint ignora. A regra
 completa, com o que o preset recusa (descrição em maiúscula, ponto final, header acima de 100
-colunas), está no [`CLAUDE.md`](apps/api/CLAUDE.md).
+colunas), está no [`CLAUDE.md`](CLAUDE.md) da raiz.
 
 ## CI
 
@@ -85,4 +85,4 @@ portas do `.env.test` (que o workflow gera do `.env.example`; nunca é commitado
 API, vendo `CI=true`, chama o Vitest direto em vez de subir o Compose. O job `commitlint` valida
 cada commit do PR contra a convenção acima. Sem deploy automático e sem remote cache do Turbo.
 Merge de fase na `dev` e de `dev` na `main` só com o CI do PR verde — a regra está no
-[`CLAUDE.md`](apps/api/CLAUDE.md).
+[`CLAUDE.md`](CLAUDE.md) da raiz.

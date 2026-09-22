@@ -305,6 +305,7 @@ perfil o user continua existindo, só o `Customer`/`Employee` é soft-deletado.
 - [`0130`](0130-auto-hospedar-bundle-scalar-vez-allowlistar-cdn.md) Auto-hospedar o bundle do Scalar em vez de allowlistar o CDN
 - [`0131`](0131-auto-hospedagem-sozinha-nao-bastou-nonce-segunda-peca.md) A auto-hospedagem sozinha não bastou — o nonce é a segunda peça (7.1)
 - [`0132`](0132-sobram-violacoes-csp-console-reference-elas-ficam.md) Sobram violações de CSP no console de `/reference`, e elas ficam
+- [`0202`](0202-bundle-scalar-vai-em-root-nao-caminho-absoluto-pnpm.md) O bundle do Scalar é servido por `root` + arquivo relativo, porque sob pnpm o caminho real passa por `.pnpm/` (11.1)
 
 
 ### Observabilidade

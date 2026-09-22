@@ -12,9 +12,9 @@ Perdido? A pergunta é sempre "isto é trabalho, decisão, vocabulário ou consu
 | [`../.scratch/`](../.scratch/README.md) | O **tracker**: uma pasta por fase (`fase-<n>-<slug>/`), com a spec e uma issue por arquivo — único para o monorepo | Enquanto a fase existir; fechada, fica marcada |
 | [`todo.md`](todo.md) | O **índice** das fases: estado, ponteiro para a fase aberta, e o resumo destilado de cada fase fechada | Sempre |
 | [`reference/backlog.md`](reference/backlog.md) | Levantado e **conscientemente adiado** — sem fase, sem data | Sempre |
-| [`adr/`](adr/) | Decisões **de sistema**, numeradas `NNNN-slug.md`: fronteira entre apps, o que é contrato, modo de trabalho ([docs seguem a skill](adr/0001-domain-docs-follow-the-skill.md), [pasta do tracker = fase](adr/0002-tracker-folders-are-phases.md), [tabela de rotas é contrato](adr/0003-route-table-is-contract-openapi-is-derived.md), [nome de feature é enum na rede](adr/0004-feature-names-cross-the-wire-as-enum.md)) | Sempre |
+| [`adr/`](adr/README.md) | Decisões **de sistema**, numeradas `NNNN-slug.md`: o monorepo e o tooling, a infra do sistema, a fronteira entre apps, o modo de trabalho. Uma linha por decisão no **índice**, agrupada por tema — ache a linha, abra só aquele ADR | Sempre |
 | [`../CONTEXT-MAP.md`](../CONTEXT-MAP.md) | O mapa dos contextos: um por app, com o caminho do `CONTEXT.md` (glossário) de cada um | Sempre |
-| [`guides/`](guides/) | Como fazer, no que vale para o todo: [formas de fase](guides/todo-phases.md) | Sempre |
+| [`guides/`](guides/) | Como fazer, no que vale para o todo: [formas de fase](guides/todo-phases.md). O **deploy do stack de produção** (que é do sistema) mora em [`apps/api/docs/guides/deploy.md`](../apps/api/docs/guides/deploy.md), porque quase todo o detalhe operacional é da API | Sempre |
 | [`agents/`](agents/) | Como as skills de IA devem ler e escrever tudo isto | Sempre |
 
 ## As pastas de cada app
@@ -65,9 +65,12 @@ Duas regras seguram o desenho:
 
 Pelo mapa e pelo índice, nunca pela leitura em bloco: [`CONTEXT-MAP.md`](../CONTEXT-MAP.md)
 diz em que contexto o assunto vive; o `CONTEXT.md` do app diz o que cada termo significa; o
-`apps/<app>/docs/adr/README.md` tem uma linha por decisão — ache a linha e abra **só** aquele ADR.
-Os ADRs da API somam quase duzentos; uma pergunta concreta precisa de um ou dois. Se o índice não
-tem a decisão, ela não foi registrada — pergunte, não invente.
+índice de ADRs tem uma linha por decisão — ache a linha e abra **só** aquele ADR. São três
+índices, um por dono: [`adr/README.md`](adr/README.md) aqui, para o que é de sistema;
+[`apps/api/docs/adr/README.md`](../apps/api/docs/adr/README.md) e
+[`apps/web/docs/adr/README.md`](../apps/web/docs/adr/README.md) para o que é de cada app.
+Os ADRs da API somam mais de duzentos; uma pergunta concreta precisa de um ou dois. Se o índice
+não tem a decisão, ela não foi registrada — pergunte, não invente.
 
 ## Depois de mexer em doc
 

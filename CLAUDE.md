@@ -139,14 +139,16 @@ O trabalho em execução vive em **`.scratch/fase-<n>-<slug>/`** (na raiz, únic
 
 ## ⚠️ REGRA — Como ler o contexto: pelo mapa e pelo índice, nunca inteiro
 
-O *porquê* de cada decisão do projeto vive em **ADRs**, um arquivo por decisão, e cada app tem
-um **índice** (`apps/<app>/docs/adr/README.md`) com uma linha por decisão, agrupada por tema. O
-protocolo é:
+O *porquê* de cada decisão do projeto vive em **ADRs**, um arquivo por decisão, e cada dono tem
+um **índice** com uma linha por decisão, agrupada por tema: `docs/adr/README.md` na raiz para o
+que é de sistema, `apps/<app>/docs/adr/README.md` para o que é de um app. O protocolo é:
 
 1. **`CONTEXT-MAP.md`** na raiz — em que contexto (app) o assunto vive.
 2. **`CONTEXT.md` do app** — o que cada termo significa (glossário puro; o da API é
    `apps/api/CONTEXT.md`).
-3. **`apps/<app>/docs/adr/README.md`** — ache a linha da decisão.
+3. **O índice de ADRs do dono** — `apps/<app>/docs/adr/README.md`, ou `docs/adr/README.md` da
+   raiz quando o assunto atravessa apps (o monorepo, o contrato, a infra, o modo de trabalho).
+   Ache a linha da decisão.
 4. **Só o ADR** daquela decisão.
 
 Nunca leia os ADRs em bloco nem "para ter contexto" — os da API somam quase 200 e passam de
@@ -156,9 +158,10 @@ não foi registrada: **pergunte, não invente.**
 Ao **acrescentar** uma decisão: escreva um **ADR novo** (próximo número, formato de
 `ADR-FORMAT.md` da skill — título que é a decisão e, em 1–3 frases ou o que ela pedir, o
 contexto, o que se decidiu e por quê; um parágrafo basta) **e** a
-linha correspondente no índice do app — os dois juntos, senão a decisão fica inalcançável. Decisão
-que vale para o sistema inteiro (fronteira entre apps, o que é contrato, fluxo de trabalho) vai
-em `docs/adr/` da raiz. Decisão revertida é **reescrita** narrando a reversão, nunca duplicada
+linha correspondente **no índice do dono** — os dois juntos, senão a decisão fica inalcançável.
+Decisão que vale para o sistema inteiro (o monorepo e o tooling, a fronteira entre apps, o que é
+contrato, a infra do sistema, o fluxo de trabalho) vai em `docs/adr/` da raiz, com a linha em
+`docs/adr/README.md`. Decisão revertida é **reescrita** narrando a reversão, nunca duplicada
 como decisão + errata. Termo novo vai para o `CONTEXT.md` do app — e só o termo: o ADR explica
 *por quê*, o glossário diz *o que é*.
 
@@ -173,7 +176,7 @@ Quando terminar um trabalho e sobrar algo pendente para uma etapa **futura**, a 
 
 O **Ciclo 1 (fundação) está fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de usuário, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação.
 
-O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por feature efetiva), ainda **sem checkout**. A **Fase 10 está fechada** e não trouxe domínio novo: desbloqueou o front web e pagou a dívida de deploy. A **Fase 11 está aberta** e não traz domínio: transforma este repo, in-place, no monorepo `pet-oasis` — spec e issues em `.scratch/fase-11-monorepo/`. A **Fase 12** é a espinha de autenticação do web — spec e issues, herdadas do `pet-oasis-web`, em `.scratch/fase-12-web-auth-spine/`. Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) — vêm na fase seguinte.
+O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por feature efetiva), ainda **sem checkout**. A **Fase 10 está fechada** e não trouxe domínio novo: desbloqueou o front web e pagou a dívida de deploy. A **Fase 11 está fechada** e não trouxe domínio: transformou este repo, in-place, no monorepo `pet-oasis` — o porquê do todo em `docs/adr/0005-monorepo-in-place-pnpm-turborepo.md`, o tracker em `.scratch/fase-11-monorepo/`. A **Fase 12 está aberta**: é a espinha de autenticação do web — spec e issues, herdadas do `pet-oasis-web`, em `.scratch/fase-12-web-auth-spine/`. A **Fase 13** é carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) —, ainda não planejada.
 
 ---
 

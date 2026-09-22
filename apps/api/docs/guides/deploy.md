@@ -1,23 +1,41 @@
 # Deploy em produção
 
-Produção sobe **só** a API + Postgres-de-prod. No Compose o serviço se chama **`api`** e o
-container, **`pet-oasis-api`** — o nome do serviço é o que o DNS da rede publica, então é por
-ele que um cliente interno (o front) alcança a API. É buildado e roda direto num VPS **ARM64**.
+Produção é **um stack só**, do sistema inteiro: `api` + `web` + Postgres-de-prod + Redis, sem
+mailpit. Os arquivos Compose vivem em `infra/` da **raiz** do monorepo e os scripts `prod:*`
+também, porque o stack é do sistema e não de um app — o porquê está em
+[`docs/adr/0007`](../../../../docs/adr/0007-single-compose-stack-one-image-per-app.md) da raiz.
+No Compose os serviços se chamam **`api`** e **`web`**, e os containers, **`pet-oasis-api`** e
+**`pet-oasis-web`** — o nome do serviço é o que o DNS da rede publica, então é por `api` que o
+front alcança a API por dentro. Tudo é buildado e roda direto num VPS **ARM64**.
 
-No servidor (Node 24 com corepack: os scripts `prod:*` rodam via `pnpm`, e o corepack instala a
-versão pinada no `packageManager` do `package.json` da raiz do monorepo; a imagem em si instala
-tudo dentro do build). O VPS clona o monorepo inteiro, mas o que se opera é o projeto da API:
-`.env.production` e os scripts `prod:*` vivem em `apps/api`, e o build da imagem usa a raiz
-do monorepo como contexto (é onde estão o lockfile e o workspace — ver
+Este guia mora no `docs/` da API porque quase todo o detalhe operacional é dela (migrations,
+seed, uploads, cadeia de IP, timers); o que é do web está marcado onde aparece.
+
+**Um stack, dois tempos de deploy.** `pnpm prod:up` sobe o sistema; `pnpm prod:up api` (ou
+`web`) reconstrói e reinicia **só** aquele serviço, com o outro seguindo na imagem que já
+tinha. A API anda à frente do front, e o deploy de uma não derruba o outro.
+
+No servidor, Node 24 com corepack — os `prod:*` rodam via `pnpm`, e o corepack instala a versão
+pinada no `packageManager` do `package.json` da raiz (nenhum Dockerfile escreve versão de pnpm;
+ver [`docs/adr/0006`](../../../../docs/adr/0006-one-source-for-node-pnpm-and-one-version-per-dependency.md)).
+O VPS clona o **monorepo inteiro**, e é da raiz dele que se opera. O build de cada imagem usa a
+raiz como contexto (é onde estão o lockfile e o workspace — ver
 [o contexto de build](../adr/0156-contexto-build-raiz-monorepo-runtime-podado-pnpm-deploy.md)):
 
 ```bash
-corepack enable                    # uma vez por máquina
-git clone <repo> && cd pet-oasis/apps/api
-cp .env.example .env.production
+corepack enable                            # uma vez por máquina
+git clone <repo> && cd pet-oasis           # a RAIZ do monorepo; é daqui que se roda tudo
+cp apps/api/.env.example apps/api/.env.production
+cp apps/web/.env.example apps/web/.env.production
 ```
 
-Preencher o `.env.production`:
+**Os dois arquivos precisam existir**, cada um dentro do app que é dono dele. O da API é
+também o `--env-file` de interpolação do Compose (é de lá que saem `POSTGRES_*` e
+`UPLOAD_HOST_DIR`). O do web pode estar **vazio de variáveis** por enquanto, e mesmo assim tem
+de existir: o Compose o lê como `env_file`, e é a garantia de que quem faz o deploy leu o
+`.env.example` dele.
+
+Preencher o `apps/api/.env.production`:
 
 - `JWT_SECRET` e `PEPPER` — segredos fortes, ≥ 32 chars cada (`openssl rand -hex 32`).
 - `POSTGRES_PASSWORD` — senha forte do banco.
@@ -80,29 +98,35 @@ Racional em `docs/adr/0162-diretorio-uploads-mora-fora-working-tree-uid-fixado.m
 
 ## Redes
 
-O Compose de produção declara **três** redes, e o `up` falha se qualquer das duas compartilhadas
-não existir — o que é a mensagem certa, e o motivo de elas serem declaradas em vez de conectadas à
-mão depois do deploy:
+O Compose de produção declara **três** redes, com papéis distintos. A API é o único serviço nas
+três — é ela que atravessa a fronteira entre os dados e quem os pede:
 
 | Rede | Quem entra | Criada por |
 |---|---|---|
 | `backend` (`internal: true`) | `db`, `redis`, `api` | o próprio `prod:up` |
-| `pet-oasis` | `api` + clientes internos (o front) | **fora deste repo**, uma vez |
-| `proxy` | `api` + nginx + clientes internos que o nginx serve | **fora deste repo**, uma vez |
+| `frontend` | `api` + `web` | o próprio `prod:up` — é **do stack** |
+| `proxy` | `api`, `web`, o nginx e o que mais ele servir | **fora deste repo**, uma vez |
 
-As duas compartilhadas são `external:` pelo mesmo motivo: rede que liga stacks diferentes vive
-mais que qualquer uma delas. Se a `pet-oasis` fosse gerenciada por este compose, o `prod:down`
-a apagaria sempre que o front também estivesse fora — e o front, que a declara externa, passaria
-a recusar subir até a API voltar. Em host novo, antes do primeiro `prod:up`:
+A rede entre a API e o front é **do stack**, e não mais `external:` — é a mudança que o
+monorepo trouxe. A `pet-oasis` externa da Fase 10 existia porque ligava **dois** stacks, cada
+um no seu repositório, e rede que liga stacks vive mais que qualquer um deles; com os dois
+serviços no mesmo stack, a rede nasce no `up` e morre no `down`, e "o up do web falhou porque a
+rede da API não existe" deixa de ser possível por construção
+([`docs/adr/0007`](../../../../docs/adr/0007-single-compose-stack-one-image-per-app.md)).
+
+A `proxy` continua externa porque o reverse proxy é de fora do repositório, e o `up` **falha se
+ela não existir** — o que é a mensagem certa, e o motivo de ela ser declarada em vez de
+conectada à mão depois de cada deploy. Em host novo, antes do primeiro `prod:up`:
 
 ```bash
-docker network create proxy       # inofensivo se já existir: erra dizendo que existe
-docker network create pet-oasis   # idem
+docker network create proxy   # inofensivo se já existir: erra dizendo que existe
 ```
 
-> Host que já rodou uma versão anterior deste compose pode ter a `pet-oasis` criada pelo próprio
-> Compose. Não faz diferença: `external:` só exige que ela exista, e o `create` erra dizendo que
-> já existe — siga em frente.
+> Host que rodou a versão anterior deste compose tem uma rede `pet-oasis` órfã: ela existia
+> para ligar os dois stacks que agora são um, e nenhum serviço a declara mais. Removê-la é
+> parte da transição de host — `docker network rm pet-oasis`, depois que o stack novo subir e
+> os dois containers responderem. Deixá-la para trás não quebra nada, mas guarda um nome que
+> um projeto futuro pode reusar acreditando que é o nosso.
 
 O NPM precisa estar nela (`docker network inspect proxy`) e passa a alcançar a API por
 `http://pet-oasis-api:3000` — o **nome do container**, não o alias `api`, e **não**
@@ -124,10 +148,15 @@ alias `api` na `proxy` (só nas redes exclusivas do projeto, onde ele é contrat
 > depurar de dentro do host, use `docker exec pet-oasis-api …` ou uma publicação temporária em
 > `127.0.0.1:3000:3000`, nunca em `0.0.0.0`.
 
-Cliente interno (o front) entra na `pet-oasis`, declarando-a como externa no compose dele. Estar
-nela dá acesso à API e **só**: Postgres e Redis ficam na `backend`, que é `internal:` e não tem
-rota para lugar nenhum. O contrato completo do lado do cliente está em
+O front entra na `frontend`, que o próprio stack cria, e alcança a API por `http://api:3000`
+— o nome do serviço, que o DNS da rede publica. Estar nela dá acesso à API e **só**: Postgres e
+Redis ficam na `backend`, que é `internal:` e não tem rota para lugar nenhum, e o web não entra
+nela. O contrato completo do lado do cliente está em
 [`integrating-with-the-api.md`](integrating-with-the-api.md).
+
+O `web` também não publica porta: o nginx o alcança por `http://pet-oasis-web:3001`, pela
+`proxy`, pelo mesmo motivo da API — porta publicada é um caminho que desvia do TLS e do rate
+limit da frente.
 
 ## Domínio e reverse proxy
 
@@ -143,6 +172,11 @@ repositório** — é do servidor pessoal que hospeda a demo, pelo mesmo motivo 
 verdades divergindo em silêncio.
 
 ### O que o proxy host precisa ter
+
+São **dois** proxy hosts desde o monorepo — o do apex, que serve o front, e o do subdomínio,
+que serve a API. O que segue descreve o da API; o do front é o mesmo desenho com o nome e o
+destino trocados (`pet-oasis.maiahub.com.br` → `http://pet-oasis-web:3001`), e o item 4 vale
+para os dois.
 
 1. **DNS.** Registro `A` de `pet-oasis-api.maiahub.com.br` na Cloudflare, **proxiado** como os
    demais registros do domínio. O nome é de primeiro nível de propósito: o Universal SSL da
@@ -168,7 +202,7 @@ verdades divergindo em silêncio.
    nela, e todo visitante cai num balde só de rate limit. O NPM já confia nas faixas da
    Cloudflare (`set_real_ip_from`, em `ip_ranges.conf`); as duas linhas fazem o `$remote_addr`
    virar o visitante. Vale para **todo** proxy host que receba visitante pela Cloudflare — o da
-   API e, quando o front subir, o do apex. O porquê completo está em
+   API e o do apex. O porquê completo está em
    `docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md`.
 
 O redirect da raiz (`/` → `/reference`) que o host público faz é do **NPM**, não da aplicação —
@@ -214,18 +248,31 @@ SQL
 
 ## Subir
 
+Sempre **da raiz do monorepo** — os `prod:*` são scripts da raiz:
+
 ```bash
-pnpm run prod:up    # build + up; migrate deploy + seed no entrypoint
+pnpm prod:up          # o sistema inteiro: db, redis, api, web
+pnpm prod:up api      # só a API: rebuild + restart dela; o web segue na imagem que já tinha
+pnpm prod:up web      # só o front, idem
 ```
 
-> ⚠️ **A imagem tem que ser construída no próprio servidor ARM.** É o que o `prod:up` faz (o
+O deploy de um serviço só é a razão de o stack ser argumentável, e funciona nas duas direções
+porque o `web` **não** declara `depends_on: api` — se declarasse, `up --build web`
+reconstruiria a API por arrasto. Para conferir que o outro serviço não foi tocado, compare o
+`StartedAt` antes e depois:
+
+```bash
+docker inspect -f '{{.State.StartedAt}} {{.Image}}' pet-oasis-api pet-oasis-web
+```
+
+> ⚠️ **As imagens têm que ser construídas no próprio servidor ARM.** É o que o `prod:up` faz (o
 > Compose tem `build:`). Construir num x86 e enviar a imagem pronta quebra em runtime com
 > "could not load the sharp module" — erro que não se parece nada com a causa, porque o
 > `sharp` traz binário nativo por arquitetura.
 
-`pnpm run prod:down` derruba; 
-`pnpm run prod:logs` acompanha. 
-A migração roda via `prisma migrate deploy` e o seed é idempotente — a subida deixa o ambiente do zero funcionando.
+`pnpm prod:down` derruba o stack; `pnpm prod:logs` acompanha os logs (dos dois serviços, ou de
+um: `pnpm prod:logs api`). A migração roda via `prisma migrate deploy` no entrypoint da API e o
+seed é idempotente — a subida deixa o ambiente do zero funcionando.
 
 ### O que no seed derruba o boot, e o que só loga
 
@@ -266,6 +313,10 @@ procedimento de troca das units estão em [`infra/cron/README.md`](../../infra/c
 > nela**. Num deploy que renomeia o container, reinstale as units **antes** do `prod:up` e rode
 > uma delas à mão **depois** dele (antes, o `docker exec` erra o nome por construção) — unit
 > apontando para container inexistente falha em silêncio, só no journal.
+>
+> A migração para o monorepo **não** renomeou nada: `container_name: pet-oasis-api` continua o
+> mesmo em `infra/docker-compose.prod.yml`, e as três units sobrevivem sem reinstalação. O que
+> mudou é de onde se roda o `prod:up` (a raiz do monorepo, não `apps/api`).
 
 > Fora do escopo da app (infra do servidor): backup do volume `prod_pgdata`, firewall. O
 > reverse proxy e o TLS também moram fora do repositório, mas a forma que precisam ter está

@@ -19,7 +19,7 @@ do fluxo, config das skills) mora na raiz do monorepo — o mapa de lá é
 ## Onde procurar o *porquê* de uma decisão
 
 Pelo índice, nunca pela leitura em bloco: abra [`adr/README.md`](adr/README.md), ache a linha
-da decisão, e abra **só** o ADR que ela aponta. São quase duzentos ADRs; uma pergunta concreta
+da decisão, e abra **só** o ADR que ela aponta. São mais de duzentos ADRs; uma pergunta concreta
 precisa de um ou dois. Se o índice não tem a decisão, ela não foi registrada — pergunte, não
 invente.
 

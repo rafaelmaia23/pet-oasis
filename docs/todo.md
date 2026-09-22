@@ -2,7 +2,9 @@
 
 > O **índice** das fases: estado de cada uma, ponteiro para a fase aberta, resumo destilado
 > das fechadas. O caderno de trabalho — spec e issues — vive em `.scratch/fase-<n>-<slug>/`.
-> Detalhes de decisões em `apps/api/docs/adr/README.md`. Regras de negócio firmadas no `CLAUDE.md`.
+> Detalhes de decisões nos índices de ADR: `docs/adr/README.md` (sistema),
+> `apps/api/docs/adr/README.md` e `apps/web/docs/adr/README.md` (cada app). Regras de negócio
+> firmadas no `CLAUDE.md`.
 >
 > **Forma de registro:** fase aberta fica em poucas linhas, com o ponteiro para a pasta da
 > fase; fase fechada é **destilada** em bullets de resultado. O molde das duas formas e as
@@ -151,7 +153,7 @@
 ---
 
 ## Fase 11 — Monorepo: pnpm workspaces, Turborepo e o primeiro contrato compartilhado ✅
-> Nenhum domínio novo: o repositório virou, **in-place**, o monorepo `pet-oasis` — a API desceu para `apps/api`, o `pet-oasis-web` entrou com histórico em `apps/web`, e nasceu `packages/api-contracts`, a fronteira tipada que justifica o monorepo (mudança de contrato na API quebra o `typecheck` do web no mesmo PR). 18 issues: 14 planejadas em três rodadas de grelha, 15–17 nascidas de duas rodadas pós-import (2026-09-21), a 18 do code-review da 12, a 14 da revisão de padrões da 02. Cada uma em feat-branch própria, mergeada na `fase-11`. Racional em `docs/adr/README.md` (o índice de sistema, nascido neste fecho: [`0005`](adr/0005-monorepo-in-place-pnpm-turborepo.md) o porquê do todo, [`0006`](adr/0006-one-source-for-node-pnpm-and-one-version-per-dependency.md) a fonte única de versões, [`0007`](adr/0007-single-compose-stack-one-image-per-app.md) o stack e as imagens, mais `0001`–`0004`) e em `apps/api/docs/adr/README.md` (`0103`, `0104`, `0156`, `0157`, `0196`–`0202`).
+> Nenhum domínio novo: o repositório virou, **in-place**, o monorepo `pet-oasis` — a API desceu para `apps/api`, o `pet-oasis-web` entrou com histórico em `apps/web`, e nasceu `packages/api-contracts`, a fronteira tipada que justifica o monorepo (mudança de contrato na API quebra o `typecheck` do web no mesmo PR). 18 issues: 01–13 planejadas em três rodadas de grelha; a 14 nasceu da revisão de padrões da 02, as 15–17 de duas rodadas pós-import (2026-09-21) e a 18 do code-review da 12. Cada uma em feat-branch própria, mergeada na `fase-11`. Racional em `docs/adr/README.md` (o índice de sistema, nascido neste fecho: [`0005`](adr/0005-monorepo-in-place-pnpm-turborepo.md) o porquê do todo, [`0006`](adr/0006-one-source-for-node-pnpm-and-one-version-per-dependency.md) a fonte única de versões, [`0007`](adr/0007-single-compose-stack-one-image-per-app.md) o stack e as imagens, mais `0001`–`0004`) e em `apps/api/docs/adr/README.md` (`0103`, `0104`, `0156`, `0157`, `0196`–`0202`).
 - **A estratégia que definiu a fase: uma camada por issue, e o pnpm antes do move (01–04).** A ordem não foi arrumação — foi oráculo. O pnpm entrou com a API ainda como pacote único (01) para que a estritez dele aparecesse com a suíte inteira verde, sem confundir "quebrou pelo pnpm" com "quebrou pelo move": expôs duas dependências fantasma (`@types/ms`, `@types/express-serve-static-core`) e um gotcha que só se vê sob pnpm — o caminho real do bundle do Scalar passa por `node_modules/.pnpm/…`, e o `sendFile` recusa segmento com ponto (ADR `0202`). Só então o move (02): **um commit mecânico** de 498 arquivos, registrado no `.git-blame-ignore-revs` para o `blame` continuar apontando o autor real. Depois os presets compartilhados (03, o pacote interno mais barato possível, provando `workspace:*` antes de o contrato depender disso) e o Turborepo (04), com `test` **fora do cache** de propósito — a suíte depende de Compose e `.env.test`, e cachear sem declarar esses inputs é risco de falso-verde.
 - **O contrato, que é o motivo da fase (09, 10):** `@pet-oasis/api-contracts` nasceu em dois movimentos — "expand" com o que não dependia de schema nenhum (enums de domínio, nomes de role e feature, shape de erro) e "contract" com os schemas de request e as views inteiros, até nenhum `*.schema.ts` sobrar em `apps/api/src/modules/`. A fronteira é uma frase: **o que precisa de algo além de `zod` não é contrato** e fica na API como composição (o helper de whitelist do presenter, a tradução de paginação em `skip`/`take`, `resolveSlug`). Duas guardas, não duas boas intenções: pureza (teste no pacote) e paridade de enum (teste na API, `DOMAIN_ENUMS` contra o Prisma). O `openapi.json` saiu **byte a byte idêntico** em cada commit da migração — o oráculo de que foi refactor.
 - **O que a grelha pós-import acrescentou ao contrato (16, 17, 18), e por quê:** a issue `00` da Fase 12 mostrou que a fronteira desenhada não bastava para um cliente consumir o pacote, e **quem cresce é o pacote, não o cliente**. `expiresIn` em segundos na resposta de login e refresh (16) — convenção OAuth2, imune a diferença de relógio, e o cliente para de decodificar o JWT. A **tabela de rotas** virou contrato (17), com a prosa do OpenAPI junto, e o `src/docs/` da API virou adaptador que a deriva: uma tabela escrita no web seria a terceira cópia do mesmo path. E nome de feature atravessa a rede como **enum** (18), achado do code-review da 12: sem isso `can(me, "raed:pet")` compilava, e a user story "esconder botão por capability" não valia no cliente.
@@ -164,7 +166,7 @@
 
 ---
 
-## ⬜ Fase 12 — Espinha de autenticação do web
+## 🔄 Fase 12 — Espinha de autenticação do web
 > Herdada do `pet-oasis-web` no import (Fase 11, issue 11): a spec e as issues dele vivem em
 > `.scratch/fase-12-web-auth-spine/`, com o conteúdo com que o web congelou. Do bootstrap
 > ao fluxo completo de conta — sessão em BFF, login e os estados bloqueados, guarda de rota,

@@ -20,8 +20,7 @@ o deploy é de um serviço só:
 
 **Um stack, dois tempos de deploy.** `pnpm prod:up` sobe o sistema; `pnpm prod:up api` (ou
 `web`) reconstrói e reinicia **só** aquele serviço, com o outro seguindo na imagem que já
-tinha. Monorepo não é monólito: a API anda à frente do front, e o deploy de um não derruba o
-outro.
+tinha.
 
 ## Preparar o host
 
@@ -40,11 +39,11 @@ cp apps/web/.env.example apps/web/.env.production
 ```
 
 **Os dois arquivos precisam existir**, cada um dentro do app que é dono dele, e nenhum deles é
-versionado. O da API é também o `--env-file` de **interpolação** do Compose: é de lá que saem
-`POSTGRES_*` e `UPLOAD_HOST_DIR`, então sem ele o stack inteiro não sobe. O do web pode estar
-**vazio de variáveis** por enquanto, e mesmo assim tem de existir — o Compose o lê como
-`env_file`, e é a garantia de que quem faz o deploy leu o `.env.example` dele. O que preencher
-em cada um está no guia do app.
+versionado — o Compose lê os dois como `env_file`, e um ausente derruba o `up`. O da API tem um
+papel a mais, que é do stack e não dela: é o `--env-file` de **interpolação**, de onde saem
+`POSTGRES_*` e `UPLOAD_HOST_DIR`. O que preencher em cada um está no guia do app
+([API](../../apps/api/docs/guides/deploy.md#o-envproduction-da-api),
+[web](../../apps/web/docs/guides/deploy.md#o-envproduction-do-web)).
 
 ## Redes
 
@@ -86,16 +85,14 @@ lado do cliente está em
 
 > ⚠️ **Nenhum serviço publica porta no host** — nem o banco, nem o cache, nem a API, nem o web.
 > O nginx alcança os dois por DNS de container na rede `proxy`, e manutenção de banco é
-> `docker exec`. No caso da API essa ausência não é só higiene: é ela que torna seguro o
-> `trust proxy` por endereço privado. Com a porta aberta na internet, qualquer um forja o
-> próprio `X-Forwarded-For` e fura rate limit, lockout e audit log de uma vez.
+> `docker exec`. No caso da API isso não é só higiene, e republicar a porta reabre um furo de
+> segurança concreto: o porquê está no [guia dela](../../apps/api/docs/guides/deploy.md#o-proxy-host-da-api).
 
 ## Domínio e reverse proxy
 
 A API atende em **`pet-oasis-api.maiahub.com.br`** e o front no apex,
-**`pet-oasis.maiahub.com.br`** — que fica **limpo**: nenhum caminho da API é redirecionado a
-partir dele. O porquê do nome da API (primeiro nível sob `maiahub.com.br`, e não
-`api.pet-oasis.…`) e o de não haver redirect estão em
+**`pet-oasis.maiahub.com.br`**. O porquê dessa repartição — o nome da API de primeiro nível sob
+`maiahub.com.br`, e não `api.pet-oasis.…`, e o apex sem nenhum redirect para a API — está em
 [`apps/api/docs/adr/0160`](../../apps/api/docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md).
 
 O reverse proxy é o **Nginx Proxy Manager** (NPM), e a configuração dele **não vive neste
@@ -122,8 +119,8 @@ São **dois** proxy hosts, um por app, com o mesmo desenho e destinos diferentes
    onde a porta 80 do servidor não é o que o mundo vê.
 3. **Destino por DNS de container**, na rede `proxy` (`docker network inspect proxy` tem que
    listar o container do NPM). É sempre o **nome do container** (`pet-oasis-api`,
-   `pet-oasis-web`), nunca o alias `api`/`web` e **nunca `127.0.0.1`** — a porta não é
-   publicada no host. O motivo de não usar o alias: a `proxy` é compartilhada com todo projeto
+   `pet-oasis-web`), nunca o alias `api`/`web` e nunca `127.0.0.1` — a porta não é publicada no
+   host. O motivo de não usar o alias: a `proxy` é compartilhada com todo projeto
    que o NPM serve neste host, e `api` é o nome genérico que um segundo projeto mais
    provavelmente usaria; dois containers respondendo pelo mesmo nome viram round-robin no DNS
    do Docker, e o proxy alterna entre os dois sem erro nenhum. Por isso o compose de produção
@@ -165,10 +162,10 @@ pnpm prod:up api      # só a API: rebuild + restart dela; o web segue na imagem
 pnpm prod:up web      # só o front, idem
 ```
 
-O deploy de um serviço só é a razão de o stack ser argumentável, e funciona nas duas direções
-porque o `web` **não** declara `depends_on: api` — se declarasse, `up --build web`
-reconstruiria a API por arrasto. Para conferir que o outro serviço não foi tocado, compare o
-`StartedAt` antes e depois:
+O deploy de um serviço só funciona nas duas direções porque o `web` **não** declara
+`depends_on: api` (o porquê, e o modo de falha que isso evita, em
+[`adr/0007`](../adr/0007-single-compose-stack-one-image-per-app.md)). Para conferir que o outro
+serviço não foi tocado, compare o `StartedAt` antes e depois:
 
 ```bash
 docker inspect -f '{{.State.StartedAt}} {{.Image}}' pet-oasis-api pet-oasis-web
@@ -185,19 +182,24 @@ API e o seed é idempotente — a subida deixa o ambiente do zero funcionando.
 
 ## Verificar o stack
 
-```bash
-# Os dois hosts respondendo, com TLS válido
-curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' \
-  https://pet-oasis-api.maiahub.com.br/api/v1/status        # 200 0
-curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' \
-  https://pet-oasis.maiahub.com.br/                         # 200 0
+O que se confere aqui é o stack: os quatro containers de pé e saudáveis, e as redes como
+devem estar.
 
-# Os quatro containers de pé
-docker compose -p pet-oasis-prod ps
+```bash
+docker ps --filter 'name=pet-oasis-' --format '{{.Names}}\t{{.Status}}'
+#   pet-oasis-api    Up … (healthy)
+#   pet-oasis-web    Up … (healthy)
+#   pet-oasis-prod-db     Up … (healthy)
+#   pet-oasis-prod-redis  Up … (healthy)
+
+docker network inspect proxy -f '{{range .Containers}}{{.Name}} {{end}}'
+#   tem que listar pet-oasis-api, pet-oasis-web e o container do NPM
 ```
 
-A verificação específica de cada app — a imagem do catálogo servida pela API, a cadeia de IP
-gravada em `audit_logs`, o front alcançando a API por dentro — está no guia do app.
+Cada app responder pelo domínio dele, e as verificações que só fazem sentido nele — a imagem
+do catálogo servida pela API, a cadeia de IP gravada em `audit_logs`, o front alcançando a API
+por dentro — estão no guia do app: [API](../../apps/api/docs/guides/deploy.md#verificar-a-api),
+[web](../../apps/web/docs/guides/deploy.md#verificar).
 
 > Fora do escopo da app (infra do servidor): backup do volume `prod_pgdata`, firewall. O
 > reverse proxy e o TLS também moram fora do repositório, mas a forma que precisam ter está

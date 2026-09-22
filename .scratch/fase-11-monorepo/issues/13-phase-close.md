@@ -6,7 +6,8 @@ reescrito para o monorepo, `main` virando o monorepo, e o repo renomeado no GitH
 
 **Blocked by:** 08, 12, 15.
 
-**Status:** fechada em 2026-09-22
+**Status:** fechada em 2026-09-22 **do lado do agente** — o último checkbox é do dono (merge
+para `dev`/`main`, PR com CI verde, deploy real), e é o que falta para a fase inteira fechar.
 
 - [x] ADR de sistema na raiz (numerado): por que monorepo, por que in-place, por que pnpm +
       Turbo, o que é contrato e a regra dos dois donos, o que ficou de fora (deploy automático,
@@ -68,7 +69,8 @@ reescrito para o monorepo, `main` virando o monorepo, e o repo renomeado no GitH
       `origin` já é `https://github.com/rafaelmaia23/pet-oasis.git`, e a API do GitHub
       confirma `full_name: rafaelmaia23/pet-oasis`). O rename era "o último ato" porque marca
       o momento em que `main` deixa de ser só a API; tendo acontecido antes, o que falta é só
-      a `main` alcançá-lo.
+      a `main` alcançá-lo. **Os outros dois itens deste checkbox no enunciado original** — o
+      remote do VPS e o deploy real — não são do agente e desceram para o bullet abaixo.
 - [ ] **Do dono, fora do alcance do agente:** merge `fase-11` → `dev` (`--no-ff`), PR com CI
       verde, merge `dev` → `main`, nova `dev` a partir da `main`; remote do VPS atualizado; um
       deploy real do stack a partir do monorepo, com API e web respondendo.
@@ -93,7 +95,7 @@ reescrito para o monorepo, `main` virando o monorepo, e o repo renomeado no GitH
 | Dockerfile por app, contexto na raiz, imagem podada por `pnpm deploy`; `pnpm deploy` sem `--prod` e antes do `next build` no web; `Dockerfile.dockerignore` por app | `docs/adr/0007-…` (o desenho que vale para os dois apps) e `apps/api/docs/adr/0156-contexto-build-raiz-monorepo-runtime-podado-pnpm-deploy.md` + `0157-pacotes-internos-entram-imagem-duas-camadas-deploy-nao.md` (o lado da API) |
 | (acréscimo tardio, 14) Estágio `base` comum no Dockerfile da API | `apps/api/docs/adr/0201-dockerfile-api-estagio-base-runtime-fora-dele.md`, com `0158` reescrito |
 | Compose unificado em `infra/`, base + overrides, projeto por ambiente; a rede do web deixa de ser externa; a `proxy` continua | `docs/adr/0007-…`; `apps/api/docs/adr/0148-tres-redes-papeis-distintos-porta-api-despublicada.md` (revisto na 11.11) e o ADR-0004 do web |
-| O VPS clona o monorepo inteiro; guia de deploy reescrito no fecho | `apps/api/docs/guides/deploy.md` |
+| O VPS clona o monorepo inteiro; guia de deploy reescrito no fecho | `docs/guides/deploy.md` (o stack: clone da raiz, redes, proxy hosts, `prod:up`), `apps/api/docs/guides/deploy.md` e `apps/web/docs/guides/deploy.md` (o recorte de cada app); a regra de geografia no `CLAUDE.md` da raiz |
 | Um fluxo de branches para tudo; numeração de fase global; o web perde a exceção "não existe `dev`" | `CLAUDE.md` da raiz, § "TDD sempre, com fluxo de branches por fase"; a numeração também em `docs/guides/todo-phases.md` |
 | Conventional Commits em inglês, escopo obrigatório e enum; mensagem de merge padrão do Git; nenhum trailer de agente | `apps/api/docs/adr/0196-conventional-commits-escopo-obrigatorio-recusados-hook.md`; a regra acionável no `CLAUDE.md` da raiz |
 | CI de verificação, só o afetado, services do job, commitlint do PR; sem deploy automático e sem remote cache | `apps/api/docs/adr/0197-ci-verifica-so-afetado-services-do-job-no-lugar-do-compose.md`; o "o que ficou de fora, e quando revisitar" em `docs/adr/0005-…` |
@@ -114,8 +116,55 @@ nasceu junto.
 
 ## O que o code-review do fecho achou, e o que foi corrigido
 
-Os dois sub-agentes de review pararam por limite de cota da conta (HTTP 429), então a revisão
-foi feita à mão, nos mesmos dois eixos. Quatro achados, todos corrigidos antes do merge:
+A primeira tentativa de review parou por limite de cota da conta (HTTP 429) e foi refeita à
+mão; a segunda rodou nos dois sub-agentes, como manda o `/code-review`, já sobre o guia
+dividido. Os achados das duas, todos corrigidos antes do merge.
+
+### Eixo Spec (sub-agente)
+
+Veredito: **fiel** — toda decisão da spec com dono, todo racional nomeado no enunciado
+coberto, e os sete itens do bullet de deploy sobrevivendo à divisão em três. Dois reparos:
+
+1. **A divisão do guia não atualizou a tabela de rastreio** — a linha do deploy ainda apontava
+   só para `apps/api/docs/guides/deploy.md`, na própria tabela cujo trabalho é estar conferida.
+   Agora nomeia os três.
+2. **Checkbox parcialmente satisfeito marcado como feito** — o do rename trazia, no enunciado
+   original, o remote do VPS e o deploy real. Os dois desceram para o bullet do dono, e o
+   `Status` desta issue passou a dizer "fechada do lado do agente".
+
+### Eixo Standards (sub-agente)
+
+Limpo no que é regra dura de commit e de índice (escopos do enum, descrição minúscula, header
+≤ 100, **nenhum trailer de agente**, cada ADR novo com linha no índice do dono) e em todas as
+conferências factuais contra `package.json`, `pnpm-workspace.yaml`, os Compose, os dois
+Dockerfiles e as units do cron. Seis achados duros e quatro julgamentos que procediam:
+
+1. **Nenhuma fase marcada como aberta** — a 12 ficou `⬜` enquanto o `CLAUDE.md`, editado no
+   mesmo commit, dizia que ela abriu. Virou `🔄` no `todo.md` e no roadmap do README da API.
+2. **Contagem contraditória** na nota de abertura da Fase 11 ("14 planejadas" e "a 14 nasceu da
+   revisão da 02"). Planejadas foram **01–13**.
+3. **A regra que este fecho escreveu ("nenhum dos três guias repete o outro") foi quebrada
+   pelos próprios guias**: os `curl` de verificação eram idênticos na raiz e em cada app, logo
+   depois de a raiz dizer que a verificação de cada app estava no guia dele; o mesmo com o
+   parágrafo do `.env.production`, o racional do `depends_on`, o "apex fica limpo" e o "nunca
+   `127.0.0.1`". A raiz passou a verificar **o stack** (containers e redes) e a apontar; cada
+   app ficou dono do que é dele.
+4. **Tempo verbal preso no futuro** no ADR `0148` ("na reescrita dele para o monorepo") — a
+   reescrita é justamente este commit.
+5. **Cabeçalho do `todo.md`** ainda mandava ao índice de ADRs da API como se fosse o único.
+6. **Três contagens diferentes de ADRs da API** ("quase 200", "quase duzentos", "mais de
+   duzentos") para o mesmo número, hoje 202. Uniformizadas.
+7. **Feature Envy e duplicação no ADR `0005`**: ele re-argumentava o `catalog:` (da `0006`), o
+   `test` fora do cache (da `0104`) e a poda da imagem (da `0156`) *além* de linká-los. Os três
+   viraram uma cláusula e o ponteiro.
+8. **`docker compose` pelado** na verificação da raiz, contra a regra escrita no próprio
+   `infra/docker-compose.yml` ("sempre pelos scripts"). Trocado por `docker ps --filter`.
+9. **Linha de `Status` da spec** com dez caminhos inline; passou a nomear os **índices**.
+10. Ficou como está, por decisão consciente: o índice de ADRs da raiz usa bullets onde o da API
+    usa tabela — os dois cumprem "uma linha por decisão", e o índice por tema da API também é
+    em bullets.
+
+### Achados da revisão feita à mão (antes dos sub-agentes)
 
 1. **Duplicação (padrão do repo: uma decisão, um dono).** O `0007` re-argumentava o desenho de
    redes, que é do `0148` da API, e o contexto de build com `Dockerfile.dockerignore`, que é do

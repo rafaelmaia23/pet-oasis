@@ -45,14 +45,15 @@ import já nascer verificado. O projeto é de estudo e portfólio: **aprender mo
 e uma tecnologia por issue, cada uma com critério de aceite próprio, é o que ensina o que cada
 camada faz e o que quebra quando ela falta.
 
-**pnpm, e não npm workspaces ou Yarn.** Três razões, nesta ordem: a **estritez** (um pacote só
-enxerga o que declarou, então a fronteira entre pacotes é real e não convenção — foi ela que
-expôs duas dependências fantasma na API já na primeira issue); o `catalog:`, que fixa **uma
-versão** por dependência compartilhada num lugar só; e o `pnpm deploy --filter`, que poda a
-imagem de produção de cada app sem o workspace inteiro junto. **Turborepo, e não scripts
-encadeados**, porque `typecheck`, `lint` e `build` passam a custar o preço do que mudou: o
-cache local devolve `FULL TURBO` quando o hash bate, e `--affected` é o que deixa o CI rodar
-só os pacotes que um PR tocou.
+**pnpm, e não npm workspaces ou Yarn.** Três razões, nesta ordem: a **estritez** — um pacote só
+enxerga o que declarou, então a fronteira entre pacotes é real e não convenção, e foi ela que
+expôs duas dependências fantasma na API já na primeira issue —, mais o `catalog:`
+([`0006`](0006-one-source-for-node-pnpm-and-one-version-per-dependency.md)) e o
+`pnpm deploy --filter` ([`0007`](0007-single-compose-stack-one-image-per-app.md)), que resolvem
+as duas dores seguintes de um monorepo: uma versão só por dependência, e uma imagem por app sem
+o workspace junto. **Turborepo, e não scripts encadeados**, porque `typecheck`, `lint` e `build`
+passam a custar o preço do que mudou, e é o `--affected` dele que deixa o CI rodar só os pacotes
+que um PR tocou ([`0104`](../../apps/api/docs/adr/0104-turborepo-pipeline-workspace-test-fica-fora-cache.md)).
 
 **O contrato é a fronteira, e enum tem dois donos.** `packages/api-contracts` é o que atravessa
 a rede entre a API e os clientes, e **só depende de `zod`** — o que precisa de Prisma, Express
@@ -75,10 +76,10 @@ diluído a fase:
 - **Remote cache do Turborepo.** Revisitar quando o CI passar a custar tempo de espera real, ou
   quando houver uma segunda máquina trabalhando no repo: com um desenvolvedor e um runner, o
   cache local já paga.
-- **Cachear `test` no Turbo.** A suíte da API sobe Postgres via Compose e lê `.env.test`;
-  cachear exigiria declarar esses inputs, e o risco é **falso-verde** — o pior defeito possível
-  numa suíte. Está em [`docs/reference/backlog.md`](../reference/backlog.md) com o método, e
-  revisitar quer dizer declarar os inputs e provar a invalidação, não ligar a flag.
+- **Cachear `test` no Turbo** — o porquê de ficar fora é da
+  [`0104`](../../apps/api/docs/adr/0104-turborepo-pipeline-workspace-test-fica-fora-cache.md), e
+  o método de entrar está em [`docs/reference/backlog.md`](../reference/backlog.md). Revisitar
+  quer dizer declarar os inputs e provar a invalidação, não ligar a flag.
 - **Versionar ou publicar o contrato, e quebrá-lo por domínio.** Enquanto os consumidores
   vivem no mesmo repo, `workspace:*` já é a versão certa, sempre. Revisitar no dia em que um
   cliente **fora** do monorepo precisar consumi-lo.

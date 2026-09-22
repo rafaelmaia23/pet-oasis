@@ -297,7 +297,7 @@ Ambos são idempotentes (`pnpm run db:seed` não duplica nada) e restaurados tod
 | ✅ | 9 | Pets ligados a Customers (CRUD, escopos *own*/*others*, falecimento ≠ exclusão) e catálogo completo: produto/variante, marca, categoria em árvore, tag, vitrine pública com view por feature efetiva, busca textual com tolerância a erro de digitação e upload de imagem — sem checkout |
 | ✅ | 10 | Desbloqueio do front web e dívida de deploy: janela de graça no refresh, `code`s estáveis de login, redes e domínio, seed fail-open por classe de dado |
 | ✅ | 11 | O repositório vira o monorepo `pet-oasis`: `apps/api` + `apps/web` + o contrato compartilhado `@pet-oasis/api-contracts`, pnpm workspaces, Turborepo, Conventional Commits e CI |
-| ⬜ | 12 | Espinha de autenticação do web (fase do `apps/web`) |
+| 🔄 | 12 | Espinha de autenticação do web (fase do `apps/web`) |
 | 🔜 | 13 | Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) |
 
 Detalhe atômico de cada item em [`docs/todo.md`](../../docs/todo.md).

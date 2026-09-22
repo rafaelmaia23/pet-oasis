@@ -152,7 +152,7 @@ que é de sistema, `apps/<app>/docs/adr/README.md` para o que é de um app. O pr
    Ache a linha da decisão.
 4. **Só o ADR** daquela decisão.
 
-Nunca leia os ADRs em bloco nem "para ter contexto" — os da API somam quase 200 e passam de
+Nunca leia os ADRs em bloco nem "para ter contexto" — os da API passam de **duzentos** e de
 25 mil tokens; uma tarefa concreta precisa de um ou dois. Se o índice não tiver a decisão, ela
 não foi registrada: **pergunte, não invente.**
 

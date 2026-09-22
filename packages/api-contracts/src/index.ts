@@ -1,7 +1,7 @@
 // Índice do contrato. Cada domínio também é uma entrada própria do `exports`
 // (`@pet-oasis/api-contracts/user`, `/auth`, `/me`, `/role`, `/feature`,
-// `/permission`, `/pet`, `/catalog`, `/audit-log`, `/log`, `/pagination`,
-// `/errors`) — o consumidor importa só o que usa.
+// `/permission`, `/pet`, `/catalog`, `/audit-log`, `/log`, `/status`,
+// `/routes`, `/pagination`, `/errors`) — o consumidor importa só o que usa.
 export * from "./audit-log";
 export * from "./auth";
 export * from "./catalog";
@@ -14,4 +14,6 @@ export * from "./pagination";
 export * from "./permission";
 export * from "./pet";
 export * from "./role";
+export * from "./routes";
+export * from "./status";
 export * from "./user";

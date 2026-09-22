@@ -74,6 +74,17 @@ const adminView = ownerView
       "Visão administrativa (quem tem read:user:others) — inclui roles e overrides de feature",
   });
 
+/**
+ * A escada de quem lê um usuário, em ordem: `owner` é o que o dono vê de si;
+ * quem tem `read:user:others` recebe `admin`, que acrescenta roles e
+ * overrides. A view é escolhida pelo **ator**, não pela rota, então toda
+ * resposta que devolve um usuário declara as duas.
+ *
+ * `default` fica de fora: é a visão mínima que aparece *dentro* de outra view
+ * (id + nome), nunca como resposta de uma rota.
+ */
+export const userViewLadder = [ownerView, adminView] as const;
+
 export const userViews = {
   default: defaultView,
   owner: ownerView,

@@ -23,7 +23,10 @@ próprio glossário (`CONTEXT.md`, formato da skill `domain-modeling`) e os pró
   visitante nunca fala com a API direto. A identidade do visitante chega à API por
   `X-Forwarded-For`, e a sessão vive num cookie do web.
 - **API ↔ Web (contrato)**: os schemas Zod que atravessam a rede — request, views de resposta,
-  enums de domínio, nomes de role e feature, shape de erro — são um pacote compartilhado,
-  `packages/api-contracts`, dependendo só de `zod`. A API o consome nos próprios controllers e
-  presenters; o web (e qualquer cliente futuro) o importa. O vocabulário desses tipos é o do
-  contexto **API**: o contrato não cria termo, só o exporta.
+  enums de domínio, nomes de role e feature, shape de erro — e a **tabela de rotas**
+  (`routes.<domínio>.<operação>`: método, path, request, resposta e erro por status, exigência
+  de auth) são um pacote compartilhado, `packages/api-contracts`, dependendo só de `zod`. A API
+  o consome nos próprios controllers e presenters, e o `/openapi.json` dela é **derivado** da
+  tabela de rotas; o web (e qualquer cliente futuro) o importa. O vocabulário desses tipos é o
+  do contexto **API**: o contrato não cria termo, só o exporta. O porquê está em
+  [`docs/adr/0003`](./docs/adr/0003-route-table-is-contract-openapi-is-derived.md).

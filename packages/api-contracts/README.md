@@ -2,12 +2,13 @@
 
 O que atravessa a rede entre a API e os clientes (web hoje; mobile e back-office amanhã): os
 schemas de request (create, update, query, path), as views de resposta, os enums de domínio,
-os nomes de role e feature, a taxonomia de auditoria, a paginação e o shape de erro. **Só
-depende de `zod`.** Qualquer outro import é sinal de que a coisa não é contrato (Prisma,
+os nomes de role e feature, a taxonomia de auditoria, a paginação, o shape de erro e a
+**tabela de rotas** — o endereço de cada operação da API. **Só depende de `zod`.** Qualquer outro import é sinal de que a coisa não é contrato (Prisma,
 Express, helper de servidor), e um teste do próprio pacote fica vermelho se isso acontecer.
 
-A API não tem schema próprio: controllers, presenters, a geração do OpenAPI e os testes
-importam daqui. O que a API guarda é o que precisa de algo além de `zod` — o helper de
+A API não tem schema próprio nem tabela de paths própria: controllers, presenters e testes
+importam daqui, e o `/openapi.json` é **derivado** da tabela de rotas por um adaptador
+(`apps/api/src/docs/adapter.ts`). O que a API guarda é o que precisa de algo além de `zod` — o helper de
 whitelist que aplica a view (`createPresenter`), a resolução de view por feature efetiva, a
 derivação de slug, os helpers de paginação do repository, a máscara de IP do audit log — sempre
 como composição por cima do schema do contrato.
@@ -26,16 +27,69 @@ como composição por cima do schema do contrato.
 | `…/pet` | `petSpeciesSchema`, `petSexSchema`; schemas de pet e de raça; `petViews`, `breedViews` |
 | `…/catalog` | `productStatusSchema`; `catalogNameSchema`, `slugSchema`, `catalogDescriptionSchema`; schemas e views de marca, categoria (recursiva), tag, produto (escada `public`/`internal`/`cost`, detalhe × lista), variante e imagem; `MAX_IMAGES_PER_PRODUCT` |
 | `…/audit-log` | `AUDIT_ACTIONS`, `AUDIT_TARGET_TYPES`; `listAuditLogsSchema`; `auditLogViews` |
-| `…/log` | `listRecentLogsSchema` |
-| `…/pagination` | `offsetQuerySchema`, `cursorQuerySchema`, `buildOffsetQuerySchema`, `defineSortConfig`, `offsetMetaSchema`, `cursorMetaSchema`, `DEFAULT_LIMIT`/`MAX_LIMIT` |
+| `…/log` | `listRecentLogsSchema`; `recentLogsViews` |
+| `…/status` | `statusViews` (o health check) |
+| `…/routes` | `routes` — a **tabela de rotas** (ver abaixo); `errorResponses`, `noContent` e os tipos `RouteDefinition`/`RouteGroup`/`RouteTable` |
+| `…/pagination` | `offsetQuerySchema`, `cursorQuerySchema`, `buildOffsetQuerySchema`, `defineSortConfig`, `offsetMetaSchema`, `cursorMetaSchema`, `DEFAULT_LIMIT`/`MAX_LIMIT`; os envelopes `offsetList`/`cursorList`/`staticList` |
 | `…/errors` | `ERROR_CODES`/`ErrorCode`, `errorResponseSchema`, `validationErrorResponseSchema` e os tipos |
 
 Cada domínio é uma entrada própria do `exports` para o consumidor importar só o que usa; o
-índice reexporta tudo. Domínio novo = pasta nova em `src/` + entrada nova no `exports`. Dentro
+índice reexporta tudo. Domínio novo = pasta nova em `src/` + entrada nova no `exports` + módulo
+em `src/routes/` ligado no índice da tabela. Dentro
 de um domínio, request vai em `*.schema.ts` e resposta em `*.views.ts`; enums e nomes vivem em
 arquivos folha (`user.enums.ts`, `role.names.ts`, …) e **todo import entre domínios aponta para a
 folha, nunca para o índice** — é o que impede um ciclo (`user → role → user`) de virar erro de
 inicialização.
+
+## A tabela de rotas
+
+`routes.<domínio>.<operação>` é o endereço de **toda** operação da API, e o `/openapi.json` é
+derivado dela — não existe segunda cópia. Cada entrada carrega o que um cliente precisa para
+chamar a rota sem escrever nada à mão:
+
+```ts
+import { routes } from "@pet-oasis/api-contracts/routes";
+
+routes.auth.login;
+// {
+//   method: "POST",
+//   path: "/auth/login",          // forma do Express, relativa a /api/v1
+//   tag: "Auth",
+//   auth: "public",               // ou "bearer"
+//   summary: "Login — retorna access token e seta o refresh cookie",
+//   description: "Recusa em cinco condições, nesta ordem: …",
+//   request: loginSchema,         // envelope z.object({ body?, params?, query? })
+//   responses: { 200: { description: "Autenticado", view: accessTokenViews.default } },
+//   errors: { 401: …, 403: …, 422: …, 429: … },   // shape de erro por status
+// }
+```
+
+O que um cliente faz com isso, em ordem de utilidade:
+
+- **Não digitar path.** `routes.product.get.path` é `/products/:idOrSlug`; trocar o path na API
+  quebra o `typecheck` de quem o usa, em vez de virar 404 em produção.
+- **Tipar os dois lados de uma chamada.** `z.infer<typeof routes.auth.login.request.shape.body>`
+  é o corpo; `z.infer<(typeof routes.auth.login.responses)[200]["view"]>` é a resposta (o
+  índice numérico pede o `typeof` entre parênteses).
+- **Saber o que tratar.** `Object.keys(route.errors)` é a lista fechada de status que aquela
+  rota devolve, cada um com o envelope que carrega (o 422 acrescenta `errors` por campo).
+- **Decidir se precisa de token** antes de chamar: `route.auth === "public"`.
+
+Duas coisas que a tabela **não** faz, de propósito:
+
+- **Montar a URL.** Um `buildPath(route, params)` é do cliente: quem monta precisa decidir
+  encoding, query string e base URL, e nada disso atravessa a rede. A tabela entrega o
+  template; a substituição de `:id` é de quem chama.
+- **Falar de multipart.** Uma rota de upload traz só `upload: "image"`. O formato aceito e o
+  teto de tamanho são do servidor (vêm de env var) e vivem na API.
+
+O path fica na forma do **Express** (`:id`) porque é assim que ele é comparado com o router:
+`apps/api/tests/unit/contracts/routeParity.test.ts` bate o conjunto `método + path` dos dois
+lados, e rota sem entrada — ou entrada sem rota — é vermelho. O template `{id}` do OpenAPI sai
+do adaptador. Quando a forma da resposta muda com a feature efetiva de quem chama, `view` é a
+**escada de capability** em ordem (`[público, interno, custo]`), e o adaptador a publica como
+união. O racional está em
+[`docs/adr/0003`](../../docs/adr/0003-route-table-is-contract-openapi-is-derived.md).
 
 ## Consumido do fonte TS, sem build
 

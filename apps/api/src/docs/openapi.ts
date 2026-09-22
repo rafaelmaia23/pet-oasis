@@ -1,22 +1,7 @@
 /// <reference types="zod-openapi" />
 import { createDocument, type ZodOpenApiObject } from "zod-openapi";
+import { buildPathsFromRouteTable } from "./adapter";
 import { securitySchemes } from "./components";
-import { auditLogPaths } from "./paths/audit-log";
-import { authPaths } from "./paths/auth";
-import { brandPaths } from "./paths/brand";
-import { breedPaths } from "./paths/breed";
-import { categoryPaths } from "./paths/category";
-import { featurePaths } from "./paths/feature";
-import { logPaths } from "./paths/log";
-import { mePaths } from "./paths/me";
-import { permissionPaths } from "./paths/permission";
-import { petPaths } from "./paths/pet";
-import { productPaths } from "./paths/product";
-import { profilePaths } from "./paths/profile";
-import { rolePaths } from "./paths/role";
-import { statusPaths } from "./paths/status";
-import { tagPaths } from "./paths/tag";
-import { userPaths } from "./paths/user";
 
 type OpenApiDocument = ReturnType<typeof createDocument>;
 
@@ -198,24 +183,9 @@ const documentDefinition: ZodOpenApiObject = {
   components: { securitySchemes },
   // Bearer por padrão; operações públicas sobrescrevem com `security: []`.
   security: [{ bearerAuth: [] }],
-  paths: {
-    ...statusPaths,
-    ...authPaths,
-    ...mePaths,
-    ...userPaths,
-    ...profilePaths,
-    ...permissionPaths,
-    ...rolePaths,
-    ...featurePaths,
-    ...breedPaths,
-    ...brandPaths,
-    ...categoryPaths,
-    ...tagPaths,
-    ...productPaths,
-    ...petPaths,
-    ...auditLogPaths,
-    ...logPaths,
-  },
+  // Os paths saem inteiros da tabela de rotas do contrato (`./adapter`):
+  // nenhum path, schema ou prosa de rota é declarado aqui.
+  paths: buildPathsFromRouteTable(),
 };
 
 let cachedDocument: OpenApiDocument | undefined;

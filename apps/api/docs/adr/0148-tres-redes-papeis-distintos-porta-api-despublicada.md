@@ -54,8 +54,8 @@ construção. Deploy de um serviço só (`pnpm prod:up api`) não toca a rede, p
 serviço não remove nada. O que a 10.17 ensinou continua valendo para o que **ainda** liga stacks
 diferentes: a `proxy`, do nginx, segue `external:`, criada uma vez no host, e é a única rede que
 o guia de deploy manda criar. A `pet-oasis` externa que ficou no host antigo é removida na
-transição de host — passo que entra no [guia de deploy](../guides/deploy.md#redes) na reescrita
-dele para o monorepo (issue 13 da Fase 11).
+transição de host — passo que a reescrita do guia para o monorepo (issue 13 da Fase 11) gravou
+no [guia de deploy do stack](../../../../docs/guides/deploy.md#redes).
 
 **A porta 3000 deixou de ser publicada no host em produção** — o nginx alcança a API por DNS de
 container, então a publicação não tinha mais função. Isso não é higiene: é a metade que torna

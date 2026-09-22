@@ -71,6 +71,9 @@ cp apps/web/.env.example apps/web/.env.production   # hoje vazio de variáveis; 
 pnpm prod:up web
 ```
 
+O procedimento completo está em [`docs/guides/deploy.md`](docs/guides/deploy.md); o que vale
+para o stack inteiro (host, redes, proxy hosts), no [guia da raiz](../../docs/guides/deploy.md).
+
 ## Documentação
 
 - [`CLAUDE.md`](CLAUDE.md) — o que é específico do web; o geral está no
@@ -78,6 +81,8 @@ pnpm prod:up web
 - [`CONTEXT.md`](CONTEXT.md) — glossário do domínio (o mapa dos contextos é o
   [`CONTEXT-MAP.md`](../../CONTEXT-MAP.md) da raiz)
 - [`docs/adr/`](docs/adr/README.md) — decisões estruturais
+- [`docs/guides/deploy.md`](docs/guides/deploy.md) — deploy só do web; o do stack inteiro é o
+  [da raiz](../../docs/guides/deploy.md)
 - [`docs/design-system.md`](docs/design-system.md) — direção visual, tokens e contrastes medidos
 - [`.scratch/fase-12-web-auth-spine/`](../../.scratch/fase-12-web-auth-spine/) — a spec
   e as issues da Fase 12 (espinha de autenticação), no tracker da raiz

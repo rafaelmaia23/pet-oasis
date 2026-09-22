@@ -260,7 +260,7 @@ pnpm run dev
 API em `http://localhost:3000/api/v1`, referência interativa em `/reference` e os emails de verificação caindo no [Mailpit](https://mailpit.axllent.org/) em `http://localhost:8025`.
 
 📘 **Passo a passo completo, comandos e fluxo de contribuição:** [`docs/guides/dev.md`](docs/guides/dev.md)
-🚢 **Deploy em produção (VPS ARM64, Compose por ambiente):** [`docs/guides/deploy.md`](docs/guides/deploy.md)
+🚢 **Deploy da API em produção (VPS ARM64):** [`docs/guides/deploy.md`](docs/guides/deploy.md) — o do stack inteiro é o [da raiz](../../docs/guides/deploy.md)
 
 Há também uma coleção [Bruno](https://www.usebruno.com/) versionada em [`api-collection/`](api-collection/), organizada por módulo, com environments `local` e `prod` e o login já encadeando o token nas demais requests.
 
@@ -297,7 +297,7 @@ Ambos são idempotentes (`pnpm run db:seed` não duplica nada) e restaurados tod
 | ✅ | 9 | Pets ligados a Customers (CRUD, escopos *own*/*others*, falecimento ≠ exclusão) e catálogo completo: produto/variante, marca, categoria em árvore, tag, vitrine pública com view por feature efetiva, busca textual com tolerância a erro de digitação e upload de imagem — sem checkout |
 | ✅ | 10 | Desbloqueio do front web e dívida de deploy: janela de graça no refresh, `code`s estáveis de login, redes e domínio, seed fail-open por classe de dado |
 | ✅ | 11 | O repositório vira o monorepo `pet-oasis`: `apps/api` + `apps/web` + o contrato compartilhado `@pet-oasis/api-contracts`, pnpm workspaces, Turborepo, Conventional Commits e CI |
-| ⬜ | 12 | Espinha de autenticação do web (fase do `apps/web`) |
+| 🔄 | 12 | Espinha de autenticação do web (fase do `apps/web`) |
 | 🔜 | 13 | Carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) |
 
 Detalhe atômico de cada item em [`docs/todo.md`](../../docs/todo.md).
@@ -318,7 +318,7 @@ de sistema, no [índice de ADRs da raiz](../../docs/adr/README.md).
 | [`docs/adr/`](docs/adr/) | Architecture Decision Records: as escolhas estruturais (`0001`–`0010`) e uma decisão por arquivo daí em diante |
 | [`docs/todo.md`](../../docs/todo.md) | Roadmap por fase (na raiz do monorepo), com o tracker em [`.scratch/`](../../.scratch/README.md) |
 | [`docs/reference/`](docs/reference/) | Consulta pontual: [rotas](docs/reference/endpoints.md), [política de log](docs/reference/logging-policy.md), [backlog](../../docs/reference/backlog.md) |
-| [`docs/guides/`](docs/guides/) | Como fazer: [ambiente de dev](docs/guides/dev.md), [deploy](docs/guides/deploy.md), [documentar endpoint](docs/guides/documenting-endpoints.md) |
+| [`docs/guides/`](docs/guides/) | Como fazer: [ambiente de dev](docs/guides/dev.md), [deploy da API](docs/guides/deploy.md), [documentar endpoint](docs/guides/documenting-endpoints.md) |
 | [`CLAUDE.md`](CLAUDE.md) | Convenções do projeto, escritas para orientar assistência de IA |
 
 ---

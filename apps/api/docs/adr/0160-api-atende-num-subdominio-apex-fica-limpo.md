@@ -72,4 +72,4 @@ o container dele e provar os quatro fluxos ponta a ponta é trabalho do `pet-oas
 
 A configuração do reverse proxy (Nginx Proxy Manager, certificado por desafio DNS na
 Cloudflare) continua **fora deste repositório** (mesmo motivo da seção seguinte); a forma que o
-proxy host precisa ter e a verificação estão em [`deploy.md`](../guides/deploy.md).
+proxy host precisa ter está no [guia do stack](../../../../docs/guides/deploy.md#o-que-cada-proxy-host-precisa-ter) (a forma vale para os dois apps) e o que é da API, com a verificação, em [`deploy.md`](../guides/deploy.md) dela.

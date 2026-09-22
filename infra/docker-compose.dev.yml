@@ -90,6 +90,14 @@ services:
     # /workspace/apps/api): o watcher precisa do node_modules do workspace, que
     # fica em /workspace/node_modules, então o app não pode viver num /app raso
     # como em produção.
+    #
+    # Este caminho é o mesmo que o estágio `dev` de ../apps/api/Dockerfile fixa no
+    # `WORKDIR`, e a repetição é deliberada: **mudou um lado, muda o outro**. A
+    # divergência não estoura — o mount cria o diretório errado, o watcher segue
+    # lendo o fonte assado na imagem e o hot reload só para de funcionar —, e é
+    # por isso que os dois arquivos se nomeiam mutuamente. O porquê de não haver
+    # variável compartilhada está em
+    # apps/api/docs/adr/0201-dockerfile-api-estagio-base-runtime-fora-dele.md.
     volumes:
       - ../apps/api/src:/workspace/apps/api/src
       - ../apps/api/prisma:/workspace/apps/api/prisma

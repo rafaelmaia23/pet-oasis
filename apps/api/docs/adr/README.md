@@ -362,13 +362,14 @@ perfil o user continua existindo, só o `Customer`/`Employee` é soft-deletado.
 - [`0155`](0155-imagem-multi-stage-nao-root.md) Imagem multi-stage e não-root
 - [`0156`](0156-contexto-build-raiz-monorepo-runtime-podado-pnpm-deploy.md) O contexto de build é a raiz do monorepo, e o runtime é podado por `pnpm deploy` (11.2)
 - [`0157`](0157-pacotes-internos-entram-imagem-duas-camadas-deploy-nao.md) Os pacotes internos entram na imagem em duas camadas, e o `deploy` não precisa de `injectWorkspacePackages` (11.3)
-- [`0158`](0158-openssl-vai-tres-estagios-imagem-engine-prisma-detectada.md) O OpenSSL vai nos três estágios da imagem, e a engine do Prisma é detectada (10.5)
+- [`0158`](0158-openssl-vai-tres-estagios-imagem-engine-prisma-detectada.md) O OpenSSL vai nos três estágios da imagem, e a engine do Prisma é detectada (10.5, revisto na 11.14 — `build` e `dev` herdam a instalação do estágio `base`)
 - [`0159`](0159-nao-existe-script-apagar-banco-producao.md) Não existe script para apagar o banco de produção (10.5)
 - [`0160`](0160-api-atende-num-subdominio-apex-fica-limpo.md) A API atende num subdomínio, e o apex fica limpo (10.6)
 - [`0161`](0161-reverse-proxy-upload-existe-nao-neste-repositorio.md) O reverse proxy do upload existe, mas não neste repositório (9.10)
 - [`0162`](0162-diretorio-uploads-mora-fora-working-tree-uid-fixado.md) O diretório de uploads mora fora do working tree, e o uid é fixado no serviço (10.4)
 - [`0163`](0163-container-dev-escreve-como-uid-host-nao-como-root.md) O container de dev escreve como o uid do host, não como root (10.16)
 - [`0164`](0164-sharp-arm64-exige-build-proprio-servidor.md) `sharp` no ARM64 exige build no próprio servidor (9.10)
+- [`0201`](0201-dockerfile-api-estagio-base-runtime-fora-dele.md) O Dockerfile da API tem um estágio `base`, e o `runtime` fica fora dele (11.14)
 
 #### Documentação da API
 

@@ -18,6 +18,14 @@ depois, pelo mesmo motivo pelo outro caminho: o `docker-entrypoint.dev.sh` roda 
 **negativo** — a engine 3.0.x é menor que a 1.1.x o bastante para pagar a camada do apt e sobrar
 (1368,56 MB → 1365,90 MB).
 
+**Revisto na Fase 11.14**, sem que a decisão mude: os três estágios que precisam do OpenSSL
+continuam com ele, mas as instruções de instalação passaram de três para **duas**. O `build` e o
+`dev` deixaram de instalar cada um o seu e passaram a herdar do estágio `base`, que os dois
+estendem ([ADR-0201](0201-dockerfile-api-estagio-base-runtime-fora-dele.md)); o `runtime`, que
+não herda do `base`, mantém a instalação dele. As duas que restam são as duas pontas da mesma
+detecção descritas acima — a do `pnpm install`, agora no `base`, e a do `migrate deploy` de cada
+boot, no `runtime` —, e por isso não são duplicação a eliminar.
+
 **Detectar, e não pinar** com `PRISMA_CLI_BINARY_TARGETS`: o alvo carrega a arquitetura junto da
 versão do SSL (`debian-openssl-3.0.x` contra `linux-arm64-openssl-3.0.x`), então fixá-lo calaria o
 warning e congelaria justamente a fragilidade em ARM64 que motivou o item. Custo medido: +7,34 MB

@@ -12,12 +12,23 @@ público, sem envolver autenticação.
 
 **Status:** ready-for-agent
 
-- [ ] `@pet-oasis/api-contracts` nas dependências por `workspace:*`; o Next o transpila
-      (`transpilePackages`). Nenhum tipo é gerado do OpenAPI e nenhum `.d.ts` é commitado
+- [x] `@pet-oasis/api-contracts` nas dependências por `workspace:*`; o Next o transpila
+      (`transpilePackages`). Nenhum tipo é gerado do OpenAPI e nenhum `.d.ts` é commitado.
+      **Feito na 11.12** (`.scratch/fase-11-monorepo/issues/12-web-consumes-contracts.md`) —
+      não refazer
 - [ ] Cliente HTTP único e tipado (`apiFetch`), ponto exclusivo de contato com a API, tipado
-      pela **tabela de rotas do contrato**: nenhum path é escrito à mão no web
+      pela **tabela de rotas do contrato**: nenhum path é escrito à mão no web. Ele **toma o
+      lugar** de `apps/web/src/lib/api-contract.ts`, o módulo de prova que a 11.12 deixou: as
+      três pontas que ele amarra (schema de request, view de resposta, tabela de rotas) passam
+      a ser amarradas pelo `apiFetch`, e o módulo sai no mesmo commit
 - [ ] Prova negativa, feita e desfeita no mesmo PR: mudar um campo de uma view no contrato
-      faz o `typecheck` do web falhar
+      faz o `typecheck` do web falhar. A 11.12 já a fez nas três pontas, mas **contra o
+      módulo de prova que o `apiFetch` substitui** — então ela se refaz aqui, contra o
+      cliente de verdade. Fica desmarcada de propósito: é trabalho desta issue
+- [ ] O `next build` prova o contrato no **bundle**, não só no `tsc`: com o `apiFetch` sendo
+      importado por um Server Component, o pacote entra no bundle de servidor. A 11.12 mediu
+      isso com uma página descartável e não deixou nada importando o contrato no estado
+      commitado (ela não constrói tela) — aqui o import é de verdade e a prova fica de pé
 - [ ] O cliente resolve o endereço por ambiente: **rede interna do Docker**
       (`http://api:3000/api/v1`) nas chamadas do servidor; endereço público apenas para URL
       de imagem

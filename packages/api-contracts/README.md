@@ -97,7 +97,15 @@ O `exports` aponta para `src/**/*.ts`, não para um `dist/`. É o padrão que o 
 de *just-in-time package*: quem compila o contrato é o consumidor, com o próprio toolchain.
 Todos os consumidores do workspace já compilam TypeScript — o tsup/esbuild que bundla a API, o
 `tsx watch` do container de dev, o Vite por baixo do Vitest e o Next (com
-`transpilePackages: ["@pet-oasis/api-contracts"]`, a única configuração que o web precisa).
+`transpilePackages: ["@pet-oasis/api-contracts"]`, a única configuração que o web precisa —
+mais `zod` como dependência direta dele, porque o web escreve `z.infer` sobre estes schemas).
+
+Isso deixou de ser expectativa na 11.12, quando o web passou a consumir o pacote de fato:
+`next build` e `tsc` do web compilam o fonte do contrato. A medida que surpreendeu está
+anotada no `next.config.ts` do web — o Turbopack do Next 16 compila o pacote **mesmo sem**
+`transpilePackages`; a linha fica porque é ela que fixa o comportamento, e porque é no bundle
+de servidor que depender do acaso custaria caro (pacote externalizado vira `require()` de um
+`.ts` em runtime).
 
 O que se ganha: nenhum passo de build entre editar o contrato e vê-lo no consumidor, nenhum
 `dist/` obsoleto para o IDE resolver por engano, `turbo.jsonc` sem task de build para o pacote,

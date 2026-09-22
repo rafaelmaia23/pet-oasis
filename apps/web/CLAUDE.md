@@ -67,7 +67,9 @@ de `@pet-oasis/tsconfig`, em `packages/tsconfig`, e guarda só o `paths` do dire
 desenho para o Biome, base em `packages/biome-config` mais os domínios `next`/`react` e o
 parser de Tailwind, que são só deste app) · Tailwind 4 (CSS-first: os tokens vivem em
 `@theme`, **não existe `tailwind.config.js`**) · shadcn 4 · `iron-session` 9 ·
-`@pet-oasis/api-contracts` (schemas Zod, views, `ERROR_CODES`, tabela de rotas) · Motion 13 ·
+`@pet-oasis/api-contracts` (schemas Zod, views, `ERROR_CODES`, tabela de rotas) · Zod 4, do
+`catalog:`, como dependência **direta** — o web escreve `z.infer` sobre os schemas do
+contrato, e o pnpm é estrito · Motion 13 ·
 Biome · Vitest + Testing Library + Playwright · Node 24 · pnpm (o do workspace).
 
 **Biome sozinho**, sem ESLint: o domínio `next` do Biome auto-ativa ao detectar `next@>=14`

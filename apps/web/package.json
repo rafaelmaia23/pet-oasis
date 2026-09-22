@@ -18,13 +18,15 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@pet-oasis/api-contracts": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.5",
     "lucide-react": "^1.41.0",
     "next": "16.3.4",
     "next-themes": "^0.4.6",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

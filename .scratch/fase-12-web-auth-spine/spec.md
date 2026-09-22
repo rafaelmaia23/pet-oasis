@@ -347,6 +347,13 @@ rediscute:
   `pnpm test`); `@pet-oasis/api-contracts` por `workspace:*`, consumido do fonte TS com
   `transpilePackages`. Versões compartilhadas (TypeScript, Biome, `@types/node`, Zod, Vitest)
   vêm do `catalog:`; `tsconfig` e `biome.json` estendem os presets de `packages/`.
+- **Os schemas vêm do contrato, nunca de cópia, e a fiação já está feita.** A issue 12 da
+  Fase 11 (`.scratch/fase-11-monorepo/issues/12-web-consumes-contracts.md`) já pôs o pacote
+  nas dependências do web, ligou o `transpilePackages` e deixou
+  `apps/web/src/lib/api-contract.ts` como prova de que renomear um campo de uma view, de um
+  schema de request ou uma entrada da tabela de rotas quebra o `typecheck` do web no mesmo
+  PR. Esta fatia **usa** essa fiação — não a refaz — e substitui aquele módulo de prova pelo
+  `apiFetch` de verdade.
 - **Desenvolvimento: o web roda no host, na porta 3001** (`pnpm dev --filter web`); API,
   Postgres, Redis e Mailpit sobem pelo stack de dev da raiz (`infra/`). É expectativa do web
   que a issue 11 do monorepo executa — o motivo de a API rodar dev em container (Prisma e

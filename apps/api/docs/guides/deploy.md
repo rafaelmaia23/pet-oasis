@@ -122,9 +122,11 @@ conectada à mão depois de cada deploy. Em host novo, antes do primeiro `prod:u
 docker network create proxy   # inofensivo se já existir: erra dizendo que existe
 ```
 
-> Host que rodou a versão anterior deste compose tem uma rede `pet-oasis` órfã, sem serviço
-> nenhum. Nada depende mais dela: `docker network rm pet-oasis` depois que o stack novo subir,
-> ou deixe-a lá — ela não atrapalha.
+> Host que rodou a versão anterior deste compose tem uma rede `pet-oasis` órfã: ela existia
+> para ligar os dois stacks que agora são um, e nenhum serviço a declara mais. Removê-la é
+> parte da transição de host — `docker network rm pet-oasis`, depois que o stack novo subir e
+> os dois containers responderem. Deixá-la para trás não quebra nada, mas guarda um nome que
+> um projeto futuro pode reusar acreditando que é o nosso.
 
 O NPM precisa estar nela (`docker network inspect proxy`) e passa a alcançar a API por
 `http://pet-oasis-api:3000` — o **nome do container**, não o alias `api`, e **não**

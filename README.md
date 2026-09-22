@@ -62,7 +62,7 @@ cacheia de propósito (a suíte depende de Compose e `.env.test`, que o Turbo n�
 um servidor, não um resultado. O que entra no hash, por que cada task tem o `dependsOn` que tem
 e o porquê de `test` ficar fora estão em
 [`apps/api/docs/adr/0104`](apps/api/docs/adr/0104-turborepo-pipeline-workspace-test-fica-fora-cache.md);
-cachear `test` está no backlog da API.
+cachear `test` está no [backlog](docs/reference/backlog.md).
 
 ## Commits
 

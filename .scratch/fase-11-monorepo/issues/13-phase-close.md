@@ -97,8 +97,33 @@ reescrito para o monorepo, `main` virando o monorepo, e o repo renomeado no GitH
 | Pipeline `grill-with-docs → to-spec → to-tickets → implement` como o modo de trabalho de toda fase | `CLAUDE.md` da raiz, § "TODO, roadmap e o pipeline de trabalho"; o caminho desenhado em `docs/README.md` |
 | ("Out of Scope") deploy automático, remote cache, cache de `test`, versionar/publicar/quebrar o contrato, apps novos | `docs/adr/0005-…`, § "O que ficou de fora, de propósito" — **cada item com o gatilho para revisitar**, que é o que a issue pedia e a spec não tinha |
 | ("Testing Decisions") suíte HTTP como oráculo; paridade de enum; pureza do contrato; paridade de rotas | `apps/api/docs/adr/0198-…` (as duas guardas do contrato) e `docs/adr/0003-…` (a paridade de rotas); a prática, no `CLAUDE.md` da API |
+| ("Fecho") ADR de sistema; rename do repo; `todo.md` destilado; decisões promovidas antes de fechar | Esta issue — os artefatos estão nos checkboxes acima; o rename já estava feito quando o fecho começou |
+| ("Further Notes") 9 de 29 arquivos da API importavam enum do Prisma | `apps/api/docs/adr/0199-…` (a migração schema a schema) e `0198-…` (o teste de paridade que substituiu o acoplamento) |
+| ("Further Notes") TS/Biome/`@types/node` divergentes entre API e web | `docs/adr/0006-…` — o `catalog:` e as duas exceções |
+| ("Further Notes") o `.dockerignore` de cada app precisa excluir o **outro** app | `docs/adr/0007-…`, § "Uma imagem por app" |
 | ("Further Notes") systemd chama o container pelo nome — conferir no fecho | **Conferido:** `container_name: pet-oasis-api` inalterado em `infra/docker-compose.prod.yml`; registrado no `deploy.md`, § "Timers de manutenção" |
 
 Nenhuma decisão ficou sem dono. Três ADRs novos foram necessários (`docs/adr/0005`, `0006`,
 `0007`) mais um da API (`0202`), e o índice de ADRs de sistema — que faltava desde a issue 07 —
 nasceu junto.
+
+## O que o code-review do fecho achou, e o que foi corrigido
+
+Os dois sub-agentes de review pararam por limite de cota da conta (HTTP 429), então a revisão
+foi feita à mão, nos mesmos dois eixos. Quatro achados, todos corrigidos antes do merge:
+
+1. **Duplicação (padrão do repo: uma decisão, um dono).** O `0007` re-argumentava o desenho de
+   redes, que é do `0148` da API, e o contexto de build com `Dockerfile.dockerignore`, que é do
+   `0156`. Os dois trechos viraram ponteiro, e no lugar ficou só o que é de sistema: "rede que
+   liga serviços do mesmo stack é do stack" e "como um app não vê o outro" (install filtrado +
+   o glob de manifestos).
+2. **Detalhe inventado.** O `0007` afirmava que a revisão da issue 11 "recusou a versão com um
+   `COPY` por app"; a issue diz só que o critério é "um app novo não muda nenhuma dessas
+   linhas". Reescrito para o que a fonte sustenta.
+3. **Afirmação errada, repetida em dois lugares.** "Cachear `test` está no backlog **da API**"
+   — o backlog é o da raiz, `docs/reference/backlog.md`. Corrigido no `0005` e no `README.md`
+   da raiz (onde já estava errado antes desta issue).
+4. **Estado envelhecido pelo próprio fecho.** O `CLAUDE.md` da raiz dizia "a Fase 11 está
+   aberta"; passou a dizer fechada, com a 12 aberta e a 13 nomeada. O `deploy.md` dizia que a
+   rede `pet-oasis` órfã "não atrapalha", enquanto o `0148` a trata como passo de transição de
+   host — o guia passou a mandar removê-la, com o motivo.

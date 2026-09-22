@@ -21,11 +21,12 @@ deploy de um não pode derrubar o outro. Isso foi **provado à mão nas duas dir
 Quatro consequências decidiram a forma do arquivo, e cada uma existe contra um modo de falha
 concreto:
 
-- **A rede entre API e web é do stack (`frontend`), não `external:`.** A `pet-oasis` externa da
-  Fase 10 (10.17) existia porque ligava **dois** stacks, e rede que liga stacks vive mais que
-  qualquer um deles. Com os dois serviços no mesmo stack, a rede nasce no `up` e morre no
-  `down`, e "o up do web falhou porque a rede da API não existe" deixa de ser possível por
-  construção. A `proxy` do nginx continua externa, porque o proxy é de fora do repositório.
+- **A rede entre API e web deixa de ser externa.** É a consequência direta de o stack ser um
+  só, e quem a narra — com o incidente que a motivou e a reversão da `pet-oasis` da 10.17 — é
+  a [`0148`](../../apps/api/docs/adr/0148-tres-redes-papeis-distintos-porta-api-despublicada.md)
+  da API, que é dona do desenho de redes desde a Fase 10. Aqui só fica a regra de sistema: rede
+  que liga serviços **do mesmo stack** é do stack; `external:` é para o que liga stacks
+  diferentes, e sobrou só a `proxy` do nginx.
 - **O `web` é declarado inteiro no override de produção, não na base.** Serviço declarado na
   base sobe em **todo** ambiente, e o web só existe como container em produção: em dev ele roda
   no host (`pnpm --filter web dev`, HMR nativo na 3001) e em teste não existe. Quando um
@@ -46,14 +47,16 @@ stack de produção é do sistema; `dev*` e `test:services:*` ficam em `apps/api
 `../../infra`, porque em dev e em teste o stack é o **dela** — o web roda no host, e a suíte
 sobe só Postgres e Redis. O critério é "de quem é o que sobe", não "onde está o arquivo".
 
-**Uma imagem por app, construída da raiz do monorepo.** O contexto de build é a raiz (é onde
-vivem o lockfile e o workspace, e o pnpm só instala um projeto de dentro do workspace dele), e
-por isso o ignore que vale é o `Dockerfile.dockerignore` **ao lado de cada Dockerfile**: cada
-app exclui `apps/*` menos o próprio e menos os manifestos (`!apps/*/package.json`), que entram
+**Uma imagem por app, construída da raiz do monorepo.** O contexto na raiz e o
+`Dockerfile.dockerignore` por app já eram a forma da API desde a issue 02, e o porquê é dela
+([`0156`](../../apps/api/docs/adr/0156-contexto-build-raiz-monorepo-runtime-podado-pnpm-deploy.md)).
+O que o segundo app acrescentou, e é decisão de sistema, é **como um app não vê o outro**: o
+install é filtrado (`--filter api...`, `--filter web...`) e cada `Dockerfile.dockerignore`
+exclui `apps/*` menos o próprio app e menos os manifestos (`!apps/*/package.json`), que entram
 por um glob só (`COPY --parents apps/*/package.json packages/*/package.json`) porque o lockfile
-os lista como importers. Um app novo não muda nenhuma dessas linhas. O install é filtrado
-(`--filter api...`, `--filter web...`), e o resultado foi inspecionado nos dois targets:
-nenhum `next`/`react` na imagem da API, nenhum Prisma na do web.
+os lista como importers. **Um app novo não muda nenhuma dessas linhas** — é o critério que a
+revisão da issue 11 fixou, e é o que separa este arranjo de um `COPY` por app. O resultado foi
+inspecionado nos dois targets: nenhum `next`/`react` na imagem da API, nenhum Prisma na do web.
 
 **No web, `pnpm deploy` vem antes do `next build`, e sem `--prod`.** A ordem é a decisão: o
 deploy existe para o build acontecer **fora do workspace**, onde o `next build` não enxerga a

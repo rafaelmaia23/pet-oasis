@@ -77,8 +77,8 @@ diluído a fase:
   cache local já paga.
 - **Cachear `test` no Turbo.** A suíte da API sobe Postgres via Compose e lê `.env.test`;
   cachear exigiria declarar esses inputs, e o risco é **falso-verde** — o pior defeito possível
-  numa suíte. Está no backlog da API, e revisitar quer dizer declarar os inputs, não ligar a
-  flag.
+  numa suíte. Está em [`docs/reference/backlog.md`](../reference/backlog.md) com o método, e
+  revisitar quer dizer declarar os inputs e provar a invalidação, não ligar a flag.
 - **Versionar ou publicar o contrato, e quebrá-lo por domínio.** Enquanto os consumidores
   vivem no mesmo repo, `workspace:*` já é a versão certa, sempre. Revisitar no dia em que um
   cliente **fora** do monorepo precisar consumi-lo.

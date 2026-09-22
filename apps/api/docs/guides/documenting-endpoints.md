@@ -1,8 +1,8 @@
 # Documentar um endpoint/módulo novo (OpenAPI + Scalar + Bruno)
 
-> Checklist do que fazer, além do código, sempre que nascer um endpoint ou módulo novo, para ele aparecer no `/openapi.json`, na UI `/reference` (Scalar) e na coleção Bruno. A fonte da doc são os **próprios schemas Zod** — nada de escrever OpenAPI à mão.
+> Checklist do que fazer, além do código, sempre que nascer um endpoint ou módulo novo, para ele aparecer no `/openapi.json`, na UI `/reference` (Scalar) e na coleção Bruno. A fonte da doc são os **próprios schemas Zod** e a **tabela de rotas do contrato** — nada de escrever OpenAPI à mão.
 
-O `/reference` (Scalar) só consome o `/openapi.json`; então **documentar o OpenAPI já cobre o Scalar**. Sobra o Bruno, que é manual. São 3 frentes: schemas → path → Bruno.
+O `/openapi.json` é **derivado** da tabela de rotas de `@pet-oasis/api-contracts/routes` ([`docs/adr/0003`](../../../../docs/adr/0003-route-table-is-contract-openapi-is-derived.md)), e o `/reference` (Scalar) só consome o `/openapi.json`; então **registrar a rota na tabela já cobre os dois**. Sobra o Bruno, que é manual. São 3 frentes: schemas → tabela de rotas → Bruno.
 
 ---
 
@@ -22,39 +22,62 @@ const defaultView = z.object({
 }).meta({ id: "Role", description: "Papel do sistema" });
 ```
 
-## 2. Registrar o path em `src/docs/paths/<mod>.ts`
+## 2. Registrar a rota na tabela do contrato
 
-Uma entrada por rota, no objeto `<mod>Paths` (tipo `ZodOpenApiPathsObject`). Path param vai como `{id}` (chaves), não `:id`.
+O path **não** mora na API: a rota inteira vive em
+`packages/api-contracts/src/routes/<domínio>.routes.ts`, um módulo por domínio agregado em
+`src/routes/index.ts`. A entrada é nomeada pela **operação** (`routes.role.get`), e o path vai
+na forma do **Express** (`:id`) — quem converte para `{id}` é o adaptador da API.
 
 ```ts
-export const rolePaths: ZodOpenApiPathsObject = {
-  "/roles/{id}": {
-    get: {
-      tags: ["Roles"],
-      summary: "Busca um papel por id — exige read:role",
-      ...fromEnvelope(roleParamsSchema),        // params/query/body do envelope
-      responses: {
-        200: jsonResponse("Papel encontrado", roleViews.default),
-        401: errorResponses[401],
-        403: errorResponses[403],
-        404: errorResponses[404],
-      },
+export const roleRoutes = {
+  get: {
+    method: "GET",
+    path: "/roles/:id",
+    tag: "Roles",
+    auth: "bearer",                 // ou "public" — a rota que responde sem token
+    summary: "Busca um papel por id — exige read:role",
+    request: roleParamsSchema,      // envelope z.object({ body?, params?, query? })
+    responses: {
+      200: { description: "Papel encontrado", view: roleViews.default },
+    },
+    errors: {
+      401: errorResponses[401],
+      403: errorResponses[403],
+      404: errorResponses[404],
     },
   },
-};
+} satisfies RouteGroup;
 ```
 
-Peças reutilizáveis (de `src/docs/components.ts` e `helpers.ts`):
-- **`fromEnvelope(schema)`** — extrai `params → path`, `query → query`, `body → requestBody` do envelope. Só emite o que existir; use quando a rota tem params/query/body.
-- **`jsonResponse(desc, schema)`** — resposta com corpo JSON (passar a **view**, ou `z.array(view)` para listas).
-- **`errorResponses[400|401|403|404|409|422]`** — respostas de erro padrão; liste as que a rota realmente pode retornar.
-- **`noContentResponse`** — para sucesso **204** (sem corpo).
-- **Rota pública** (sem token): adicionar `security: []` na operação (o default do documento é `bearerAuth`). Ex.: tudo em `/auth`.
+Peças reutilizáveis (de `src/routes/responses.ts` e `src/pagination/list-envelope.ts`):
+- **`view`** — a view do presenter. Uma listagem envolve a view num envelope:
+  `offsetList(view)` (`?page=&limit=`), `cursorList(view)` (`?cursor=&limit=`) ou
+  `staticList(view)` (coleção pequena, `meta {}`).
+- **Escada de capability** — quando a **forma** da resposta muda com a feature efetiva de quem
+  chama, `view` é o array dos degraus em ordem (`[productViews.public, …internal, …cost]`); o
+  adaptador publica a união. Uma view só quando a forma é uma só.
+- **`{ description }` sem `view`** — sucesso **204**; use a constante `noContent`.
+- **`errorResponses[400|401|403|404|409|413|422|429|503]`** — o shape de erro por status; liste
+  só os que a rota realmente devolve. Precisa de prosa própria num status? Espalhe a entrada e
+  sobrescreva a `description` (é o que o 403 do login faz).
+- **`upload: "image"`** — a rota recebe `multipart/form-data` com um arquivo em `file`. O
+  formato aceito e o teto de tamanho são do servidor e ficam na API (`src/docs/components.ts`).
 
-## 3. Se for um MÓDULO novo — ligar no documento
+⚠️ O contrato **só depende de `zod`**. Se a rota parece precisar de `env`, Prisma ou Express
+para ser declarada, a peça que precisa disso é do servidor — vá para `src/docs/components.ts`.
 
-1. Criar `src/docs/paths/<mod>.ts` exportando `<mod>Paths`.
-2. Em `src/docs/openapi.ts`: **importar** e dar **spread** em `paths: { ... }`, e acrescentar uma entrada em `tags: [...]` (a tag usada nas operações).
+## 3. Se for um MÓDULO novo — ligar nas duas pontas
+
+1. Criar `packages/api-contracts/src/routes/<mod>.routes.ts` exportando `<mod>Routes` e
+   acrescentar a entrada em `src/routes/index.ts` (a ordem ali é a ordem dos paths no
+   `/openapi.json`).
+2. Em `apps/api/src/docs/openapi.ts`: acrescentar uma entrada em `tags: [...]` — a prosa do
+   grupo é do documento, e a tag usada em cada rota vem da tabela. **Os paths não são tocados**:
+   `buildPathsFromRouteTable()` já os monta da tabela inteira.
+3. Montar o router do Express no `src/routes/index.ts` da API. O
+   `tests/unit/contracts/routeParity.test.ts` fica vermelho até os dois lados casarem — é ele
+   que garante que o documento não descreve rota que não existe, nem esquece rota que existe.
 
 ## 4. Bruno (`api-collection/`) — manual
 
@@ -74,9 +97,9 @@ Peças reutilizáveis (de `src/docs/components.ts` e `helpers.ts`):
 ## 5. Fechar
 
 - Atualizar o índice interno **`docs/reference/endpoints.md`** (1 linha por rota — não é OpenAPI, é o mapa rápido).
-- `pnpm run typecheck` + `pnpm run lint` verdes. O `openapi.test.ts` roda em `pnpm test` e falha se a doc vazar campo sensível ou se um path sumir — rodar a suíte.
+- `pnpm run typecheck` + `pnpm run lint` verdes. O `routeParity.test.ts` falha se a tabela e o router divergirem, e o `openapi.test.ts` falha se a doc vazar campo sensível ou se um path sumir — rodar a suíte.
 - Conferir no ar (opcional): `pnpm run dev` → `GET /openapi.json` e `/reference` mostram a rota nova; validar o `.bru` com `@usebruno/cli` se quiser.
 
 ---
 
-**Regra de ouro:** o contrato é o schema Zod. Se a doc de um endpoint parece exigir escrever OpenAPI à mão, provavelmente falta um `.meta()` num schema/view.
+**Regra de ouro:** o contrato é o schema Zod mais a tabela de rotas. Se a doc de um endpoint parece exigir escrever OpenAPI à mão, provavelmente falta um `.meta()` num schema/view — ou um campo na entrada da tabela.

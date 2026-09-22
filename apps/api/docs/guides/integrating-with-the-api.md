@@ -291,8 +291,15 @@ allowlist dele.
 
 ## 8. Descobrir o resto
 
+- **A tabela de rotas do contrato** — `routes.<domínio>.<operação>` em
+  [`@pet-oasis/api-contracts/routes`](../../../../packages/api-contracts/README.md) é a
+  **fonte dos paths**: método, path, schema de request, resposta e shape de erro por status, e
+  se a rota é pública ou exige bearer. Um cliente do workspace não escreve `"/auth/login"` à
+  mão — importa `routes.auth.login.path` e deixa o `typecheck` reclamar quando a API mudar. O
+  `/openapi.json` é derivado desta tabela, não o contrário.
 - **`GET /openapi.json`** (público, na **raiz do host** — não sob `/api/v1`) — a especificação
-  OpenAPI 3.1, gerada dos schemas Zod. É a fonte para gerar tipos no cliente.
+  OpenAPI 3.1, derivada da tabela de rotas e dos schemas Zod. É a fonte para gerar tipos em
+  cliente que **não** compartilha o workspace (um serviço de terceiro, outra linguagem).
 - **`GET /reference`** (público, também na raiz) — a UI Scalar, interativa, com "try it".
 - [`docs/reference/endpoints.md`](../reference/endpoints.md) — a lista de rotas em prosa, com
   a feature exigida por cada uma.

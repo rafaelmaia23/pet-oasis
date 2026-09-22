@@ -10,7 +10,10 @@
 Todo schema de request (create, update, query, path) e toda view de resposta vivem em
 `packages/api-contracts/src/<domínio>/` — `user`, `auth`, `me`, `role`, `feature`, `permission`,
 `pet`, `catalog`, `audit-log`, `log`, `pagination`, `errors` —, e a API os **importa** de lá:
-controllers, presenters, `docs/paths/*` e testes. Nenhum `*.schema.ts` sobrou em
+controllers, presenters, a geração do OpenAPI e testes. (A tabela de paths que ainda era da API
+quando isto foi escrito também virou contrato logo depois, na issue 17 —
+[`docs/adr/0003`](../../../../docs/adr/0003-route-table-is-contract-openapi-is-derived.md) da
+raiz.) Nenhum `*.schema.ts` sobrou em
 `apps/api/src/modules/`; os `*.presenter.ts` sobraram, mas só com o helper de whitelist aplicado
 sobre a view importada (`createPresenter(userViews)`) e o que é serialização da API (`maskIp`).
 A resolução de view por feature efetiva (`resolveUserView`, `readViewFor`) continua na API — quem sabe

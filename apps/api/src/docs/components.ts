@@ -1,18 +1,15 @@
 /// <reference types="zod-openapi" />
 
-import {
-  errorResponseSchema,
-  validationErrorResponseSchema,
-} from "@pet-oasis/api-contracts/errors";
-import {
-  cursorMetaSchema,
-  offsetMetaSchema,
-} from "@pet-oasis/api-contracts/pagination";
 import { z } from "zod";
 import type {
-  ZodOpenApiResponseObject,
+  ZodOpenApiOperationObject,
   ZodOpenApiSecuritySchemeObject,
 } from "zod-openapi";
+
+// O que o **servidor** acrescenta ao documento, e que por isso não cabe na
+// tabela de rotas do contrato: como o token viaja e como um upload chega. Todo
+// o resto — path, request, resposta, prosa — vem de
+// `@pet-oasis/api-contracts/routes`.
 
 export const securitySchemes = {
   bearerAuth: {
@@ -23,74 +20,32 @@ export const securitySchemes = {
   } satisfies ZodOpenApiSecuritySchemeObject,
 };
 
-function jsonResponse(
-  description: string,
-  schema: z.ZodType,
-): ZodOpenApiResponseObject {
-  return { description, content: { "application/json": { schema } } };
+/**
+ * Corpo `multipart/form-data` de um upload de imagem (9.10). Um campo, um
+ * arquivo — a API não aceita lote: o cliente que deixa o usuário escolher oito
+ * fotos dispara oito requests, e ganha progresso e retry por imagem.
+ *
+ * Mora aqui, e não no contrato, porque tudo o que ele declara é do servidor: o
+ * teto de tamanho é do multer (**não** do `JSON_BODY_LIMIT`, que só age em
+ * `application/json`), e os formatos aceitos são os que o pipeline de imagem
+ * sabe converter. A tabela de rotas só diz `upload: "image"`.
+ */
+export function imageUploadBody(sizeLimitBytes: number) {
+  return {
+    requestBody: {
+      required: true,
+      content: {
+        "multipart/form-data": {
+          schema: z.object({
+            file: z.string().meta({
+              format: "binary",
+              description: `Imagem JPEG, PNG ou WebP de até ${Math.floor(
+                sizeLimitBytes / (1024 * 1024),
+              )} MB. O formato é conferido pelos bytes do arquivo, não pela extensão nem pelo Content-Type; a saída é sempre WebP, em dois tamanhos.`,
+            }),
+          }),
+        },
+      },
+    },
+  } satisfies Pick<ZodOpenApiOperationObject, "requestBody">;
 }
-
-// Respostas de erro reutilizáveis — referenciar por código nas operações. O
-// shape (envelope comum e o 422 com `errors` por campo) é contrato: vem de
-// `@pet-oasis/api-contracts/errors`, o mesmo que o cliente usa para ler.
-export const errorResponses = {
-  400: jsonResponse("Requisição malformada", errorResponseSchema),
-  401: jsonResponse(
-    "Não autenticado (token ausente ou inválido)",
-    errorResponseSchema,
-  ),
-  403: jsonResponse("Sem permissão para executar a ação", errorResponseSchema),
-  404: jsonResponse("Recurso não encontrado", errorResponseSchema),
-  409: jsonResponse("Conflito — valor único já em uso", errorResponseSchema),
-  // 9.10: upload acima de UPLOAD_MAX_FILE_SIZE_BYTES. O teto é do multer — o
-  // JSON_BODY_LIMIT só age em `application/json` e não alcança multipart.
-  413: jsonResponse(
-    "Arquivo maior que o tamanho máximo permitido",
-    errorResponseSchema,
-  ),
-  422: jsonResponse("Erro de validação", validationErrorResponseSchema),
-  // 10.22: rate limit por IP e lockout por usuário respondem o mesmo 429 — mesmo
-  // `code`, mesma prosa —, e ambos carregam `Retry-After`. O cliente usa o
-  // valor, não a mensagem; a spec precisa declará-lo para quem gera tipos.
-  429: {
-    ...jsonResponse("Muitas tentativas — limite excedido", errorResponseSchema),
-    headers: z.object({
-      "Retry-After": z.number().int().positive().meta({
-        description:
-          "Segundos até a próxima tentativa ser aceita (rate limit ou lockout de conta).",
-        example: 900,
-      }),
-    }),
-  },
-  // 10.7: dependência externa indisponível. É **retentável** — o cliente que
-  // recebe isso no refresh deve tentar de novo, não deslogar.
-  503: jsonResponse(
-    "Dependência externa indisponível — tente novamente",
-    errorResponseSchema,
-  ),
-} satisfies Record<number, ZodOpenApiResponseObject>;
-
-// Resposta de sucesso sem corpo (204).
-export const noContentResponse: ZodOpenApiResponseObject = {
-  description: "Sucesso, sem conteúdo",
-};
-
-// Envelope `{ data, meta }` das listagens (D4). Uma variante por estratégia de
-// paginação; `staticList` é o envelope de meta vazio das listas que não paginam.
-const emptyMetaSchema = z
-  .object({})
-  .meta({ id: "EmptyMeta", description: "Sem metadados de paginação" });
-
-export function offsetList(view: z.ZodType) {
-  return z.object({ data: z.array(view), meta: offsetMetaSchema });
-}
-
-export function cursorList(view: z.ZodType) {
-  return z.object({ data: z.array(view), meta: cursorMetaSchema });
-}
-
-export function staticList(view: z.ZodType) {
-  return z.object({ data: z.array(view), meta: emptyMetaSchema });
-}
-
-export { jsonResponse };

@@ -46,3 +46,15 @@ const accessTokenView = z
 export const accessTokenViews = { default: accessTokenView } as const;
 
 export type AccessTokenView = keyof typeof accessTokenViews;
+
+// A resposta genérica dos fluxos que não podem revelar se o email existe
+// (reenvio de verificação, esqueci a senha) e do signup que caiu no ramo de
+// reativação. Só uma frase para o usuário: qualquer campo a mais aqui viraria
+// oráculo de existência de conta.
+const messageView = z
+  .object({ message: z.string() })
+  .meta({ id: "MessageResponse" });
+
+export const messageViews = { default: messageView } as const;
+
+export type MessageView = keyof typeof messageViews;

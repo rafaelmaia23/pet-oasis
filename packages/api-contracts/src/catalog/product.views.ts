@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { offsetMetaSchema } from "../pagination/pagination.schema";
 import { petSpeciesSchema } from "../pet/pet.enums";
 import { brandViews } from "./brand.views";
 import { productStatusSchema } from "./catalog.enums";
@@ -229,3 +230,32 @@ export const productImageViews = {
 } as const;
 
 export type ProductImageView = keyof typeof productImageViews;
+
+/**
+ * A listagem de produtos ganha `meta.search` **só** quando veio `?q=` (9.9/Z15):
+ * o eco do que foi digitado e do que de fato foi buscado depois da correção de
+ * digitação. Fica numa meta própria, e não na `offsetMetaSchema` genérica, para
+ * o campo não ser prometido em toda lista paginada do projeto.
+ */
+const searchMetaSchema = z
+  .object({
+    q: z.string().meta({ example: "racao golen" }),
+    applied: z.string().meta({ example: "racao golden" }),
+  })
+  .meta({
+    id: "ProductSearchMeta",
+    description: "O que foi digitado e o que de fato foi buscado",
+  });
+
+export const productListMetaSchema = offsetMetaSchema
+  .extend({ search: searchMetaSchema.optional() })
+  .meta({
+    id: "ProductListMeta",
+    description: "Paginação por offset, mais o eco da busca quando há `?q=`",
+  });
+
+// A resposta da reordenação: a fila inteira, na ordem nova. Sem `meta` — não é
+// listagem paginada, é o estado resultante de uma escrita.
+export const productImageListSchema = z.object({
+  data: z.array(productImageView),
+});

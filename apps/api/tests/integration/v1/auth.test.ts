@@ -146,21 +146,27 @@ afterEach(async () => {
 });
 
 /**
- * `expiresIn` é contrato (11.16): inteiro, positivo, e igual ao que o próprio
- * token diz (`exp - iat`). Decodificar aqui é legítimo — o teste é da emissora;
- * é o **cliente** que o guia proíbe de decodificar.
+ * O corpo que login e refresh prometem (11.16): o token, o prazo — e nada mais.
+ * `expiresIn` é inteiro, positivo e igual ao que o próprio token diz
+ * (`exp - iat`); decodificar aqui é legítimo, porque o teste é da emissora — é
+ * o **cliente** que o guia proíbe de decodificar.
  */
-function expectExpiresInToMatchToken(body: {
-  accessToken: string;
-  expiresIn: number;
-}) {
-  const payload = jwt.decode(body.accessToken) as jwt.JwtPayload;
+function expectAccessTokenBody(body: unknown) {
+  expect(body).toEqual({
+    accessToken: expect.any(String),
+    expiresIn: expect.any(Number),
+  });
+  expect(body).toMatchView(accessTokenViews.default);
 
-  expect(Number.isInteger(body.expiresIn)).toBe(true);
-  expect(body.expiresIn).toBeGreaterThan(0);
-  expect(body.expiresIn).toBe(
-    (payload.exp as number) - (payload.iat as number),
-  );
+  const { accessToken, expiresIn } = body as {
+    accessToken: string;
+    expiresIn: number;
+  };
+  const payload = jwt.decode(accessToken) as jwt.JwtPayload;
+
+  expect(Number.isInteger(expiresIn)).toBe(true);
+  expect(expiresIn).toBeGreaterThan(0);
+  expect(expiresIn).toBe((payload.exp as number) - (payload.iat as number));
 }
 
 describe("POST /api/v1/auth/signup", () => {
@@ -372,12 +378,7 @@ describe("POST /api/v1/auth/login", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      accessToken: expect.any(String),
-      expiresIn: expect.any(Number),
-    });
-    expect(response.body).toMatchView(accessTokenViews.default);
-    expectExpiresInToMatchToken(response.body);
+    expectAccessTokenBody(response.body);
   });
 
   it("should set the refresh token as an httpOnly, non-secure cookie scoped to /api/v1/auth", async () => {
@@ -742,12 +743,7 @@ describe("POST /api/v1/auth/refresh", () => {
       .set("Cookie", refreshCookie);
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      accessToken: expect.any(String),
-      expiresIn: expect.any(Number),
-    });
-    expect(response.body).toMatchView(accessTokenViews.default);
-    expectExpiresInToMatchToken(response.body);
+    expectAccessTokenBody(response.body);
 
     const newRefreshCookie = extractRefreshCookie(response);
     expect(newRefreshCookie).not.toBe(refreshCookie);

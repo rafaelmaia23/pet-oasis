@@ -20,8 +20,10 @@ export function listRecentLogs(query: ListRecentLogsQuery) {
     meta: {
       count: data.length,
       capacity: env.LOG_BUFFER_SIZE,
-      perProcess: true,
-      volatile: true,
+      // `as const`: a view do contrato declara os dois como `z.literal(true)`
+      // — não são um estado do buffer, são o que ele é.
+      perProcess: true as const,
+      volatile: true as const,
     },
   };
 }

@@ -1,9 +1,15 @@
+import { routes } from "@pet-oasis/api-contracts/routes";
 import { Router } from "express";
+import { registerRoute } from "@/lib/registerRoute";
+import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
-import * as logController from "./log.controller";
+import { getRecentLogs } from "./log.controller";
 
 const logRouter = Router();
 
-logRouter.get("/recent", canAccess("read:log"), logController.getRecentLogs);
+registerRoute(logRouter, routes.log.listRecent, {
+  before: [authenticate, canAccess("read:log")],
+  handler: getRecentLogs,
+});
 
 export default logRouter;

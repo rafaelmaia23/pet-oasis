@@ -5,6 +5,11 @@ import type {
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import {
+  invalidateSessionsOfUser,
+  liveSessionsOfUserWhere,
+  liveSessionWhere,
+} from "@/modules/auth/auth.liveSession.repository";
+import {
   grantRolesToUser,
   restoreProfilesOfUser,
 } from "@/modules/user/user.lifecycle.repository";
@@ -28,12 +33,7 @@ export async function createSessionAndEvictOldest(
 ) {
   return prisma.$transaction(async (tx) => {
     const liveSessions = await tx.session.findMany({
-      where: {
-        userId: data.userId,
-        usedAt: null,
-        invalidatedAt: null,
-        expiresAt: { gt: new Date() },
-      },
+      where: liveSessionsOfUserWhere(data.userId),
       orderBy: { createdAt: "asc" },
       select: { id: true },
     });
@@ -103,15 +103,25 @@ export async function invalidateSession(sessionId: string) {
   });
 }
 
+/**
+ * A cascata de reuso de refresh. Delega inteira, e existe mesmo assim: o
+ * service chama a cascata sem estar numa transação, e é o repository — não
+ * ele — quem tem o cliente do Prisma para entregar à operação.
+ */
 export async function invalidateAllUserSessions(userId: string) {
-  return prisma.session.updateMany({
-    where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
-    data: { invalidatedAt: new Date() },
-  });
+  return invalidateSessionsOfUser(prisma, userId, new Date());
 }
 
-export async function findSessionByIdForUser(id: string, userId: string) {
-  return prisma.session.findFirst({ where: { id, userId } });
+/**
+ * A sessão que `DELETE /auth/sessions/:id` pode revogar. O filtro de sessão
+ * viva entra no `where`, e não numa conferência depois da busca, porque os dois
+ * desfechos são o mesmo 404: revogar uma sessão que já morreu não é um caso
+ * distinto de revogar uma que não existe.
+ */
+export async function findLiveSessionByIdForUser(id: string, userId: string) {
+  return prisma.session.findFirst({
+    where: { id, userId, ...liveSessionWhere() },
+  });
 }
 
 type CreateVerificationTokenData = {
@@ -170,10 +180,7 @@ export async function consumePasswordReset(
       where: { id: userId },
       data: { passwordHash, mustChangePassword: false },
     });
-    await tx.session.updateMany({
-      where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
-      data: { invalidatedAt: new Date() },
-    });
+    await invalidateSessionsOfUser(tx, userId, new Date());
     if (audit) await record(audit, tx);
   });
 }
@@ -385,22 +392,14 @@ export async function updatePasswordAndInvalidateSessions(
       where: { id: userId },
       data: { passwordHash },
     });
-    await tx.session.updateMany({
-      where: { userId, invalidatedAt: null, expiresAt: { gt: new Date() } },
-      data: { invalidatedAt: new Date() },
-    });
+    await invalidateSessionsOfUser(tx, userId, new Date());
     if (audit) await record(audit, tx);
   });
 }
 
 export async function findLiveSessionsByUserId(userId: string) {
   return prisma.session.findMany({
-    where: {
-      userId,
-      usedAt: null,
-      invalidatedAt: null,
-      expiresAt: { gt: new Date() },
-    },
+    where: liveSessionsOfUserWhere(userId),
     orderBy: { createdAt: "desc" },
   });
 }

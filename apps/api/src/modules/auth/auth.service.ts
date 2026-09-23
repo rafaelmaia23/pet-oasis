@@ -28,6 +28,10 @@ import {
   REFRESH_GRACE_WINDOW_MS,
   REFRESH_TOKEN_TTL_MS,
 } from "./auth.constants";
+import {
+  isInvalidatableSession,
+  isLiveSession,
+} from "./auth.liveSession.repository";
 import * as authRepository from "./auth.repository";
 
 const log = logger.child({ module: "auth" });
@@ -192,12 +196,18 @@ async function classifyGraceLink(
   refreshTokenHash: string,
 ): Promise<GraceLinkState> {
   const link = await authRepository.findSessionByHash(refreshTokenHash);
+  const now = new Date();
 
-  if (!link || link.invalidatedAt || link.expiresAt < new Date()) {
+  // Os três estados são recortes da mesma definição, e não três comparações
+  // escritas à mão: morto é o que a invalidação nem alcançaria; dos que sobram,
+  // só `usedAt` separa `LIVE` de `ROTATED`. Assim `LIVE` aqui significa o mesmo
+  // que `LIVE` em `GET /auth/sessions`, inclusive na fronteira do prazo — o
+  // corte é `expiresAt > agora` nos três lugares, como o `gt` do banco.
+  if (!link || !isInvalidatableSession(link, now)) {
     return "DEAD";
   }
 
-  return link.usedAt ? "ROTATED" : "LIVE";
+  return isLiveSession(link, now) ? "LIVE" : "ROTATED";
 }
 
 export async function refresh(
@@ -232,16 +242,21 @@ export async function refresh(
     // a marca de 503 — este elo já respondeu "tente de novo", e a retentativa
     // que obedece não pode ser lida como roubo só porque chegou depois dos
     // dez segundos. Fora das duas, cascata como sempre.
-    const now = Date.now();
+    const now = new Date();
+    const nowMs = now.getTime();
     const insideGraceWindow =
-      session.usedAt.getTime() + REFRESH_GRACE_WINDOW_MS > now;
+      session.usedAt.getTime() + REFRESH_GRACE_WINDOW_MS > nowMs;
     const insideDeferredWindow =
       session.graceDeferredAt !== null &&
       session.graceDeferredAt.getTime() + REFRESH_GRACE_DEFERRED_WINDOW_MS >
-        now;
+        nowMs;
+    // "Elo que a invalidação alcançaria" é exatamente "elo que a graça ainda
+    // socorre": é a mesma definição, e por isso ela é chamada, não recopiada.
+    // Enquanto as duas forem uma só, um ban que derruba o elo rotacionado
+    // fecha esta porta por construção — que é o motivo de a invalidação ser
+    // mais larga que a leitura.
     const graceApplies =
-      !session.invalidatedAt &&
-      session.expiresAt.getTime() > now &&
+      isInvalidatableSession(session, now) &&
       (insideGraceWindow || insideDeferredWindow);
 
     if (graceApplies) {
@@ -412,19 +427,15 @@ const REVOKE_SESSION_NOT_FOUND_ERROR = {
 };
 
 export async function revokeSession(userId: string, sessionId: string) {
-  const session = await authRepository.findSessionByIdForUser(
+  // Sessão que não existe e sessão que já morreu recebem o mesmo 404, e por
+  // isso a vivacidade é uma cláusula da busca e não uma conferência depois
+  // dela — um caminho a menos para a definição divergir.
+  const session = await authRepository.findLiveSessionByIdForUser(
     sessionId,
     userId,
   );
 
   if (!session) {
-    throw createNotFoundError(REVOKE_SESSION_NOT_FOUND_ERROR);
-  }
-
-  const isLive =
-    !session.usedAt && !session.invalidatedAt && session.expiresAt > new Date();
-
-  if (!isLive) {
     throw createNotFoundError(REVOKE_SESSION_NOT_FOUND_ERROR);
   }
 

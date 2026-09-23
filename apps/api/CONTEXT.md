@@ -103,9 +103,15 @@ rotativo: cada uso o troca por um novo.
 _Avoid_: token de renovação, token longo
 
 **Sessão viva**:
-`Session` com `usedAt`, `invalidatedAt` nulos e `expiresAt` no futuro. É o que
-`GET /auth/sessions` lista e o que ban, reset e change derrubam.
+`Session` com `usedAt`, `invalidatedAt` nulos e `expiresAt` no futuro, definida em
+`src/modules/auth/auth.liveSession.repository.ts`. É o que `GET /auth/sessions` lista.
 _Avoid_: sessão ativa (colide com o `status`), sessão aberta
+
+**Sessão invalidável**:
+`Session` que ainda não foi morta nem expirou — a viva **mais** o elo já rotacionado. É o que ban,
+reset, troca de senha e deleção derrubam, e o que a janela de graça ainda socorre — ver
+[`0057`](./docs/adr/0057-janela-graca-10s-rotacao.md).
+_Avoid_: sessão viva (é mais larga), sessão pendente
 
 **Reuso de refresh**:
 Apresentar um refresh token que já tem `usedAt`. Dentro da janela de graça da rotação é

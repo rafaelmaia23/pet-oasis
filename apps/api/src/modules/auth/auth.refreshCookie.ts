@@ -1,10 +1,3 @@
-import { env } from "@/config/env";
-import {
-  REFRESH_TOKEN_COOKIE_NAME,
-  REFRESH_TOKEN_COOKIE_PATH,
-  REFRESH_TOKEN_TTL_MS,
-} from "./auth.constants";
-
 /**
  * O cookie de sessão da API: **emitir, ler e limpar**, e nada além disso.
  *
@@ -27,32 +20,47 @@ import {
  * um só — mas quem mexer aqui em `sameSite` ou no TTL precisa olhar lá, senão
  * as duas metades da mesma sessão passam a expirar em momentos diferentes.
  */
-const refreshCookiePolicy = () => ({
-  httpOnly: true,
-  sameSite: "lax" as const,
-  // Ambiente é lido a cada chamada, não no import: o módulo não guarda cópia de
-  // uma decisão que o processo já tomou em `env`, e o teste alcança produção.
-  secure: env.NODE_ENV === "production",
-  path: REFRESH_TOKEN_COOKIE_PATH,
-});
+import { env } from "@/config/env";
+import {
+  REFRESH_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_COOKIE_PATH,
+  REFRESH_TOKEN_TTL_MS,
+} from "./auth.constants";
 
 /**
  * O que o módulo precisa de uma resposta e de uma requisição — nada mais que o
- * jar. `Response` e `Request` do Express satisfazem os dois, e o teste
- * unitário satisfaz sem subir HTTP.
+ * jar. O `Response` e o `Request` do Express satisfazem os dois sem cast, e a
+ * resposta falsa do teste unitário os satisfaz sem subir HTTP.
  */
+export type CookieAttributes = {
+  httpOnly: boolean;
+  sameSite: "lax";
+  secure: boolean;
+  path: string;
+  maxAge?: number;
+};
+
 export type RefreshCookieResponse = {
   cookie(name: string, value: string, options: CookieAttributes): unknown;
-  clearCookie(name: string, options: CookieAttributes): unknown;
+  clearCookie(name: string, options: Pick<CookieAttributes, "path">): unknown;
 };
 
 export type RefreshCookieRequest = {
   cookies?: unknown;
 };
 
-type CookieAttributes = ReturnType<typeof refreshCookiePolicy> & {
-  maxAge?: number;
-};
+/**
+ * Os atributos que protegem e endereçam o cookie. O prazo fica fora: quem
+ * emite tem prazo, quem limpa não.
+ */
+const refreshCookiePolicy = (): CookieAttributes => ({
+  httpOnly: true,
+  sameSite: "lax",
+  // Ambiente é lido a cada chamada, não no import: o módulo não guarda cópia de
+  // uma decisão que o processo já tomou em `env`, e o teste alcança produção.
+  secure: env.NODE_ENV === "production",
+  path: REFRESH_TOKEN_COOKIE_PATH,
+});
 
 /**
  * Emite o refresh token na resposta, com a política inteira mais o prazo. O
@@ -74,16 +82,24 @@ export const setRefreshCookie = (
  * navegador só apaga quando os dois batem, e dois literais iguais mantidos à
  * mão são exatamente o que falha em silêncio (o logout responderia 204 com o
  * cookie ainda no jar).
+ *
+ * Só o `path` viaja, e não a política inteira: quem identifica o cookie a
+ * apagar é a tripla nome/domínio/path, então `httpOnly`, `sameSite` e `secure`
+ * não mudariam nada no navegador — mudariam só os bytes do `Set-Cookie` do
+ * logout, e este esforço não altera comportamento externo.
  */
 export const clearRefreshCookie = (res: RefreshCookieResponse): void => {
-  res.clearCookie(REFRESH_TOKEN_COOKIE_NAME, refreshCookiePolicy());
+  res.clearCookie(REFRESH_TOKEN_COOKIE_NAME, {
+    path: refreshCookiePolicy().path,
+  });
 };
 
 /**
  * Lê o refresh token da requisição. `req.cookies` é `any` no Express e o valor
  * vem do cliente: o cast que o controller fazia prometia `string | undefined`
- * sem provar nada — um nome de cookie repetido chega como array. Aqui o tipo é
- * verificado, e o que não for texto é tratado como ausência.
+ * sem provar nada — o `cookie-parser` devolve objeto quando o valor chega com o
+ * prefixo `j:`. Aqui o tipo é verificado, e o que não for texto é tratado como
+ * ausência (401 ou 204, em vez de um objeto descendo até o hash do token).
  */
 export const readRefreshCookie = (
   req: RefreshCookieRequest,

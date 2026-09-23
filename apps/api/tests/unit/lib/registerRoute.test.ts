@@ -5,11 +5,7 @@ import request from "supertest";
 import { describe, expect, it, type Mock, vi } from "vitest";
 import { z } from "zod";
 import type { AuthUser } from "@/lib/authorization";
-import {
-  type RouteHandlerContext,
-  type RouteSuccessBody,
-  registerRoute,
-} from "@/lib/registerRoute";
+import { type RouteHandlerContext, registerRoute } from "@/lib/registerRoute";
 import { errorHandler } from "@/middlewares/error-handler.middleware";
 
 /**
@@ -107,10 +103,10 @@ const someActor = () => makeAuthUser(["read:user"]);
  * está aqui só para o `mock.calls`: é ele que faz o typecheck reprovar um
  * handler que espere um campo que a entrada não declara.
  */
-const spyOn = <E extends RouteDefinition>(
+const spyOn = <E extends RouteDefinition, R>(
   _entry: E,
-  result: RouteSuccessBody<E>,
-): Mock<(context: RouteHandlerContext<E>) => Promise<RouteSuccessBody<E>>> =>
+  result: R,
+): Mock<(context: RouteHandlerContext<E>) => Promise<R>> =>
   vi.fn(async (_context: RouteHandlerContext<E>) => result);
 
 describe("registerRoute", () => {
@@ -263,8 +259,9 @@ describe("registerRoute", () => {
       const app = makeApp(
         (router) =>
           registerRoute(router, readThing, {
-            // @ts-expect-error: o tipo do handler já recusa isto; o teste prova
-            // o que acontece quando o dado do banco desmente a view em runtime.
+            // Quem confere a forma da resposta é a view, em runtime: o tipo do
+            // handler não a afirma (ver `HasResponseBody`), justamente porque o
+            // dado que o serviço entrega é mais largo do que a view publica.
             handler: async () => ({ id: ID }),
           }),
         someActor(),

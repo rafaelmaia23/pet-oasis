@@ -61,7 +61,7 @@ v1Router.use("/tags", optionalAuthenticate, tagRouter);
 v1Router.use("/products", optionalAuthenticate, productRouter);
 
 // PROTEGIDAS — com authenticate
-v1Router.use("/me", authenticate, meRouter);
+v1Router.use(meRouter);
 v1Router.use("/users", authenticate, userRouter);
 v1Router.use("/users/:userId", authenticate, userProfileRouter);
 v1Router.use("/users/:userId", authenticate, permissionRouter);

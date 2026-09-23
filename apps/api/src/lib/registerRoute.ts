@@ -41,20 +41,24 @@ type ParsedRequest<E> = E extends { request: infer R }
 type SuccessStatus<E extends RouteDefinition> = keyof E["responses"];
 
 /**
- * O corpo que o handler deve devolver: a entrada da view do status de sucesso.
- * É `never` quando o status não tem corpo (204) — e é esse `never` que o
- * `RouteHandler` abaixo lê para pedir um handler sem retorno. Uma entrada cuja
- * `view` é a escada de capability cai em `unknown`: o registrador a recusa no
- * registro até a escada ganhar dono (issue 17 do esforço).
+ * O status de sucesso desta entrada tem corpo? É a única coisa que o tipo do
+ * handler precisa saber sobre a resposta.
+ *
+ * **O tipo do corpo não é derivado da view, de propósito.** A view é um parser
+ * de whitelist, e é ela que estreita: `featureNameSchema` recebe o `string` que
+ * veio do banco e devolve a união literal, `z.coerce.date()` recebe o que vier
+ * e devolve `Date`. Exigir a entrada da view no retorno do handler obrigaria o
+ * serviço a afirmar a união antes do parse — o `as` que
+ * `apps/api/docs/adr/0095-fronteira-featurename-string.md` decidiu evitar. Quem
+ * confere a forma da resposta é o `presentWith`, em runtime, como sempre foi
+ * com os presenters (`present(data: unknown, …)`).
  */
-export type RouteSuccessBody<E extends RouteDefinition> =
+type HasResponseBody<E extends RouteDefinition> =
   E["responses"][SuccessStatus<E>] extends {
-    view: infer V;
+    view: z.ZodType | readonly z.ZodType[];
   }
-    ? V extends z.ZodType
-      ? z.input<V>
-      : unknown
-    : never;
+    ? true
+    : false;
 
 /**
  * O ator é obrigatório onde a tabela diz `auth: "bearer"` — não porque o
@@ -77,13 +81,10 @@ export type RouteHandlerContext<E extends RouteDefinition> =
  * o ramo, que é o que faz `async () => {}` ser a forma certa de escrever o 204
  * e ser recusada em qualquer outra rota.
  */
-export type RouteHandler<E extends RouteDefinition> = [
-  RouteSuccessBody<E>,
-] extends [never]
-  ? (context: RouteHandlerContext<E>) => Promise<void> | void
-  : (
-      context: RouteHandlerContext<E>,
-    ) => Promise<RouteSuccessBody<E>> | RouteSuccessBody<E>;
+export type RouteHandler<E extends RouteDefinition> =
+  HasResponseBody<E> extends true
+    ? (context: RouteHandlerContext<E>) => Promise<unknown> | unknown
+    : (context: RouteHandlerContext<E>) => Promise<void> | void;
 
 export type RouteRegistration<E extends RouteDefinition> = {
   /** Middleware de servidor, na ordem em que roda. */

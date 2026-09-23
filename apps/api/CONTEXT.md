@@ -54,8 +54,16 @@ _Avoid_: ativação da conta, ativação do usuário, confirmação de cadastro
 
 **VerificationToken**:
 Token opaco de uso único, guardado só como hash, com um `purpose`: `EMAIL_VERIFICATION`,
-`PASSWORD_RESET`, `EMAIL_CHANGE` ou `ACCOUNT_REACTIVATION`.
+`PASSWORD_RESET`, `EMAIL_CHANGE` ou `ACCOUNT_REACTIVATION`. Emitir e consumir vivem em
+[`verificationToken.repository.ts`](./src/modules/auth/verificationToken.repository.ts) e
+[`verificationToken.service.ts`](./src/modules/auth/verificationToken.service.ts) — ver
+[`0069`](./docs/adr/0069-verificationtoken-generico-purpose.md).
 _Avoid_: código de verificação, link mágico, OTP
+
+**Consumir um token**:
+Marcar `usedAt` **e** aplicar o efeito do `purpose`, na mesma transação — os dois juntos ou
+nenhum. Um token válido cujo efeito falhou continua por usar.
+_Avoid_: validar o token, resgatar o token, usar o token (para dizer só a marca)
 
 **Troca de email**:
 Fluxo em dois passos: o pedido grava o alvo em `User.pendingEmail` e emite um token

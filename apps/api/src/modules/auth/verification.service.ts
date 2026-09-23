@@ -1,11 +1,12 @@
 import { env } from "@/config/env";
-import { createBadRequestError } from "@/errors";
 import { send } from "@/lib/email";
 import { logger } from "@/lib/logger";
-import { generateOpaqueToken, hashToken } from "@/lib/token";
 import { findUserByEmail } from "@/modules/user/user.repository";
-import { EMAIL_VERIFICATION_TTL_MS } from "./auth.constants";
-import * as authRepository from "./auth.repository";
+import { activateUser } from "./auth.repository";
+import {
+  consumeVerificationToken,
+  issueVerificationToken,
+} from "./verificationToken.service";
 
 const log = logger.child({ module: "verification" });
 
@@ -35,13 +36,9 @@ export async function issueEmailVerification(
   email: string,
   trigger: VerificationTrigger = "ACCOUNT_CREATION",
 ) {
-  const rawToken = generateOpaqueToken();
-
-  await authRepository.createVerificationToken({
+  const rawToken = await issueVerificationToken({
     userId,
-    tokenHash: hashToken(rawToken),
     purpose: "EMAIL_VERIFICATION",
-    expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
   });
 
   const { subject, html, text } = buildVerificationEmail(rawToken);
@@ -52,34 +49,14 @@ export async function issueEmailVerification(
 }
 
 export async function verifyEmail(token: string) {
-  const verificationToken = await authRepository.findVerificationTokenByHash(
-    hashToken(token),
-  );
+  const { userId } = await consumeVerificationToken({
+    rawToken: token,
+    purpose: "EMAIL_VERIFICATION",
+    invalidTokenError: INVALID_TOKEN_ERROR,
+    plan: async () => ({ effect: activateUser() }),
+  });
 
-  if (
-    verificationToken?.purpose !== "EMAIL_VERIFICATION" ||
-    verificationToken.usedAt !== null ||
-    verificationToken.expiresAt < new Date()
-  ) {
-    log.warn(
-      {
-        ...(verificationToken ? { userId: verificationToken.userId } : {}),
-        reason: verificationToken ? "USED_OR_EXPIRED" : "UNKNOWN_TOKEN",
-      },
-      "email verification refused",
-    );
-    throw createBadRequestError(INVALID_TOKEN_ERROR);
-  }
-
-  await authRepository.consumeEmailVerification(
-    verificationToken.id,
-    verificationToken.userId,
-  );
-
-  log.info(
-    { userId: verificationToken.userId },
-    "email verified, account activated",
-  );
+  log.info({ userId }, "email verified, account activated");
 }
 
 export async function resendVerification(email: string) {

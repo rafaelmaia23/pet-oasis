@@ -1,9 +1,10 @@
 import type { FeatureName } from "@pet-oasis/api-contracts/feature";
 import { makeAuthUser } from "@tests/factories/user.factory";
-import { describe, expect, it } from "vitest";
-import { ForbiddenError } from "@/errors";
+import { describe, expect, it, vi } from "vitest";
+import { ForbiddenError, NotFoundError } from "@/errors";
 import {
   assertActorIsAdmin,
+  authorizeThenLoad,
   can,
   canActOnResource,
   computeEffectiveFeatures,
@@ -450,6 +451,306 @@ describe("Authorization", () => {
 
     it("should throw for a missing actor", () => {
       expect(() => assertActorIsAdmin(null, denial)).toThrow(ForbiddenError);
+    });
+  });
+
+  /**
+   * A primitiva de ordem. O que estes casos guardam é a invariante do
+   * `docs/adr/0011-autorizacao-sempre-antes-busca.md`: quem não pode ver o
+   * recurso recebe **o mesmo 403** para um id que existe e para um que não
+   * existe — e por isso "o load nunca correu" é asserção, não detalhe.
+   */
+  describe("authorizeThenLoad()", () => {
+    const notFound = {
+      message: "Recurso não encontrado",
+      action: "Verifique o ID e tente novamente",
+    };
+
+    /** O erro lançado, para poder afirmar sobre ele como o resto do arquivo. */
+    const rejectionOf = async (promise: Promise<unknown>) => {
+      try {
+        await promise;
+      } catch (error) {
+        return error;
+      }
+
+      throw new Error("esperava que a promise rejeitasse");
+    };
+
+    describe('modo "owner-in-url" — o dono vem da URL', () => {
+      it("should return the loaded record when the actor acts on itself", async () => {
+        const actor = makeAuthUser(["read:user"]);
+        const load = vi.fn().mockResolvedValue({ id: actor.id });
+
+        const record = await authorizeThenLoad({
+          actor,
+          feature: "read:user",
+          mode: "owner-in-url",
+          ownerId: actor.id,
+          load,
+          notFound,
+        });
+
+        expect(record).toEqual({ id: actor.id });
+        expect(load).toHaveBeenCalledTimes(1);
+      });
+
+      it("should return the loaded record when the actor has the :others variant", async () => {
+        const actor = makeAuthUser(["read:user:others"]);
+        const load = vi.fn().mockResolvedValue({ id: "other-id" });
+
+        const record = await authorizeThenLoad({
+          actor,
+          feature: "read:user",
+          mode: "owner-in-url",
+          ownerId: "other-id",
+          load,
+          notFound,
+        });
+
+        expect(record).toEqual({ id: "other-id" });
+      });
+
+      it("should make 403 win over 404 — the load never runs for an unauthorized actor", async () => {
+        const actor = makeAuthUser(["read:user"]);
+        const load = vi.fn().mockResolvedValue(null);
+
+        const error = await rejectionOf(
+          authorizeThenLoad({
+            actor,
+            feature: "read:user",
+            mode: "owner-in-url",
+            ownerId: "someone-else",
+            load,
+            notFound,
+          }),
+        );
+
+        expect(error).toBeInstanceOf(ForbiddenError);
+        expect(error).toMatchObject({
+          statusCode: 403,
+          code: "FORBIDDEN",
+          message: "Você não tem permissão para acessar este recurso",
+          action: 'Verifique se você tem acesso a feature "read:user:others"',
+        });
+        expect(load).not.toHaveBeenCalled();
+      });
+
+      it("should name the unscoped feature when the actor is the owner", async () => {
+        const actor = makeAuthUser([]);
+
+        const error = await rejectionOf(
+          authorizeThenLoad({
+            actor,
+            feature: "read:user",
+            mode: "owner-in-url",
+            ownerId: actor.id,
+            load: vi.fn(),
+            notFound,
+          }),
+        );
+
+        expect(error).toMatchObject({
+          action: 'Verifique se você tem acesso a feature "read:user"',
+        });
+      });
+
+      it("should throw the given 404 when the authorized actor finds nothing", async () => {
+        const actor = makeAuthUser(["read:user:others"]);
+
+        const error = await rejectionOf(
+          authorizeThenLoad({
+            actor,
+            feature: "read:user",
+            mode: "owner-in-url",
+            ownerId: "other-id",
+            load: async () => null,
+            notFound,
+          }),
+        );
+
+        expect(error).toBeInstanceOf(NotFoundError);
+        expect(error).toMatchObject({
+          statusCode: 404,
+          code: "NOT_FOUND",
+          ...notFound,
+        });
+      });
+
+      it("should pass with any of the required features, and list all of them when none passes", async () => {
+        const actor = makeAuthUser(["reactivate:customer-profile:others"]);
+        const features = [
+          "create:customer-profile",
+          "reactivate:customer-profile",
+        ];
+
+        await expect(
+          authorizeThenLoad({
+            actor,
+            feature: features,
+            mode: "owner-in-url",
+            ownerId: "other-id",
+            load: async () => ({ id: "other-id" }),
+            notFound,
+          }),
+        ).resolves.toEqual({ id: "other-id" });
+
+        const error = await rejectionOf(
+          authorizeThenLoad({
+            actor: makeAuthUser([]),
+            feature: features,
+            mode: "owner-in-url",
+            ownerId: "other-id",
+            load: vi.fn(),
+            notFound,
+          }),
+        );
+
+        expect(error).toMatchObject({
+          action:
+            'Verifique se você tem acesso a uma das features: "create:customer-profile:others", "reactivate:customer-profile:others"',
+        });
+      });
+    });
+
+    describe('modo "no-owner" — a feature não tem par self/:others (D11)', () => {
+      it("should pass on the plain feature, whoever the target is", async () => {
+        const actor = makeAuthUser(["create:employee-profile"]);
+
+        await expect(
+          authorizeThenLoad({
+            actor,
+            feature: "create:employee-profile",
+            mode: "no-owner",
+            load: async () => ({ id: "other-id" }),
+            notFound,
+          }),
+        ).resolves.toEqual({ id: "other-id" });
+      });
+
+      it("should not accept the :others variant, and must not load when it refuses", async () => {
+        const actor = makeAuthUser(["create:employee-profile:others"]);
+        const load = vi.fn().mockResolvedValue({ id: "other-id" });
+
+        const error = await rejectionOf(
+          authorizeThenLoad({
+            actor,
+            feature: "create:employee-profile",
+            mode: "no-owner",
+            load,
+            notFound,
+          }),
+        );
+
+        expect(error).toBeInstanceOf(ForbiddenError);
+        expect(error).toMatchObject({
+          action:
+            'Verifique se você tem acesso a feature "create:employee-profile"',
+        });
+        expect(load).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('modo "fail-closed" — o dono só aparece no registro', () => {
+      const ownerOf = (record: { ownerId: string }) => record.ownerId;
+
+      it("should return the record the actor owns", async () => {
+        const actor = makeAuthUser(["read:pet"]);
+
+        await expect(
+          authorizeThenLoad({
+            actor,
+            feature: "read:pet",
+            mode: "fail-closed",
+            ownerOf,
+            load: async () => ({ ownerId: actor.id }),
+            notFound,
+          }),
+        ).resolves.toEqual({ ownerId: actor.id });
+      });
+
+      it("should return another owner's record to the :others variant", async () => {
+        const actor = makeAuthUser(["read:pet:others"]);
+
+        await expect(
+          authorizeThenLoad({
+            actor,
+            feature: "read:pet",
+            mode: "fail-closed",
+            ownerOf,
+            load: async () => ({ ownerId: "other-id" }),
+            notFound,
+          }),
+        ).resolves.toEqual({ ownerId: "other-id" });
+      });
+
+      it("should answer 403 — not 404 — for a record that does not exist, so the route is no existence oracle", async () => {
+        const actor = makeAuthUser(["read:pet"]);
+
+        const error = await rejectionOf(
+          authorizeThenLoad({
+            actor,
+            feature: "read:pet",
+            mode: "fail-closed",
+            ownerOf,
+            load: async () => null,
+            notFound,
+          }),
+        );
+
+        expect(error).toBeInstanceOf(ForbiddenError);
+        expect(error).toMatchObject({
+          action: 'Verifique se você tem acesso a feature "read:pet:others"',
+        });
+      });
+
+      it("should answer the very same 403 for another owner's record", async () => {
+        const actor = makeAuthUser(["read:pet"]);
+
+        const absent = await rejectionOf(
+          authorizeThenLoad({
+            actor,
+            feature: "read:pet",
+            mode: "fail-closed",
+            ownerOf,
+            load: async () => null,
+            notFound,
+          }),
+        );
+
+        const foreign = await rejectionOf(
+          authorizeThenLoad({
+            actor,
+            feature: "read:pet",
+            mode: "fail-closed",
+            ownerOf,
+            load: async () => ({ ownerId: "other-id" }),
+            notFound,
+          }),
+        );
+
+        expect((foreign as ForbiddenError).toJson()).toEqual(
+          (absent as ForbiddenError).toJson(),
+        );
+      });
+
+      it("should answer 404 for a record that does not exist once the actor has :others", async () => {
+        const actor = makeAuthUser(["read:pet:others"]);
+
+        const error = await rejectionOf(
+          authorizeThenLoad({
+            actor,
+            feature: "read:pet",
+            mode: "fail-closed",
+            ownerOf,
+            load: async () => null,
+            notFound,
+          }),
+        );
+
+        expect(error).toBeInstanceOf(NotFoundError);
+        expect(error).toMatchObject(notFound);
+      });
     });
   });
 });

@@ -14,7 +14,7 @@ Monorepo do Pet Oasis — um pet shop online. Gerido por **pnpm workspaces**
 | `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`): formatter, linter e estilo; cada app estende e acrescenta só os ignores que são seus |
 | [`packages/api-contracts`](packages/api-contracts/README.md) | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): schemas Zod de request, views de resposta, enums de domínio, nomes de role/feature e shape de erro; só depende de `zod`, consumido do fonte TS |
 | [`docs/`](docs/README.md) | Documentação do **sistema**: ADRs de sistema, [índice das fases](docs/todo.md), [backlog](docs/reference/backlog.md), o [deploy do stack](docs/guides/deploy.md) e a config das skills |
-| [`.scratch/`](.scratch/README.md) | O tracker, único para o monorepo: uma pasta por fase (`fase-<n>-<slug>/`), com a spec e uma issue por arquivo |
+| [`.scratch/`](.scratch/README.md) | O tracker, único para o monorepo: uma pasta por **esforço** (`fase-<n>-<slug>/`; uma fase tem um ou mais), com a spec e uma issue por arquivo |
 | [`CONTEXT-MAP.md`](CONTEXT-MAP.md) | O mapa dos contextos — um por app, com o glossário (`CONTEXT.md`) de cada um |
 | `infra/` | O stack Compose do **sistema** (base + overrides `dev`/`test`/`prod`): API, web, Postgres, Redis e mailpit num projeto só por ambiente |
 | `tools/` | Scripts da raiz que não pertencem a pacote nenhum (o `docs:check`) |

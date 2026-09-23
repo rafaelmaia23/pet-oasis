@@ -1,13 +1,14 @@
 # pet-oasis — TODO
 
 > O **índice** das fases: estado de cada uma, ponteiro para a fase aberta, resumo destilado
-> das fechadas. O caderno de trabalho — spec e issues — vive em `.scratch/fase-<n>-<slug>/`.
+> das fechadas. O caderno de trabalho — spec e issues — vive em `.scratch/fase-<n>-<slug>/`, uma
+> pasta por **esforço** (uma fase tem um ou mais).
 > Detalhes de decisões nos índices de ADR: `docs/adr/README.md` (sistema),
 > `apps/api/docs/adr/README.md` e `apps/web/docs/adr/README.md` (cada app). Regras de negócio
 > firmadas no `CLAUDE.md`.
 >
-> **Forma de registro:** fase aberta fica em poucas linhas, com o ponteiro para a pasta da
-> fase; fase fechada é **destilada** em bullets de resultado. O molde das duas formas e as
+> **Forma de registro:** fase aberta fica em poucas linhas, com um ponteiro por esforço; esforço
+> fechado é **destilado** em bullets de resultado, e a fase fecha quando o último deles fecha. O molde das duas formas e as
 > regras da transição estão em [`guides/todo-phases.md`](guides/todo-phases.md); o mapa da
 > documentação inteira, em [`README.md`](README.md).
 
@@ -160,21 +161,28 @@
 - **O import do web (11), a issue mais larga:** `git filter-repo --to-subdirectory-filter apps/web` + merge com `--allow-unrelated-histories` — 14 commits entraram, nenhum perdido, `git log --follow` atravessando. As mensagens foram **reescritas no mesmo passo** (escopo `web` nos reais, forma padrão do Git nos merges), porque o `commitlint` do CI alcança a segunda raiz do histórico e reprovaria o PR da fase. O `catalog:` fixou uma versão por dependência com **duas exceções escritas no arquivo**: TS fica no 6 (o 7 é a reescrita nativa) e `@types/node` no 24, casando com `engines.node` — tipo acima do runtime compila código que quebra em produção. O medo da spec (Next 16 não aceitar TS 6) foi verificado e não se confirmou.
 - **O smoke que prova o objetivo (12), e a ressalva que ficou registrada:** `apps/web/src/lib/api-contract.ts` tem **uma ponta por export** — request, view e tabela de rotas —, e a prova negativa foi feita e desfeita nas três (`TS2322`, `TS2339`, `TS2339`). A primeira versão tinha só `parseLoginForm` e **não provava nada**: `safeParse` recebe `unknown`, então renomear um campo do contrato deixava o web verde — daí o `LOGIN_FIELDS` amarrado a `keyof LoginBody`. O code-review pegou o que faltava e foi registrado em vez de maquiado: no estado commitado ninguém importa o módulo de prova, então quem cobre o contrato no `next build` é o `tsc`, não o bundler — virou critério na issue 03 da Fase 12.
 - **Commits e CI (05, 06), as duas barreiras:** Conventional Commits em inglês com **escopo obrigatório** e enum do monorepo, recusados pelo hook `commit-msg` na máquina de quem commita (05) e de novo pelo job `commitlint` sobre todos os commits do PR (06) — o hook local não pode ser a única barreira, porque worktree novo só o tem depois de `pnpm install`. O `verify` roda `typecheck`, `lint` e `test` **só do afetado** em relação à base, com Postgres e Redis como `services` do job em vez do Compose, e o `docs:check` do repo inteiro sempre. `main` e `dev` passaram a ter um verde verificável fora da máquina de quem mergeia.
-- **A documentação virou a da skill, sem adaptação (07, 08, 15):** o `docs/context/` da API — o arquivão temático — foi **migrado inteiro**, uma seção = um ADR, e deixou de existir; o índice por tema virou `apps/api/docs/adr/README.md`, e a numeração `NNNN-slug.md` passou a ser uma só (`docs/adr/0001`). O `CONTEXT.md` da API foi escrito do zero como glossário **puro** (08), e o `CLAUDE.md` se partiu em raiz (fluxo, branches, commits, regras transversais) + um por app. Caiu junto a regra "documento permanente não cita `.scratch/`": spec e issue são arquivos fixos do tracker versionado, e o `docs:check` prova que o caminho citado existe. O tracker ganhou forma (15): **pasta = fase**, `fase-<n>-<slug>/`, provado pelo `docs:check`, e o termo "esforço" saiu do vocabulário.
+- **A documentação virou a da skill, sem adaptação (07, 08, 15):** o `docs/context/` da API — o arquivão temático — foi **migrado inteiro**, uma seção = um ADR, e deixou de existir; o índice por tema virou `apps/api/docs/adr/README.md`, e a numeração `NNNN-slug.md` passou a ser uma só (`docs/adr/0001`). O `CONTEXT.md` da API foi escrito do zero como glossário **puro** (08), e o `CLAUDE.md` se partiu em raiz (fluxo, branches, commits, regras transversais) + um por app. Caiu junto a regra "documento permanente não cita `.scratch/`": spec e issue são arquivos fixos do tracker versionado, e o `docs:check` prova que o caminho citado existe. O tracker ganhou forma (15): **pasta = fase**, `fase-<n>-<slug>/`, provado pelo `docs:check`, e o termo "esforço" saiu do vocabulário — **revertido em parte dois dias depois**, quando a ordem de execução mudou e renumerar uma fase saiu caro: pasta passou a ser **esforço**, e a fase a agrupá-los (`docs/adr/0002-tracker-folders-are-phases.md`, reescrito).
 - **A infra virou uma só (11, 14):** um stack Compose em `infra/` da raiz, projeto por ambiente, com os `prod:*` na **raiz** (o stack de produção é do sistema) e `dev*`/`test:services:*` na API (em dev e teste o stack é dela — o web roda no host). A rede API↔web deixou de ser externa: com os dois serviços no mesmo stack, "o up do web falhou porque a rede da API não existe" deixou de ser possível por construção. `pnpm prod:up api` reconstrói só a API, provado à mão nas duas direções — e é por isso que o `web` **não** tem `depends_on: api`. Cada imagem é construída da raiz com install filtrado e o outro app excluído pelo `Dockerfile.dockerignore`; no web o `pnpm deploy` vem **antes** do `next build`, que roda fora do workspace. A 14 tirou do Dockerfile da API a duplicação entre `build` e `dev`, com um estágio `base` que os dois estendem.
 - **Fechos (13):** o rastreio decisão → destino achou os racionais que tinham nascido na execução e viviam só em comentário de código — a fonte única de Node/pnpm/versões e o stack Compose com as imagens —, e eles viraram ADRs de sistema (`0006`, `0007`) junto com o ADR do todo (`0005`) e o índice `docs/adr/README.md`, que faltava desde a 07. O guia de deploy foi reescrito para o monorepo e **dividido em três** por decisão do dono — o do stack na raiz (`docs/guides/deploy.md`: host, redes, os dois proxy hosts, `prod:up`) e o recorte de cada app no app (`apps/api/…/deploy.md`, e `apps/web/…/deploy.md` novo), cada um apontando para os outros em vez de repetir; a regra de geografia virou linha no `CLAUDE.md`. Conferiu-se que `container_name: pet-oasis-api` não mudou — as units systemd sobrevivem sem reinstalação. Suíte (**1367** na API + **50** no contrato) + `typecheck` + `lint` + `docs:check` verdes.
 
 ---
 
-## 🔄 Fase 12 — Espinha de autenticação do web
-> Herdada do `pet-oasis-web` no import (Fase 11, issue 11): a spec e as issues dele vivem em
-> `.scratch/fase-12-web-auth-spine/`, com o conteúdo com que o web congelou. Do bootstrap
-> ao fluxo completo de conta — sessão em BFF, login e os estados bloqueados, guarda de rota,
-> renovação automática, signup, verificação de email, recuperação de senha e reativação —,
-> consumindo os schemas do contrato compartilhado. Os dois pedidos ao contrato que a issue `00`
-> dela fazia foram absorvidos pela Fase 11, como as issues 16 (`expiresIn` na resposta de
-> sessão) e 17 (tabela de rotas no contrato) de `.scratch/fase-11-monorepo/issues/`.
-- Progresso: 2 de 12 issues fechadas (01 e 02, ainda no repositório de origem).
+## 🔄 Fase 12 — Profundidade nos módulos e a espinha de auth do web
+> Dois **esforços**, nesta ordem — o primeiro muda o que o segundo consome. A forma "uma fase,
+> um ou mais esforços" está em [`adr/0002`](adr/0002-tracker-folders-are-phases.md).
+- 🔄 **`fase-12-module-depth`**: aprofundar os módulos da API e do contrato — o route entry passa
+  a construir o handler (79 rotas, lista de erros do `/openapi.json` derivada), `ERROR_CODES` do
+  contrato passa a tipar o erro da API, e os invariantes que hoje vivem em cópia (token de
+  verificação, sessão viva, cookie de refresh, autorizar-antes-de-buscar) ganham um dono. A pasta
+  nasce com o planejamento.
+- ⬜ **`fase-12-web-auth-spine`**: herdado do `pet-oasis-web` no import (Fase 11, issue 11), com o
+  conteúdo com que o web congelou — do bootstrap ao fluxo completo de conta: sessão em BFF, login
+  e os estados bloqueados, guarda de rota, renovação automática, signup, verificação de email,
+  recuperação de senha e reativação, consumindo os schemas do contrato compartilhado. Spec e
+  issues em `.scratch/fase-12-web-auth-spine/`; 2 de 12 issues fechadas (01 e 02, ainda no
+  repositório de origem). Os dois pedidos ao contrato que a issue `00` dele fazia foram
+  absorvidos pela Fase 11, como as issues 16 (`expiresIn` na resposta de sessão) e 17 (tabela de
+  rotas no contrato) de `.scratch/fase-11-monorepo/issues/`.
 
 ## ⬜ Fase 13 — Carrinho, pedido e pagamento
 

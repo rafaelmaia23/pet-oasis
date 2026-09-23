@@ -16,8 +16,8 @@
  * não tem o arquivo, a raiz é tentada — é como um app cita `docs/todo.md`.
  *
  * O tracker (`.scratch/`) só existe na raiz, então uma menção a ele — a pasta de
- * uma fase ou um arquivo dela — resolve sempre da raiz. E a forma das pastas do
- * tracker também é regra checada aqui: pasta = fase, `fase-<n>-<slug>/`, com
+ * um esforço ou um arquivo dele — resolve sempre da raiz. E a forma das pastas do
+ * tracker também é regra checada aqui: pasta = esforço, `fase-<n>-<slug>/`, com
  * `spec.md` dentro (`docs/adr/0002-tracker-folders-are-phases.md`).
  *
  * Uso: `pnpm docs:check` (na raiz)
@@ -109,12 +109,14 @@ const SCRATCH_MENTION = /(?<![\w/.-])\.scratch\/[\w.-]+(?:\/[\w./-]*)?/g;
 const SCRATCH_DIR = join(ROOT, ".scratch");
 
 /**
- * A forma de uma pasta do tracker: **pasta = fase**, `fase-<n>-<slug>`, com o
- * número global da fase sem zero à esquerda (o mesmo da branch `fase-<n>`) e o
- * slug em kebab-case. O porquê — e para onde vai o trabalho que não é fase —
- * está em `docs/adr/0002-tracker-folders-are-phases.md`.
+ * A forma de uma pasta do tracker: **pasta = esforço**, `fase-<n>-<slug>`, com o
+ * número global da fase sem zero à esquerda (o mesmo da branch do esforço, que é o
+ * nome da pasta) e o slug em kebab-case. Dois esforços da mesma fase compartilham o
+ * número, então o padrão é checado **por diretório** e não exige número único. O
+ * porquê — e para onde vai o trabalho que não é de nenhuma fase — está em
+ * `docs/adr/0002-tracker-folders-are-phases.md`.
  */
-const PHASE_FOLDER = /^fase-[1-9]\d*-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const EFFORT_FOLDER = /^fase-[1-9]\d*-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** `line` é `null` quando o problema é de um diretório, não de uma linha de arquivo. */
 type Problem = { file: string; line: number | null; message: string };
@@ -205,11 +207,11 @@ function report(file: string, line: number | null, message: string): void {
   problems.push({ file: relative(ROOT, file), line, message });
 }
 
-// A forma do tracker: cada diretório de `.scratch/` é uma fase, nomeado
-// `fase-<n>-<slug>`, e tem a `spec.md` dela.
+// A forma do tracker: cada diretório de `.scratch/` é um esforço de uma fase, nomeado
+// `fase-<n>-<slug>`, e tem a `spec.md` dele.
 for (const dir of listDirs(SCRATCH_DIR)) {
   const name = relative(SCRATCH_DIR, dir);
-  if (!PHASE_FOLDER.test(name)) {
+  if (!EFFORT_FOLDER.test(name)) {
     report(
       dir,
       null,

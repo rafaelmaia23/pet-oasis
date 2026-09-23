@@ -9,7 +9,7 @@ Perdido? A pergunta é sempre "isto é trabalho, decisão, vocabulário ou consu
 
 | Onde | O que guarda | Vive |
 |---|---|---|
-| [`../.scratch/`](../.scratch/README.md) | O **tracker**: uma pasta por fase (`fase-<n>-<slug>/`), com a spec e uma issue por arquivo — único para o monorepo | Enquanto a fase existir; fechada, fica marcada |
+| [`../.scratch/`](../.scratch/README.md) | O **tracker**: uma pasta por **esforço** (`fase-<n>-<slug>/`; uma fase tem um ou mais), com a spec e uma issue por arquivo — único para o monorepo | Enquanto o esforço existir; fechado, fica marcado |
 | [`todo.md`](todo.md) | O **índice** das fases: estado, ponteiro para a fase aberta, e o resumo destilado de cada fase fechada | Sempre |
 | [`reference/backlog.md`](reference/backlog.md) | Levantado e **conscientemente adiado** — sem fase, sem data | Sempre |
 | [`adr/`](adr/README.md) | Decisões **de sistema**, numeradas `NNNN-slug.md`: o monorepo e o tooling, a infra do sistema, a fronteira entre apps, o modo de trabalho. Uma linha por decisão no **índice**, agrupada por tema — ache a linha, abra só aquele ADR | Sempre |

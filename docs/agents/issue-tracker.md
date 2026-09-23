@@ -1,7 +1,7 @@
 # Issue tracker: markdown local em `.scratch/`
 
-Este repo **não usa um issue tracker externo**. Não existe GitHub Issues em uso, não existe
-`gh` instalado, e nenhuma skill deve tentar criar issue remota. Specs e issues vivem como
+Este repo **não usa um issue tracker externo**. Não existe GitHub Issues em uso, e nenhuma
+skill deve tentar criar issue remota. Specs e issues vivem como
 markdown versionado dentro do próprio repo, em `.scratch/` da raiz do monorepo — um tracker só,
 uma numeração de fase só, para API, contratos e web.
 
@@ -9,7 +9,7 @@ uma numeração de fase só, para API, contratos e web.
 
 | Arquivo | O que guarda |
 | --- | --- |
-| [`.scratch/fase-<n>-<slug>/spec.md`](../../.scratch/) | O desenho negociado de uma fase: problema, solução, decisões, escopo de fora. |
+| [`.scratch/fase-<n>-<slug>/spec.md`](../../.scratch/) | O desenho negociado de um esforço: problema, solução, decisões, escopo de fora. |
 | [`.scratch/fase-<n>-<slug>/issues/NN-<slug>.md`](../../.scratch/) | Uma issue por arquivo, numerada a partir de `01` em ordem de dependência. É o tracker propriamente dito. |
 | [`docs/todo.md`](../todo.md) | O **índice** das fases: estado de cada uma, ponteiro para a pasta da fase aberta, resumo destilado das fechadas. |
 | [`docs/reference/backlog.md`](../reference/backlog.md) | O que foi levantado e **conscientemente adiado** — sem fase, sem data. |
@@ -17,19 +17,20 @@ uma numeração de fase só, para API, contratos e web.
 O caminho completo, da ideia ao código, está em [`docs/README.md`](../README.md); as duas
 formas de uma fase no `todo.md`, em [`docs/guides/todo-phases.md`](../guides/todo-phases.md).
 
-## A forma de uma pasta: pasta = fase
+## A forma de uma pasta: pasta = esforço
 
-Todo diretório de `.scratch/` é uma fase, nomeado `fase-<n>-<slug>/` — flat, número global da
-fase sem zero à esquerda, slug em kebab-case (o app no slug só quando a fase é de um só, como
-`fase-12-web-auth-spine`). A skill prescreve `<feature-slug>` sem ordem; aqui o número é o que
-ordena o `ls` e casa a pasta com a branch `fase-<n>`. Não há subpasta por app: uma fase
-atravessa apps. **Não existe pasta sem número.** Trabalho que não é fase tem três destinos, e
-nenhum deles é uma pasta nova:
+Todo diretório de `.scratch/` é um **esforço** de uma fase, nomeado `fase-<n>-<slug>/` — flat,
+número global da fase sem zero à esquerda, slug em kebab-case (o app no slug só quando o esforço
+é de um só, como `fase-12-web-auth-spine`). A skill prescreve `<feature-slug>` sem ordem; aqui o
+número é o que ordena o `ls` e agrupa os esforços de uma mesma fase, e a pasta casa 1:1 com a
+branch, que tem o mesmo nome dela. Não há subpasta por app: um esforço atravessa apps. **Não
+existe pasta sem número.** Trabalho que não é de nenhuma fase tem três destinos, e nenhum deles
+é uma pasta nova:
 
 - correção pontual ou ajuste de processo → branch solta a partir da `dev` (`fix/<slug>`,
   `docs/<slug>`), sem tracker;
 - ideia sem fase → [`docs/reference/backlog.md`](../reference/backlog.md);
-- pendência descoberta no meio de uma fase → issue nova na pasta da fase aberta.
+- pendência descoberta no meio de um esforço → issue nova na pasta do esforço aberto.
 
 O `pnpm docs:check` reprova pasta fora do padrão ou sem `spec.md`. O porquê está em
 [`docs/adr/0002`](../adr/0002-tracker-folders-are-phases.md).
@@ -63,10 +64,12 @@ Sequencie como expand–contract em issues próprias, em vez de forçar numa fat
 
 ## Convenções de branch e numeração
 
-- Branch de fase: `fase-<n>`, a partir da `dev`.
-- Branch de issue: `feat/fase-<n>-<NN>-<slug>`, a partir da branch da fase.
-- O `<NN>` é **local à fase** (reinicia em `01` a cada fase); o `<n>` da fase é **global e
-  nunca reinicia**. É a combinação dos dois que dá nome não-ambíguo à branch.
+- Branch de esforço: **o nome da pasta** (`fase-12-module-depth`), a partir da `dev`.
+- Branch de issue: `feat/<nome-do-esforço>-<NN>-<slug>`
+  (`feat/fase-12-module-depth-02-error-codes`), a partir da branch do esforço.
+- O `<NN>` é **local ao esforço** (reinicia em `01`); o `<n>` da fase é **global e nunca
+  reinicia**, e dois esforços da mesma fase o compartilham — é por isso que a branch de issue
+  carrega o nome do esforço, e não só o número.
 - Trabalho fora de fase sai da `dev` em branch descritiva (`chore/<slug>`, `fix/<slug>`,
   `docs/<slug>`) e volta por merge `--no-ff`.
 
@@ -77,7 +80,7 @@ planejado. Item que veio do backlog também é marcado lá
 ([`docs/reference/backlog.md`](../reference/backlog.md)), senão a entrada vira lixo que
 ressurge no fecho da fase seguinte.
 
-## Fechar uma fase
+## Fechar um esforço
 
 1. Cada decisão nomeada na spec ganha dono permanente — um **ADR** (no app dono da decisão, ou
    em `docs/adr/` da raiz quando é de sistema) e a linha no índice. **Migrar antes de fechar**:
@@ -85,7 +88,8 @@ ressurge no fecho da fase seguinte.
 2. A primeira linha do `spec.md` vira
    `Status: fechada em <AAAA-MM-DD> — porquê promovido a <caminhos>`. O `pnpm docs:check`
    exige que os caminhos nomeados existam.
-3. A fase encolhe no [`docs/todo.md`](../todo.md) para o resumo de resultado.
+3. O esforço encolhe no [`docs/todo.md`](../todo.md) para um bloco de resultado, sob o capítulo
+   da fase. A fase ganha ✅ quando o último esforço dela fecha.
 
 A pasta **não é apagada**: o histórico da negociação fica legível, e o marcador é o que
 impede alguém de ler uma spec morta como corrente.
@@ -93,13 +97,13 @@ impede alguém de ler uma spec morta como corrente.
 ## A regra que mais quebra: pendência vai para a frente, nunca para trás
 
 Ao terminar um trabalho, uma pendência para uma etapa **futura** vira **uma issue nova** na
-pasta da fase — nunca uma nota ao fim da issue recém-fechada. Anotar para trás garante que
+pasta do esforço — nunca uma nota ao fim da issue recém-fechada. Anotar para trás garante que
 ninguém leia a nota na hora certa.
 
 ## Quando uma skill disser "publicar no issue tracker"
 
 Escreva um arquivo de issue em `.scratch/fase-<n>-<slug>/issues/`. Se o item não pertence a
-nenhuma fase planejada, ele vai para `docs/reference/backlog.md` — com o problema que resolve e
+nenhum esforço planejado, ele vai para `docs/reference/backlog.md` — com o problema que resolve e
 o esforço estimado (**P** = uma issue · **M** = uma feat-branch · **G** = fase própria), que é o
 formato daquele arquivo. Nunca crie um arquivo de tickets novo ao lado desses dois.
 

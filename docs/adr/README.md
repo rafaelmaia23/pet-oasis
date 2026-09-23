@@ -47,8 +47,9 @@
 
 - [`0001`](0001-domain-docs-follow-the-skill.md) A documentação de domínio segue a skill
   `domain-modeling` sem adaptação — `CONTEXT.md` é glossário puro, decisão com explicação é ADR
-- [`0002`](0002-tracker-folders-are-phases.md) Cada pasta do tracker é uma fase, nomeada
-  `fase-<n>-<slug>`
+- [`0002`](0002-tracker-folders-are-phases.md) Cada pasta do tracker é um **esforço** de uma
+  fase, nomeada `fase-<n>-<slug>` — a fase é capítulo do roadmap, o esforço é a unidade de
+  branch e de entrega
 
 ---
 

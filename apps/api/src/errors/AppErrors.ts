@@ -5,7 +5,9 @@ import { AppError, type AppErrorParams } from "./AppError";
 // O status é fixo por subclasse — é a identidade HTTP dela. O `code` tem
 // default por subclasse mas é parametrizável: uma mesma resposta 403 pode
 // precisar de identificadores distintos por condição (10.8), e é no `code`,
-// nunca na prosa de `message`, que o cliente ramifica.
+// nunca na prosa de `message`, que o cliente ramifica. Todo code — o default
+// da classe e o que o chamador passa — vem do `ERROR_CODES` do contrato, que é
+// quem tem o vocabulário: o tipo de `AppErrorParams.code` recusa o resto.
 export type OmitFixed<T> = Omit<T, "statusCode">;
 
 export type ValidationErrorFields = Record<string, string[]>;

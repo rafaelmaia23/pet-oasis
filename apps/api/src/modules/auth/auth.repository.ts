@@ -8,7 +8,7 @@ import {
   invalidateSessionsOfUser,
   liveSessionsOfUserWhere,
   liveSessionWhere,
-} from "@/modules/auth/auth.liveSession";
+} from "@/modules/auth/auth.liveSession.repository";
 import {
   grantRolesToUser,
   restoreProfilesOfUser,
@@ -103,6 +103,11 @@ export async function invalidateSession(sessionId: string) {
   });
 }
 
+/**
+ * A cascata de reuso de refresh. Delega inteira, e existe mesmo assim: o
+ * service chama a cascata sem estar numa transação, e é o repository — não
+ * ele — quem tem o cliente do Prisma para entregar à operação.
+ */
 export async function invalidateAllUserSessions(userId: string) {
   return invalidateSessionsOfUser(prisma, userId, new Date());
 }

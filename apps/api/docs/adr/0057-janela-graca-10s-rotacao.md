@@ -120,3 +120,25 @@ informativo; o `warn` continua reservado ao reuso fora da janela, que é o sinal
 módulo — diluir os dois faria a concorrência rotineira de um cliente enterrar o sinal. O contrato
 para quem consome está em [`guides/integrating-with-the-api.md`](../guides/integrating-with-the-api.md),
 com o aviso de que a janela **não** substitui serialização no cliente.
+
+**O que a graça alcança e o que o glossário chama de sessão viva são dois conjuntos — e agora um é
+construído do outro.** A guarda desta janela lê `invalidatedAt` e `expiresAt`, duas cláusulas, e não
+as três de "sessão viva": o elo que ela socorre é justamente o **rotacionado**. Enquanto a
+invalidação em massa esteve escrita à mão em cada site, os dois conjuntos divergiam sem que nada
+percebesse — ban, deleção e reset forçado usavam as três cláusulas e deixavam o elo rotacionado sem
+marca, de modo que o parágrafo acima ("um elo explicitamente morto — logout, ban, reset de senha, a
+cascata de um roubo anterior — mantém o comportamento que já tinha") era verdade para o logout e
+mentira para eles. O sintoma não era reabrir sessão, porque a caminhada da corrente já exige ponta
+viva; era o **503**: com o Redis fora do ar, reapresentar um elo rotacionado logo depois de um ban
+recebia "tente novamente agora" por uma sessão que nunca mais voltaria, e a retentativa insistia
+até a marca de 30s fechar.
+
+A correção foi dar um dono às cláusulas. `src/modules/auth/auth.liveSession.repository.ts` define
+**sessão invalidável** — não morta e não expirada — e deriva **sessão viva** dela acrescentando
+`usedAt` nulo, no `where` do Prisma e em memória, pelo mesmo par de funções. A guarda desta janela
+e a invalidação em massa passaram a chamar a mesma função: derrubar uma sessão fecha esta porta por
+construção, e não por duas condições parecidas que alguém manteve alinhadas. Ban, deleção e reset
+forçado passaram a marcar também o elo rotacionado, e o único comportamento observável que mudou é
+o do parágrafo acima — naquele ramo, 503 virou 401. Foi decisão do dono do projeto convergir para o
+conjunto largo; o conjunto estreito tornaria o glossário literalmente verdadeiro e deixaria esta
+porta aberta.

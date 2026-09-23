@@ -28,7 +28,10 @@ import {
   REFRESH_GRACE_WINDOW_MS,
   REFRESH_TOKEN_TTL_MS,
 } from "./auth.constants";
-import { isLiveSession } from "./auth.liveSession";
+import {
+  isInvalidatableSession,
+  isLiveSession,
+} from "./auth.liveSession.repository";
 import * as authRepository from "./auth.repository";
 
 const log = logger.child({ module: "auth" });
@@ -195,13 +198,15 @@ async function classifyGraceLink(
   const link = await authRepository.findSessionByHash(refreshTokenHash);
   const now = new Date();
 
-  if (!link || link.invalidatedAt || link.expiresAt < now) {
+  // Os três estados são recortes da mesma definição, e não três comparações
+  // escritas à mão: morto é o que a invalidação nem alcançaria; dos que sobram,
+  // só `usedAt` separa `LIVE` de `ROTATED`. Assim `LIVE` aqui significa o mesmo
+  // que `LIVE` em `GET /auth/sessions`, inclusive na fronteira do prazo — o
+  // corte é `expiresAt > agora` nos três lugares, como o `gt` do banco.
+  if (!link || !isInvalidatableSession(link, now)) {
     return "DEAD";
   }
 
-  // Depois da guarda acima, só `usedAt` separa os dois estados que sobram — e
-  // é o filtro de sessão viva que decide qual, para que `LIVE` aqui signifique
-  // o mesmo que `LIVE` em `GET /auth/sessions`.
   return isLiveSession(link, now) ? "LIVE" : "ROTATED";
 }
 
@@ -237,16 +242,21 @@ export async function refresh(
     // a marca de 503 — este elo já respondeu "tente de novo", e a retentativa
     // que obedece não pode ser lida como roubo só porque chegou depois dos
     // dez segundos. Fora das duas, cascata como sempre.
-    const now = Date.now();
+    const now = new Date();
+    const nowMs = now.getTime();
     const insideGraceWindow =
-      session.usedAt.getTime() + REFRESH_GRACE_WINDOW_MS > now;
+      session.usedAt.getTime() + REFRESH_GRACE_WINDOW_MS > nowMs;
     const insideDeferredWindow =
       session.graceDeferredAt !== null &&
       session.graceDeferredAt.getTime() + REFRESH_GRACE_DEFERRED_WINDOW_MS >
-        now;
+        nowMs;
+    // "Elo que a invalidação alcançaria" é exatamente "elo que a graça ainda
+    // socorre": é a mesma definição, e por isso ela é chamada, não recopiada.
+    // Enquanto as duas forem uma só, um ban que derruba o elo rotacionado
+    // fecha esta porta por construção — que é o motivo de a invalidação ser
+    // mais larga que a leitura.
     const graceApplies =
-      !session.invalidatedAt &&
-      session.expiresAt.getTime() > now &&
+      isInvalidatableSession(session, now) &&
       (insideGraceWindow || insideDeferredWindow);
 
     if (graceApplies) {

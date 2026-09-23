@@ -3,7 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { UserStatus } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
-import { invalidateSessionsOfUser } from "@/modules/auth/auth.liveSession";
+import { invalidateSessionsOfUser } from "@/modules/auth/auth.liveSession.repository";
 import {
   type CascadeCounts,
   cascadeDeleteUserGraph,

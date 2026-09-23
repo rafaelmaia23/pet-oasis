@@ -3,7 +3,7 @@ import { clearDatabase } from "@tests/helpers/database";
 import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
-import { invalidateSessionsOfUser } from "@/modules/auth/auth.liveSession";
+import { invalidateSessionsOfUser } from "@/modules/auth/auth.liveSession.repository";
 import {
   findLiveSessionsByUserId,
   updatePasswordAndInvalidateSessions,

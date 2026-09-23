@@ -1,14 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  invalidatableSessionsOfUserWhere,
+  invalidatableSessionWhere,
+  isInvalidatableSession,
   isLiveSession,
   liveSessionsOfUserWhere,
   liveSessionWhere,
-  reachableSessionsOfUserWhere,
-} from "@/modules/auth/auth.liveSession";
+} from "@/modules/auth/auth.liveSession.repository";
 
 const NOW = new Date("2026-09-23T12:00:00.000Z");
 const LATER = new Date(NOW.getTime() + 1);
 const EARLIER = new Date(NOW.getTime() - 1);
+
+const session = (overrides: Partial<Parameters<typeof isLiveSession>[0]>) => ({
+  usedAt: null,
+  invalidatedAt: null,
+  expiresAt: LATER,
+  ...overrides,
+});
 
 describe("o filtro de sessão viva", () => {
   it("é exatamente as três cláusulas do glossário, e nenhuma a mais", () => {
@@ -38,58 +47,73 @@ describe("o filtro de sessão viva", () => {
   });
 });
 
-describe("o predicado de sessão viva", () => {
-  const session = (
-    overrides: Partial<Parameters<typeof isLiveSession>[0]>,
-  ) => ({
-    usedAt: null,
-    invalidatedAt: null,
-    expiresAt: LATER,
-    ...overrides,
-  });
-
-  it("aceita a sessão não usada, não invalidada e com prazo no futuro", () => {
-    expect(isLiveSession(session({}), NOW)).toBe(true);
-  });
-
-  it("recusa a sessão já rotacionada", () => {
-    expect(isLiveSession(session({ usedAt: EARLIER }), NOW)).toBe(false);
-  });
-
-  it("recusa a sessão invalidada", () => {
-    expect(isLiveSession(session({ invalidatedAt: EARLIER }), NOW)).toBe(false);
-  });
-
-  it("recusa a sessão expirada", () => {
-    expect(isLiveSession(session({ expiresAt: EARLIER }), NOW)).toBe(false);
-  });
-
-  it("recusa a sessão que expira exatamente agora — o filtro é `gt`, não `gte`", () => {
-    expect(isLiveSession(session({ expiresAt: NOW }), NOW)).toBe(false);
-  });
-
-  it("concorda com o `where` que o banco recebe: as mesmas três colunas, os mesmos nomes", () => {
-    expect(Object.keys(liveSessionWhere(NOW)).sort()).toEqual(
-      ["expiresAt", "invalidatedAt", "usedAt"].sort(),
-    );
-  });
-});
-
 describe("o filtro do que a invalidação alcança", () => {
-  it("é o de sessão viva sem `usedAt` — o elo rotacionado também precisa ser morto", () => {
-    const live = liveSessionsOfUserWhere("user-1", NOW);
-    const reachable = reachableSessionsOfUserWhere("user-1", NOW);
+  it("é duas cláusulas: ainda não foi morta e ainda não expirou", () => {
+    expect(invalidatableSessionWhere(NOW)).toEqual({
+      invalidatedAt: null,
+      expiresAt: { gt: NOW },
+    });
+    expect(Object.keys(invalidatableSessionWhere(NOW))).not.toContain("usedAt");
+  });
 
-    expect(reachable).toEqual({
+  it("recorta por usuário, e a viva é ele mais `usedAt` nulo — um é construído do outro", () => {
+    const invalidatable = invalidatableSessionsOfUserWhere("user-1", NOW);
+
+    expect(invalidatable).toEqual({
       userId: "user-1",
       invalidatedAt: null,
       expiresAt: { gt: NOW },
     });
-    expect(Object.keys(reachable)).not.toContain("usedAt");
-    // Superconjunto por construção: tudo o que sobra depois de tirar uma
-    // cláusula continua valendo para quem passava nas três.
-    for (const [key, value] of Object.entries(reachable)) {
-      expect(live[key as keyof typeof live]).toEqual(value);
-    }
+    expect(liveSessionsOfUserWhere("user-1", NOW)).toEqual({
+      ...invalidatable,
+      usedAt: null,
+    });
+  });
+});
+
+describe("os predicados em memória", () => {
+  it("aceitam a sessão não usada, não invalidada e com prazo no futuro", () => {
+    expect(isLiveSession(session({}), NOW)).toBe(true);
+    expect(isInvalidatableSession(session({}), NOW)).toBe(true);
+  });
+
+  it("separam a sessão rotacionada: não é viva, mas ainda é alcançável", () => {
+    const rotated = session({ usedAt: EARLIER });
+
+    expect(isLiveSession(rotated, NOW)).toBe(false);
+    expect(isInvalidatableSession(rotated, NOW)).toBe(true);
+  });
+
+  it("recusam, os dois, a sessão já invalidada", () => {
+    const killed = session({ invalidatedAt: EARLIER });
+
+    expect(isLiveSession(killed, NOW)).toBe(false);
+    expect(isInvalidatableSession(killed, NOW)).toBe(false);
+  });
+
+  it("recusam, os dois, a sessão expirada", () => {
+    const expired = session({ expiresAt: EARLIER });
+
+    expect(isLiveSession(expired, NOW)).toBe(false);
+    expect(isInvalidatableSession(expired, NOW)).toBe(false);
+  });
+
+  it("recusam a sessão que expira exatamente agora — o corte é `gt`, não `gte`, como no banco", () => {
+    const onTheDot = session({ expiresAt: NOW });
+
+    expect(isLiveSession(onTheDot, NOW)).toBe(false);
+    expect(isInvalidatableSession(onTheDot, NOW)).toBe(false);
+  });
+
+  it("concordam com o `where` que o banco recebe: as mesmas colunas, os mesmos nomes", () => {
+    expect(Object.keys(liveSessionWhere(NOW)).sort()).toEqual([
+      "expiresAt",
+      "invalidatedAt",
+      "usedAt",
+    ]);
+    expect(Object.keys(invalidatableSessionWhere(NOW)).sort()).toEqual([
+      "expiresAt",
+      "invalidatedAt",
+    ]);
   });
 });

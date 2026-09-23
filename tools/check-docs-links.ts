@@ -1,14 +1,26 @@
 /**
- * Valida os links da documentação: todo caminho `docs/**.md` citado em qualquer
- * arquivo do repo (markdown, código ou config) precisa existir, e toda âncora
- * `#slug` usada num link markdown precisa corresponder a um heading real.
+ * Valida os links da documentação do monorepo inteiro: todo caminho
+ * `docs/**.md` citado em qualquer arquivo (markdown, código ou config) precisa
+ * existir, e toda âncora `#slug` usada num link markdown precisa corresponder a
+ * um heading real.
  *
- * Existe porque a documentação é referenciada de três lugares que envelhecem em
- * ritmos diferentes — os próprios docs, comentários em `src/` e o README —, e um
- * caminho quebrado só aparece quando alguém tenta seguir o link. Roda em cada
- * fecho de fase, junto da auditoria de doc.
+ * Existe porque a documentação é referenciada de lugares que envelhecem em
+ * ritmos diferentes — os próprios docs, comentários em `src/` de cada app, os
+ * READMEs, o tracker — e um caminho quebrado só aparece quando alguém tenta
+ * seguir o link. Roda em cada fecho de issue, junto de `typecheck` e `lint`.
  *
- * Uso: `npm run docs:check`
+ * Num monorepo há dois `docs/`: o da raiz (sistema) e o de cada app. Uma menção
+ * em prosa `docs/<arquivo>.md` resolve contra o **pacote** do arquivo que a cita (a
+ * raiz, ou o `apps/<x>`/`packages/<x>` que o contém); de fora do app, o doc dele
+ * é citado com o prefixo, `apps/api/docs/<arquivo>.md`, e resolve da raiz. Se o pacote
+ * não tem o arquivo, a raiz é tentada — é como um app cita `docs/todo.md`.
+ *
+ * O tracker (`.scratch/`) só existe na raiz, então uma menção a ele — a pasta de
+ * uma fase ou um arquivo dela — resolve sempre da raiz. E a forma das pastas do
+ * tracker também é regra checada aqui: pasta = fase, `fase-<n>-<slug>/`, com
+ * `spec.md` dentro (`docs/adr/0002-tracker-folders-are-phases.md`).
+ *
+ * Uso: `pnpm docs:check` (na raiz)
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -18,11 +30,36 @@ const ROOT = resolve(import.meta.dirname, "..");
 const IGNORED_DIRS = new Set([
   "node_modules",
   ".git",
+  ".claude",
+  ".turbo",
   "dist",
   "coverage",
   "generated",
+  // O build e o cache do Next (apps/web): gerado, fora do git.
+  ".next",
+  // Notas pessoais de estudo, fora do git (.gitignore): não são documentação.
+  ".learning",
 ]);
-const SCANNED_EXTENSIONS = [".md", ".ts", ".json", ".yml", ".yaml", ".bru"];
+const SCANNED_EXTENSIONS = [
+  ".md",
+  ".ts",
+  // Os componentes do web citam a documentação dele em comentário, como a API.
+  ".tsx",
+  ".mjs",
+  // Os comentários do schema do Prisma citam ADRs e a política de log.
+  ".prisma",
+  ".json",
+  ".jsonc",
+  ".yml",
+  ".yaml",
+  ".bru",
+];
+
+/** Diretórios que são um pacote do workspace: a raiz e cada `apps/*`, `packages/*`. */
+const PACKAGE_ROOTS = [
+  ROOT,
+  ...["apps", "packages"].flatMap((group) => listDirs(join(ROOT, group))),
+];
 
 /**
  * Documentos de trabalho que foram **dissolvidos de propósito** e continuam
@@ -33,53 +70,10 @@ const SCANNED_EXTENSIONS = [".md", ".ts", ".json", ".yml", ".yaml", ".bru"];
 const DISSOLVED_DOCS = new Set(["docs/fase-8-redesign.md"]);
 
 /**
- * Documento **efêmero** — spec ou issue em `.scratch/`, o tracker — não pode
- * ser citado por documento permanente (9.12/AC5, retargetado na Fase 10).
- *
- * A regra existe porque ela já falhou por disciplina: um ADR citava um `§` de
- * um documento de planejamento escrito para ser descartável, e o link
- * sobreviveu a uma revisão. Versionar o `.scratch/` (Fase 10) mudou a
- * durabilidade do arquivo, **não** a autoridade do conteúdo: uma spec é o
- * retrato de uma negociação num instante, e envelhece assim que a
- * implementação diverge dela.
- *
- * Casa só a citação de um **arquivo**; nomear o diretório é legítimo (é o que
- * o mapa e os guias fazem ao descrever o layout).
- */
-const EPHEMERAL_DOC = /\.scratch\/[\w./-]+\.[\w]+/g;
-
-/**
- * Quem pode citar documento efêmero. Cada entrada tem um motivo, e um motivo
- * que deixa de valer é entrada que sai:
- *
- * - `docs/todo.md` — é o tracker, e efêmero também: enquanto a fase está
- *   aberta, ele aponta para a spec dela em vez de repeti-la.
- * - `docs/README.md` — o mapa da documentação; os caminhos ali são o desenho
- *   do fluxo, não referência a um documento que exista.
- * - `docs/agents/issue-tracker.md` e `docs/guides/todo-phases.md` — descrevem o
- *   layout do tracker, então precisam nomeá-lo.
- * - este próprio arquivo — os padrões acima são dados, não citação.
- *
- * Além destes, **todo arquivo dentro de `.scratch/`**: o tracker citando o
- * tracker é o caso normal (uma issue aponta para a spec, a spec para outra
- * issue), e nada ali é permanente.
- */
-const MAY_CITE_EPHEMERAL = new Set([
-  "docs/todo.md",
-  "docs/README.md",
-  "docs/agents/issue-tracker.md",
-  "docs/guides/todo-phases.md",
-  "tools/check-docs-links.ts",
-]);
-
-/** Prefixos cujo conteúdo inteiro pode citar efêmero. */
-const EPHEMERAL_CITERS = [".scratch/"];
-
-/**
- * Spec de esforço fechado. O fecho não apaga a pasta — marca a spec, e o
+ * Spec de fase fechada. O fecho não apaga a pasta — marca a spec, e o
  * marcador nomeia para onde o *porquê* foi promovido:
  *
- *   Status: fechada em 2026-09-30 — porquê promovido a docs/adr/<nome>.md
+ *   Status: fechada em 2026-09-30 — porquê promovido a apps/api/docs/adr/0196-<slug>.md
  *
  * Verificar isto aqui é o que repõe a força que o antigo "apagar a spec no
  * fecho" dava à regra de migrar-antes-de-fechar: sem a remoção, a promoção
@@ -88,7 +82,49 @@ const EPHEMERAL_CITERS = [".scratch/"];
  */
 const CLOSED_SPEC = /^Status:\s*fechada\b/;
 
-type Problem = { file: string; line: number; message: string };
+/**
+ * Um caminho de documento como aparece em prosa: `docs/<arquivo>.md`, ou com o
+ * prefixo do pacote (`apps/api/docs/<arquivo>.md`). É a mesma forma nos dois
+ * lugares em que o script a procura — a linha `Status:` da spec fechada e
+ * qualquer menção —, e mudar a regra de prefixo tem de mudar as duas de uma vez.
+ */
+const DOC_PATH = String.raw`((?:apps|packages)\/[\w-]+\/)?(docs\/[\w./-]+\.md)`;
+const CLOSED_SPEC_DESTINATION = new RegExp(
+  String.raw`\b(?:${DOC_PATH}|CLAUDE\.md|CONTEXT\.md)`,
+);
+const DOC_MENTION = new RegExp(String.raw`(?<![\w/.-])${DOC_PATH}\b`, "g");
+
+/**
+ * Uma menção ao tracker como aparece em prosa: a pasta de uma fase, com ou sem a
+ * barra final (`.scratch/fase-11-monorepo/`), ou um caminho dentro dela
+ * (`.scratch/fase-11-monorepo/issues/07-root-docs-skeleton.md`). O que vier depois
+ * é resolvido inteiro contra a raiz, então um segmento com erro de digitação
+ * também reprova. Um ponto final de frase colado ao caminho é aparado; uma
+ * menção interrompida por `<` é placeholder de guia (`.scratch/fase-<n>-<slug>/`)
+ * e é ignorada.
+ */
+const SCRATCH_MENTION = /(?<![\w/.-])\.scratch\/[\w.-]+(?:\/[\w./-]*)?/g;
+
+/** O tracker só existe na raiz; toda menção a ele resolve daqui. */
+const SCRATCH_DIR = join(ROOT, ".scratch");
+
+/**
+ * A forma de uma pasta do tracker: **pasta = fase**, `fase-<n>-<slug>`, com o
+ * número global da fase sem zero à esquerda (o mesmo da branch `fase-<n>`) e o
+ * slug em kebab-case. O porquê — e para onde vai o trabalho que não é fase —
+ * está em `docs/adr/0002-tracker-folders-are-phases.md`.
+ */
+const PHASE_FOLDER = /^fase-[1-9]\d*-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** `line` é `null` quando o problema é de um diretório, não de uma linha de arquivo. */
+type Problem = { file: string; line: number | null; message: string };
+
+function listDirs(dir: string): string[] {
+  if (!exists(dir)) return [];
+  return readdirSync(dir)
+    .map((entry) => join(dir, entry))
+    .filter((full) => statSync(full).isDirectory());
+}
 
 /**
  * Replica a geração de âncora do GitHub: minúsculas, remove tudo que não é
@@ -154,30 +190,52 @@ function exists(path: string): boolean {
   }
 }
 
+/** O pacote do workspace que contém o arquivo — o mais profundo que o contém. */
+function packageRootOf(file: string): string {
+  let best = ROOT;
+  for (const root of PACKAGE_ROOTS) {
+    if (file.startsWith(`${root}/`) && root.length > best.length) best = root;
+  }
+  return best;
+}
+
 const problems: Problem[] = [];
 
-function report(file: string, line: number, message: string): void {
+function report(file: string, line: number | null, message: string): void {
   problems.push({ file: relative(ROOT, file), line, message });
+}
+
+// A forma do tracker: cada diretório de `.scratch/` é uma fase, nomeado
+// `fase-<n>-<slug>`, e tem a `spec.md` dela.
+for (const dir of listDirs(SCRATCH_DIR)) {
+  const name = relative(SCRATCH_DIR, dir);
+  if (!PHASE_FOLDER.test(name)) {
+    report(
+      dir,
+      null,
+      `pasta do tracker fora do padrão \`fase-<n>-<slug>\` (número da fase sem zero à esquerda, slug em kebab-case): ${name}`,
+    );
+  }
+  if (!exists(join(dir, "spec.md"))) {
+    report(dir, null, `pasta do tracker sem spec.md: ${name}`);
+  }
 }
 
 for (const file of collectFiles(ROOT)) {
   const lines = readFileSync(file, "utf8").split("\n");
   const isMarkdown = file.endsWith(".md");
   const relativePath = relative(ROOT, file);
-  const mayCiteEphemeral =
-    MAY_CITE_EPHEMERAL.has(relativePath) ||
-    EPHEMERAL_CITERS.some((prefix) => relativePath.startsWith(prefix));
+  const packageRoot = packageRootOf(file);
 
-  // Spec fechada: os destinos que ela nomeia precisam existir de fato. A
-  // checagem de caminho `docs/**.md` acima já cobre a maioria; esta acrescenta
-  // que a linha `Status: fechada` tem que nomear ao menos um destino.
+  // Spec fechada: a linha `Status: fechada` tem que nomear ao menos um destino
+  // permanente; a existência do caminho é coberta pela checagem de prosa abaixo.
   if (/^\.scratch\/[^/]+\/spec\.md$/.test(relativePath)) {
     const statusLine = lines.find((line) => CLOSED_SPEC.test(line));
-    if (statusLine && !/\b(docs\/[\w./-]+\.md|CLAUDE\.md)/.test(statusLine)) {
+    if (statusLine && !CLOSED_SPEC_DESTINATION.test(statusLine)) {
       report(
         file,
         lines.indexOf(statusLine) + 1,
-        "spec marcada como fechada sem nomear o destino do porquê — acrescente os caminhos de docs/adr/ ou docs/context/ que passaram a guardá-lo",
+        "spec marcada como fechada sem nomear o destino do porquê — acrescente os caminhos dos ADRs que passaram a guardá-lo",
       );
     }
   }
@@ -187,6 +245,14 @@ for (const file of collectFiles(ROOT)) {
 
     // Links markdown relativos: [texto](caminho.md#ancora)
     if (isMarkdown) {
+      // Link para uma pasta (`](../.scratch/fase-12-web-auth-spine/)`): só a
+      // existência, não há âncora.
+      for (const match of line.matchAll(/]\(([^)\s:]+\/)\)/g)) {
+        const target = match[1];
+        if (target && !exists(resolve(dirname(file), target))) {
+          report(file, lineNumber, `pasta inexistente: ${target}`);
+        }
+      }
       for (const match of line.matchAll(/]\(([^)\s]+\.md)(#[^)\s]*)?\)/g)) {
         const [, target, hash] = match;
         if (!target || /^[a-z]+:\/\//.test(target)) continue;
@@ -204,38 +270,48 @@ for (const file of collectFiles(ROOT)) {
       }
     }
 
-    // Menções em prosa ou comentário: `docs/reference/endpoints.md`.
+    // Menções em prosa ou comentário: `docs/todo.md` (do pacote, senão da raiz)
+    // ou, de fora do app, `apps/api/docs/reference/endpoints.md`.
     //
     // O lookbehind é o que impede o caminho de OUTRO repositório de ser lido
     // como nosso: em `../pet-oasis-web/docs/adr/<nome>.md`, o trecho a partir
     // de `docs/` casaria sozinho, e checar a existência dele aqui reprovaria um
-    // documento correto. Um caminho precedido de barra não é nosso.
-    for (const match of line.matchAll(/(?<![\w/.-])docs\/[\w./-]+\.md\b/g)) {
-      const target = match[0];
-      if (DISSOLVED_DOCS.has(target)) continue;
-      if (!exists(join(ROOT, target))) {
+    // documento correto. Um caminho precedido de barra não é nosso — salvo o
+    // prefixo de pacote, que o próprio padrão captura.
+    for (const match of line.matchAll(DOC_MENTION)) {
+      const [target, packagePrefix, docPath] = match;
+      if (!docPath || DISSOLVED_DOCS.has(docPath)) continue;
+      // Sem prefixo: o pacote do arquivo primeiro e a raiz como segunda tentativa
+      // (é como um app cita `docs/todo.md`); na raiz, os dois são o mesmo lugar.
+      const candidates = packagePrefix
+        ? [join(ROOT, target)]
+        : [
+            join(packageRoot, docPath),
+            ...(packageRoot === ROOT ? [] : [join(ROOT, docPath)]),
+          ];
+      if (!candidates.some(exists)) {
         report(file, lineNumber, `caminho inexistente: ${target}`);
       }
     }
 
-    if (mayCiteEphemeral) return;
-
-    for (const match of line.matchAll(EPHEMERAL_DOC)) {
-      report(
-        file,
-        lineNumber,
-        `documento permanente citando efêmero: ${match[0]} — promova o conteúdo a ADR ou a docs/context/ e cite o destino`,
-      );
+    // Menções ao tracker: `.scratch/fase-11-monorepo/` ou um caminho dentro dela.
+    // É o que prova que renomear uma pasta de fase não deixou ponteiro para trás.
+    for (const match of line.matchAll(SCRATCH_MENTION)) {
+      if (line[match.index + match[0].length] === "<") continue;
+      const target = match[0].replace(/\.$/, "");
+      if (!exists(join(ROOT, target))) {
+        report(file, lineNumber, `caminho inexistente: ${target}`);
+      }
     }
   });
 }
 
 if (problems.length > 0) {
-  console.error(`✗ ${problems.length} link(s) quebrado(s) na documentação:\n`);
+  console.error(`✗ ${problems.length} problema(s) na documentação:\n`);
   for (const { file, line, message } of problems) {
-    console.error(`  ${file}:${line} — ${message}`);
+    console.error(`  ${line === null ? file : `${file}:${line}`} — ${message}`);
   }
   process.exit(1);
 }
 
-console.log("✓ documentação: todos os caminhos e âncoras existem");
+console.log("✓ documentação: caminhos, âncoras e pastas do tracker em ordem");

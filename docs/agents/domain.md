@@ -1,59 +1,84 @@
 # Domain Docs
 
 Como as skills de engenharia devem consumir a documentação de domínio deste repo ao explorar o
-código. O layout é **single-context** (um contexto só, sem monorepo), mas **não** usa o
-`CONTEXT.md` na raiz: a convenção daqui é anterior e mais granular.
+código. O layout é **multi-contexto**, no formato da skill `domain-modeling` **sem adaptação**:
+[`CONTEXT-MAP.md`](../../CONTEXT-MAP.md) na raiz lista um contexto por app; cada app tem o
+próprio `CONTEXT.md` (glossário) e os próprios ADRs; decisões de sistema ficam em
+[`docs/adr/`](../adr/) da raiz.
 
 ## Antes de explorar, leia nesta ordem
 
-1. **[`CLAUDE.md`](../../CLAUDE.md)** na raiz — o essencial acionável: camadas, convenções e as
-   regras de negócio **já decididas** (que não se re-decidem).
-2. **[`docs/context.md`](../context.md)** — é um **índice**, um roteador: uma linha por decisão,
-   apontando o arquivo temático que a contém.
-3. **Só o arquivo temático da decisão** que você precisa, em [`docs/context/`](../context/):
-   `authorization`, `lifecycle`, `identity-and-sessions`, `api-contracts`, `architecture`,
-   `security`, `observability`, `infrastructure`, `pet-domain`, `schema`, `history`.
-4. **[`docs/adr/`](../adr/)** — os ADRs que tocam a área em que você vai mexer. Decisão estrutural
-   vive aqui; o contexto guarda só o ponteiro.
+1. **[`CLAUDE.md`](../../CLAUDE.md)** da raiz — fluxo, regras transversais, onde mora cada
+   documento — e o **`CLAUDE.md` do app** em que vai mexer ([`apps/api/CLAUDE.md`](../../apps/api/CLAUDE.md),
+   [`apps/web/CLAUDE.md`](../../apps/web/CLAUDE.md)): camadas, convenções e as regras de negócio
+   **já decididas** (que não se re-decidem).
+2. **[`CONTEXT-MAP.md`](../../CONTEXT-MAP.md)** — em que contexto o assunto vive.
+3. **`CONTEXT.md` do app** — o que cada termo significa e os sinônimos a evitar. O da API é
+   [`apps/api/CONTEXT.md`](../../apps/api/CONTEXT.md), o do web é
+   [`apps/web/CONTEXT.md`](../../apps/web/CONTEXT.md); o porquê de cada termo não está lá, está
+   no ADR que ele aponta.
+4. **[`apps/<app>/docs/adr/README.md`](../../apps/api/docs/adr/README.md)** — é um **índice**, um
+   roteador: uma linha por decisão, agrupada por tema, apontando o ADR que a contém.
+5. **Só o ADR da decisão** que você precisa. Os `0001`–`0010` da API são as decisões
+   estruturais (caras de reverter); do `0011` em diante, uma decisão por arquivo.
+6. **[`docs/adr/`](../adr/)** da raiz — só quando o assunto atravessa apps (fronteira, contrato,
+   modo de trabalho).
 
-> ⚠️ **Nunca leia os arquivos de `docs/context/` em bloco, nem "para ter contexto".** Juntos passam
-> de 25 mil tokens; uma tarefa concreta precisa de um ou dois. O protocolo é: índice → identifique a
-> decisão → abra apenas aquele arquivo. Se o índice não tiver a decisão, ela não foi registrada:
-> **pergunte, não invente.**
+> ⚠️ **Nunca leia os ADRs em bloco, nem "para ter contexto".** Os da API somam quase duzentos e
+> passam de 25 mil tokens; uma tarefa concreta precisa de um ou dois. O protocolo é: mapa →
+> glossário → índice → identifique a decisão → abra apenas aquele ADR. Se o índice não tiver a
+> decisão, ela não foi registrada: **pergunte, não invente.**
 
 ## Estrutura de arquivos
 
 ```
 /
-├── CLAUDE.md                 ← regras acionáveis + regras de negócio firmadas
+├── CLAUDE.md                     ← fluxo e regras transversais do monorepo
+├── CONTEXT-MAP.md                ← um contexto por app, com o caminho do CONTEXT.md de cada um
 ├── docs/
-│   ├── context.md            ← ÍNDICE (leia este; é o roteador)
-│   ├── context/              ← o porquê longo, quebrado por tema
-│   │   ├── authorization.md
-│   │   ├── pet-domain.md
-│   │   └── …
-│   ├── adr/                  ← decisões estruturais
-│   │   ├── product-catalog-modeling.md
-│   │   └── …
-│   ├── todo.md               ← índice das fases (ver docs/agents/issue-tracker.md)
-│   └── reference/            ← endpoints, política de log, backlog
-├── .scratch/                 ← o tracker: specs e issues, versionado
-└── src/
+│   ├── adr/                      ← decisões de SISTEMA (0001-…)
+│   ├── todo.md                   ← índice das fases (ver docs/agents/issue-tracker.md)
+│   ├── reference/backlog.md
+│   └── agents/                   ← este diretório
+├── .scratch/                     ← o tracker: specs e issues, versionado, único
+├── apps/api/
+│   ├── CLAUDE.md                 ← o específico da stack + regras de negócio firmadas
+│   ├── CONTEXT.md                ← glossário do contexto (o que cada termo é)
+│   ├── docs/
+│   │   ├── adr/
+│   │   │   ├── README.md         ← ÍNDICE por tema (leia este; é o roteador)
+│   │   │   ├── 0001-auth-token-revocation.md
+│   │   │   ├── …
+│   │   │   └── 0195-ultima-variante-ativa-decidida-sob-lock.md
+│   │   ├── reference/            ← endpoints, política de log, schema, histórico
+│   │   └── guides/
+│   └── src/
+└── apps/web/                     ← mesmo desenho (CLAUDE.md, CONTEXT.md, docs/adr/ com o
+                                    README.md-índice), mais a direção visual em design-system.md
 ```
 
-Não existe `CONTEXT.md` na raiz nem `CONTEXT-MAP.md`, e **não se deve criar um**: seria um segundo
-sistema de documentação de domínio ao lado do que já existe. Se uma skill pedir `CONTEXT.md`, o
-equivalente aqui é o par `CLAUDE.md` (vocabulário e regras firmadas) + `docs/context.md` (índice).
+Não existe `CONTEXT.md` na raiz — o repo tem mais de um contexto, então o que existe na raiz é
+o `CONTEXT-MAP.md`, como a skill pede. Não existe mais `docs/context/`: o que vivia lá virou um
+ADR por decisão (migração de 2026-09-18, [`docs/adr/0001`](../adr/0001-domain-docs-follow-the-skill.md)).
 
 ## Ao acrescentar uma decisão
 
-Escreva no **arquivo temático** (um `###` com o título da decisão) **e** acrescente a linha
-correspondente no índice `docs/context.md` — os dois juntos, senão a decisão fica inalcançável.
-Decisão estrutural vira ADR em `docs/adr/`, e o contexto guarda só o ponteiro. Decisão revertida é
-**reescrita** narrando a reversão, nunca duplicada como decisão + errata.
+Escreva um **ADR novo** no app dono da decisão (próximo número em `docs/adr/`, formato de
+`ADR-FORMAT.md` da skill: título que é a decisão e, em 1–3 frases ou o que ela pedir, contexto,
+decisão e porquê — um parágrafo basta) **e**
+acrescente a linha correspondente no índice `apps/<app>/docs/adr/README.md`, na seção do tema —
+os dois juntos, senão a decisão fica inalcançável. Decisão que atravessa apps vai em `docs/adr/`
+da raiz. Decisão revertida é **reescrita** narrando a reversão, nunca duplicada como decisão +
+errata; reversão grande marca o ADR antigo como `superseded by ADR-NNNN`.
 
-Depois de mexer em doc, rode **`npm run docs:check`**: ele prova que todo caminho e toda âncora
-citados no repo (inclusive nos comentários de `src/`) existem de fato.
+Termo novo ou termo que ganhou significado mais preciso vai para o `CONTEXT.md` do app — e **só
+o termo**, com a definição de uma ou duas linhas e os sinônimos a evitar. O glossário não guarda
+racional nem implementação; se a definição precisa de porquê, ela aponta para o ADR.
+
+Spec e issue de `.scratch/` **podem** ser citadas de um ADR ou de um comentário — são arquivos
+fixos do tracker versionado. Depois de mexer em doc, rode **`pnpm docs:check`** na raiz: ele
+prova que todo caminho e toda âncora citados no monorepo (inclusive nos comentários de `src/`)
+existem de fato.
 
 ## Use o vocabulário do projeto
 
@@ -64,14 +89,15 @@ nível da árvore de `Category`; perfil é definido pela **presença** da relaç
 "tipo". Não deslize para sinônimos.
 
 Se o conceito que você precisa não está em lugar nenhum, isso é um sinal: ou você está inventando
-linguagem que o projeto não usa (reconsidere), ou há uma lacuna real (registre-a).
+linguagem que o projeto não usa (reconsidere), ou há uma lacuna real (registre-a — no glossário,
+se é termo; em ADR, se é decisão).
 
 ## Sinalize conflito com um ADR
 
 Se sua saída contradiz um ADR existente, diga isso em voz alta em vez de sobrescrever em silêncio:
 
-> _Contradiz o `docs/adr/authorization-scope-and-lifecycle.md` (override pendurado na atribuição de
-> role), mas vale reabrir porque…_
+> _Contradiz o `apps/api/docs/adr/0005-authorization-scope-and-lifecycle.md` (override pendurado
+> na atribuição de role), mas vale reabrir porque…_
 
 E lembre: contradizer um ADR é quase sempre **decisão de negócio**. Apresente os caminhos e a
 consequência de cada um, e espere a decisão do usuário.

@@ -1,0 +1,42 @@
+{
+  // Base de todo projeto do workspace. O que está aqui é regra do monorepo, não
+  // preferência de um app: a rigidez (strict + exactOptionalPropertyTypes +
+  // noUncheckedIndexedAccess) e a semântica de módulo (ESM + resolução de
+  // bundler + verbatimModuleSyntax). Cada alvo (node/next/library) estende este
+  // e muda só o que o alvo pede; cada app estende o do alvo e guarda só o que é
+  // relativo ao próprio diretório (rootDir, paths, typeRoots, include).
+  //
+  // Caminho relativo escrito AQUI resolve a partir DESTE arquivo, não do app
+  // que estende — por isso nada de rootDir/outDir/paths/typeRoots nos presets.
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    // Environment Settings
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+
+    // Emit. Quem emite (biblioteca) emite com mapas e tipos; quem não emite
+    // (app bundlado pelo tsup, Next com noEmit) ignora estes três.
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+
+    // Stricter Typechecking Options
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Interop
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    // Recommended Options
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  }
+}

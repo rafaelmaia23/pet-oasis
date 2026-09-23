@@ -5,7 +5,7 @@ documentação do front afirma algo **factualmente diferente** do que a API faz 
 Nenhum deles é opinião: cada um cita a linha da API que o contradiz.
 
 Este arquivo é para entregar a quem mantém o `pet-oasis-web`, e **morre quando for aplicado**.
-O conteúdo permanente correspondente vive em `docs/guides/integrating-with-the-api.md`, do
+O conteúdo permanente correspondente vive em `apps/api/docs/guides/integrating-with-the-api.md`, do
 lado da API — quando esta errata sumir, nada se perde.
 
 ---

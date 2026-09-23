@@ -41,5 +41,4 @@ que alguém religar um `jwt.verify` cru ali.
 
 **Consequência de implantação:** o deploy invalida todo access token em voo — o cliente que
 trata o 401 com `refresh` (fluxo normal de expiração) recompõe o par sem o usuário notar; o
-refresh token é opaco e não muda. Registrado em `docs/context/security.md` § "O access token
-tem algoritmo pinado", indexado em `docs/context.md`, e o item do backlog riscado.
+refresh token é opaco e não muda. Registrado em `apps/api/docs/adr/0129-access-token-tem-algoritmo-pinado-iss-aud-obrigatorios.md`, indexado em `apps/api/docs/adr/README.md`, e o item do backlog riscado.

@@ -1,0 +1,21 @@
+{
+  // Estende o preset Next do workspace (`packages/tsconfig`): rigidez, semântica
+  // de módulo, `jsx: preserve`, `noEmit`, `allowJs` e o plugin `next` vêm de lá.
+  // Fica aqui SÓ o que é relativo a este diretório — caminho escrito num preset
+  // resolveria a partir do preset, não daqui.
+  "extends": "@pet-oasis/tsconfig/tsconfig.next.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.mts",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

@@ -51,9 +51,8 @@ anônimo `src/generated`) e cai para o uid do host, via `setpriv` (já na imagem
   do serviço — é o que o `chown -R` compra para quem já tinha um clone com o defeito.
 - Comentários corrigidos onde a issue pediu: compose de dev (a disputa existe, e é com o host),
   `.gitignore` (quem cria primeiro é o Docker), estágio `dev` do `Dockerfile` (root só até o
-  `generate`). O porquê permanente está em `docs/context/infrastructure.md` § "O container de dev
-  escreve como o uid do host, não como root (10.16)", com a linha no índice e o parágrafo da 10.4
-  reescrito narrando o que ela não enxergou; o ADR `environments-and-deploy.md` deixou de dizer
+  `generate`). O porquê permanente está em `apps/api/docs/adr/0163-container-dev-escreve-como-uid-host-nao-como-root.md`, com a linha no índice e o parágrafo da 10.4
+  reescrito narrando o que ela não enxergou; o ADR `0002-environments-and-deploy.md` deixou de dizer
   "fica root para evitar EACCES".
 - A suíte não muda: `vitest.config.ts` continua apontando `UPLOAD_DIR` para um tmpdir, e o
   caminho consertado (Compose + entrypoint) não tem seam testável em Vitest — a prova é a

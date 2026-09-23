@@ -1,157 +1,131 @@
-# Deploy em produção
+# Deploy do stack de produção
 
-Produção sobe **só** a API + Postgres-de-prod. No Compose o serviço se chama **`api`** e o
-container, **`pet-oasis-api`** — o nome do serviço é o que o DNS da rede publica, então é por
-ele que um cliente interno (o front) alcança a API. É buildado e roda direto num VPS **ARM64**.
+Produção é **um stack só**, do sistema inteiro: `api` + `web` + Postgres-de-prod + Redis, sem
+mailpit. Os arquivos Compose vivem em [`infra/`](../../infra/) e os scripts `prod:*` no
+`package.json` da **raiz**, porque o stack é do sistema e não de um app — o porquê está em
+[`adr/0007`](../adr/0007-single-compose-stack-one-image-per-app.md). No Compose os serviços se
+chamam **`api`** e **`web`**, e os containers, **`pet-oasis-api`** e **`pet-oasis-web`** — o
+nome do serviço é o que o DNS da rede publica, então é por `api` que o front alcança a API por
+dentro. Tudo é buildado e roda direto num VPS **ARM64**.
 
-No servidor:
+**Este guia é o do stack.** O que é específico de um app — as variáveis dele, o que a imagem
+dele contém, o que quebra só nele — mora no guia daquele app, e é para lá que você vai quando
+o deploy é de um serviço só:
 
-```bash
-git clone <repo> && cd pet-oasis
-cp .env.example .env.production
-```
+| Deploy | Guia |
+|---|---|
+| O sistema inteiro, ou o primeiro deploy de um host | este arquivo |
+| Só a API (`pnpm prod:up api`) | [`apps/api/docs/guides/deploy.md`](../../apps/api/docs/guides/deploy.md) |
+| Só o front (`pnpm prod:up web`) | [`apps/web/docs/guides/deploy.md`](../../apps/web/docs/guides/deploy.md) |
 
-Preencher o `.env.production`:
+**Um stack, dois tempos de deploy.** `pnpm prod:up` sobe o sistema; `pnpm prod:up api` (ou
+`web`) reconstrói e reinicia **só** aquele serviço, com o outro seguindo na imagem que já
+tinha.
 
-- `JWT_SECRET` e `PEPPER` — segredos fortes, ≥ 32 chars cada (`openssl rand -hex 32`).
-- `POSTGRES_PASSWORD` — senha forte do banco.
-- `APP_URL` — o domínio real do **front** (usado nos links de email), não o da API. Os dois
-  são hosts diferentes: ver [Domínio e reverse proxy](#domínio-e-reverse-proxy) abaixo.
-- `MAIL_FROM` e `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS` — SMTP para envio dos emails.
-- `SEED_DEMO_USER=true` + `DEMO_*` — só se quiser o usuário demo público.
-- `UPLOAD_HOST_DIR` — o diretório **no host** que o Compose monta em `/app/uploads`. É bind
-  mount, não volume nomeado: é o que permite, amanhã, o nginx servir `/uploads/` direto sem
-  tocar em código nem no banco. **Obrigatória**: sem ela o `prod:up` falha nomeando a variável,
-  e o caminho precisa ser **absoluto e fora do working tree** do repo clonado (ver abaixo).
-  Absoluto não é preciosismo: fonte relativa de bind mount resolve contra o **diretório do
-  projeto** do Compose, que é o do primeiro `-f` — `infra/`, não a raiz do repo. `./uploads`
-  aqui significaria `<repo>/infra/uploads` (é por isso que o compose de dev pede `../uploads`).
-- `UPLOAD_PUBLIC_BASE_URL` — a base pública das URLs de imagem, no host da **API**
-  (`https://pet-oasis-api.maiahub.com.br/uploads`). Quem serve o byte é a API, então é o
-  certificado dela que cobre o endereço. O banco guarda só a **chave**; a URL é montada com
-  isto na resposta, o que faz trocar de host custar uma variável e nenhuma migration.
-- `SEED_FAKE_DATA=true` e `DEMO_MODE=true` — só num deploy de demonstração: povoam o
-  catálogo fictício e liberam o `demo-reset` (truncate + reseed diário).
+## Preparar o host
 
-## Diretório de uploads
-
-O diretório de dados fica **fora do working tree** do repo clonado, e isso não é preferência de
-arrumação. Dentro da árvore ele tem dois donos incompatíveis — o git escreve como o usuário do
-host (uid 1001 no servidor), o container escreve como uid 1000 — e não existe dono que satisfaça
-os dois. Já custou dois incidentes: um `pull` abortado por `Permission denied`, deixando o
-checkout pela metade, e um `EACCES` no seed. Fora da árvore, o git nunca toca no caminho, e uma
-limpeza de arquivos não rastreados no repo não alcança o que foi enviado.
-
-O uid **1000 está fixado no serviço** (`user: "1000:1000"` em `infra/docker-compose.prod.yml`),
-em vez de herdado do `USER node` da imagem base — é o mesmo par que o `chown` abaixo usa, e os
-dois mudam juntos ou nenhum.
-
-Criar o diretório antes da primeira subida — um bind mount criado pelo Docker nasce de `root`, e
-o container não escreveria nele:
+No servidor, Node 24 com corepack — os `prod:*` rodam via `pnpm`, e o corepack instala a versão
+pinada no `packageManager` do `package.json` da raiz (nenhum Dockerfile escreve versão de pnpm;
+ver [`adr/0006`](../adr/0006-one-source-for-node-pnpm-and-one-version-per-dependency.md)). O
+VPS clona o **monorepo inteiro**, e é da raiz dele que se opera. O build de cada imagem usa a
+raiz como contexto, que é onde estão o lockfile e o workspace (ver
+[`apps/api/docs/adr/0156`](../../apps/api/docs/adr/0156-contexto-build-raiz-monorepo-runtime-podado-pnpm-deploy.md)):
 
 ```bash
-sudo mkdir -p /srv/pet-oasis-data/uploads
-sudo chown -R 1000:1000 /srv/pet-oasis-data/uploads
+corepack enable                            # uma vez por máquina
+git clone <repo> && cd pet-oasis           # a RAIZ do monorepo; é daqui que se roda tudo
+cp apps/api/.env.example apps/api/.env.production
+cp apps/web/.env.example apps/web/.env.production
 ```
 
-É o **número** que importa, não o nome: `1000:1000` é o `user:` do serviço, e um `ls -la` vai
-mostrá-lo com o nome que o host der a esse uid (`opc`, `ubuntu`, o que for). Conferir com
-`id -u <nome>` antes de confiar no nome.
-
-### Não há deploy para migrar — mas há bytes a regravar
-
-Nenhum deploy com dados antecede este layout, então não há diretório a mover. Mas o volume do
-banco sobrevive ao redeploy e o seed não regrava o que o banco já tem — se as linhas de imagem
-apontam para bytes que ficaram para trás, a API sobe limpa e toda imagem responde 404. No demo,
-o conserto é repovoar:
-
-```bash
-sudo systemctl start pet-oasis-demo-reset.service     # trunca e repovoa, gravando no mount novo
-ls /srv/pet-oasis-data/uploads                          # brands  pets  products
-```
-
-Racional em `docs/context/infrastructure.md` § "O diretório de uploads mora fora do working tree".
+**Os dois arquivos precisam existir**, cada um dentro do app que é dono dele, e nenhum deles é
+versionado — o Compose lê os dois como `env_file`, e um ausente derruba o `up`. O da API tem um
+papel a mais, que é do stack e não dela: é o `--env-file` de **interpolação**, de onde saem
+`POSTGRES_*` e `UPLOAD_HOST_DIR`. O que preencher em cada um está no guia do app
+([API](../../apps/api/docs/guides/deploy.md#o-envproduction-da-api),
+[web](../../apps/web/docs/guides/deploy.md#o-envproduction-do-web)).
 
 ## Redes
 
-O Compose de produção declara **três** redes, e o `up` falha se qualquer das duas compartilhadas
-não existir — o que é a mensagem certa, e o motivo de elas serem declaradas em vez de conectadas à
-mão depois do deploy:
+O Compose de produção declara **três** redes, com papéis distintos. A API é o único serviço nas
+três — é ela que atravessa a fronteira entre os dados e quem os pede:
 
 | Rede | Quem entra | Criada por |
 |---|---|---|
 | `backend` (`internal: true`) | `db`, `redis`, `api` | o próprio `prod:up` |
-| `pet-oasis` | `api` + clientes internos (o front) | **fora deste repo**, uma vez |
-| `proxy` | `api` + nginx + clientes internos que o nginx serve | **fora deste repo**, uma vez |
+| `frontend` | `api` + `web` | o próprio `prod:up` — é **do stack** |
+| `proxy` | `api`, `web`, o nginx e o que mais ele servir | **fora deste repo**, uma vez |
 
-As duas compartilhadas são `external:` pelo mesmo motivo: rede que liga stacks diferentes vive
-mais que qualquer uma delas. Se a `pet-oasis` fosse gerenciada por este compose, o `prod:down`
-a apagaria sempre que o front também estivesse fora — e o front, que a declara externa, passaria
-a recusar subir até a API voltar. Em host novo, antes do primeiro `prod:up`:
+A rede entre a API e o front é **do stack**, e não mais `external:` — é a mudança que o
+monorepo trouxe. A `pet-oasis` externa da Fase 10 existia porque ligava **dois** stacks, cada
+um no seu repositório, e rede que liga stacks vive mais que qualquer um deles; com os dois
+serviços no mesmo stack, a rede nasce no `up` e morre no `down`, e "o up do web falhou porque a
+rede da API não existe" deixa de ser possível por construção
+([`adr/0007`](../adr/0007-single-compose-stack-one-image-per-app.md), e o desenho completo de
+redes em [`apps/api/docs/adr/0148`](../../apps/api/docs/adr/0148-tres-redes-papeis-distintos-porta-api-despublicada.md)).
+
+A `proxy` continua externa porque o reverse proxy é de fora do repositório, e o `up` **falha se
+ela não existir** — o que é a mensagem certa, e o motivo de ela ser declarada em vez de
+conectada à mão depois de cada deploy. Em host novo, antes do primeiro `prod:up`:
 
 ```bash
-docker network create proxy       # inofensivo se já existir: erra dizendo que existe
-docker network create pet-oasis   # idem
+docker network create proxy   # inofensivo se já existir: erra dizendo que existe
 ```
 
-> Host que já rodou uma versão anterior deste compose pode ter a `pet-oasis` criada pelo próprio
-> Compose. Não faz diferença: `external:` só exige que ela exista, e o `create` erra dizendo que
-> já existe — siga em frente.
+> Host que rodou a versão anterior deste compose tem uma rede `pet-oasis` órfã: ela existia
+> para ligar os dois stacks que agora são um, e nenhum serviço a declara mais. Removê-la é
+> parte da transição de host — `docker network rm pet-oasis`, depois que o stack novo subir e
+> os dois containers responderem. Deixá-la para trás não quebra nada, mas guarda um nome que
+> um projeto futuro pode reusar acreditando que é o nosso.
 
-O NPM precisa estar nela (`docker network inspect proxy`) e passa a alcançar a API por
-`http://pet-oasis-api:3000` — o **nome do container**, não o alias `api`, e **não**
-`127.0.0.1:3000`. A porta 3000 não é mais publicada no host:
+Estar na `frontend` dá acesso à API e **só**: Postgres e Redis ficam na `backend`, que é
+`internal:` e não tem rota para lugar nenhum, e o web não entra nela. O contrato completo do
+lado do cliente está em
+[`integrating-with-the-api.md`](../../apps/api/docs/guides/integrating-with-the-api.md).
 
-```nginx
-proxy_pass http://pet-oasis-api:3000;
-```
-
-Por que o nome do container e não `api`: a `proxy` é compartilhada com todo projeto que o NPM
-serve neste host, e `api` é o nome genérico que um segundo projeto mais provavelmente usaria.
-Dois containers respondendo pelo mesmo nome viram round-robin no DNS do Docker, e o proxy passa
-a alternar entre as duas APIs sem erro nenhum. Por isso o compose de produção **não** declara o
-alias `api` na `proxy` (só nas redes exclusivas do projeto, onde ele é contrato com o front).
-
-> ⚠️ **Não republique a porta da API.** A ausência de publicação é o que torna seguro o
-> `trust proxy` por endereço privado do `app.ts`: com a porta aberta na internet, qualquer um
-> forja o próprio `X-Forwarded-For` e fura rate limit, lockout e audit log de uma vez. Para
-> depurar de dentro do host, use `docker exec pet-oasis-api …` ou uma publicação temporária em
-> `127.0.0.1:3000:3000`, nunca em `0.0.0.0`.
-
-Cliente interno (o front) entra na `pet-oasis`, declarando-a como externa no compose dele. Estar
-nela dá acesso à API e **só**: Postgres e Redis ficam na `backend`, que é `internal:` e não tem
-rota para lugar nenhum. O contrato completo do lado do cliente está em
-[`integrating-with-the-api.md`](integrating-with-the-api.md).
+> ⚠️ **Nenhum serviço publica porta no host** — nem o banco, nem o cache, nem a API, nem o web.
+> O nginx alcança os dois por DNS de container na rede `proxy`, e manutenção de banco é
+> `docker exec`. No caso da API isso não é só higiene, e republicar a porta reabre um furo de
+> segurança concreto: o porquê está no [guia dela](../../apps/api/docs/guides/deploy.md#o-proxy-host-da-api).
 
 ## Domínio e reverse proxy
 
-A API atende em **`pet-oasis-api.maiahub.com.br`**. O apex (`pet-oasis.maiahub.com.br`) é do
-front e fica **limpo**: nenhum caminho da API é redirecionado a partir dele. Quem chama a API
-usa a base do subdomínio — o README e a coleção Bruno (`api-collection/environments/prod.bru`)
-já apontam para lá. O porquê do nome (primeiro nível sob `maiahub.com.br`, e não
-`api.pet-oasis.…`) e o de não haver redirect estão em `docs/context/infrastructure.md`
-§ "A API atende num subdomínio, e o apex fica limpo (10.6)".
+A API atende em **`pet-oasis-api.maiahub.com.br`** e o front no apex,
+**`pet-oasis.maiahub.com.br`**. O porquê dessa repartição — o nome da API de primeiro nível sob
+`maiahub.com.br`, e não `api.pet-oasis.…`, e o apex sem nenhum redirect para a API — está em
+[`apps/api/docs/adr/0160`](../../apps/api/docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md).
 
 O reverse proxy é o **Nginx Proxy Manager** (NPM), e a configuração dele **não vive neste
 repositório** — é do servidor pessoal que hospeda a demo, pelo mesmo motivo registrado em
-`docs/context/infrastructure.md` § "O reverse proxy do upload existe, mas não neste repositório
-(9.10)". O que segue é a **forma** que ela precisa ter; versionar uma cópia aqui só criaria duas
-verdades divergindo em silêncio.
+[`apps/api/docs/adr/0161`](../../apps/api/docs/adr/0161-reverse-proxy-upload-existe-nao-neste-repositorio.md).
+O que segue é a **forma** que ela precisa ter; versionar uma cópia aqui só criaria duas verdades
+divergindo em silêncio.
 
-### O que o proxy host precisa ter
+### O que cada proxy host precisa ter
 
-1. **DNS.** Registro `A` de `pet-oasis-api.maiahub.com.br` na Cloudflare, **proxiado** como os
-   demais registros do domínio. O nome é de primeiro nível de propósito: o Universal SSL da
-   Cloudflare cobre o apex e `*.maiahub.com.br`, e nada além — um nome de segundo nível não tem
-   certificado na borda e falha no handshake TLS antes de a requisição chegar ao servidor.
-2. **Certificado** Let's Encrypt emitido pelo NPM por **desafio DNS** na Cloudflare (token de API
-   com permissão de editar a zona). É o desafio que funciona atrás do proxy da Cloudflare, onde a
-   porta 80 do servidor não é o que o mundo vê.
-3. **Proxy host** `pet-oasis-api.maiahub.com.br` → `http://pet-oasis-api:3000`. O NPM alcança a
-   API por **DNS de container**, na rede `proxy` (`docker network inspect proxy` tem que listar
-   o container do NPM). `pet-oasis-api` é o nome do container; `api` é o alias que o compose
-   declara e resolve igual. **NUNCA `127.0.0.1:3000`** — a porta não é publicada no host, e é
-   essa ausência que torna seguro o `trust proxy` por endereço privado (ver "Redes", acima).
+São **dois** proxy hosts, um por app, com o mesmo desenho e destinos diferentes:
+
+| Host | Destino |
+|---|---|
+| `pet-oasis.maiahub.com.br` (apex) | `http://pet-oasis-web:3001` |
+| `pet-oasis-api.maiahub.com.br` | `http://pet-oasis-api:3000` |
+
+1. **DNS.** Registro `A` de cada nome na Cloudflare, **proxiado** como os demais registros do
+   domínio. O da API é de primeiro nível de propósito: o Universal SSL da Cloudflare cobre o
+   apex e `*.maiahub.com.br`, e nada além — um nome de segundo nível não tem certificado na
+   borda e falha no handshake TLS antes de a requisição chegar ao servidor.
+2. **Certificado** Let's Encrypt emitido pelo NPM por **desafio DNS** na Cloudflare (token de
+   API com permissão de editar a zona). É o desafio que funciona atrás do proxy da Cloudflare,
+   onde a porta 80 do servidor não é o que o mundo vê.
+3. **Destino por DNS de container**, na rede `proxy` (`docker network inspect proxy` tem que
+   listar o container do NPM). É sempre o **nome do container** (`pet-oasis-api`,
+   `pet-oasis-web`), nunca o alias `api`/`web` e nunca `127.0.0.1` — a porta não é publicada no
+   host. O motivo de não usar o alias: a `proxy` é compartilhada com todo projeto
+   que o NPM serve neste host, e `api` é o nome genérico que um segundo projeto mais
+   provavelmente usaria; dois containers respondendo pelo mesmo nome viram round-robin no DNS
+   do Docker, e o proxy alterna entre os dois sem erro nenhum. Por isso o compose de produção
+   **não** declara alias na `proxy` (só nas redes exclusivas do projeto, onde ele é contrato
+   entre API e web).
 4. **Custom config** do proxy host (a aba *Advanced* do NPM, que entra no nível do `server`):
 
    ```nginx
@@ -159,23 +133,18 @@ verdades divergindo em silêncio.
    real_ip_recursive off;
    ```
 
-   É o que mantém verdadeira a cadeia de IP da 10.2 com a Cloudflare na frente: sem isto o
-   `X-Forwarded-For` que chega à API termina na borda da Cloudflare, o `trust proxy` para
-   nela, e todo visitante cai num balde só de rate limit. O NPM já confia nas faixas da
-   Cloudflare (`set_real_ip_from`, em `ip_ranges.conf`); as duas linhas fazem o `$remote_addr`
-   virar o visitante. Vale para **todo** proxy host que receba visitante pela Cloudflare — o da
-   API e, quando o front subir, o do apex. O porquê completo está em
-   `docs/context/infrastructure.md` § "A API atende num subdomínio, e o apex fica limpo (10.6)".
-
-O redirect da raiz (`/` → `/reference`) que o host público faz é do **NPM**, não da aplicação —
-a API não tem rota `/`.
+   É o que mantém verdadeira a cadeia de IP com a Cloudflare na frente: sem isto o
+   `X-Forwarded-For` que chega à API termina na borda da Cloudflare, o `trust proxy` para nela,
+   e todo visitante cai num balde só de rate limit. O NPM já confia nas faixas da Cloudflare
+   (`set_real_ip_from`, em `ip_ranges.conf`); as duas linhas fazem o `$remote_addr` virar o
+   visitante. Vale para **os dois** proxy hosts.
 
 O que o NPM gera é o equivalente a este `location`, e é isto que qualquer outro reverse proxy
 precisaria reproduzir — os quatro `proxy_set_header` são o contrato do `trust proxy`:
 
 ```nginx
 location / {
-    proxy_pass http://pet-oasis-api:3000;
+    proxy_pass http://pet-oasis-api:3000;   # ou pet-oasis-web:3001, no host do apex
     proxy_set_header Host              $host;
     proxy_set_header X-Real-IP         $remote_addr;
     proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -183,87 +152,55 @@ location / {
 }
 ```
 
-### Verificar
-
-```bash
-# TLS válido e a API respondendo no host
-curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' \
-  https://pet-oasis-api.maiahub.com.br/api/v1/status        # 200 0
-
-# Uma imagem do catálogo servida pelo host da API
-curl -sS -o /dev/null -w '%{http_code}\n' \
-  "$(curl -s 'https://pet-oasis-api.maiahub.com.br/api/v1/products?limit=1' \
-     | grep -o 'https://[^"]*\.webp' | head -1)"          # 200
-
-# A cadeia de IP pela Cloudflare: um login recusado, vindo de fora do servidor,
-# tem que gravar em audit_logs o IP de QUEM chamou — não 2606:4700::/104.x
-# (Cloudflare) nem 172.x (a rede docker do NPM).
-curl -sS -o /dev/null -w '%{http_code}\n' \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"nobody@example.com","password":"wrong"}' \
-  https://pet-oasis-api.maiahub.com.br/api/v1/auth/login    # 401
-docker exec -i pet-oasis-prod-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
-select ip, created_at from audit_logs
- where action = 'AUTH_LOGIN_FAILED' order by created_at desc limit 1;
-SQL
-```
-
 ## Subir
 
+Sempre **da raiz do monorepo** — os `prod:*` são scripts da raiz:
+
 ```bash
-npm run prod:up    # build + up; migrate deploy + seed no entrypoint
+pnpm prod:up          # o sistema inteiro: db, redis, api, web
+pnpm prod:up api      # só a API: rebuild + restart dela; o web segue na imagem que já tinha
+pnpm prod:up web      # só o front, idem
 ```
 
-> ⚠️ **A imagem tem que ser construída no próprio servidor ARM.** É o que o `prod:up` faz (o
+O deploy de um serviço só funciona nas duas direções porque o `web` **não** declara
+`depends_on: api` (o porquê, e o modo de falha que isso evita, em
+[`adr/0007`](../adr/0007-single-compose-stack-one-image-per-app.md)). Para conferir que o outro
+serviço não foi tocado, compare o `StartedAt` antes e depois:
+
+```bash
+docker inspect -f '{{.State.StartedAt}} {{.Image}}' pet-oasis-api pet-oasis-web
+```
+
+> ⚠️ **As imagens têm que ser construídas no próprio servidor ARM.** É o que o `prod:up` faz (o
 > Compose tem `build:`). Construir num x86 e enviar a imagem pronta quebra em runtime com
 > "could not load the sharp module" — erro que não se parece nada com a causa, porque o
 > `sharp` traz binário nativo por arquitetura.
 
-`npm run prod:down` derruba; 
-`npm run prod:logs` acompanha. 
-A migração roda via `prisma migrate deploy` e o seed é idempotente — a subida deixa o ambiente do zero funcionando.
+`pnpm prod:down` derruba o stack; `pnpm prod:logs` acompanha os logs (dos dois serviços, ou de
+um: `pnpm prod:logs api`). A migração do banco roda via `prisma migrate deploy` no entrypoint da
+API e o seed é idempotente — a subida deixa o ambiente do zero funcionando.
 
-### O que no seed derruba o boot, e o que só loga
+## Verificar o stack
 
-O seed roda a cada boot do container, e **não** é tudo-ou-nada:
-
-| Classe | O que é | Falhando |
-|---|---|---|
-| Dado de referência | features, roles, raças, léxico da busca | **para o boot** — é pré-requisito, como a migration |
-| Dado de demonstração | usuário demo, admin de teste, dataset fake (`SEED_*`) | **só loga** em nível de erro; o servidor sobe |
-
-Dado de demonstração não vale uma API fora do ar: uma falha de permissão gravando imagem do
-catálogo fake já pôs este container em crash loop e o site inteiro em 502. Quando isso acontece, a
-última linha do seed diz exatamente quais passos faltaram:
-
-```
-SEEDING COMPLETED WITH FAILURES: fake-catalog — dado de demonstração faltando; a API sobe assim mesmo.
-```
-
-Ou seja: **a API está no ar e incompleta**, não fora do ar. Corrigida a causa (quase sempre a
-permissão do `UPLOAD_HOST_DIR` — ver o `chown` acima), rode o seed à mão, sem redeploy e sem
-downtime:
+O que se confere aqui é o stack: os quatro containers de pé e saudáveis, e as redes como
+devem estar.
 
 ```bash
-docker exec pet-oasis-api node dist/seed.js
+docker ps --filter 'name=pet-oasis-' --format '{{.Names}}\t{{.Status}}'
+#   pet-oasis-api    Up … (healthy)
+#   pet-oasis-web    Up … (healthy)
+#   pet-oasis-prod-db     Up … (healthy)
+#   pet-oasis-prod-redis  Up … (healthy)
+
+docker network inspect proxy -f '{{range .Containers}}{{.Name}} {{end}}'
+#   tem que listar pet-oasis-api, pet-oasis-web e o container do NPM
 ```
 
-O seed é idempotente: o que já foi semeado é pulado, e só o que faltou entra. Se em vez disso o
-**boot** parou, o `prod:logs` mostra o erro e o container reiniciando — aí a falha é de dado de
-referência (ou do banco), e é para parar mesmo.
-
-## Timers de manutenção
-
-Os scripts de faxina (`cleanup-sessions`, `cleanup-audit-log` e, no deploy demo, `demo-reset`)
-são agendados por systemd timer — passo manual, fora do Compose. Instalação, verificação e o
-procedimento de troca das units estão em [`infra/cron/README.md`](../../infra/cron/README.md).
-
-> ⚠️ Cada unit chama `docker exec pet-oasis-api …`, ou seja, **o nome do container está gravado
-> nela**. Num deploy que renomeia o container, reinstale as units **antes** do `prod:up` e rode
-> uma delas à mão **depois** dele (antes, o `docker exec` erra o nome por construção) — unit
-> apontando para container inexistente falha em silêncio, só no journal.
+Cada app responder pelo domínio dele, e as verificações que só fazem sentido nele — a imagem
+do catálogo servida pela API, a cadeia de IP gravada em `audit_logs`, o front alcançando a API
+por dentro — estão no guia do app: [API](../../apps/api/docs/guides/deploy.md#verificar-a-api),
+[web](../../apps/web/docs/guides/deploy.md#verificar).
 
 > Fora do escopo da app (infra do servidor): backup do volume `prod_pgdata`, firewall. O
 > reverse proxy e o TLS também moram fora do repositório, mas a forma que precisam ter está
-> escrita acima, em [Domínio e reverse proxy](#domínio-e-reverse-proxy) — é a peça sem a qual
-> a API não é alcançável pelo público.
+> escrita acima — é a peça sem a qual nada é alcançável pelo público.

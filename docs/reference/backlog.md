@@ -9,13 +9,13 @@
 ## Segurança
 
 ### ~~Timing attack no login e enumeração de usuário~~ — ✅ resolvido (Fase 10.9)
-Medido com o custo real do bcrypt: email desconhecido respondia em 5 ms e senha errada em 172 ms. O ramo sem conta passou a verificar contra um hash de ninguém (`simulatePasswordVerification`, `src/lib/password.ts`) e as medianas ficaram em 171 ms contra 172 ms. Racional e método da medição em `docs/context/identity-and-sessions.md` § "O relógio do login não é oráculo".
+Medido com o custo real do bcrypt: email desconhecido respondia em 5 ms e senha errada em 172 ms. O ramo sem usuário passou a verificar contra um hash de ninguém (`simulatePasswordVerification`, `src/lib/password.ts`) e as medianas ficaram em 171 ms contra 172 ms. Racional e método da medição em `apps/api/docs/adr/0064-relogio-login-nao-oraculo-email-desconhecido-paga-bcrypt.md`.
 
-### Resíduo de tempo no login: o contador de lockout só no ramo com conta — **P**
-Depois da 10.9 sobra ~1 ms entre as duas recusas: o ramo com conta grava o contador de lockout no Redis (`lockout.recordFailure`) e o ramo sem conta não. Em rede local é ruído; em Redis remoto pode voltar a ser mensurável. **Correção possível:** uma escrita dummy no Redis no ramo sem conta, ou medir com o Redis de produção antes de decidir que não vale o custo. Decisão de produto, não tomada.
+### Resíduo de tempo no login: o contador de lockout só no ramo com usuário — **P**
+Depois da 10.9 sobra ~1 ms entre as duas recusas: o ramo com usuário grava o contador de lockout no Redis (`lockout.recordFailure`) e o ramo sem usuário não. Em rede local é ruído; em Redis remoto pode voltar a ser mensurável. **Correção possível:** uma escrita dummy no Redis no ramo sem usuário, ou medir com o Redis de produção antes de decidir que não vale o custo. Decisão de produto, não tomada.
 
 ### ~~Comprimento máximo em todo campo de texto~~ — ✅ resolvido (Fase 10.13)
-Catálogo e pet já tinham teto; faltavam identidade e sessão (email 254, senha conferida 100, token 64, CPF 14 e telefone 20 medidos no texto cru com máscara, `cursor` 128, `targetId` 36). Cada teto sai como `maxLength` no `/openapi.json` e tem teste no módulo. Racional em `docs/context/security.md` § "Todo campo de texto tem teto".
+Catálogo e pet já tinham teto; faltavam identidade e sessão (email 254, senha conferida 100, token 64, CPF 14 e telefone 20 medidos no texto cru com máscara, `cursor` 128, `targetId` 36). Cada teto sai como `maxLength` no `/openapi.json` e tem teste no módulo. Racional em `apps/api/docs/adr/0128-todo-campo-texto-tem-teto-teto-contrato.md`.
 
 ### Teto para `User-Agent` e `X-Forwarded-For` antes de gravar em `Session`/`AuditLog` — **P**
 A varredura da 10.13 cobriu campo de schema; os dois headers vão para o banco (`Session.userAgent`/`ipAddress`, `AuditLog.userAgent`/`ip`) sem teto próprio — o único é o do Node (`--max-http-header-size`, 16KB), e 16KB numa coluna de sessão por login é o mesmo lixo que o `.max()` evitou no corpo. **Correção:** truncar no `requestContext` (o único ponto que lê os dois) para um teto documentado, sem recusar a requisição — header grande não é erro do cliente que valha 4xx.
@@ -24,10 +24,10 @@ A varredura da 10.13 cobriu campo de schema; os dois headers vão para o banco (
 `stockQuantity`, `weightGrams` e `volumeMl` da variante não têm teto: um valor acima de 2³¹−1 passa pelo Zod e morre no Prisma, que responde 500 em vez de 422. Não é texto, então ficou fora da 10.13. **Correção:** `.max()` coerente com o que o campo representa (estoque, peso e volume têm teto físico óbvio), com teste por schema como na 10.13.
 
 ### ~~Auditar mass assignment nos schemas de update~~ — ✅ resolvido (Fase 10.12)
-Nenhum schema estava permissivo: todo update é `.strict()`, create e upsert descartam a chave desconhecida. O resultado foi só a suíte de regressão (`tests/integration/v1/mass-assignment.test.ts`, um caso por endpoint de escrita) e a regra de que schema de escrita novo entra nela no mesmo commit. Racional em `docs/context/security.md` § "Mass assignment".
+Nenhum schema estava permissivo: todo update é `.strict()`, create e upsert descartam a chave desconhecida. O resultado foi só a suíte de regressão (`tests/integration/v1/mass-assignment.test.ts`, um caso por endpoint de escrita) e a regra de que schema de escrita novo entra nela no mesmo commit. Racional em `apps/api/docs/adr/0127-mass-assignment-schema-update-strict-protecao-tem-teste.md`.
 
 ### ~~Endurecer a verificação do JWT~~ — ✅ resolvido (Fase 10.10)
-`algorithms: ["HS256"]`, `iss`/`aud` exigidos e `clockTolerance` de 5s, com emissão e verificação lendo as mesmas constantes em `src/lib/accessToken.ts`. O deploy invalida os access tokens em voo (não carregam `iss`/`aud`); o `refresh` recompõe o par. Racional em `docs/context/security.md` § "O access token tem algoritmo pinado".
+`algorithms: ["HS256"]`, `iss`/`aud` exigidos e `clockTolerance` de 5s, com emissão e verificação lendo as mesmas constantes em `src/lib/accessToken.ts`. O deploy invalida os access tokens em voo (não carregam `iss`/`aud`); o `refresh` recompõe o par. Racional em `apps/api/docs/adr/0129-access-token-tem-algoritmo-pinado-iss-aud-obrigatorios.md`.
 
 ### Bloquear senhas vazadas via HIBP — **M**
 No signup e no change-password, consultar a API de range do Have I Been Pwned por *k-anonymity*: envia-se apenas os 5 primeiros caracteres do SHA-1 da senha, nunca a senha nem o hash completo. Gratuito e sem chave para esse endpoint. Puro polimento, mas é o tipo de detalhe que se nota numa revisão de código.
@@ -38,7 +38,7 @@ No signup e no change-password, consultar a API de range do Have I Been Pwned po
 ### Rotação de segredo do JWT com `kid` — **M**
 Hoje a troca do segredo invalida todas as sessões de uma vez. Suportar múltiplas chaves com `kid` no header permite rotacionar sem derrubar ninguém. Só vale quando houver usuário real; até lá, o procedimento manual de rotação documentado já basta.
 
-### Lock manual de conta pelo admin — **M**
+### Lock manual de usuário pelo admin — **M**
 A Fase 7.10 entrega só o *desbloqueio*; o lock acontece apenas automaticamente por tentativas erradas. Um lock manual (suspensão temporária sem o peso do ban) é um degrau intermediário útil, mas exige decidir como convive com `bannedAt` e `status` — o que reabre desenho de negócio já fechado.
 
 ### Auditar a leitura do audit log — **P**
@@ -51,14 +51,26 @@ Em ambiente regulado, consultar a trilha também gera linha na trilha. Aqui foi 
 ### `/health/ready` separado de `/status` — **P**
 Hoje há um endpoint só. O ideal são dois papéis distintos: um público e mínimo (não vaza versão nem dependência), e um de readiness verificando Postgres e Redis, para o orquestrador saber quando pode mandar tráfego. Fica mais relevante quando houver mais de uma réplica.
 
+### Cachear `test` no Turborepo — **M**
+Da Fase 11 (issue 04), o `test` é a única task de verificação fora do cache: a suíte da API sobe Postgres e Redis via Compose e lê `.env.test`, inputs que o Turbo não vê, e um cache que os ignora devolve verde de outro ambiente. Cachear exige declarar esses inputs (`inputs` com os Compose e o `.env.example`, `env` com o que a suíte lê) e um teste negativo provando que mudar cada um invalida — o mesmo método que provou o `dependsOn` na 11.4. Só compensa quando a suíte deixar de caber num `pnpm test` de dois minutos; o CI (11.6) já roda a suíte em todo PR que toca a API, sem cache e sem remote cache, o que é o outro lado desta conta.
+
+### Excluir `.claude/` no `biome.json` da raiz — **P**
+Da Fase 11 (issue 05): a varredura do repo inteiro pelo Biome (11.4, rodada de `apps/api` com `biome check ../..`) devolve dezenas de erros de formatação que não são do repo — vêm de `.claude/worktrees/*/apps/api/src/generated/`, worktrees locais do Claude Code com o client do Prisma gerado. O Biome não lê o `.gitignore`, e os ignores da `biome.json` da API não valeram para aquela cópia (não investigado — o diretório inteiro é lixo local, não há o que lintar nele). Um `"!.claude"` no `includes` da raiz resolve; o CI (11.6) linta por pacote via Turbo e não passa por isso; vale fazer na primeira vez em que a varredura completa for usada de verdade.
+
+### `.env.example` com `SENTRY_DSN=` vazio não passa no `env.ts` — **P**
+Da Fase 11 (issue 06): copiar o `.env.example` fielmente não sobe a app — `SENTRY_DSN=` vazio é recusado por `z.url().optional()` (string vazia não é URL nem ausência), enquanto `AXIOM_TOKEN=` vazio passa por ser `z.string()`. O código já trata `SENTRY_DSN` falsy como "sem Sentry" (`src/lib/sentry.ts`), então a intenção é "vazio = ausente". O workflow do CI apaga a linha ao gerar o `.env.test`; o `.env.test` local nem tem a chave. **Correção possível:** um `z.preprocess` que converte `""` em `undefined` nas variáveis opcionais de URL, ou o template deixar de listar a chave (com o comentário dizendo que ela é opcional) — decisão do dono, não tomada.
+
+### Proteger `dev` e `main` com os checks do CI como obrigatórios — **P**
+Da Fase 11 (issue 06): o CI roda em todo PR, mas hoje nada impede o merge com o PR vermelho — a barreira é a regra do `CLAUDE.md`, não o GitHub. "Branch protection" (ou ruleset) em `dev` e `main` com `verify (affected)` e `commitlint (PR commits)` como *required status checks* transforma a regra em mecanismo. É configuração do repositório no GitHub, não do código; fazer depois do primeiro PR real passar pelo workflow, quando os nomes dos jobs estiverem provados.
+
 ### CI: supply chain e segredos — **M**
-`npm audit` no pipeline, Dependabot ou Renovate ligado para dependências, e `gitleaks` varrendo o histórico atrás de segredo commitado por engano. Somar um `SECURITY.md` na raiz com o canal de reporte. Barato, e no contexto de portfólio comunica maturidade mais rápido que qualquer feature.
+`pnpm audit` no pipeline, Dependabot ou Renovate ligado para dependências, e `gitleaks` varrendo o histórico atrás de segredo commitado por engano. Somar um `SECURITY.md` na raiz com o canal de reporte. Barato, e no contexto de portfólio comunica maturidade mais rápido que qualquer feature.
 
 ### Métricas e tracing (OpenTelemetry) — **G**
 A Fase 7 entrega logs; falta o resto do tripé. Instrumentar com OTel deixaria o backend trocável por configuração (Axiom, Grafana, Honeycomb) em vez de acoplado a um SDK. Fase própria, e só compensa quando houver carga real para observar.
 
 ### Refresh automático do dicionário de lexemas — **P**
-A correção de erro de digitação da busca (9.9) trabalha contra um dicionário materializado por `npm run db:refresh-search`. Produto criado pela API entra na busca **literal** na hora, mas suas palavras novas só passam a corrigir typo depois do próximo refresh — a defasagem existe e hoje não morde, porque quem popula o catálogo é o seed. **Correção:** um systemd timer em `infra/cron/`, no molde dos `cleanup-*`. **Gatilho:** catálogo alimentado por gente, não por seed.
+A correção de erro de digitação da busca (9.9) trabalha contra um dicionário materializado por `pnpm run db:refresh-search`. Produto criado pela API entra na busca **literal** na hora, mas suas palavras novas só passam a corrigir typo depois do próximo refresh — a defasagem existe e hoje não morde, porque quem popula o catálogo é o seed. **Correção:** um systemd timer em `infra/cron/`, no molde dos `cleanup-*`. **Gatilho:** catálogo alimentado por gente, não por seed.
 
 ### Systemd timer para a varredura de arquivos órfãos — **P**
 O `db:cleanup-uploads` (9.10) nasceu sem agendamento: roda à mão, ao contrário dos outros dois `cleanup-*`, que têm timer em `infra/cron/`. **Gatilho:** o dia em que ela encontrar arquivo órfão duas vezes — antes disso, agendar é automatizar um problema que ainda não se provou existir.
@@ -74,16 +86,16 @@ Dump agendado do banco do deploy, com um *restore* de fato testado — backup nu
 ## Produto e domínio
 
 ### ~~Dummy data para a demo~~ — ✅ resolvido (Fase 9.11)
-O seed fake passou a cobrir o domínio inteiro sob a mesma flag `SEED_FAKE_DATA`: 9 marcas, 20 categorias em 3 níveis, 8 tags, 35 produtos com 51 variantes e imagem, e 15 pets em 12 donos, mais um funcionário de cada role nova da 9.1. O `demo-reset` trunca e repovoa o catálogo e limpa o diretório de upload, então a demo volta ao mesmo estado todo dia — com foto. O dataset é **cobertura de cenário**, não volume (produto sem imagem, esgotado parcial e total, folha de item único, pet falecido, pet de dono excluído), e cada cenário é afirmado por teste. Racional em `docs/context/pet-domain.md` § "Dataset fake do domínio (9.11)" e `docs/context/infrastructure.md`.
+O seed fake passou a cobrir o domínio inteiro sob a mesma flag `SEED_FAKE_DATA`: 9 marcas, 20 categorias em 3 níveis, 8 tags, 35 produtos com 51 variantes e imagem, e 15 pets em 12 donos, mais um funcionário de cada role nova da 9.1. O `demo-reset` trunca e repovoa o catálogo e limpa o diretório de upload, então a demo volta ao mesmo estado todo dia — com foto. O dataset é **cobertura de cenário**, não volume (produto sem imagem, esgotado parcial e total, folha de item único, pet falecido, pet de dono excluído), e cada cenário é afirmado por teste. Racional em `apps/api/docs/adr/README.md#dataset-fake-do-domínio-911` e `apps/api/docs/adr/README.md#infraestrutura`.
 
 ### ~~Ordenação configurável nas listagens~~ — ✅ resolvido (Fase 9.2)
-`?sort=<campo>&order=asc|desc` entrou no helper de offset, com allowlist por recurso (fora dela → 422) e tiebreaker por `id` obrigatório também no offset. Primeiro consumidor: `GET /users`. Decisões de contrato no adendo de `docs/adr/pagination.md`. **A limitação do cursor permanece** — ordenar por campo ali exigiria a chave do cursor codificar o próprio campo de ordenação; se algum dia fizer falta, é entrada nova neste backlog.
+`?sort=<campo>&order=asc|desc` entrou no helper de offset, com allowlist por recurso (fora dela → 422) e tiebreaker por `id` obrigatório também no offset. Primeiro consumidor: `GET /users`. Decisões de contrato no adendo de `apps/api/docs/adr/0004-pagination.md`. **A limitação do cursor permanece** — ordenar por campo ali exigiria a chave do cursor codificar o próprio campo de ordenação; se algum dia fizer falta, é entrada nova neste backlog.
 
 ### Transferência de pet entre clientes — **M**
 Caso real (venda, doação, mudança de tutor de um pet já cadastrado). Deixado fora da Fase 9 por escopo — precisa de trilha de auditoria própria e de decisão sobre o que acontece com o histórico clínico do pet (que só existe quando a veterinária chegar). Levantado no planejamento da Fase 9.
 
 ### Múltiplos donos por pet — **G**
-Família compartilhando o mesmo pet é caso real, mas a Fase 9 modela dono único (`Pet.customerId` obrigatório, sem N:N) — ver `docs/adr/pet-domain-modeling.md`. Gatilho de revisão: migrar `customerId` de FK direta para uma tabela de junção `PetOwner` (N:N), o que também reabre a pergunta acima (transferência de pet).
+Família compartilhando o mesmo pet é caso real, mas a Fase 9 modela dono único (`Pet.customerId` obrigatório, sem N:N) — ver `apps/api/docs/adr/0006-pet-domain-modeling.md`. Gatilho de revisão: migrar `customerId` de FK direta para uma tabela de junção `PetOwner` (N:N), o que também reabre a pergunta acima (transferência de pet).
 
 ### `/me/pets` — **P**
 Atalho de conveniência sobre `GET /customers/:customerId/pets`, evitando o cliente precisar primeiro resolver o próprio `customerId`. Fora da Fase 9 por duplicar rota/teste/documentação sem necessidade — `GET /me` devolve `customer.id`, que é tudo que o cliente precisa para chamar a rota aninhada. **Ressalva registrada na 9.4:** essa justificativa era falsa quando foi escrita — a view de `/me` **não** expunha `customer.id`, e a coleção aninhada era inalcançável pelo próprio dono. O campo foi acrescentado na 9.4 e a premissa agora é verdadeira; a lição é que um item de backlog justificado por uma capacidade existente precisa citar onde ela está no código.
@@ -92,7 +104,7 @@ Atalho de conveniência sobre `GET /customers/:customerId/pets`, evitando o clie
 A Fase 9 modela só `ProductVariant.stockQuantity` como número, sem movimentação, reserva ou histórico. Uma entidade `StockMovement` auditável é natural e desejável, mas só faz sentido na fase do pedido (Fase 10), que é onde a movimentação passa a ter causa (venda, devolução, ajuste manual).
 
 ### Imagem por variante (hoje é por produto) — **P**
-`ProductImage` pertence ao `Product`, não ao `ProductVariant` (Fase 9, `docs/adr/product-catalog-modeling.md`). Imagem por variante é caso real ("cores diferentes" precisa; "mesmo saco, tamanhos diferentes" quase nunca precisa) mas adiciona complexidade que o domínio de pet shop raramente cobra.
+`ProductImage` pertence ao `Product`, não ao `ProductVariant` (Fase 9, `apps/api/docs/adr/0007-product-catalog-modeling.md`). Imagem por variante é caso real ("cores diferentes" precisa; "mesmo saco, tamanhos diferentes" quase nunca precisa) mas adiciona complexidade que o domínio de pet shop raramente cobra.
 
 ### Teto da busca aplicado antes do recorte de visibilidade — **P**
 A busca ranqueia no máximo 500 ids (9.9/Z9) e o SQL cru **não** filtra `deleted_at`/`status`, porque quem decide visibilidade é o `buildProductWhere` (Z4). Consequência: produto soft-deletado ou em rascunho consome cota do teto, e num catálogo com mais de 500 casamentos para o mesmo termo isso pode empurrar resultado visível para fora. Não morde no volume atual. **Correção quando morder:** paginação por keyset no próprio SQL, ou aceitar repetir `deleted_at IS NULL` lá — que é o primeiro passo da duplicação de "produto visível" que a Z4 recusou, e por isso não se faz sem motivo medido.
@@ -101,10 +113,10 @@ A busca ranqueia no máximo 500 ids (9.9/Z9) e o SQL cru **não** filtra `delete
 A 9.9 põe busca textual **só** em `GET /products` (Z7). `/brands`, `/categories`, `/tags` e `/breeds` continuam sem `?q=`. Não é esquecimento: são listas curtas (dezenas de linhas), onde um `ILIKE` sobre o nome resolveria sem `tsvector`, coluna gerada, índice nem dicionário de lexemas — e replicar a infraestrutura da 9.9 por recurso multiplicaria o custo de manutenção pelo número de tabelas. **Gatilho:** alguém precisar filtrar essas listas por texto na interface; a correção é `ILIKE` com `f_unaccent` (a função já existirá desde a 9.9), não um segundo `tsvector`.
 
 ### Meilisearch/Typesense como motor de busca — **G**
-A Fase 9 decide busca textual no Postgres nativo (`tsvector`+`unaccent`+`pg_trgm`, `docs/adr/text-search.md`), por escolha didática do usuário. Meilisearch/Typesense (typo tolerance por padrão, self-hosted) é a alternativa de mercado quando o volume justificar — custam um container a mais, um pipeline de sincronização produto→índice e uma segunda fonte de verdade que pode divergir do Postgres.
+A Fase 9 decide busca textual no Postgres nativo (`tsvector`+`unaccent`+`pg_trgm`, `apps/api/docs/adr/0009-text-search.md`), por escolha didática do usuário. Meilisearch/Typesense (typo tolerance por padrão, self-hosted) é a alternativa de mercado quando o volume justificar — custam um container a mais, um pipeline de sincronização produto→índice e uma segunda fonte de verdade que pode divergir do Postgres.
 
 ### Storage externo (S3/R2) para upload — **M**
-A Fase 9 usa disco local atrás de um adaptador (`docs/adr/file-storage-and-uploads.md`), por restrição de custo (VPS ARM64, hospedagem própria) e intenção didática. O adaptador já deixa a porta aberta — trocar por S3/R2 é uma classe nova e uma env var. Gatilho: pressão de disco no VPS.
+A Fase 9 usa disco local atrás de um adaptador (`apps/api/docs/adr/0010-file-storage-and-uploads.md`), por restrição de custo (VPS ARM64, hospedagem própria) e intenção didática. O adaptador já deixa a porta aberta — trocar por S3/R2 é uma classe nova e uma env var. Gatilho: pressão de disco no VPS.
 
 ### Histórico de preço do produto — **G**
 A Fase 9 guarda só o preço corrente (`ProductVariant.priceCents`). O congelamento de preço no pedido (Fase 10, já decidido: o item do pedido grava o preço no momento da compra) é outra coisa e é obrigatório — histórico de preço ao longo do tempo (para relatório, gráfico de variação) é o que fica de fora.
@@ -114,6 +126,9 @@ A Fase 9 guarda só o preço corrente (`ProductVariant.priceCents`). O congelame
 
 ### ~~Migração de token para cookie httpOnly~~ — ✅ resolvido fora deste repo (Fase 10)
 O gatilho documentado ocorreu — o frontend próprio nasceu (`pet-oasis-web`) — e a resposta veio do lado dele, não daqui: o front adotou **BFF**, guardando a sessão num cookie `httpOnly` cifrado do **domínio dele**, de modo que o token nunca chega ao JavaScript do navegador. A API continua Bearer e continua sem CSRF no escopo, que era a contrapartida temida deste item. O ganho pretendido (armazenamento seguro, não depender do cliente fazer certo) foi obtido sem que a API trocasse de mecanismo — e é isso que a mantém universal para o app mobile planejado, que não usaria cookie. Item encerrado: se um segundo cliente de navegador aparecer sem BFF, ele reabre, mas como decisão daquele cliente.
+
+### Textos que a API entrega ao usuário final ainda dizem "conta" onde o glossário diz `User` — **M**
+O glossário da API (`apps/api/CONTEXT.md`, Fase 11, issue 08) fixou `User`/usuário e a documentação inteira foi alinhada — mas o que a API **devolve** ficou como estava: 41 strings em 15 arquivos de `src/` (`message`/`action` dos erros de login, lockout, ban e reativação; os emails de reativação; as descrições OpenAPI em `src/docs/`; as descrições de feature semeadas em `feature.constants.ts`; os `description` de schema no contrato). O guia de integração cita a resposta real (`"Conta não verificada"`) e por isso também não mudou. Mudar é decisão de produto: "conta" pode ser a palavra certa para quem lê a tela, e o custo é o mesmo em qualquer direção — os testes que afirmam mensagem, o `openapi.json` e o `mailpit` mudam juntos. Os **`code`** (`ACCOUNT_BANNED`) e o enum `ACCOUNT_REACTIVATION` são contrato e ficam fora, seja qual for a escolha.
 
 ---
 
@@ -131,8 +146,7 @@ fail-open"; a decisão foi fail-open **por classe de dado**, não em bloco: refe
 roles, raças, léxico da busca) continua fatal, porque é pré-requisito da API como a migration;
 demonstração é fail-open, com `SEEDING COMPLETED WITH FAILURES: <passos>` nomeando o que falhou.
 Fail-open no seed inteiro deixaria a API de pé com a tabela de autorização quebrada, escondida
-numa linha de log. Racional em `docs/context/infrastructure.md` § "O boot para no dado de
-referência e segue no de demonstração".
+numa linha de log. Racional em `apps/api/docs/adr/0153-boot-dado-referencia-segue-demonstracao.md`.
 
 ---
 
@@ -162,8 +176,7 @@ Além do proposto, `uploads/.gitkeep` foi removido e o `.gitignore` passou a ign
 inteiro: enquanto o git versionasse aquele caminho, ele continuaria dono dele em todo clone — era
 justamente o `.gitkeep` que o `pull` não conseguia escrever. E `UPLOAD_HOST_DIR` perdeu o
 fallback `:-./uploads`, que era o caminho silencioso de volta para dentro da árvore; faltando a
-variável, o `prod:up` falha nomeando-a. Racional em `docs/context/infrastructure.md` § "O
-diretório de uploads mora fora do working tree, e o uid é fixado no serviço".
+variável, o `prod:up` falha nomeando-a. Racional em `apps/api/docs/adr/0162-diretorio-uploads-mora-fora-working-tree-uid-fixado.md`.
 
 ---
 
@@ -175,7 +188,7 @@ binário) e no boot (onde o CLI redetecta), e instalar num só faria os dois dis
 `dev` recebeu a mesma linha logo depois, fechando o item abaixo. O baked engine passou de
 `schema-engine-debian-openssl-1.1.x` para `debian-openssl-3.0.x` e o boot ficou sem warning, com as
 24 migrations aplicadas contra banco vazio na verificação. Custo: +2,34 MB líquidos. Racional em
-`docs/context/infrastructure.md` § "O OpenSSL vai nos três estágios da imagem".
+`apps/api/docs/adr/0158-openssl-vai-tres-estagios-imagem-engine-prisma-detectada.md`.
 
 ---
 
@@ -203,8 +216,7 @@ janela é **503** retentável, nunca cascata. A 10.15 fez a graça seguir a corr
 (o retardatário recebe o par **atual**, não um elo gasto), e a 10.18 acrescentou a marca
 `graceDeferredAt` na linha para que a retentativa tardia de um 503 não seja lida como roubo. A
 cascata fora das duas janelas continua intacta — a alternativa "invalidar só a sessão envolvida"
-segue rejeitada pelo motivo de sempre. Racional em `docs/context/identity-and-sessions.md` § "A
-janela de graça de 10s na rotação (10.7)".
+segue rejeitada pelo motivo de sempre. Racional em `apps/api/docs/adr/0057-janela-graca-10s-rotacao.md`.
 
 ### `enum` de `code` no schema do 403 do login — **P**
 
@@ -238,8 +250,7 @@ duas. A condição que o item já exigia — só confiar vindo da rede interna �
 porta 3000 em produção, feita na mesma issue porque as duas são uma decisão só. Rate limit, lockout
 e audit log voltam a ver o visitante; o cliente pode copiar o header ou acrescentar o próprio salto,
 tanto faz. Três cadeias cobertas por teste em `tests/integration/v1/visitor-ip.test.ts`. Racional em
-`docs/context/security.md` § "`trust proxy` é por endereço de origem" e `docs/context/infrastructure.md`
-§ "Três redes com papéis distintos".
+`apps/api/docs/adr/0123-trust-proxy-endereco-origem-nao-contagem-saltos.md` e `apps/api/docs/adr/0148-tres-redes-papeis-distintos-porta-api-despublicada.md`.
 
 ### ~~Apex passa a ser o front; API migra para `pet-oasis-api.maiahub.com.br`~~ — ✅ resolvido (Fase 10.6, 10.14)
 
@@ -260,7 +271,7 @@ nada indo para um subdomínio.
   que é o que essa variável sempre quis dizer) e `UPLOAD_PUBLIC_BASE_URL` →
   `https://pet-oasis-api.maiahub.com.br/uploads`.
 - **Sem migration**: o banco guarda a chave do arquivo, nunca a URL (ADR
-  `file-storage-and-uploads.md`), então trocar a env var basta. A decisão daquele ADR paga
+  `0010-file-storage-and-uploads.md`), então trocar a env var basta. A decisão daquele ADR paga
   dividendo aqui — e pagou duas vezes, porque a troca de nome também custou só a variável.
 - **Sem mudança na spec**: `servers: [{ url: "/api/v1" }]` (`src/docs/openapi.ts:85`) é
   relativo e segue o host que serve o documento.
@@ -268,7 +279,7 @@ nada indo para um subdomínio.
   `/openapi.json` para o subdomínio, para link publicado não morrer. A demo era quase não
   divulgada, e manter dois `location` para sempre num host que não é da API era resíduo sem
   dono. O apex fica limpo; quem tinha o link antigo troca a base.
-- **Documentação**: README, badges, `docs/guides/deploy.md` e `docs/context/infrastructure.md`.
+- **Documentação**: README, badges, `apps/api/docs/guides/deploy.md` e `apps/api/docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md`.
 
 **Contrato de rotas com o front (a parte que não é infraestrutura):** quatro caminhos são
 montados a partir de `APP_URL` e passam a ser obrigação do front, com estes nomes exatos —
@@ -278,5 +289,5 @@ quebra o email correspondente sem erro visível em lugar nenhum.
 
 **Ordem de execução, planejada e relaxada:** a regra era virar `APP_URL` para o apex só depois de
 o front ter as quatro rotas no ar; na demo ela foi virada antes, por decisão do dono do projeto
-(demo efêmera, sem conta real). O porquê, e por que a regra segue valendo para deploy com
-usuários, em `docs/context/infrastructure.md` § "A API atende num subdomínio".
+(demo efêmera, sem usuário real). O porquê, e por que a regra segue valendo para deploy com
+usuários, em `apps/api/docs/adr/0160-api-atende-num-subdominio-apex-fica-limpo.md`.

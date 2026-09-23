@@ -23,7 +23,7 @@ pode ser feita a qualquer momento, inclusive antes da 01.
 > trocando um warning por um erro. Também se optou por **detectar e não pinar**
 > (`PRISMA_CLI_BINARY_TARGETS`): o alvo carrega a arquitetura junto da versão do SSL, então fixá-lo
 > congelaria a fragilidade em ARM64 que motivou o item. Racional permanente em
-> `docs/context/infrastructure.md` § "O OpenSSL vai nos três estágios da imagem".
+> `apps/api/docs/adr/0158-openssl-vai-tres-estagios-imagem-engine-prisma-detectada.md`.
 
 > **Tamanho, medido nas duas imagens do estágio `runtime`** (soma das camadas via
 > `docker history`; o `docker image ls` arredonda as duas para 1.17 GB e esconde a diferença):

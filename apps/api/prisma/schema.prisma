@@ -1,0 +1,591 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Usuário base ────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  cpf          String   @unique
+  email        String   @unique
+  pendingEmail String?  @map("pending_email")
+  passwordHash String   @map("password_hash")
+  status       UserStatus @default(PENDING)
+  bannedAt     DateTime?  @map("banned_at")
+  bannedBy     String?    @map("banned_by")
+  banReason    String?    @map("ban_reason")
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  // perfis 1:1 (presença define o tipo)
+  employee Employee?
+  customer Customer?
+
+  // autorização — overrides não penduram no user solto: alcança-se por
+  // `roles[].features[]`, porque todo override pertence a uma UserRole (D2).
+  roles UserRole[]
+
+  // autenticação
+  sessions           Session[]
+  verificationTokens VerificationToken[]
+  previousEmails     PreviousEmail[]
+
+  @@map("users")
+}
+
+// ─── Perfis ─────────────────────────────────────────────────────────────────────
+
+model Employee {
+  id         String   @id @default(uuid())
+  userId     String   @unique @map("user_id")
+  hiringDate DateTime @default(now()) @map("hiring_date")
+  createdAt  DateTime @default(now()) @map("created_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("employees")
+}
+
+model Customer {
+  id        String    @id @default(uuid())
+  userId    String    @unique @map("user_id")
+  phone     String    @unique
+  address   String?
+  birthDate DateTime? @map("birth_date")
+  createdAt DateTime @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pets Pet[]
+
+  @@map("customers")
+}
+
+// ─── Autorização ─────────────────────────────────────────────────────────────
+
+model Feature {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  roles RoleFeature[]
+  users UserFeature[]
+
+  @@map("features")
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  // Obrigatório: toda role pertence a exatamente um perfil. É isso que faz
+  // "matar as roles do perfil" e "matar as roles do usuário" serem a mesma
+  // coisa na cascata (D1) — sem isso existiria role órfã, morta pela cascata e
+  // restaurável por perfil nenhum.
+  appliesTo   ProfileKind
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  features RoleFeature[]
+  users    UserRole[]
+
+  @@map("roles")
+}
+
+model RoleFeature {
+  roleId    String @map("role_id")
+  featureId String @map("feature_id")
+
+  role    Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, featureId])
+  @@map("role_features")
+}
+
+// Uma linha por par (userId, roleId), para sempre (D3): re-conceder reusa a
+// linha (`deletedAt = null`) em vez de criar outra. É esse id estável que
+// permite ao override pendurar aqui sem ficar órfão a cada ciclo (D2/D6).
+model UserRole {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  roleId    String    @map("role_id")
+  grantedAt DateTime  @default(now()) @map("granted_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role          @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  features UserFeature[]
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+// Override escopado à **atribuição de role**, não ao usuário (D2): override é
+// sobre a função ("esse precisa de um pouco mais pro trabalho que faz"), então
+// perder a função tem que levar o override junto.
+model UserFeature {
+  id         String    @id @default(uuid())
+  userRoleId String    @map("user_role_id")
+  featureId  String    @map("feature_id")
+  granted    Boolean   @default(true) // true = concede · false = nega explicitamente
+  grantedAt  DateTime  @default(now()) @map("granted_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  userRole UserRole @relation(fields: [userRoleId], references: [id], onDelete: Cascade)
+  feature  Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([userRoleId, featureId])
+  @@map("user_features")
+}
+
+enum ProfileKind {
+  EMPLOYEE
+  CUSTOMER
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+}
+
+// ─── Autenticação ────────────────────────────────────────────────────────────────
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  usedAt           DateTime? @map("used_at")
+  /// Quando este elo já respondeu 503 dentro da janela de graça (10.18): a
+  /// retentativa que chegar depois de `usedAt + 10s` mas antes de
+  /// `graceDeferredAt + 30s` ainda é lida como concorrência, não como roubo.
+  graceDeferredAt  DateTime? @map("grace_deferred_at")
+  userAgent        String?   @map("user_agent")
+  ipAddress        String?   @map("ip_address")
+  expiresAt        DateTime  @map("expires_at")
+  invalidatedAt    DateTime? @map("invalidated_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+enum VerificationPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  EMAIL_CHANGE
+  ACCOUNT_REACTIVATION
+}
+
+model VerificationToken {
+  id        String              @id @default(uuid())
+  userId    String              @map("user_id")
+  tokenHash String              @unique @map("token_hash")
+  purpose   VerificationPurpose
+  expiresAt DateTime            @map("expires_at")
+  usedAt    DateTime?           @map("used_at")
+  newEmail  String?             @map("new_email")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  // Escolha do ator que pediu a reativação, congelada no token (só usadas com
+  // `purpose = ACCOUNT_REACTIVATION`, mesmo idioma do `newEmail`). Quem confirma
+  // é o dono da conta, não quem escolheu — então a escolha tem de viajar junto.
+  // `restoreProfiles` = com que perfis a conta volta (o self-service grava
+  // sempre `[CUSTOMER]`, D11). `restoreRoleIds` vazio = default do D8: todas as
+  // roles que morreram na cascata.
+  restoreProfiles ProfileKind[] @map("restore_profiles")
+  restoreRoleIds  String[]      @map("restore_role_ids")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("verification_tokens")
+}
+
+// Histórico de emails que já foram ativos numa conta. Unique global: um email
+// só pode ter sido ativo de uma conta na história do sistema (reserva
+// permanente, mesmo idioma do email "preso" de conta soft-deletada).
+// Histórico puro (D13): registra que um endereço pertenceu a uma conta até tal
+// data, e NUNCA bloqueia reuso. Por isso `email` não é único (8.6/K25) — o mesmo
+// endereço pode ser deixado para trás por várias contas ao longo do tempo, e uma
+// conta pode voltar a um endereço que já largou; com unique, a segunda troca
+// estouraria P2002 e travaria a conta sem caminho de volta.
+model PreviousEmail {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  email      String
+  replacedAt DateTime @map("replaced_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("previous_emails")
+}
+
+// ─── Auditoria ───────────────────────────────────────────────────────────────
+
+// Trilha durável de ações sensíveis (quem fez o quê, em quem, quando).
+// Append-only: sem update/delete pela aplicação (só o script de retenção 7.14).
+// actorId/targetId são uuid cru SEM FK — evidência pode apontar para linha
+// soft-deleted, mesmo idioma de User.bannedBy. Regras em docs/reference/logging-policy.md §4.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  @map("actor_id")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String?  @map("target_id")
+  metadata   Json?
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt, id]) // cursor pagination da 7.8 (tiebreaker por id)
+  @@index([action])
+  @@index([actorId])
+  @@index([targetId])
+  @@map("audit_logs")
+}
+
+// ─── Pet shop ────────────────────────────────────────────────────────────────
+
+// Espécie do pet: enum fechado, deliberadamente mais largo que o mínimo e
+// **sem `OUTRO`** — `OUTRO` seria buraco permanente de qualidade de dado (pet
+// sem raça válida, fora de todo filtro), e a pressão seguinte seria um
+// `speciesOther` de texto livre. Espécie nova é `ALTER TYPE ... ADD VALUE`,
+// migration barata. Racional em docs/adr/0006-pet-domain-modeling.md.
+enum PetSpecies {
+  DOG
+  CAT
+  RABBIT
+  BIRD
+  RODENT
+  REPTILE
+  FISH
+}
+
+// Catálogo de raças — dado de **referência**, no mesmo idioma de Feature/Role:
+// semeado por constante versionada (src/modules/breed/breed.constants.ts),
+// nunca consultado em API de terceiro em runtime, e por isso sem `deletedAt`
+// nem `updatedAt` (não há campo mutável — `species` e `name` SÃO a chave).
+// Nem toda espécie tem raça: quem exige é a constante SPECIES_WITH_BREED, não
+// a presença de linha aqui (derivar faria pet já cadastrado violar a regra
+// retroativamente).
+model Breed {
+  id        String     @id @default(uuid())
+  name      String
+  species   PetSpecies
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  pets Pet[]
+
+  @@unique([species, name])
+  @@map("breeds")
+}
+
+enum PetSex {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+// Pet — primeiro recurso de domínio do projeto (9.4). Dono único: `customerId`
+// é obrigatório e não há tabela de junção; família compartilhando pet e
+// transferência entre clientes ficaram no backlog, juntas, porque uma reabre a
+// outra.
+//
+// Três colunas de tempo com significados distintos, e é de propósito:
+// `deceasedAt` (o pet morreu) NÃO é `deletedAt` (o registro não deve mais
+// aparecer). Pet falecido continua na lista do dono e mantém legível todo o
+// histórico clínico futuro; tratar falecimento como exclusão destruiria
+// informação clinicamente relevante. Ver docs/adr/0006-pet-domain-modeling.md.
+//
+// `breedId` é nullable no banco porque a obrigatoriedade é **semântica**: quem
+// exige raça é SPECIES_WITH_BREED, lida em runtime pelo pet.service (as três
+// 422 de espécie/raça). `weightGrams` é inteiro pelo mesmo racional do preço em
+// centavos, e é um **instantâneo** — quando a veterinária chegar, o peso vira
+// medição datada no prontuário.
+model Pet {
+  id                   String     @id @default(uuid())
+  customerId           String     @map("customer_id")
+  name                 String
+  species              PetSpecies
+  breedId              String?    @map("breed_id")
+  sex                  PetSex     @default(UNKNOWN)
+  birthDate            DateTime?  @map("birth_date")
+  birthDateIsEstimated Boolean    @default(false) @map("birth_date_is_estimated")
+  weightGrams          Int?       @map("weight_grams")
+  neutered             Boolean    @default(false)
+  // Unique **global**, valendo também para a linha soft-deletada — mesmo
+  // idioma de User.email/User.cpf/Customer.phone (U1, 9.4). Num identificador
+  // do mundo real isso é o comportamento certo: o chip preso por um pet
+  // excluído é o sinal "este pet já foi cadastrado aqui". Duplicata vira 409
+  // pelo handler de P2002. NULL não colide (Postgres permite N nulos).
+  microchipId          String?    @unique @map("microchip_id")
+  color                String?
+  notes                String?
+  // Preenchida só a partir da 9.10 (upload); nasce aqui para não exigir uma
+  // migration de uma coluna só depois.
+  photoPath            String?    @map("photo_path")
+  deceasedAt           DateTime?  @map("deceased_at")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+  deletedAt            DateTime?  @map("deleted_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  breed    Breed?   @relation(fields: [breedId], references: [id])
+
+  @@index([customerId])
+  @@map("pets")
+}
+
+// ---------------------------------------------------------------------------
+// Catálogo — taxonomia (9.6) e produto (9.7).
+// ---------------------------------------------------------------------------
+
+// Marca é entidade própria, não string livre no produto
+// (docs/adr/0007-product-catalog-modeling.md): filtro confiável, grafia única e página de marca
+// no futuro. `name` e `slug` são unique **global** — o índice ignora
+// `deletedAt`, como User.email e Pet.microchipId (9.6/W6): recriar uma marca
+// excluída sai 409 pelo handler de P2002, que é o sinal correto ("isto já
+// existiu aqui"), não um convite a duplicar.
+model Brand {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  // Gerado do nome na criação e congelado depois (9.6/W4) — renomear não muda
+  // a URL pública, senão uma correção de digitação quebraria link externo.
+  slug        String    @unique
+  description String?
+  // Preenchida só a partir da 9.10 (upload); nasce aqui pelo mesmo motivo da
+  // `Pet.photoPath`: evitar uma migration de uma coluna só depois.
+  logoPath    String?   @map("logo_path")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // A marca entra no corpus da busca por uma coluna gerada **dela** (9.9/Z1):
+  // coluna gerada não cruza linha, então o nome da marca não caberia na do
+  // produto sem denormalizar e manter por trigger.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
+  products Product[]
+
+  @@map("brands")
+}
+
+// Categoria modela **função** do produto (Alimentação > Ração > Ração seca),
+// nunca espécie — espécie é faceta (`Product.targetSpecies`), fora da árvore.
+// Profundidade máxima de 3 níveis (9.6/W1), validada no service: o banco não
+// tem como expressar isso, e subir a cadeia em SQL a cada escrita seria caro.
+// `name` NÃO é unique — o mesmo rótulo pode existir em ramos diferentes; quem
+// arbitra a colisão é o `slug`, e quem quiser dois "Camas" manda o slug
+// explícito no corpo.
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  parentId    String?   @map("parent_id")
+  description String?
+  // Ordem entre irmãos, definida pelo staff; o desempate é o nome.
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+
+  products ProductCategory[]
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+// Tag é rótulo transversal e volátil ("promoção", "filhote", "lançamento") —
+// não participa de venda, então não há histórico a preservar e o DELETE é
+// **hard** (9.6/W5). Por isso nasce sem `deletedAt` e sem `updatedAt`, no mesmo
+// idioma do Breed: o que existe aqui é nome e slug, e os dois são a identidade.
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  products ProductTag[]
+
+  @@map("tags")
+}
+
+// "Isto está à venda?" e "isto existe?" são perguntas diferentes, e por isso o
+// status convive com o `deletedAt` (docs/adr/0007-product-catalog-modeling.md
+// § "Status do produto coexiste com soft delete"): descontinuado some da vitrine mas
+// preserva o histórico de venda, enquanto excluído é erro de cadastro.
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  DISCONTINUED
+}
+
+// Product é a **identidade comercial** ("Ração Golden Adulto"); quem é vendável
+// é a ProductVariant (SKU/preço/estoque). Nunca produto plano — ver o ADR. O
+// invariante "todo produto tem ≥1 variante" não cabe no banco (nenhuma
+// constraint expressa "a coleção não pode estar vazia"), então mora no service:
+// criar exige `variants[]` com min 1 (9.7/X3) e excluir a última variante ativa
+// é 409 (X6).
+//
+// `targetSpecies` é **faceta**, não nível da árvore de categoria (N7, "problema
+// da cama"): uma cama serve cão e gato sem virar duas categorias. Array vazio
+// significa "qualquer espécie", não "nenhuma".
+//
+// `brandId` é obrigatório: marca como entidade é o que dá filtro confiável e
+// grafia única, e produto sem marca reabriria a string livre por outra porta.
+model Product {
+  id            String        @id @default(uuid())
+  name          String
+  // Mesma regra da taxonomia (9.6/W4 e W6, reaplicadas em 9.7): derivado do
+  // nome na criação, congelado depois, explícito vence, unique **global** —
+  // recriar um produto excluído sai 409 pelo handler de P2002.
+  slug          String        @unique
+  description   String
+  brandId       String        @map("brand_id")
+  status        ProductStatus @default(DRAFT)
+  targetSpecies PetSpecies[]  @map("target_species")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  deletedAt     DateTime?     @map("deleted_at")
+
+  // Coluna **gerada** (9.9/Z1): `name` com peso A, `description` com peso C,
+  // ambos por `f_unaccent` (Z8). Declarada aqui só para o `migrate` não acusar
+  // drift — o Prisma não lê nem escreve `Unsupported`, e é exatamente isso que
+  // se quer: quem a consulta é o SQL cru de `product.search.repository.ts`.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
+  brand      Brand             @relation(fields: [brandId], references: [id])
+  variants   ProductVariant[]
+  categories ProductCategory[]
+  tags       ProductTag[]
+  images     ProductImage[]
+
+  @@index([brandId])
+  @@map("products")
+}
+
+// Nasce na 9.10, e não junto do produto na 9.7: o precedente de coluna órfã
+// esperando dono (`Pet.photoPath`, `Brand.logoPath`) valia para **coluna**, não
+// para tabela — uma tabela sem escrita nenhuma não é economia de migration, é
+// esquema morto.
+//
+// Sem `deletedAt`, como a `Tag` (9.6/W5) — e é consciente (9.10/AA16): o soft delete existe para preservar fato de negócio (quem comprou
+// o quê), e imagem é *asset*. A linha só faz sentido enquanto o byte existe —
+// soft delete com arquivo apagado criaria a linha-apontando-para-o-nada que o
+// ADR classifica como mais grave que um órfão no disco.
+//
+// `path` é a **chave base** (`products/<id>/<uuid>`), nem caminho de arquivo
+// nem URL: os dois derivados nascem dela por sufixo (`-full.webp`,
+// `-thumb.webp`), e a URL pública sai de `UPLOAD_PUBLIC_BASE_URL`. É o que
+// permite trocar quem serve o byte sem reescrever uma linha gravada.
+//
+// `position` não tem `@@unique([productId, position])`: a reordenação reescreve
+// o bloco inteiro, e um unique tornaria a permuta impossível sem posições
+// temporárias. Quem garante a sequência é o service — e a capa é a posição 0,
+// sem flag `isCover` (AA13), para que "qual é a capa?" nunca tenha duas
+// respostas possíveis.
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  path      String
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId, position])
+  @@map("product_images")
+}
+
+// A unidade vendável: é para cá que o `OrderItem` da Fase 10 vai apontar, nunca
+// para o Product. Características em colunas fixas (N8) — EAV e JSON foram
+// recusados porque tipagem estrita é valor central do projeto; atributo novo é
+// migration, barata e explícita.
+//
+// Preço, custo e comparação em **centavos** inteiros (N9): sem ponto flutuante
+// e sem o `Decimal` do Prisma contaminando Zod e serialização. `costCents` é
+// dado interno — quem o vê é quem tem `read:product:cost`, e o corte é da view.
+//
+// `sku` é unique **global**, valendo para a linha soft-deletada (9.7/X1):
+// mesmo idioma de `Pet.microchipId`. O SKU de uma variante excluída fica preso,
+// e isso é o sinal "este código já foi usado aqui" — reemitir é escolher outro.
+//
+// `isDefault`: exatamente uma por produto, garantida pelo service (X5) — a
+// vitrine sempre tem o que mostrar sem precisar de critério de desempate.
+model ProductVariant {
+  id                  String    @id @default(uuid())
+  productId           String    @map("product_id")
+  sku                 String    @unique
+  // Rótulo que o cliente lê no seletor ("15 kg", "Tamanho M"), informado pelo
+  // staff (X10): derivar de `weightGrams` produziria "15000 g" e esconderia
+  // regra de formatação no código.
+  label               String
+  priceCents          Int       @map("price_cents")
+  compareAtPriceCents Int?      @map("compare_at_price_cents")
+  costCents           Int?      @map("cost_cents")
+  // Sem movimentação nem reserva nesta fase (StockMovement é da Fase 10, quando
+  // a mudança passa a ter causa). Não pode ficar negativo (X2).
+  stockQuantity       Int       @default(0) @map("stock_quantity")
+  weightGrams         Int?      @map("weight_grams")
+  volumeMl            Int?      @map("volume_ml")
+  sizeLabel           String?   @map("size_label")
+  barcode             String?
+  isDefault           Boolean   @default(false) @map("is_default")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  deletedAt           DateTime? @map("deleted_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+// As duas junções nascem aqui, não na 9.6: não existe join sem a ponta
+// `Product`. São **aresta**, não filho com ciclo de vida próprio — por isso sem
+// `deletedAt`: substituir os vínculos apaga a linha, e excluir o produto deixa
+// as arestas onde estão (o filtro de quem lê é o `deletedAt` do produto).
+//
+// O mínimo de uma categoria por produto (X7) é do service, como todo mínimo de
+// coleção. Tag não tem mínimo: rótulo transversal é opcional por natureza.
+model ProductCategory {
+  productId  String @map("product_id")
+  categoryId String @map("category_id")
+
+  product  Product  @relation(fields: [productId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
+  @@map("product_categories")
+}
+
+model ProductTag {
+  productId String @map("product_id")
+  tagId     String @map("tag_id")
+
+  product Product @relation(fields: [productId], references: [id])
+  tag     Tag     @relation(fields: [tagId], references: [id])
+
+  @@id([productId, tagId])
+  @@index([tagId])
+  @@map("product_tags")
+}

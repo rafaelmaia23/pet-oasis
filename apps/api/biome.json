@@ -1,0 +1,13 @@
+{
+  "root": false,
+  "extends": ["@pet-oasis/biome-config/biome"],
+  "files": {
+    "includes": [
+      "**",
+      "!src/generated",
+      "!api-collection",
+      "!dist",
+      "!src/lib/seed/fakeImages.constants.ts"
+    ]
+  }
+}

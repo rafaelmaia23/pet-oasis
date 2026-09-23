@@ -42,7 +42,7 @@ arquivo por `vi.hoisted` (roda antes dos imports, então `@/config/env` já as l
 teste não depende do `.env.test` de cada máquina. Vermelho verificado antes da implementação
 (a `APP_URL` ainda entrava; a função não existia).
 
-Decisão registrada em `docs/context/security.md` ("A allowlist de CORS sai só da variável
+Decisão registrada em `apps/api/docs/adr/README.md#segurança` ("A allowlist de CORS sai só da variável
 explícita — a `APP_URL` não entra por inércia (10.11)") + linha no índice. Revisão de duas
 trilhas (padrões + spec) sem violação; os julgamentos aplicados viraram o commit de refactor.
 

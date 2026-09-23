@@ -1,0 +1,41 @@
+# Ignore do build do web. Chama-se `Dockerfile.dockerignore` (e não
+# `.dockerignore`) porque o contexto de build é a RAIZ do monorepo: um
+# `.dockerignore` da raiz valeria para o Dockerfile de todo app, e o que o web
+# exclui (a API) é justamente o que a API precisa. O Docker lê o
+# `<Dockerfile>.dockerignore` ao lado do Dockerfile quando ele existe, e só
+# então cai no `.dockerignore` da raiz. Os caminhos abaixo são relativos à raiz.
+
+# node_modules de qualquer nível: o da raiz (a virtual store do workspace) e o
+# de cada projeto (symlinks para ela) — o install acontece dentro da imagem.
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/.env
+**/.env.*
+**/*.tsbuildinfo
+**/next-env.d.ts
+.git
+**/.gitignore
+.vscode
+.claude
+.learning
+
+# Todo outro app, inteiro — só o package.json de cada um entra (o Dockerfile
+# copia `apps/*/package.json`, porque o lockfile os lista como importers). As
+# negações reabrem este app e os manifestos; um app novo não muda estas linhas.
+apps/*
+!apps/web
+!apps/*/package.json
+# Os Compose orquestram a imagem, não entram nela.
+infra
+
+# O que o web tem mas a imagem não precisa.
+apps/web/docs
+apps/web/scripts
+apps/web/components.json
+packages/*/tests
+.scratch
+docs
+tools
+**/*.md

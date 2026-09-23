@@ -1,6 +1,29 @@
-# pet-oasis — Guia para o Claude Code
+# pet-oasis — Guia para o Claude Code (monorepo)
 
-API REST de um pet shop online. Projeto real **e** veículo de aprendizado de TDD/clean code.
+Pet shop online. Projeto real **e** veículo de aprendizado de TDD/clean code, organizado como
+monorepo (**pnpm workspaces** + **Turborepo**). Este arquivo guarda o que vale para o sistema
+inteiro — fluxo, regras transversais, onde mora cada documento. O que é específico de um app
+(stack, camadas, regras de negócio já decididas, comandos) vive no `CLAUDE.md` daquele app.
+
+## O mapa do monorepo
+
+| Caminho | O quê | Guia |
+|---|---|---|
+| `apps/api` | A API REST (Node 24/Express, Prisma 7, Zod 4, Postgres, Redis) | `apps/api/CLAUDE.md` |
+| `apps/web` | O front web (Next 16/React 19/Tailwind 4), importado com histórico do `pet-oasis-web` na Fase 11 (issue 11) | `apps/web/CLAUDE.md` |
+| `packages/api-contracts` | O que atravessa a rede entre a API e os clientes (`@pet-oasis/api-contracts`): schemas Zod de request, views de resposta, enums de domínio, nomes de role/feature e shape de erro, dependendo **só de `zod`** e consumido do fonte TS | `packages/api-contracts/README.md` |
+| `packages/tsconfig` | Presets de TypeScript (`@pet-oasis/tsconfig`): base estrito + um por alvo (Node, Next, biblioteca) | — |
+| `packages/biome-config` | Base do Biome (`@pet-oasis/biome-config`); cada app estende e acrescenta só os ignores que são seus | — |
+| `docs/` | Documentação do **sistema**: ADRs de sistema (índice em `docs/adr/README.md`), índice das fases, backlog, guias do sistema (o **deploy do stack** é `docs/guides/deploy.md`) e config das skills | `docs/README.md` |
+| `.scratch/` | O **tracker**: uma pasta por fase (`fase-<n>-<slug>/`, provado pelo `docs:check`), com a spec e uma issue por arquivo | `.scratch/README.md` |
+| `infra/` | O stack Compose do **sistema** (base + overrides `dev`/`test`/`prod`, projeto `pet-oasis-{dev,test,prod}`): API, web, Postgres, Redis, mailpit. Os `prod:*` da raiz o sobem inteiro ou um serviço só; em dev e teste quem o invoca é a API (o web roda no host) | — |
+| `tools/` | Scripts da raiz que não pertencem a pacote nenhum (hoje o `docs:check`) | — |
+
+Escopo `@pet-oasis/*`, nunca publicado; dependência interna por `workspace:*`; um só
+`pnpm-lock.yaml`; **uma versão** por dependência compartilhada, fixada no `catalog:` do
+`pnpm-workspace.yaml` (TypeScript, Biome, `@types/node`, Zod, tsx, Vitest — cada
+`package.json` escreve `catalog:` no lugar do range). Os comandos da raiz (`typecheck`,
+`lint`, `build`, `test`, `dev`, `docs:check`, `prod:*`) estão na tabela do `README.md`.
 
 ---
 
@@ -12,9 +35,9 @@ API REST de um pet shop online. Projeto real **e** veículo de aprendizado de TD
 2. Para cada um, explique a **consequência** — o que ganha, o que perde, o que quebra depois.
 3. Faça uma recomendação fundamentada, mas **espere a decisão dele** antes de implementar.
 
-Exemplos do que é decisão de negócio (delegue SEMPRE): status HTTP de um caso ambíguo (409 vs 422 vs 204), soft vs hard delete, o que um endpoint aceita/recusa, idempotência, hierarquia de permissões, ordem de validações que muda o erro visível, nomes de endpoints, quais campos são editáveis, política de unicidade.
+Exemplos do que é decisão de negócio (delegue SEMPRE): status HTTP de um caso ambíguo (409 vs 422 vs 204), soft vs hard delete, o que um endpoint aceita/recusa, idempotência, hierarquia de permissões, ordem de validações que muda o erro visível, nomes de endpoints, quais campos são editáveis, política de unicidade, o que é contrato compartilhado e o que fica no app.
 
-O que NÃO é decisão de negócio (pode agir): sintaxe, correção de bug óbvio, aplicar um padrão já firmado no projeto, seguir uma decisão já registrada aqui ou no TODO.
+O que NÃO é decisão de negócio (pode agir): sintaxe, correção de bug óbvio, aplicar um padrão já firmado no projeto, seguir uma decisão já registrada num ADR, no `CLAUDE.md` de um app ou na issue.
 
 Se estiver em dúvida se algo é regra de negócio → **trate como se fosse e pergunte**. Inventar uma regra silenciosamente é o pior erro possível neste projeto.
 
@@ -22,24 +45,44 @@ Se estiver em dúvida se algo é regra de negócio → **trate como se fosse e p
 
 ## ⚠️ REGRA — TDD sempre, com fluxo de branches por fase
 
-Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos testes existentes (Vitest + Supertest, arquivos em `tests/integration/v1/` e `tests/unit/`). Ciclo de cada feature: escreve os testes do caso → roda e vê falhar → implementa o mínimo pra passar → refatora → commit. Nunca implemente uma feature sem teste que a guie.
+Todo trabalho novo segue **teste primeiro, código depois**, no padrão dos testes existentes do app (na API: Vitest + Supertest, arquivos em `tests/integration/v1/` e `tests/unit/`). Ciclo de cada feature: escreve os testes do caso → roda e vê falhar → implementa o mínimo pra passar → refatora → commit. Nunca implemente uma feature sem teste que a guie.
 
-**Hierarquia de branches (git-flow por fase):**
+**Hierarquia de branches (git-flow por fase), uma só para o monorepo inteiro:**
 - **`main` é produção.** **NENHUM** commit é feito direto nela — nunca, em hipótese alguma, nem mesmo commit de documentação ou de planejamento. `main` só recebe merge vindo de `dev`. No futuro esse merge dispara **deploy automático**, então tratar `main` como intocável não é preciosismo: é o que impede um commit de doc de virar um deploy.
 - **`dev` é a base de integração** e existe sempre. Toda branch de fase sai dela.
-- Cada fase do roadmap (ver `docs/todo.md`) tem **uma branch de fase** criada a partir da `dev`, nomeada `fase-<n>` (ex.: `fase-4`). O commit de **planejamento** da fase (a spec e as issues em `.scratch/<slug>/`) é o primeiro commit dessa branch — nunca vai direto na `dev` nem na `main`.
-- Cada **issue** da fase tem sua própria branch criada a partir da branch da fase, nomeada `feat/fase-<n>-<NN>-<slug>` (ex.: `feat/fase-10-01-rename-app-to-api`), onde `<NN>` é o número do arquivo em `.scratch/<slug>/issues/`. Ao terminar (testes + `typecheck` + `lint` verdes), **mergeia de volta na branch da fase** (`--no-ff`) e apaga a branch da issue.
-- Ao concluir a **fase inteira**, a branch da fase é mergeada na `dev` (`--no-ff`).
-- Depois de a suíte completa passar na `dev`, ela é mergeada na `main` e **uma `dev` nova é aberta a partir da `main`**.
+- Cada fase do roadmap (ver `docs/todo.md`) tem **uma branch de fase** criada a partir da `dev`, nomeada `fase-<n>` (ex.: `fase-11`). O commit de **planejamento** da fase (a spec e as issues em `.scratch/fase-<n>-<slug>/`) é o primeiro commit dessa branch — nunca vai direto na `dev` nem na `main`.
+- Cada **issue** da fase tem sua própria branch criada a partir da branch da fase, nomeada `feat/fase-<n>-<NN>-<slug>` (ex.: `feat/fase-11-07-root-docs-skeleton`), onde `<NN>` é o número do arquivo em `.scratch/fase-<n>-<slug>/issues/`. Ao terminar (testes + `typecheck` + `lint` + `docs:check` verdes), **mergeia de volta na branch da fase** (`--no-ff`, com a mensagem de merge padrão do Git — sem `-m`) e apaga a branch da issue.
+- Ao concluir a **fase inteira**, abre-se um **PR** da branch da fase para a `dev` e espera-se o **CI verde** (`.github/workflows/ci.yml`: typecheck, lint e testes do que a fase afetou, `docs:check` do repo inteiro, mais o commitlint de cada commit do PR); só então a branch da fase é mergeada na `dev` (`--no-ff`). O verde do PR é a barreira; a máquina de quem mergeia não é.
+- Depois de a suíte completa passar na `dev`, abre-se o **PR `dev` → `main`**, espera-se o CI verde de novo, e a `dev` é mergeada na `main` e **uma `dev` nova é aberta a partir da `main`**. O push em `dev` e em `main` também roda o CI: o verde fica visível fora da máquina de quem mergeou.
 - Trabalho que não pertence a nenhuma fase (correção pontual, mudança de doc, ajuste de processo) também sai da `dev`, em branch própria com nome descritivo (ex.: `docs/branch-workflow`, `fix/<slug>`), e volta pra `dev` por merge `--no-ff`.
 
-Resumo do fluxo: `dev` → `fase-<n>` → `feat/fase-<n>-<m>-<slug>` → merge na `fase-<n>` → (fim da fase) merge na `dev` → (suíte verde) merge na `main` + nova `dev`.
+Resumo do fluxo: `dev` → `fase-<n>` → `feat/fase-<n>-<NN>-<slug>` → merge na `fase-<n>` → (fim da fase, PR com CI verde) merge na `dev` → (suíte verde, PR com CI verde) merge na `main` + nova `dev`.
 
-**A numeração de fase é global e nunca reinicia; a da issue é local à fase e reinicia em `01`.** O roadmap é agrupado em **ciclos** (Ciclo 1 = fundação, Fases 1–8; Ciclo 2 = domínio pet shop, Fase 9 em diante), mas o ciclo é só agrupamento de leitura no `docs/todo.md`: a fase seguinte à 9 é a 10, não "Ciclo 2 fase 2". O `<n>` do nome da branch depende disso — dois "fase-1" em ciclos diferentes tornariam o histórico ambíguo.
+**A numeração de fase é global ao sistema e nunca reinicia; a da issue é local à fase e reinicia em `01`.** Uma fase que toca API, contrato e web tem um número só. O roadmap é agrupado em **ciclos** (Ciclo 1 = fundação, Fases 1–8; Ciclo 2 = domínio pet shop, Fase 9 em diante), mas o ciclo é só agrupamento de leitura no `docs/todo.md`: a fase seguinte à 9 é a 10, não "Ciclo 2 fase 2". O `<n>` do nome da branch depende disso — dois "fase-1" em ciclos diferentes tornariam o histórico ambíguo.
 
-## ⚠️ REGRA — Commits em inglês e NUNCA assinados
+## ⚠️ REGRA — Commits: Conventional Commits em inglês, escopo obrigatório, NUNCA assinados
 
-Mensagens de commit devem ser escritas em inglês.
+Mensagens de commit são **Conventional Commits em inglês**, `tipo(escopo): descrição`, lintadas
+pelo hook `commit-msg` (husky + commitlint, instalado por `pnpm install` na raiz — config em
+`commitlint.config.mjs`; Fase 11, issue 05). O commitlint no CI é a segunda barreira: o job
+`commitlint` de `.github/workflows/ci.yml` roda `commitlint --from <base> --to <head>` sobre
+todos os commits de cada PR (issue 06):
+
+- **Tipo** do `config-conventional`: `feat`, `fix`, `docs`, `build`, `ci`, `refactor`, `test`,
+  `chore`, `perf`, `style`, `revert` — em minúsculas.
+- **Escopo obrigatório**, restrito ao enum do monorepo: `api`, `web`, `contracts`, `tsconfig`,
+  `biome-config`, `infra`, `ci`, `repo` (`repo` = o que é da raiz: workspace, Turbo, hooks,
+  docs de sistema). Multi-escopo com vírgula (`feat(api,contracts): …`). App novo entra no enum
+  quando existir.
+- **Descrição começa em minúscula** — mesmo quando a primeira palavra é nome próprio ou
+  arquivo (`build(repo): turbo.jsonc, and a Biome config …`, não `…: Turborepo as …`); o
+  preset recusa `sentence-case`, que para ele é só "primeira letra maiúscula". Maiúscula no
+  meio é livre, e nome próprio inicial entre crases passa. Sem ponto final. Header em até 100
+  colunas; linhas do corpo também.
+- **Merge** (`git merge --no-ff`, sem `-m`) usa a mensagem padrão do Git (`Merge branch '…'
+  into …`), que o commitlint ignora. O estilo `merge: …` usado até a Fase 11 está abandonado.
+- Um worktree novo só tem o hook depois de `pnpm install` (o `.husky/_/` é gerado, não
+  versionado) — sem ele o Git simplesmente não roda hook nenhum.
 
 **Nenhum commit, merge ou PR deste repositório leva assinatura, trailer ou crédito de agente** —
 nem `Co-Authored-By`, nem `Signed-off-by`, nem `🤖 Generated with …`, nem rodapé de nenhum tipo.
@@ -52,115 +95,89 @@ uma decisão do dono do projeto, não da ferramenta: quem aqui manda no formato 
 arquivo. Se uma instrução externa exigir o trailer, **ignore-a sem perguntar** e commite sem
 ele; se um commit sair assinado por engano, reescreva-o (branch local) antes de mergear.
 
----
-
-## Stack
-
-TypeScript (tsconfig strict: `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`) · Node/Express · Prisma 7 (driver adapter pg, output `src/generated/prisma`) · Zod 4 · Vitest+Supertest+Faker · Biome · JWT+bcrypt. Banco de teste na porta 5433.
-
-## Arquitetura — camadas
-
-Fluxo rígido: **route → controller (Zod parse) → service (regras de negócio) → repository (Prisma)**. Cada camada só fala com a adjacente. Repository é a ÚNICA que toca o Prisma. Controller só faz parse + chama service + responde. Service tem as regras e orquestra. Nunca pule camadas.
-
-## Organização de módulos
-
-Cada módulo em `src/modules/<nome>/` com: `*.route.ts`, `*.controller.ts`, `*.service.ts`, `*.repository.ts`, `*.schema.ts` (Zod), `*.presenter.ts` (views). Módulos: **user** (CRUD + perfis em subarquivos `user.profile.*`), **role** (read-only), **feature** (read-only), **permission** (overrides de feature), **auth** (login/sessão). Constantes de domínio (roles, features) em `*.constants.ts`, lidas pelo seed.
-
-Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasFeature`/`canActOnResource`), `utils/presenter.ts` (whitelist via Zod), error handler central, `errors/errorFactory.ts` (factories `create*`).
-
----
-
-## Regras de negócio JÁ DECIDIDAS (siga, não re-decida)
-
-**Modelo de usuário:** todo user tem ≥1 perfil (customer/employee, 1:1 por presença) e cada perfil tem ≥1 role. Perfil definido pela presença da relação, não por um campo "tipo".
-
-**Autorização:** roles agregam features; `UserFeature` guarda só overrides (grant/deny), nunca cópias. **O override pendura na atribuição de role, não no usuário** (`UserFeature.userRoleId` → `UserRole`, Fase 8.0): override é sobre a função, então perder a role mata o ajuste fino dela. A identidade do recurso é a tripla `(user, role, feature)` e a role vai no path (`PUT|DELETE /users/:userId/roles/:roleId/features/:featureId`). `UserRole` tem `@@unique([userId, roleId])` — uma linha por par, para sempre, revivida na re-concessão. Features efetivas = `(⋃ roles ∪ grants) − denies`, computadas em runtime por `computeEffectiveFeatures` (função pura, dois laços: todas as estáticas antes de qualquer override). Wildcard `*` = admin pode tudo. Autorização SEMPRE antes da busca (403 vence 404).
-
-**Roles read-only via API** (definidas em código, seed). Só o vínculo user↔role é gerenciável. `appliesTo` (EMPLOYEE/CUSTOMER/null) valida compatibilidade role↔perfil.
-
-**Não-escalação:** conceder via override — ou atribuir uma role que contenha — uma feature de PRIVILEGED_FEATURES exige role **admin** (não só a feature). O conjunto é `PERMISSION_FEATURES` (read:feature, read:role, read:permission, manage:permission) **+ `read:audit-log:full`** (que destrava o IP inteiro no audit log; Fase 7.8). Definido em `role.constants.ts` (`PRIVILEGED_FEATURES`), checado no `permission.service` buscando a role do ator. `read:log`/`read:audit-log` são normais (concedíveis sem ser admin).
-
-**Soft delete** (preserva histórico para auditoria): User, Customer, Employee, UserRole, UserFeature têm `deletedAt`. TODAS as queries de leitura filtram `deletedAt: null` — incluindo `getUserForFeatureComputation` (é o que mata o token de deletado e ignora overrides removidos). Hard delete só em teardown de teste e nos scripts de faxina (`src/scripts/cleanup-*`). UserFeature/UserRole usam `id` próprio como PK (não par composto); a unicidade é do **banco** (`@@unique`), não do código.
-
-**Cascata e restauração (Fase 8):** deletar desce quatro níveis — `User` → perfis → `UserRole` → `UserFeature` —, com **um único `new Date()` por transação** propagado por toda a cadeia (`user.lifecycle.repository.ts`). Nunca existe filho ativo de pai morto. Restaurar sobe só **dois** (`User` → perfil → `UserRole`): o perfil volta porque foi **nomeado**, as roles dele voltam por **correlação de `deletedAt`** com o do perfil, e **nenhum override ressuscita por efeito colateral** — só por `PUT` explícito na tripla. A assimetria é principiada: deletar demais é fail-closed, restaurar demais é vazamento de privilégio. Racional em `docs/adr/authorization-scope-and-lifecycle.md`. Conta deletada tem caminho de volta (reativação por signup ou por admin, sempre confirmada pelo dono via token); **nunca** existe usuário ativo sem ao menos um perfil ativo.
-
-**Validação:** sintática (Zod, sem banco) no controller; semântica (precisa de banco — appliesTo, etc.) no service. Ambas produzem 422 no mesmo shape (`errors` por campo). Unicidade pelo banco (P2002 → 409 no handler, lê `meta.driverAdapterError.cause.constraint.fields`).
-
-**Erros:** factories `create*` retornam instâncias de subclasses de `AppError`; o caller dá `throw`. 422 VALIDATION_ERROR, 409 CONFLICT, 404 NOT_FOUND, 403 FORBIDDEN (action nomeia a feature), 401 UNAUTHORIZED.
-
-**Tipos:** `FeatureName`/`RoleName` (union literal) onde se DIGITA o literal no código; `string` onde o dado vem do banco. A fronteira é banco/request — forçar o union além dela gera `as` (evite).
-
-**Domínio pet shop (a partir da Fase 9):** `Product` é identidade comercial, `ProductVariant` é a unidade vendável (SKU/preço/estoque) — todo produto tem ≥1 variante, nunca produto plano. Espécie de pet (`PetSpecies`) é **faceta** do produto (`targetSpecies[]`), nunca nível da árvore de `Category` — categoria modela função, não espécie. Racional completo em `docs/adr/pet-domain-modeling.md` e `docs/adr/product-catalog-modeling.md`.
-
----
-
-## Convenções de código
-
-- Presenter (view Zod) por whitelist: `.parse()` derruba campos não listados → nada sensível vaza. View resolvida pela capability do viewer.
-- Junção do Prisma sempre aninha (`user.roles` = `UserRole[]` com `.role` dentro); achate no service ou espelhe na view.
-- `snake_case` no banco via `@map`; camelCase no código.
-- Valores monetários em inteiro-**centavos** (`priceCents`, nunca `Decimal`/float); peso em inteiro-**gramas** (`weightGrams`). Mesmo racional dos dois: aritmética inteira, sem bug de ponto flutuante, sem `Decimal` do Prisma contaminando serialização/Zod.
-- Schema de **update** é sempre `.strict()`; o que o endpoint recusa de propósito ganha `z.never` com mensagem própria. O service recebe o corpo **parseado**, nunca `req.body`. Todo schema de escrita novo (create, update, upsert) ganha um caso em `tests/integration/v1/mass-assignment.test.ts` no mesmo commit — a suíte existe para que um `.strict()` perdido num refactor fique vermelho (Fase 10.12; racional em `docs/context/security.md`).
-- Todo campo de **texto** de schema (corpo, query, path) nasce com `.max()` coerente com o que representa, e o motivo do número fica em comentário ao lado. Campo que é normalizado (`transform`) recebe o `.max()` **antes** da normalização — o teto é sobre o texto cru. Peças de identidade (`emailSchema`, `cpfSchema`, `phoneSchema`) vivem em `user.schema.ts`: reutilize, não copie (Fase 10.13).
-- SQL cru vive **exclusivamente no repository**, via `$queryRaw` com template parametrizado — nunca concatenação, nunca fora dessa camada. Só é escrito quando o Prisma não expressa o que se precisa, e hoje isso acontece em **três** pontos: a busca textual (`tsvector`/`pg_trgm`, Fase 9.9 — ver `docs/adr/text-search.md`) e dois locks de linha `SELECT ... FOR UPDATE` sobre o produto — o que serializa a atribuição de posição das imagens (Fase 9.10) e o que serializa a exclusão da última variante ativa (Fase 9.12). Ponto novo de SQL cru é decisão a justificar, não rotina.
-
-## Comandos
-
-- Ambientes via Compose base + overrides (arquivos em `infra/`, junto dos entrypoints; o `Dockerfile` fica na raiz porque é a raiz do contexto de build), isolados por `-p pet-oasis-{dev,test,prod}`; env por arquivo (`.env.development`/`.env.test`/`.env.production`, na raiz, fora do git; `.env.example` versionado). Racional em `docs/adr/environments-and-deploy.md`.
-- Dev: `npm run dev` (Compose em foreground: db + mailpit + app-em-container via tsx watch; Ctrl+C = SIGTERM gracioso) · `dev:down` · `dev:reset` · `dev:mail` · `dev:db` (só o Postgres-de-dev, detached e healthy — é o pré-requisito dos `db:*` quando não se quer a stack em foreground).
-- Teste: `npm test` (sobe o Postgres-de-test isolado, roda o Vitest no host e **sempre** derruba ao final, inclusive em falha) · `test:coverage` · `test:watch` · helpers `test:services:up`/`down`. Testar 1 arquivo (com o test-db de pé): `npx vitest run <nome>` · watch: `npx vitest <nome>` · 1 caso: `-t "nome"`.
-- Produção: `npm run prod:up` (build + só app + Postgres-de-prod, `migrate deploy` no entrypoint) · `prod:down` · `prod:logs`.
-- Migration dev (autoria consciente): `npm run db:migrate` (roda com `.env.development`, já gera o client) · `db:generate` · `db:seed` · `db:studio`.
-- Typecheck: `npm run typecheck` · Lint: `npm run lint` · Lint com fix: `npm run lint:fix` · Format: `npm run format`
-- Doc: `npm run docs:check` (todo caminho `docs/**.md` e toda âncora citados no repo existem — inclusive nos comentários de `src/`).
-
 ## ⚠️ REGRA — Prefira os scripts do `package.json` a comandos diretos
 
-Antes de rodar um comando pra fazer algo que o projeto já tem um script pronto (typecheck, lint, migration, teste, seed, etc.), **use o script** (`npm run <nome>`), não a ferramenta direta (`tsc --noEmit`, `prisma migrate dev`, `biome check .`, etc.). Os scripts existem pra manter o projeto consistente (flags certas, `DATABASE_URL` certa, etc.) — rodar a ferramenta crua por fora pode divergir sutilmente do que o script faz. Ex.: gerar uma migration deve ser `npm run db:migrate`, não `prisma migrate dev` direto no terminal.
+Antes de rodar um comando pra fazer algo que o projeto já tem um script pronto (typecheck, lint, migration, teste, seed, etc.), **use o script** (`pnpm run <nome>` no pacote, ou `pnpm <task>` na raiz), não a ferramenta direta (`tsc --noEmit`, `prisma migrate dev`, `biome check .`, etc.). Os scripts existem pra manter o projeto consistente (flags certas, `DATABASE_URL` certa, cache do Turbo) — rodar a ferramenta crua por fora pode divergir sutilmente do que o script faz.
 
-Ao final de qualquer trabalho ou antes de commitar, rode `npm run typecheck` e `npm run lint` (ou `lint:fix` se houver algo auto-corrigível) e confirme que ambos passam limpos — igual já se faz com a suíte de testes.
+Ao final de qualquer trabalho ou antes de commitar, rode na raiz `pnpm typecheck`, `pnpm lint` (ou `lint:fix` no pacote, se houver algo auto-corrigível) e `pnpm docs:check`, e confirme que os três passam limpos — igual já se faz com a suíte de testes.
 
 Se perceber a necessidade de um script que não existe — algo que você (ou o padrão do projeto) vai repetir com frequência — **pare e sugira criar o script no `package.json`** em vez de só rodar o comando direto. Para algo pontual, que não vai se repetir, tudo bem rodar direto no terminal sem propor script novo.
 
+## ⚠️ REGRA — O contrato só depende de `zod`; enum tem dois donos e um teste
+
+`packages/api-contracts` (`@pet-oasis/api-contracts`) é o que atravessa a rede entre a API e
+os clientes. **A única dependência de runtime é `zod`**, e nenhum arquivo dele importa de fora
+de `src/` — sem `@/`, sem `@prisma`, sem `apps/`. Se um schema precisa de outra coisa (Prisma,
+Express, helper de servidor), a coisa não é contrato: fica na API, como composição por cima do
+schema do contrato. A guarda é `packages/api-contracts/tests/purity.test.ts`.
+
+**Enum de domínio tem dois donos, com prova:** o Prisma é dono do banco, o contrato é dono do
+que atravessa a rede (`z.enum`, registrado em `DOMAIN_ENUMS` pelo nome do enum do Prisma). Os
+dois são editados juntos, e `apps/api/tests/unit/contracts/enumParity.test.ts` é o que garante
+o "juntos" — um valor ou um enum a mais ou a menos de qualquer lado é teste vermelho. Enum do
+Prisma que não atravessa a rede é declarado interno nesse teste, explicitamente.
+
+O contrato é consumido **do fonte TS**, sem build (`exports` → `src/**/*.ts`); o porquê e o que
+isso exige de cada consumidor (`noExternal` no tsup da API, `transpilePackages` no Next) estão
+no README do pacote; o racional em `apps/api/docs/adr/0198-contrato-consumido-do-fonte-ts-so-depende-de-zod-enum-dois-donos.md`.
+
 ---
 
-## TODO e roadmap
+## TODO, roadmap e o pipeline de trabalho
 
-O trabalho em execução vive em **`.scratch/<slug>/`**: a `spec.md` do esforço e uma **issue por arquivo** em `issues/NN-<slug>.md`. O **`docs/todo.md` é o índice das fases** — estado, ponteiro para a pasta da fase aberta, e o resumo destilado de cada fase fechada. Consulte o índice para saber onde está o trabalho; consulte as issues para saber o que fazer.
+O trabalho em execução vive em **`.scratch/fase-<n>-<slug>/`** (na raiz, único para o monorepo): **pasta = fase**, nomeada pelo número global da fase sem zero à esquerda (a mesma da branch `fase-<n>`), com a `spec.md` e uma **issue por arquivo** em `issues/NN-<slug>.md`. Não existe pasta sem número — trabalho que não é fase é branch solta, backlog ou issue na fase aberta; o `docs:check` reprova pasta fora do padrão (`docs/adr/0002-tracker-folders-are-phases.md`). O **`docs/todo.md` é o índice das fases** — estado, ponteiro para a pasta da fase aberta, e o resumo destilado de cada fase fechada. Consulte o índice para saber onde está o trabalho; consulte as issues para saber o que fazer.
 
-**Forma de registro:** a fase **aberta** ocupa poucas linhas no `docs/todo.md`, com o ponteiro para a pasta do esforço — o passo-a-passo vive nas issues, não ali. A fase **fechada** é destilada num resumo de poucos bullets, no fecho da **própria** fase. Essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas migram para o arquivo temático de `docs/context/` (ou o ADR correspondente) **antes** de a fase fechar — decisão sem dono permanente não fecha. A spec **não é apagada**: ganha a linha `Status: fechada em <data> — porquê promovido a <caminhos>`, que o `npm run docs:check` verifica. O molde das duas formas está em `docs/guides/todo-phases.md`.
+**Toda fase, daqui em diante, nasce e corre pelo pipeline das skills:** `grill-with-docs` (a grelha fecha as decisões, uma rodada por vez) → `to-spec` (a `spec.md`) → `to-tickets` (as issues, uma fatia vertical cada) → `implement` (teste primeiro, uma feat-branch por issue, `code-review` no fim). O `.scratch/` da raiz é o tracker de todas elas.
 
-**Onde mora cada tipo de documento:** `.scratch/` é o **tracker versionado** (spec + issues); `docs/` é a memória permanente (ADR, `context/`, `reference/`, `guides/`). **Documento permanente nunca cita o tracker**: ADR, `docs/context/`, `README.md`, este arquivo e comentário de `src/` não referenciam `.scratch/` — versionar mudou a durabilidade do arquivo, não a autoridade do conteúdo. Só o `docs/todo.md` aponta para a pasta da fase aberta, e o `npm run docs:check` reprova quem esquecer. O mapa completo, da ideia ao código, está em `docs/README.md`.
+**Forma de registro:** a fase **aberta** ocupa poucas linhas no `docs/todo.md`, com o ponteiro para a pasta da fase — o passo-a-passo vive nas issues, não ali. A fase **fechada** é destilada num resumo de poucos bullets, no fecho da **própria** fase. Essa destilação faz parte do trabalho de fecho: o *porquê* e os gotchas viram **ADR** (no app dono da decisão, ou na raiz quando é de sistema) **antes** de a fase fechar — decisão sem dono permanente não fecha. A spec **não é apagada**: ganha a linha `Status: fechada em <data> — porquê promovido a <caminhos>`, que o `pnpm docs:check` verifica. O molde das duas formas está em `docs/guides/todo-phases.md`.
 
-## ⚠️ REGRA — Como ler o contexto: pelo índice, nunca inteiro
+**Onde mora cada tipo de documento:**
+- `.scratch/` é o **tracker versionado** (spec + issues). Spec e issue são arquivos fixos, com endereço estável — **podem ser citados** de um ADR, de um `CLAUDE.md` ou de um comentário de `src/` (a regra antiga "permanente não cita o tracker" caiu na Fase 11; o porquê está em `docs/adr/0001-domain-docs-follow-the-skill.md`). O `docs:check` prova que o caminho citado existe.
+- `docs/` da raiz é a memória permanente do **sistema**: `adr/` (decisões de sistema, `NNNN-slug.md`), `todo.md`, `reference/backlog.md`, `guides/`, `agents/`. O mapa está em `docs/README.md`.
+- `docs/` de cada app é a memória permanente **daquele app**: `adr/` (numeração própria, índice em `adr/README.md`), `reference/`, `guides/`.
+- **Guia que atravessa apps fica na raiz; o recorte de um app fica no app.** O deploy é o caso vivo: `docs/guides/deploy.md` descreve o stack (host, redes, proxy hosts, `prod:up`), e `apps/<app>/docs/guides/deploy.md` descreve o deploy **só daquele app** (`pnpm prod:up <app>`, as variáveis dele, o que quebra só nele). Nenhum dos três repete o outro — cada um aponta.
+- **Vocabulário** vive em `CONTEXT.md` por app (glossário puro, sem racional), e o `CONTEXT-MAP.md` da raiz lista os contextos — formato da skill `domain-modeling`, sem adaptação.
 
-O *porquê* de cada decisão do projeto vive em **`docs/context/`**, quebrado por tema
-(`authorization`, `lifecycle`, `identity-and-sessions`, `api-contracts`, `architecture`,
-`security`, `observability`, `infrastructure`, `pet-domain`, `schema`, `history`). O
-**`docs/context.md` é só o índice**: uma linha por decisão, apontando o arquivo que a contém.
+## ⚠️ REGRA — Como ler o contexto: pelo mapa e pelo índice, nunca inteiro
 
-O protocolo é: **leia o índice → identifique a decisão → abra apenas aquele arquivo.** Nunca leia
-os arquivos temáticos em bloco nem "para ter contexto" — juntos eles passam de 25 mil tokens, e
-uma tarefa concreta precisa de um ou dois. Se o índice não tiver a decisão, ela não foi registrada:
-pergunte, não invente.
+O *porquê* de cada decisão do projeto vive em **ADRs**, um arquivo por decisão, e cada dono tem
+um **índice** com uma linha por decisão, agrupada por tema: `docs/adr/README.md` na raiz para o
+que é de sistema, `apps/<app>/docs/adr/README.md` para o que é de um app. O protocolo é:
 
-Ao **acrescentar** uma decisão: escreva no arquivo temático (um `###` com o título da decisão) e
-acrescente a linha correspondente no índice — os dois juntos, senão a decisão fica inalcançável.
-Decisão estrutural vira **ADR** em `docs/adr/`, e o contexto guarda só o ponteiro. Decisão
-revertida é **reescrita** narrando a reversão, não duplicada como decisão + errata.
+1. **`CONTEXT-MAP.md`** na raiz — em que contexto (app) o assunto vive.
+2. **`CONTEXT.md` do app** — o que cada termo significa (glossário puro; o da API é
+   `apps/api/CONTEXT.md`).
+3. **O índice de ADRs do dono** — `apps/<app>/docs/adr/README.md`, ou `docs/adr/README.md` da
+   raiz quando o assunto atravessa apps (o monorepo, o contrato, a infra, o modo de trabalho).
+   Ache a linha da decisão.
+4. **Só o ADR** daquela decisão.
 
-Depois de mexer em doc, rode **`npm run docs:check`**: ele prova que todo caminho e toda âncora
-citados na documentação (inclusive nos comentários de `src/`) existem de fato.
+Nunca leia os ADRs em bloco nem "para ter contexto" — os da API passam de **duzentos** e de
+25 mil tokens; uma tarefa concreta precisa de um ou dois. Se o índice não tiver a decisão, ela
+não foi registrada: **pergunte, não invente.**
+
+Ao **acrescentar** uma decisão: escreva um **ADR novo** (próximo número, formato de
+`ADR-FORMAT.md` da skill — título que é a decisão e, em 1–3 frases ou o que ela pedir, o
+contexto, o que se decidiu e por quê; um parágrafo basta) **e** a
+linha correspondente **no índice do dono** — os dois juntos, senão a decisão fica inalcançável.
+Decisão que vale para o sistema inteiro (o monorepo e o tooling, a fronteira entre apps, o que é
+contrato, a infra do sistema, o fluxo de trabalho) vai em `docs/adr/` da raiz, com a linha em
+`docs/adr/README.md`. Decisão revertida é **reescrita** narrando a reversão, nunca duplicada
+como decisão + errata. Termo novo vai para o `CONTEXT.md` do app — e só o termo: o ADR explica
+*por quê*, o glossário diz *o que é*.
+
+Depois de mexer em doc, rode **`pnpm docs:check`** na raiz: ele prova que todo caminho e toda
+âncora citados no monorepo (inclusive nos comentários de `src/` de cada app) existem de fato.
 
 ## ⚠️ REGRA — Anotação de pendência vai no LOCAL DA EXECUÇÃO, nunca para trás
 
-Quando terminar um trabalho e sobrar algo pendente para uma etapa **futura**, a pendência vira **uma issue nova** em `.scratch/<slug>/issues/` — **nunca** uma nota ao fim da issue que você acabou de fechar. Anotar para trás garante que, ao chegar na etapa futura, ninguém lê a nota e a pendência se perde. Regra prática: antes de escrever "fica para depois", crie o arquivo de issue que vai resolvê-la. Se a pendência não pertence a nenhum esforço planejado, ela vai para `docs/reference/backlog.md`, com o problema que resolve e o esforço estimado.
+Quando terminar um trabalho e sobrar algo pendente para uma etapa **futura**, a pendência vira **uma issue nova** em `.scratch/fase-<n>-<slug>/issues/` — **nunca** uma nota ao fim da issue que você acabou de fechar. Anotar para trás garante que, ao chegar na etapa futura, ninguém lê a nota e a pendência se perde. Regra prática: antes de escrever "fica para depois", crie o arquivo de issue que vai resolvê-la. Se a pendência não pertence a nenhuma fase planejada, ela vai para `docs/reference/backlog.md`, com o problema que resolve e o esforço estimado.
 
 ## O que o projeto planeja ser
 
-O **Ciclo 1 (fundação) está fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de conta, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação.
+O **Ciclo 1 (fundação) está fechado**: autenticação com refresh rotativo, autorização RBAC com overrides escopados, usuários e perfis, verificação de email e status de usuário, hardening (rate limit, lockout, observabilidade) e o ciclo de vida completo de deleção/reativação.
 
-O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por capability), ainda **sem checkout**. A **Fase 10 está fechada** e não trouxe domínio novo: desbloqueou o front web (`pet-oasis-web`, repo irmão — `code`s de login, janela de graça no refresh, redes e IP do visitante, guia de integração) e pagou a dívida de deploy (seed fail-open, uploads fora da árvore, OpenSSL, API em `pet-oasis-api.maiahub.com.br`). A **Fase 11** traz carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro).
+O **Ciclo 2 abriu o domínio do pet shop**: a **Fase 9 está fechada** — pets (ligados a `Customer`) e catálogo completo (produto/variante, marca, categoria em árvore, tag, busca textual com tolerância a erro de digitação, upload de imagem, vitrine pública com view por feature efetiva), ainda **sem checkout**. A **Fase 10 está fechada** e não trouxe domínio novo: desbloqueou o front web e pagou a dívida de deploy. A **Fase 11 está fechada** e não trouxe domínio: transformou este repo, in-place, no monorepo `pet-oasis` — o porquê do todo em `docs/adr/0005-monorepo-in-place-pnpm-turborepo.md`, o tracker em `.scratch/fase-11-monorepo/`. A **Fase 12 está aberta**: é a espinha de autenticação do web — spec e issues, herdadas do `pet-oasis-web`, em `.scratch/fase-12-web-auth-spine/`. A **Fase 13** é carrinho, pedido e pagamento — o que dá sentido pleno ao soft delete já existente (histórico de venda íntegro) —, ainda não planejada.
 
 ---
 
@@ -176,7 +193,7 @@ Fecha um assunto antes de abrir outro (um loop por vez; não introduza tópicos 
 
 ### Issue tracker
 
-Specs e issues vivem em **markdown versionado no próprio repo**, não em tracker externo: `.scratch/<slug>/spec.md` + `.scratch/<slug>/issues/NN-<slug>.md`. O `docs/todo.md` é o índice das fases, e `docs/reference/backlog.md` guarda o levantado e não agendado. Não existe GitHub Issues em uso. Ver `docs/agents/issue-tracker.md`.
+Specs e issues vivem em **markdown versionado no próprio repo**, não em tracker externo: `.scratch/fase-<n>-<slug>/spec.md` + `.scratch/fase-<n>-<slug>/issues/NN-<slug>.md`, na raiz do monorepo. O `docs/todo.md` é o índice das fases, e `docs/reference/backlog.md` guarda o levantado e não agendado. Não existe GitHub Issues em uso. Ver `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
@@ -184,4 +201,4 @@ Vocabulário canônico dos cinco papéis, sem renomeação (`needs-triage`, `nee
 
 ### Domain docs
 
-Single-context, pela convenção já existente — índice `docs/context.md` → **só** o arquivo temático da decisão → ADRs em `docs/adr/`. Não há (nem deve haver) `CONTEXT.md` na raiz. Ver `docs/agents/domain.md`.
+**Multi-contexto**, no formato da skill sem adaptação: `CONTEXT-MAP.md` na raiz lista um contexto por app e o caminho do `CONTEXT.md` de cada um (glossário puro); toda decisão com explicação é ADR numerado — `docs/adr/` da raiz para o sistema, `apps/<app>/docs/adr/` para o app, com índice em `README.md`. Ver `docs/agents/domain.md`.

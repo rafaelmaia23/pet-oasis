@@ -1,0 +1,27 @@
+{
+  // Estende o preset Node do workspace (`packages/tsconfig`): rigidez, semântica
+  // de módulo e emit vêm de lá. Fica aqui SÓ o que é relativo a este diretório —
+  // caminho escrito num preset resolveria a partir do preset, não daqui.
+  "extends": "@pet-oasis/tsconfig/tsconfig.node.json",
+  "compilerOptions": {
+    // `rootDir` é a raiz porque o programa abrange src/ E tests/ — fixá-lo em
+    // ./src faria os testes caírem fora dele. Não afeta o bundle: quem gera é o
+    // tsup (entradas explícitas em tsup.config.ts); o tsc só roda com --noEmit.
+    "rootDir": ".",
+    "outDir": "./dist",
+
+    // O @types/node vem do preset; o `src/@types` (augmentations do Express) é
+    // deste app, então o typeRoots também é.
+    "typeRoots": ["./src/@types", "./node_modules/@types"],
+
+    "paths": {
+      "@/*": ["./src/*"],
+      "@tests/*": ["./tests/*"]
+    }
+  },
+
+  // tests/ precisa estar no programa: é o que mantém o typecheck cobrindo os
+  // testes e o que faz o `declare module "vitest"` de tests/setup/vitest.d.ts
+  // (matcher toMatchView) ser aplicado.
+  "include": ["src/**/*", "tests/**/*", "tools/**/*"]
+}

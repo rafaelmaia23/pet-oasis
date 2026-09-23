@@ -1,0 +1,760 @@
+import { productViews } from "@pet-oasis/api-contracts/catalog";
+import { buildCustomer, buildEmployee } from "@tests/factories/user.factory";
+import { expectValidationError } from "@tests/helpers/assertions";
+import { loginAs } from "@tests/helpers/auth";
+import { clearDatabase } from "@tests/helpers/database";
+import { flushRedis } from "@tests/helpers/redis";
+import request from "supertest";
+import { afterEach, describe, expect, it } from "vitest";
+import z from "zod";
+import app from "@/app";
+import { prisma } from "@/lib/prisma";
+
+afterEach(async () => {
+  await clearDatabase();
+  await flushRedis();
+});
+
+/** Autoria de catálogo é `manage:product`, e `catalog-manager` a tem (9.1). */
+async function loginAsCatalogManager() {
+  const user = await buildEmployee({ roleNames: ["catalog-manager"] });
+
+  return loginAs(user.email, user.password);
+}
+
+/**
+ * Taxonomia mínima para pendurar um produto: o `brandId` é obrigatório e o
+ * mínimo de uma categoria é regra do service (9.7/X7), então quase todo caso
+ * precisa das duas.
+ */
+async function seedTaxonomy() {
+  const brand = await prisma.brand.create({
+    data: { name: "Golden", slug: "golden" },
+  });
+  const category = await prisma.category.create({
+    data: { name: "Ração seca", slug: "racao-seca" },
+  });
+  const tag = await prisma.tag.create({
+    data: { name: "Promoção", slug: "promocao" },
+  });
+
+  return { brand, category, tag };
+}
+
+function makeProductBody(
+  brandId: string,
+  categoryId: string,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    name: "Ração Golden Adulto",
+    description: "Ração seca para cães adultos de porte médio.",
+    brandId,
+    categories: [categoryId],
+    targetSpecies: ["DOG"],
+    variants: [{ sku: "GOLDEN-AD-15KG", label: "15 kg", priceCents: 24990 }],
+    ...overrides,
+  };
+}
+
+describe("POST /api/v1/products", () => {
+  it("should return 401 without a token", async () => {
+    const { brand, category } = await seedTaxonomy();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .send(makeProductBody(brand.id, category.id));
+
+    expect(response.status).toBe(401);
+  });
+
+  it("should return 403 for a customer", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const user = await buildCustomer();
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should return 403 for a stockist — counting shelves is not authoring", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const user = await buildEmployee({ roleNames: ["stockist"] });
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    expect(response.status).toBe(403);
+  });
+
+  it("should create the product with its variant, categories and tags", async () => {
+    const { brand, category, tag } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          tags: [tag.id],
+          variants: [
+            {
+              sku: "GOLDEN-AD-15KG",
+              label: "15 kg",
+              priceCents: 24990,
+              costCents: 18000,
+              stockQuantity: 12,
+              weightGrams: 15000,
+            },
+          ],
+        }),
+      );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchView(productViews.cost);
+    expect(response.body).toMatchObject({
+      name: "Ração Golden Adulto",
+      slug: "racao-golden-adulto",
+      status: "DRAFT",
+      targetSpecies: ["DOG"],
+      brand: { id: brand.id },
+    });
+    expect(response.body.categories).toHaveLength(1);
+    expect(response.body.tags).toHaveLength(1);
+    expect(response.body.variants).toHaveLength(1);
+    expect(response.body.variants[0]).toMatchObject({
+      sku: "GOLDEN-AD-15KG",
+      priceCents: 24990,
+      costCents: 18000,
+      stockQuantity: 12,
+      isDefault: true,
+    });
+  });
+
+  it("should record the creation in the audit log without the product name", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    const log = await prisma.auditLog.findFirst({
+      where: { action: "PRODUCT_CREATED" },
+    });
+
+    expect(log?.targetType).toBe("Product");
+    expect(log?.targetId).toBe(response.body.id);
+    expect(JSON.stringify(log?.metadata)).not.toContain("Ração Golden Adulto");
+  });
+
+  it("should reject a product without variants (X3)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { variants: [] }));
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["variants"]);
+  });
+
+  it("should reject a product without categories (X7)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { categories: [] }));
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["categories"]);
+  });
+
+  it("should reject an unknown brand naming brandId", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    await prisma.brand.update({
+      where: { id: brand.id },
+      data: { deletedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["brandId"]);
+  });
+
+  it("should reject a deleted category naming categories", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    await prisma.category.update({
+      where: { id: category.id },
+      data: { deletedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["categories"]);
+  });
+
+  it("should reject an unknown tag naming tags", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          tags: ["11111111-1111-4111-8111-111111111111"],
+        }),
+      );
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["tags"]);
+  });
+
+  it("should let an explicit slug win over the derived one (W4)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, { slug: "golden-adulto-15kg" }),
+      );
+
+    expect(response.status).toBe(201);
+    expect(response.body.slug).toBe("golden-adulto-15kg");
+  });
+
+  it("should reject a slug shaped like a UUID (9.8/Y2)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          slug: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+        }),
+      );
+
+    // `GET /products/:idOrSlug` decide id × slug pela forma do valor: um slug
+    // com cara de uuid tornaria a rota ambígua para sempre. O corte é aqui, na
+    // escrita, e não lá — a leitura não pode consertar o que já está no banco.
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["slug"]);
+  });
+
+  it("should name `name` when it produces no usable slug", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { name: "!!!" }));
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["name"]);
+  });
+
+  it("should reject a name whose derived slug is shaped like a UUID", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    // O corte da Y2 valia só para o slug **explícito**: um nome que slugifica
+    // para algo com cara de uuid entrava, e o produto nascia inalcançável por
+    // slug — `GET /products/:idOrSlug` leria aquele valor como id para sempre.
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          name: "3f2504e0 4f89 41d3 9a0c 0305e82c3301",
+        }),
+      );
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["name"]);
+  });
+
+  it("should reject a category repeated inside the same body", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    // Sem a recusa no Zod, a duplicata fura a PK composta do vínculo e o
+    // handler traduz o P2002 para um 409 que fala de `product_id` — erro que
+    // manda procurar bug no lugar errado. O array de imagens e a lista de
+    // variantes já recusam duplicata aqui, no mesmo lugar.
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          categories: [category.id, category.id],
+        }),
+      );
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["categories"]);
+  });
+
+  it("should reject a tag repeated inside the same body", async () => {
+    const { brand, category, tag } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { tags: [tag.id, tag.id] }));
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["tags"]);
+  });
+
+  it("should return 409 for a slug that already exists", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const body = makeProductBody(brand.id, category.id);
+
+    await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(body);
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ ...body, variants: [{ ...body.variants[0], sku: "OTHER-SKU" }] });
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should reject a SKU repeated inside the same body (422, before the database)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          variants: [
+            { sku: "SAME-SKU", label: "1 kg", priceCents: 2990 },
+            { sku: "SAME-SKU", label: "15 kg", priceCents: 24990 },
+          ],
+        }),
+      );
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["variants"]);
+  });
+
+  it("should return 409 for a SKU held by a soft-deleted variant (X1)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const body = makeProductBody(brand.id, category.id);
+
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(body);
+
+    await request(app)
+      .delete(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ ...body, slug: "outro-produto", name: "Outro produto" });
+
+    expect(response.status).toBe(409);
+  });
+
+  it("should accept an empty targetSpecies — it means every species", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { targetSpecies: [] }));
+
+    expect(response.status).toBe(201);
+    expect(response.body.targetSpecies).toEqual([]);
+  });
+
+  it("should reject a species outside the enum", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, { targetSpecies: ["DRAGON"] }),
+      );
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["targetSpecies"]);
+  });
+
+  it("should reject a negative price and a negative stock (X2)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          variants: [
+            {
+              sku: "NEG",
+              label: "1 kg",
+              priceCents: -1,
+              stockQuantity: -3,
+            },
+          ],
+        }),
+      );
+
+    expect(response.status).toBe(422);
+    expectValidationError(response);
+  });
+
+  it("should reject an unknown field (strict)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { featured: true }));
+
+    expect(response.status).toBe(422);
+  });
+
+  it("should make the first variant the default when none is marked (X5)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          variants: [
+            { sku: "A", label: "1 kg", priceCents: 2990 },
+            { sku: "B", label: "15 kg", priceCents: 24990 },
+          ],
+        }),
+      );
+
+    expect(response.status).toBe(201);
+    const defaults = response.body.variants.filter(
+      (variant: { isDefault: boolean }) => variant.isDefault,
+    );
+    expect(defaults).toHaveLength(1);
+    expect(defaults[0].sku).toBe("A");
+  });
+
+  it("should honour the variant explicitly marked as default", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          variants: [
+            { sku: "A", label: "1 kg", priceCents: 2990 },
+            { sku: "B", label: "15 kg", priceCents: 24990, isDefault: true },
+          ],
+        }),
+      );
+
+    expect(response.status).toBe(201);
+    const defaults = response.body.variants.filter(
+      (variant: { isDefault: boolean }) => variant.isDefault,
+    );
+    expect(defaults).toHaveLength(1);
+    expect(defaults[0].sku).toBe("B");
+  });
+
+  it("should reject two variants marked as default (X5)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          variants: [
+            { sku: "A", label: "1 kg", priceCents: 2990, isDefault: true },
+            { sku: "B", label: "15 kg", priceCents: 24990, isDefault: true },
+          ],
+        }),
+      );
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["variants"]);
+  });
+
+  it("should hide costCents from an author without read:product:cost", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const user = await buildEmployee({
+      roleNames: ["catalog-manager"],
+      denies: ["read:product:cost"],
+    });
+    const token = await loginAs(user.email, user.password);
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          variants: [
+            {
+              sku: "GOLDEN-AD-15KG",
+              label: "15 kg",
+              priceCents: 24990,
+              costCents: 18000,
+            },
+          ],
+        }),
+      );
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchView(productViews.internal);
+    expect(JSON.stringify(response.body)).not.toContain("18000");
+    expect(response.body.variants[0]).not.toHaveProperty("costCents");
+  });
+
+  it("should keep the stock quantity visible to the author", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    expect(response.body.variants[0]).toHaveProperty("stockQuantity");
+    expect(response.body.variants).toMatchView(
+      z.array(productViews.cost.shape.variants.element),
+    );
+  });
+});
+
+describe("PATCH /api/v1/products/:productId", () => {
+  it("should return 404 for an unknown product", async () => {
+    const token = await loginAsCatalogManager();
+
+    const response = await request(app)
+      .patch("/api/v1/products/11111111-1111-4111-8111-111111111111")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Outro nome" });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("should keep the slug frozen when the name changes (W4)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    const response = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Ração Golden Adulto Frango" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.name).toBe("Ração Golden Adulto Frango");
+    expect(response.body.slug).toBe("racao-golden-adulto");
+  });
+
+  it("should replace the whole category and tag sets (X7)", async () => {
+    const { brand, category, tag } = await seedTaxonomy();
+    const other = await prisma.category.create({
+      data: { name: "Petiscos", slug: "petiscos" },
+    });
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { tags: [tag.id] }));
+
+    const response = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ categories: [other.id], tags: [] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.categories).toHaveLength(1);
+    expect(response.body.categories[0].id).toBe(other.id);
+    expect(response.body.tags).toEqual([]);
+  });
+
+  it("should keep the current links when the fields are absent", async () => {
+    const { brand, category, tag } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id, { tags: [tag.id] }));
+
+    const response = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ status: "ACTIVE" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe("ACTIVE");
+    expect(response.body.categories).toHaveLength(1);
+    expect(response.body.tags).toHaveLength(1);
+  });
+
+  it("should reject an empty category set (X7)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    const response = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ categories: [] });
+
+    expect(response.status).toBe(422);
+    expectValidationError(response, ["categories"]);
+  });
+
+  it("should reject an empty body and a variants field", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    const empty = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+
+    const withVariants = await request(app)
+      .patch(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ variants: [{ sku: "X", label: "X", priceCents: 1 }] });
+
+    expect(empty.status).toBe(422);
+    expect(withVariants.status).toBe(422);
+  });
+});
+
+describe("DELETE /api/v1/products/:productId", () => {
+  it("should soft delete the product and cascade into its variants with one timestamp (X8)", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        makeProductBody(brand.id, category.id, {
+          variants: [
+            { sku: "A", label: "1 kg", priceCents: 2990 },
+            { sku: "B", label: "15 kg", priceCents: 24990 },
+          ],
+        }),
+      );
+
+    const response = await request(app)
+      .delete(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(204);
+
+    const product = await prisma.product.findUnique({
+      where: { id: created.body.id },
+    });
+    const variants = await prisma.productVariant.findMany({
+      where: { productId: created.body.id },
+    });
+
+    expect(product?.deletedAt).not.toBeNull();
+    expect(variants).toHaveLength(2);
+    for (const variant of variants) {
+      expect(variant.deletedAt?.getTime()).toBe(product?.deletedAt?.getTime());
+    }
+  });
+
+  it("should record the cascaded variant count in the audit log", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    await request(app)
+      .delete(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const log = await prisma.auditLog.findFirst({
+      where: { action: "PRODUCT_DELETED" },
+    });
+
+    expect(log?.metadata).toMatchObject({ cascadedVariants: 1 });
+  });
+
+  it("should return 404 when deleting twice", async () => {
+    const { brand, category } = await seedTaxonomy();
+    const token = await loginAsCatalogManager();
+    const created = await request(app)
+      .post("/api/v1/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send(makeProductBody(brand.id, category.id));
+
+    await request(app)
+      .delete(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    const response = await request(app)
+      .delete(`/api/v1/products/${created.body.id}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+  });
+});

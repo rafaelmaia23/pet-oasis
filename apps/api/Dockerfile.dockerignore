@@ -1,0 +1,42 @@
+# Ignore do build da API. Chama-se `Dockerfile.dockerignore` (e não
+# `.dockerignore`) porque o contexto de build é a RAIZ do monorepo: um
+# `.dockerignore` da raiz valeria para o Dockerfile de todo app, e o que a API
+# exclui (o outro app) é justamente o que o outro app precisa. O Docker lê o
+# `<Dockerfile>.dockerignore` ao lado do Dockerfile quando ele existe, e só
+# então cai no `.dockerignore` da raiz. Os caminhos abaixo são relativos à raiz.
+
+# node_modules de qualquer nível: o da raiz (a virtual store do workspace) e o
+# de cada projeto (symlinks para ela) — o install acontece dentro da imagem.
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+.git
+**/.gitignore
+.vscode
+.claude
+.learning
+
+# Todo outro app, inteiro — só o package.json de cada um entra (o Dockerfile
+# copia `apps/*/package.json`, porque o lockfile os lista como importers). As
+# negações reabrem este app e os manifestos; um app novo não muda estas linhas.
+apps/*
+!apps/api
+!apps/*/package.json
+# Os Compose da raiz orquestram a imagem, não entram nela.
+infra
+
+# O que a API tem mas a imagem não precisa. Os entrypoints em apps/api/infra/
+# SÃO copiados pelo Dockerfile — excluir o diretório inteiro quebraria o build.
+apps/api/src/generated
+apps/api/tests
+apps/api/infra/cron
+apps/api/api-collection
+apps/api/docs
+apps/api/.scratch
+apps/api/tools
+packages/*/tests
+apps/api/uploads
+apps/api/assets-inbox
+**/*.md

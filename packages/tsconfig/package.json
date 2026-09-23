@@ -1,0 +1,21 @@
+{
+  "name": "@pet-oasis/tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Presets de TypeScript do monorepo: um base estrito e um por alvo (Node, Next, biblioteca). Config pura, sem build.",
+  "license": "MIT",
+  "author": "Rafael Maia da Fonseca",
+  "exports": {
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./tsconfig.node.json": "./tsconfig.node.json",
+    "./tsconfig.next.json": "./tsconfig.next.json",
+    "./tsconfig.library.json": "./tsconfig.library.json"
+  },
+  "scripts": {
+    "lint": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@pet-oasis/biome-config": "workspace:*"
+  }
+}

@@ -1,7 +1,7 @@
 # As duas formas de uma fase no `todo.md`
 
 O [`todo.md`](../todo.md) é o **índice** das fases, não o caderno de trabalho — o caderno é a
-pasta do esforço em [`.scratch/`](../../.scratch/). Cada fase aparece no índice de **uma de
+pasta da fase em [`.scratch/`](../../.scratch/) (`fase-<n>-<slug>/`). Cada fase aparece no índice de **uma de
 duas formas**, e qual delas depende só de a fase estar aberta ou fechada.
 
 ## Fase aberta — enquanto está em execução
@@ -11,8 +11,8 @@ nas issues.
 
 ```markdown
 ## 🔄 Fase <n> — <título>
-> O recorte da fase em uma ou duas linhas, e o **ponteiro** para a pasta do esforço:
-> `.scratch/<slug>/`, onde vivem a spec e as issues.
+> O recorte da fase em uma ou duas linhas, e o **ponteiro** para a pasta da fase:
+> `.scratch/fase-<n>-<slug>/`, onde vivem a spec e as issues.
 - Progresso: <k> de <total> issues fechadas.
 ```
 
@@ -27,7 +27,7 @@ em ritmos diferentes — que foi exatamente o que aconteceu na Fase 9.
 ```markdown
 ## Fase <n> — <título> ✅
 > Uma nota de abertura: o que a fase entregou, em quantas issues, e **os ponteiros** para
-> onde o porquê mora agora (`context/`, ADRs).
+> onde o porquê mora agora (os ADRs).
 - Um bullet por **grupo de issues**, dizendo o que ficou decidido e por quê — não o que
   foi planejado.
 - …
@@ -41,12 +41,12 @@ recuperável — nas issues, que não são apagadas, e no histórico do git.
 
 1. **Encolher é trabalho de fecho da própria fase**, não da seguinte.
 2. **Migrar antes de fechar.** Cada decisão nomeada na spec precisa ter dono em
-   `docs/context/` ou em um ADR **antes** de a fase fechar. Decisão sem dono não fecha:
+   um ADR (do app, ou da raiz quando é de sistema) **antes** de a fase fechar. Decisão sem dono não fecha:
    escrever o dono é o trabalho. Na prática, isso quer dizer montar uma tabela de rastreio
    (decisão → arquivo de destino) e conferi-la.
 3. **A spec é marcada, não apagada.** No fecho, a primeira linha do `spec.md` vira
    `Status: fechada em <AAAA-MM-DD> — porquê promovido a <caminhos>`, e o
-   `npm run docs:check` exige que os caminhos nomeados existam. É o marcador que repõe a
+   `pnpm docs:check` exige que os caminhos nomeados existam. É o marcador que repõe a
    força que o antigo "apagar a spec" dava à regra 2 — e é o que impede alguém de ler uma
    spec morta como corrente.
 

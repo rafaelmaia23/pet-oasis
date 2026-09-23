@@ -1,39 +1,57 @@
-# Base compose — shared `api` skeleton only. Per-environment overrides add the
-# databases / mailpit and complete the api service (build target, env_file,
-# mounts, ports):
-#   dev  → docker-compose.dev.yml   (db + mailpit + api via tsx watch)
-#   prod → docker-compose.prod.yml  (db + api runtime bundle; no mailpit)
-#   test → docker-compose.test.yml  (db [+ mailpit via `--profile mail`]; NO api,
-#                                    Vitest runs the app in-process on the host)
+# Compose base do MONOREPO — o esqueleto do serviço `api`, só. É um stack para o
+# sistema inteiro (API, web e os serviços de apoio), e os overrides por ambiente
+# completam o que cada ambiente sobe:
+#   dev  → docker-compose.dev.yml   (db + redis + mailpit + api via tsx watch;
+#                                    o web roda NO HOST, `pnpm --filter web dev`)
+#   prod → docker-compose.prod.yml  (db + redis + api + web; sem mailpit)
+#   test → docker-compose.test.yml  (db + redis [+ mailpit via `--profile mail`];
+#                                    NEM api NEM web: o Vitest roda a API
+#                                    in-process no host)
 #
-# Always invoke through the npm scripts, which pass `-p <project>`,
-# `--env-file .env.<env>` and the right `-f` files. Never a bare `docker compose`.
+# O serviço `web` não tem esqueleto aqui, de propósito: um serviço declarado na
+# base sobe em TODO ambiente, e o web só existe como container em produção — em
+# dev ele roda no host (HMR nativo, porta 3001), e em teste não existe. Por isso
+# o override de produção o declara inteiro. Quando um segundo ambiente precisar
+# dele em container, o esqueleto sobe para cá.
+#
+# Sempre invocar pelos scripts do package.json — os de `prod:*` na raiz (o stack
+# de produção é do sistema), os de `dev*` e `test:services:*` em `apps/api` (em
+# dev e teste o stack é o da API). Cada um passa `-p <projeto>`, `--env-file` e
+# os `-f` certos. Nunca um `docker compose` pelado.
+#
+# Os caminhos relativos deste diretório resolvem contra ELE (o diretório do
+# primeiro `-f`), não contra a raiz nem contra o app que chamou: env_file e bind
+# mount de um app começam por `../apps/<app>/`.
 services:
   # `api` e não `app`: o nome do serviço é o que o DNS da rede do Compose
-  # publica, então ele É o endereço que um cliente interno (o front) escreve no
+  # publica, então ele É o endereço que um cliente interno (o web) escreve no
   # código. Renomear o serviço é renomear o contrato.
   api:
     build:
-      # A raiz do repo, não infra/ — os caminhos aqui são relativos a este
-      # arquivo. Com o contexto na raiz, o Dockerfile é achado em
-      # <context>/Dockerfile e o .dockerignore da raiz continua valendo.
+      # A raiz do monorepo — os caminhos aqui são relativos a este arquivo. O
+      # contexto precisa ser a raiz porque o pnpm-lock.yaml e o
+      # pnpm-workspace.yaml vivem lá, e o pnpm só instala um projeto de dentro
+      # do workspace dele. O Dockerfile então é nomeado, e o ignore que vale é o
+      # `Dockerfile.dockerignore` ao lado dele (por app: cada Dockerfile exclui o
+      # outro app; um `.dockerignore` da raiz serviria a todos de uma vez).
       context: ..
+      dockerfile: apps/api/Dockerfile
       # Host DNS is Tailscale MagicDNS (100.100.100.100), reachable only from the
       # host network namespace; Docker's default bridge can't route to it, so
-      # container DNS lookups during `npm ci` hang. Building on the host network
+      # container DNS lookups during `pnpm install` hang. Building on the host network
       # sidesteps it without touching the daemon's global DNS config.
       network: host
     restart: unless-stopped
     expose:
       - "3000"
     # A topologia de rede é por ambiente e vive nos overrides: produção tem três
-    # redes com papéis distintos (uma `internal:` com os dados, uma nomeada e
-    # compartilhada com clientes internos, e a do nginx, externa a este repo) e
-    # dev tem a `default` do projeto. Só a de produção pode declarar a rede do
-    # proxy como `external:`, porque só lá ela existe — declará-la aqui quebraria
-    # o `npm run dev` de quem nunca subiu um nginx.
+    # redes com papéis distintos (uma `internal:` com os dados, uma do stack
+    # entre a API e o web, e a do nginx, externa a este repo) e dev tem a
+    # `default` do projeto. Só a de produção pode declarar a rede do proxy como
+    # `external:`, porque só lá ela existe — declará-la aqui quebraria o
+    # `pnpm run dev` de quem nunca subiu um nginx.
     #
-    # Nas redes do projeto (`backend`, `pet-oasis`) o serviço leva um **alias
+    # Nas redes do projeto (`backend`, `frontend`) o serviço leva um **alias
     # explícito** `api`, mesmo o Compose já criando um implícito com o nome do
     # serviço: DNS que some numa renomeação falha em silêncio (o cliente vê
     # ENOTFOUND, não uma pista), e essa é a falha cara aqui. Na rede `proxy`,

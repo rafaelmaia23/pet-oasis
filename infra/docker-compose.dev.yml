@@ -1,6 +1,9 @@
-# Dev override — db + mailpit + api (tsx watch in-container against bind-mounted
-# src/). Distinct container names / volume / ports from test so both can run at
-# once. Bring up in FOREGROUND (`npm run dev`); Ctrl+C → graceful SIGTERM.
+# Dev override — db + redis + mailpit + api (tsx watch in-container against
+# bind-mounted src/). Distinct container names / volume / ports from test so both
+# can run at once. Bring up in FOREGROUND (`pnpm run dev` in apps/api, or
+# `pnpm dev` at the root, which also starts the web on the host); Ctrl+C →
+# graceful SIGTERM. No `web` service: in dev the web runs on the host, port
+# 3001, against this stack (see the base compose).
 services:
   db:
     image: postgres:16-alpine
@@ -46,7 +49,7 @@ services:
     build:
       target: dev
     container_name: pet-oasis-dev-api
-    env_file: ../.env.development
+    env_file: ../apps/api/.env.development
     environment:
       # env_file keeps localhost/1025 for host tooling; inside the compose network
       # the container reaches the services by name.
@@ -57,9 +60,9 @@ services:
       # script `dev` exporta os dois a partir de `id -u`/`id -g`, então quem
       # clona não configura nada. O default 1000 existe para os scripts que não
       # sobem o `api` (`dev:down`, `dev:mail`, `dev:db`) não avisarem variável
-      # vazia — não é cobertura: quem invocar o Compose por fora do npm com
+      # vazia — não é cobertura: quem invocar o Compose por fora do pnpm com
       # outro uid recebe uma árvore de 1000, e o EACCES volta.
-      # Ver o comentário do mount de ../uploads.
+      # Ver o comentário do mount de ../apps/api/uploads.
       HOST_UID: ${HOST_UID:-1000}
       HOST_GID: ${HOST_GID:-1000}
     depends_on:
@@ -83,9 +86,21 @@ services:
       default:
         aliases:
           - api
+    # Os destinos espelham o layout do repo dentro da imagem (`dev` para em
+    # /workspace/apps/api): o watcher precisa do node_modules do workspace, que
+    # fica em /workspace/node_modules, então o app não pode viver num /app raso
+    # como em produção.
+    #
+    # Este caminho é o mesmo que o estágio `dev` de ../apps/api/Dockerfile fixa no
+    # `WORKDIR`, e a repetição é deliberada: **mudou um lado, muda o outro**. A
+    # divergência não estoura — o mount cria o diretório errado, o watcher segue
+    # lendo o fonte assado na imagem e o hot reload só para de funcionar —, e é
+    # por isso que os dois arquivos se nomeiam mutuamente. O porquê de não haver
+    # variável compartilhada está em
+    # apps/api/docs/adr/0201-dockerfile-api-estagio-base-runtime-fora-dele.md.
     volumes:
-      - ../src:/app/src
-      - ../prisma:/app/prisma
+      - ../apps/api/src:/workspace/apps/api/src
+      - ../apps/api/prisma:/workspace/apps/api/prisma
       # Bind mount e não volume nomeado (9.10/AA2): o arquivo fica visível no
       # filesystem do host, que é o pré-requisito para um nginx passar a servi-lo
       # direto. De brinde, backup vira `rsync` de um diretório em vez de
@@ -94,7 +109,7 @@ services:
       # Aqui — e só aqui — o caminho fica dentro da árvore. O que obriga produção
       # a sair dela (10.4) é o git e o container disputarem o dono do diretório;
       # em dev o git não disputa (`uploads/` não é versionado, o `.gitkeep`
-      # saiu), mas o **host** disputa: `npm run db:seed` e `db:cleanup-uploads`
+      # saiu), mas o **host** disputa: `pnpm run db:seed` e `db:cleanup-uploads`
       # rodam no host e escrevem aqui. Num clone novo o diretório não existe, e
       # quem o cria é o Docker ao montar — como root. Foi isso que a 10.4 leu
       # como "disputa que não existe" e a 10.16 corrigiu por outro lado: o
@@ -103,10 +118,10 @@ services:
       # que nasce aqui tem o dono do host. Trocar o caminho por uma variável
       # custaria um passo de setup a quem clona, sem resolver problema que dev
       # tenha.
-      - ../uploads:/app/uploads
+      - ../apps/api/uploads:/workspace/apps/api/uploads
       # Anonymous volume: keeps the container's generated Prisma client from being
       # masked by the host's src/ bind-mount (entrypoint runs `prisma generate`).
-      - /app/src/generated
+      - /workspace/apps/api/src/generated
 
 volumes:
   dev_pgdata:

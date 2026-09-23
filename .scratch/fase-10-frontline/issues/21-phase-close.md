@@ -9,13 +9,13 @@ mandava fazer "no fecho" e que estavam pendurados na issue 14 (fechada como trab
 
 
 - [x] O aviso "⚠️ Este guia descreve o estado-alvo da Fase 10" no topo de
-      `docs/guides/integrating-with-the-api.md` sai (a spec: "O aviso sai no fecho").
+      `apps/api/docs/guides/integrating-with-the-api.md` sai (a spec: "O aviso sai no fecho").
 - [x] `docs/reference/backlog.md`: as entradas de "Necessidades do front web" são marcadas como
       resolvidas; a premissa "guardar o hash anterior na sessão" (item "Janela de graça na rotação
       do refresh token", ~linha 188) é **reescrita narrando a correção** da 10.7 (o par em texto
       claro no Redis, chaveado pelo hash apresentado — não coluna na `Session`), do mesmo jeito
       que a de "dois saltos" já foi (linha ~228, feito na 10.2).
-- [x] Achado do deploy da 04 ganha dono em `docs/context/infrastructure.md` (decisão da 10.4) e no
+- [x] Achado do deploy da 04 ganha dono em `apps/api/docs/adr/README.md#infraestrutura` (decisão da 10.4) e no
       `deploy.md` § "Diretório de uploads": redeploy preserva o volume do banco, os bytes das imagens
       morreram com o container antigo, o seed não regrava, 404 em toda imagem com `SEEDING
       COMPLETED!` limpo; `demo-reset` conserta na demo. E no `chown`, o que importa é o número

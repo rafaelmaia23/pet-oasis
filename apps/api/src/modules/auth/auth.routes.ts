@@ -1,0 +1,90 @@
+import { Router } from "express";
+import {
+  emailIpLimiter,
+  emailTargetLimiter,
+  loginIpLimiter,
+  rateLimitByEmailTarget,
+  rateLimitByIp,
+  signupIpLimiter,
+  tokenIpLimiter,
+} from "@/lib/rateLimit";
+import { authenticate } from "@/middlewares/authenticate.middleware";
+import { canAccess } from "@/middlewares/canAccess.middleware";
+import * as authController from "./auth.controller";
+
+const authRouter = Router();
+
+authRouter.post(
+  "/signup",
+  rateLimitByIp(signupIpLimiter, "signup"),
+  authController.signup,
+);
+authRouter.post(
+  "/login",
+  rateLimitByIp(loginIpLimiter, "login"),
+  authController.login,
+);
+authRouter.post("/refresh", authController.refresh);
+authRouter.post("/verify-email", authController.verifyEmail);
+authRouter.post(
+  "/verify-email/resend",
+  rateLimitByIp(emailIpLimiter, "verify-email-resend"),
+  rateLimitByEmailTarget(emailTargetLimiter, "verify-email-resend"),
+  authController.resendVerification,
+);
+authRouter.post(
+  "/forgot-password",
+  rateLimitByIp(emailIpLimiter, "forgot-password"),
+  rateLimitByEmailTarget(emailTargetLimiter, "forgot-password"),
+  authController.forgotPassword,
+);
+// As três rotas públicas de token dividem um balde por IP (K26): são anônimas,
+// consomem credencial opaca e não têm outro freio na frente.
+authRouter.post(
+  "/reset-password",
+  rateLimitByIp(tokenIpLimiter, "reset-password"),
+  authController.resetPassword,
+);
+authRouter.post(
+  "/change-password",
+  authenticate,
+  authController.changePassword,
+);
+authRouter.post(
+  "/change-email",
+  authenticate,
+  canAccess("update:user"),
+  authController.changeEmail,
+);
+authRouter.post(
+  "/confirm-email-change",
+  rateLimitByIp(tokenIpLimiter, "confirm-email-change"),
+  authController.confirmEmailChange,
+);
+// Pública: o token é a credencial — quem confirma é o dono de um `User` morto,
+// que por definição não tem sessão nem consegue autenticar.
+authRouter.post(
+  "/confirm-account-reactivation",
+  rateLimitByIp(tokenIpLimiter, "confirm-account-reactivation"),
+  authController.confirmAccountReactivation,
+);
+authRouter.post(
+  "/logout",
+  authenticate,
+  canAccess("manage:session"),
+  authController.logout,
+);
+authRouter.get(
+  "/sessions",
+  authenticate,
+  canAccess("read:session"),
+  authController.listSessions,
+);
+authRouter.delete(
+  "/sessions/:id",
+  authenticate,
+  canAccess("manage:session"),
+  authController.revokeSession,
+);
+
+export default authRouter;

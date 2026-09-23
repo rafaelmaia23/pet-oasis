@@ -1,20 +1,24 @@
-node_modules
-dist
-coverage
-src/generated
+# Ignores da raiz. Os padrões `**/` cobrem o que todo app do workspace produz
+# (node_modules, dist, .next, envs, uploads, client gerado); cada app repete os
+# seus no próprio .gitignore, com o porquê ao lado (apps/api/.gitignore explica
+# uploads/ e assets-inbox/; apps/web/.gitignore, o que o Next gera) — os dois
+# cobrem de propósito, para que o app continue coerente sozinho e a raiz
+# proteja um app novo que ainda não tem o seu.
+node_modules/
+dist/
+.next/
+coverage/
 .env
 .env.*
 !.env.example
-# Uploads: nem o conteúdo nem o diretório são versionados (10.4). Versionar o
-# diretório punha o git como dono de um caminho que o container escreve com
-# outro uid, e foi isso que abortou um `pull` no servidor. Em produção o
-# diretório vive fora do working tree (UPLOAD_HOST_DIR). Em dev, num clone
-# novo, quem cria `uploads/` é o Docker ao montar o bind mount — como root —,
-# e é o entrypoint de dev que o entrega ao uid do host antes de gravar (10.16).
-uploads/
+**/uploads/
+**/src/generated/
 
-# Originais das imagens do seed fake (9.11/AB1) — só o base64 derivado é versionado.
-assets-inbox/
+# Cache e logs do Turborepo: `.turbo/` na raiz (cache) e em cada pacote (log da
+# task). Só o Turbo produz, e o Turbo é da raiz, então só a raiz ignora — e
+# precisa ignorar, porque arquivo untracked entra no hash da task e um log que
+# muda a cada run faria toda rodada ser cache miss.
+.turbo/
 
-# `.scratch/` é VERSIONADO (Fase 10): é o tracker — specs e issues vivem lá.
-# Deixou de ser rascunho fora do git; ver .scratch/README.md e docs/README.md.
+# Notas pessoais de estudo — fora do git e fora do docs:check.
+.learning/

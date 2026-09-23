@@ -46,7 +46,7 @@ segundos. Mas a escolha entre "converge" e "não complica" é do dono do produto
 - [x] O caminho escolhido está implementado e comentado com o porquê da recusa dos outros dois.
 - [x] Teste na fronteira HTTP, sem injeção de relógio: A → B → C dentro da janela, e então A de
       novo. Afirma o desfecho escolhido, e afirma que **nenhuma sessão morre** no caminho.
-- [x] A decisão está em `docs/context/identity-and-sessions.md`, na seção da janela de graça.
+- [x] A decisão está em `apps/api/docs/adr/README.md#identidade-e-sessões`, na seção da janela de graça.
 
 ## O que foi feito
 

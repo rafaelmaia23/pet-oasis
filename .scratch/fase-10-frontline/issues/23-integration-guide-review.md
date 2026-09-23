@@ -1,6 +1,6 @@
 # 23: Revisão final do guia de integração contra o código da fase
 
-**What to build:** o front pode construir-se a partir de `docs/guides/integrating-with-the-api.md`
+**What to build:** o front pode construir-se a partir de `apps/api/docs/guides/integrating-with-the-api.md`
 sem descobrir por 401 o que o guia devia ter dito. A revisão final da fase (2026-09-16), feita
 afirmação por afirmação contra o código, achou **três erros** — coisas que o guia afirma e a API
 não faz — e **duas lacunas** — contrato que o front precisa e o guia não menciona. O resto
@@ -77,8 +77,8 @@ depois da 22. Escrever antes seria documentar promessa.
 
 ## O que foi feito
 
-Um arquivo, `docs/guides/integrating-with-the-api.md`; nenhuma seção nova, nenhuma âncora
-mudada (a única citada de fora é a de CORS, em `docs/context/security.md`, e ficou intacta).
+Um arquivo, `apps/api/docs/guides/integrating-with-the-api.md`; nenhuma seção nova, nenhuma âncora
+mudada (a única citada de fora é a de CORS, em `apps/api/docs/adr/README.md#segurança`, e ficou intacta).
 
 - **§1** — o alias `api` passou a ser descrito como das redes do projeto, com a omissão na `proxy`
   e o porquê (round-robin no DNS do Docker); "nginx (Nginx Proxy Manager)" na primeira menção.

@@ -1,62 +1,7 @@
 {
-  // Visit https://aka.ms/tsconfig to read more about this file
-  "compilerOptions": {
-    // File Layout
-    // `rootDir` é a raiz porque o programa abrange src/ E tests/ — fixá-lo em
-    // ./src faria os testes caírem fora dele. Não afeta o bundle: quem gera é o
-    // tsup (entradas explícitas em tsup.config.ts); o tsc só roda com --noEmit.
-    "rootDir": ".",
-    "outDir": "./dist",
-
-    // Environment Settings
-    // See also https://aka.ms/tsconfig/module
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "target": "es2022",
-    // For nodejs:
-    // "lib": ["esnext"],
-    "types": ["node"],
-    // and npm install -D @types/node
-    "typeRoots": ["./src/@types", "./node_modules/@types"],
-
-    // Other Outputs
-    "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
-
-    // Stricter Typechecking Options
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-
-    // Style Options
-    // "noImplicitReturns": true,
-    // "noImplicitOverride": true,
-    // "noUnusedLocals": true,
-    // "noUnusedParameters": true,
-    // "noFallthroughCasesInSwitch": true,
-    // "noPropertyAccessFromIndexSignature": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-
-    // Recommended Options
-    "strict": true,
-    "jsx": "react-jsx",
-    "verbatimModuleSyntax": true,
-    "isolatedModules": true,
-    "noUncheckedSideEffectImports": true,
-    "moduleDetection": "force",
-    "skipLibCheck": true,
-
-    "paths": {
-      "@/*": ["./src/*"],
-      "@tests/*": ["./tests/*"]
-    }
-  },
-
-  // tests/ precisa estar no programa: é o que mantém o typecheck cobrindo os
-  // testes e o que faz o `declare module "vitest"` de tests/setup/vitest.d.ts
-  // (matcher toMatchView) ser aplicado.
-  "include": ["src/**/*", "tests/**/*", "tools/**/*"]
+  // Só para `tools/` — os scripts da raiz que não pertencem a pacote nenhum.
+  // Estende o preset Node do workspace pelo mesmo motivo que a API: a rigidez
+  // é regra do monorepo. Nada de `paths` nem `outDir`: o tsc aqui só checa.
+  "extends": "@pet-oasis/tsconfig/tsconfig.node.json",
+  "include": ["tools/**/*"]
 }

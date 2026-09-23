@@ -1,0 +1,42 @@
+meta {
+  name: Login (demo)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "demo@petoasis.dev",
+    "password": "DemoOasis2026!"
+  }
+}
+
+script:post-response {
+  // runtime var (bru.setVar): reusável na sessão sem gravar segredo no .bru versionado
+  if (res.getStatus() === 200) {
+    bru.setVar("accessToken", res.getBody().accessToken);
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Público. 200 devolve o access token e seta o refresh cookie httpOnly (cookie jar do Bruno).
+
+  Recusas, nesta ordem: 401 (email desconhecido ou senha errada — indistinguíveis),
+  429 (lockout, com Retry-After) e 403 quando a senha confere mas o usuário está recusado.
+  No 403 ramifique pelo `code`, nunca pela `message`: ACCOUNT_BANNED,
+  PASSWORD_RESET_REQUIRED (o link de redefinição chega por email) ou EMAIL_NOT_VERIFIED.
+}

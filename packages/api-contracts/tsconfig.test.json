@@ -1,0 +1,8 @@
+{
+  // O programa dos testes: o preset de Node (a guarda de pureza lê `src/` pelo
+  // filesystem) sobre `src/` + `tests/`. O fonte continua provado como
+  // biblioteca pelo `tsconfig.json`; aqui ele só entra para os testes poderem
+  // importá-lo.
+  "extends": "@pet-oasis/tsconfig/tsconfig.node.json",
+  "include": ["src/**/*", "tests/**/*"]
+}

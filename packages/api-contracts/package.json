@@ -1,0 +1,43 @@
+{
+  "name": "@pet-oasis/api-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "O que atravessa a rede entre a API e os clientes (web, mobile): schemas de request, views de resposta, enums de domínio, nomes de role e feature, paginação e shape de erro. Só depende de zod; consumido do fonte TS, sem build.",
+  "license": "MIT",
+  "author": "Rafael Maia da Fonseca",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./user": "./src/user/index.ts",
+    "./pet": "./src/pet/index.ts",
+    "./catalog": "./src/catalog/index.ts",
+    "./role": "./src/role/index.ts",
+    "./feature": "./src/feature/index.ts",
+    "./errors": "./src/errors/index.ts",
+    "./pagination": "./src/pagination/index.ts",
+    "./me": "./src/me/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./permission": "./src/permission/index.ts",
+    "./audit-log": "./src/audit-log/index.ts",
+    "./log": "./src/log/index.ts",
+    "./status": "./src/status/index.ts",
+    "./routes": "./src/routes/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "lint": "biome check .",
+    "lint:fix": "biome check . --write",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@pet-oasis/biome-config": "workspace:*",
+    "@pet-oasis/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -28,6 +28,7 @@ import {
   REFRESH_GRACE_WINDOW_MS,
   REFRESH_TOKEN_TTL_MS,
 } from "./auth.constants";
+import { isLiveSession } from "./auth.liveSession";
 import * as authRepository from "./auth.repository";
 
 const log = logger.child({ module: "auth" });
@@ -192,12 +193,16 @@ async function classifyGraceLink(
   refreshTokenHash: string,
 ): Promise<GraceLinkState> {
   const link = await authRepository.findSessionByHash(refreshTokenHash);
+  const now = new Date();
 
-  if (!link || link.invalidatedAt || link.expiresAt < new Date()) {
+  if (!link || link.invalidatedAt || link.expiresAt < now) {
     return "DEAD";
   }
 
-  return link.usedAt ? "ROTATED" : "LIVE";
+  // Depois da guarda acima, só `usedAt` separa os dois estados que sobram — e
+  // é o filtro de sessão viva que decide qual, para que `LIVE` aqui signifique
+  // o mesmo que `LIVE` em `GET /auth/sessions`.
+  return isLiveSession(link, now) ? "LIVE" : "ROTATED";
 }
 
 export async function refresh(
@@ -412,19 +417,15 @@ const REVOKE_SESSION_NOT_FOUND_ERROR = {
 };
 
 export async function revokeSession(userId: string, sessionId: string) {
-  const session = await authRepository.findSessionByIdForUser(
+  // Sessão que não existe e sessão que já morreu recebem o mesmo 404, e por
+  // isso a vivacidade é uma cláusula da busca e não uma conferência depois
+  // dela — um caminho a menos para a definição divergir.
+  const session = await authRepository.findLiveSessionByIdForUser(
     sessionId,
     userId,
   );
 
   if (!session) {
-    throw createNotFoundError(REVOKE_SESSION_NOT_FOUND_ERROR);
-  }
-
-  const isLive =
-    !session.usedAt && !session.invalidatedAt && session.expiresAt > new Date();
-
-  if (!isLive) {
     throw createNotFoundError(REVOKE_SESSION_NOT_FOUND_ERROR);
   }
 

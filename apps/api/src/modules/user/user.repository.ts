@@ -3,6 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { UserStatus } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
+import { invalidateSessionsOfUser } from "@/modules/auth/auth.liveSession";
 import {
   type CascadeCounts,
   cascadeDeleteUserGraph,
@@ -188,15 +189,7 @@ export async function softDeleteUserAndInvalidateSessions(
   return prisma.$transaction(async (tx) => {
     const deletedAt = new Date();
 
-    await tx.session.updateMany({
-      where: {
-        userId,
-        usedAt: null,
-        invalidatedAt: null,
-        expiresAt: { gt: deletedAt },
-      },
-      data: { invalidatedAt: deletedAt },
-    });
+    await invalidateSessionsOfUser(tx, userId, deletedAt);
     const user = await tx.user.update({
       where: { id: userId, deletedAt: null },
       data: { deletedAt },
@@ -220,15 +213,7 @@ export async function banUserAndInvalidateSessions(
       where: { id: userId, deletedAt: null },
       data: { bannedAt: new Date(), bannedBy, banReason: reason },
     });
-    await tx.session.updateMany({
-      where: {
-        userId,
-        usedAt: null,
-        invalidatedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      data: { invalidatedAt: new Date() },
-    });
+    await invalidateSessionsOfUser(tx, userId, new Date());
     if (audit) await record(audit, tx);
     return user;
   });
@@ -245,15 +230,7 @@ export async function forcePasswordResetAndInvalidateSessions(
       where: { id: userId, deletedAt: null },
       data: { mustChangePassword: true },
     });
-    await tx.session.updateMany({
-      where: {
-        userId,
-        usedAt: null,
-        invalidatedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      data: { invalidatedAt: new Date() },
-    });
+    await invalidateSessionsOfUser(tx, userId, new Date());
     await tx.verificationToken.create({
       data: { userId, tokenHash, purpose: "PASSWORD_RESET", expiresAt },
     });

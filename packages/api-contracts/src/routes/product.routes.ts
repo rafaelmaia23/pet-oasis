@@ -202,7 +202,7 @@ export const productRoutes = {
       422: errorResponses[422],
     },
   },
-} satisfies RouteGroup;
+} as const satisfies RouteGroup;
 
 export const variantRoutes = {
   create: {
@@ -262,4 +262,4 @@ export const variantRoutes = {
       422: errorResponses[422],
     },
   },
-} satisfies RouteGroup;
+} as const satisfies RouteGroup;

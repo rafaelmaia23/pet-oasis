@@ -35,4 +35,4 @@ export const featureRoutes = {
       404: errorResponses[404],
     },
   },
-} satisfies RouteGroup;
+} as const satisfies RouteGroup;

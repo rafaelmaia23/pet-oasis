@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { RouteTag } from "./route.tags";
 
 /**
  * O vocabulário da tabela de rotas. Uma entrada descreve **uma operação
@@ -45,8 +46,11 @@ export type RouteDefinition = {
    * `{id}` do OpenAPI é o adaptador da API.
    */
   path: string;
-  /** O grupo da operação na referência — a mesma tag do OpenAPI. */
-  tag: string;
+  /**
+   * O grupo da operação na referência — a mesma tag do OpenAPI, e só uma das
+   * declaradas em `route.tags.ts`.
+   */
+  tag: RouteTag;
   auth: RouteAuth;
   summary: string;
   description?: string;

@@ -20,4 +20,4 @@ export const breedRoutes = {
     },
     errors: { 422: errorResponses[422] },
   },
-} satisfies RouteGroup;
+} as const satisfies RouteGroup;

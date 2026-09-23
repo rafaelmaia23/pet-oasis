@@ -44,7 +44,7 @@ v1Router.use("/auth", authRouter);
 // Vitrine do catálogo (9.1): responde sem token porque o e-commerce vive de
 // quem chega pelo Google sem usuário. `/breeds` fica aqui, seco: é só leitura, não
 // tem escrita nem view por feature efetiva, então não precisa nem identificar o ator.
-v1Router.use("/breeds", breedRouter);
+v1Router.use(breedRouter);
 
 // PÚBLICAS COM AUTENTICAÇÃO OPCIONAL (9.6) — leem sem token, escrevem com
 // feature. O middleware identifica o ator quando o `Bearer` vem e segue anônimo

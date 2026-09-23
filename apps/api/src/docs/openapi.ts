@@ -1,4 +1,5 @@
 /// <reference types="zod-openapi" />
+import { ROUTE_TAGS, type RouteTag } from "@pet-oasis/api-contracts/routes";
 import { createDocument, type ZodOpenApiObject } from "zod-openapi";
 import { buildPathsFromRouteTable } from "./adapter";
 import { securitySchemes } from "./components";
@@ -55,6 +56,75 @@ O **403 não é um endpoint travado**: é o RBAC calculando, em runtime, que a r
 Feito por [Rafael Maia da Fonseca](https://www.linkedin.com/in/rafaelmaiadafonseca).
 `.trim();
 
+/**
+ * A prosa de cada grupo da referência. As **tags** são do contrato
+ * (`ROUTE_TAGS`), e o tipo aqui é a amarra dos dois sentidos: descrever uma tag
+ * que a tabela não usa, ou esquecer de descrever uma que ela usa, não compila.
+ * Quem prova o outro lado — que a tabela usa exatamente estas — é
+ * `packages/api-contracts/tests/route-table.test.ts`.
+ */
+const TAG_DESCRIPTIONS: Record<RouteTag, string> = {
+  Status:
+    "Health check público — responde sem autenticação e sem tocar no banco.",
+  Auth:
+    "Signup, login, verificação de email, recuperação de senha e o ciclo " +
+    "de sessões. O access token é um JWT curto; o refresh é opaco, " +
+    "rotativo e vive num cookie `httpOnly`.",
+  Me:
+    "O usuário autenticado sobre si mesmo — perfil, roles e a lista de " +
+    "features efetivas calculadas para ele.",
+  Users:
+    "CRUD de usuários e banimento. Soft delete em toda parte: nada some " +
+    "do banco, o histórico fica íntegro para auditoria.",
+  Profiles:
+    "Perfis *customer* e *employee* de um usuário. O perfil é definido " +
+    'pela presença da relação, não por um campo "tipo"; criação e ' +
+    "remoção rodam em transação e o último perfil ativo não pode ser " +
+    "removido.",
+  Permissions:
+    "Vínculos com roles e overrides de feature por usuário. Overrides " +
+    "guardam só exceções (grant/deny) — as features efetivas são " +
+    "computadas em runtime, nunca materializadas.",
+  Roles:
+    "Catálogo de papéis, somente leitura. As roles são definidas em " +
+    "código e semeadas; só o vínculo usuário↔role é gerenciável pela API.",
+  Features:
+    "Catálogo de features, somente leitura. É a lista fechada de tudo " +
+    "que se pode autorizar no sistema.",
+  Breeds:
+    "Catálogo de raças, público e somente leitura. Semeado por constante " +
+    "versionada e nunca consultado em API de terceiro; nem toda espécie " +
+    "tem raça cadastrada.",
+  Brands:
+    "Marcas do catálogo. Leitura pública; escrita sob " +
+    "`manage:catalog-structure`. Slug derivado do nome e congelado.",
+  Categories:
+    "Árvore de categorias — modela a **função** do produto, nunca a " +
+    "espécie (que é faceta do produto). Máximo de três níveis; leitura " +
+    "pública devolve a árvore aninhada.",
+  Tags:
+    "Rótulos transversais e voláteis (promoção, filhote, lançamento). " +
+    "Leitura pública; exclusão é hard delete.",
+  Products:
+    "Produtos do catálogo — a identidade comercial. Escrita sob " +
+    "`manage:product`; custo e estoque aparecem conforme a feature efetiva do " +
+    "leitor. Todo produto tem pelo menos uma variante.",
+  Variants:
+    "Variantes — a unidade vendável (SKU, preço, estoque). Ajuste de " +
+    "estoque é `manage:stock`, o resto é `manage:product`, e a feature é " +
+    "exigida por campo presente no corpo.",
+  Pets:
+    "Pets dos clientes. Coleção aninhada no cliente, recurso plano no " +
+    "item. Escopo `own` para o dono e `:others` para o balcão; " +
+    "falecimento é estado próprio, distinto de exclusão.",
+  Audit:
+    "Trilha durável de ações sensíveis (append-only, só leitura). " +
+    "Paginação por cursor; o IP sai mascarado sem `read:audit-log:full`.",
+  Logs:
+    "Buffer de logs em memória do processo — volátil e por réplica. " +
+    "Leitura via `read:log`.",
+};
+
 const documentDefinition: ZodOpenApiObject = {
   openapi: "3.1.0",
   info: {
@@ -68,118 +138,10 @@ const documentDefinition: ZodOpenApiObject = {
     license: { name: "MIT", identifier: "MIT" },
   },
   servers: [{ url: "/api/v1", description: "API v1" }],
-  tags: [
-    {
-      name: "Status",
-      description:
-        "Health check público — responde sem autenticação e sem tocar no banco.",
-    },
-    {
-      name: "Auth",
-      description:
-        "Signup, login, verificação de email, recuperação de senha e o ciclo " +
-        "de sessões. O access token é um JWT curto; o refresh é opaco, " +
-        "rotativo e vive num cookie `httpOnly`.",
-    },
-    {
-      name: "Me",
-      description:
-        "O usuário autenticado sobre si mesmo — perfil, roles e a lista de " +
-        "features efetivas calculadas para ele.",
-    },
-    {
-      name: "Users",
-      description:
-        "CRUD de usuários e banimento. Soft delete em toda parte: nada some " +
-        "do banco, o histórico fica íntegro para auditoria.",
-    },
-    {
-      name: "Profiles",
-      description:
-        "Perfis *customer* e *employee* de um usuário. O perfil é definido " +
-        'pela presença da relação, não por um campo "tipo"; criação e ' +
-        "remoção rodam em transação e o último perfil ativo não pode ser " +
-        "removido.",
-    },
-    {
-      name: "Permissions",
-      description:
-        "Vínculos com roles e overrides de feature por usuário. Overrides " +
-        "guardam só exceções (grant/deny) — as features efetivas são " +
-        "computadas em runtime, nunca materializadas.",
-    },
-    {
-      name: "Roles",
-      description:
-        "Catálogo de papéis, somente leitura. As roles são definidas em " +
-        "código e semeadas; só o vínculo usuário↔role é gerenciável pela API.",
-    },
-    {
-      name: "Features",
-      description:
-        "Catálogo de features, somente leitura. É a lista fechada de tudo " +
-        "que se pode autorizar no sistema.",
-    },
-    {
-      name: "Breeds",
-      description:
-        "Catálogo de raças, público e somente leitura. Semeado por constante " +
-        "versionada e nunca consultado em API de terceiro; nem toda espécie " +
-        "tem raça cadastrada.",
-    },
-    {
-      name: "Brands",
-      description:
-        "Marcas do catálogo. Leitura pública; escrita sob " +
-        "`manage:catalog-structure`. Slug derivado do nome e congelado.",
-    },
-    {
-      name: "Categories",
-      description:
-        "Árvore de categorias — modela a **função** do produto, nunca a " +
-        "espécie (que é faceta do produto). Máximo de três níveis; leitura " +
-        "pública devolve a árvore aninhada.",
-    },
-    {
-      name: "Tags",
-      description:
-        "Rótulos transversais e voláteis (promoção, filhote, lançamento). " +
-        "Leitura pública; exclusão é hard delete.",
-    },
-    {
-      name: "Products",
-      description:
-        "Produtos do catálogo — a identidade comercial. Escrita sob " +
-        "`manage:product`; custo e estoque aparecem conforme a feature efetiva do " +
-        "leitor. Todo produto tem pelo menos uma variante.",
-    },
-    {
-      name: "Variants",
-      description:
-        "Variantes — a unidade vendável (SKU, preço, estoque). Ajuste de " +
-        "estoque é `manage:stock`, o resto é `manage:product`, e a feature é " +
-        "exigida por campo presente no corpo.",
-    },
-    {
-      name: "Pets",
-      description:
-        "Pets dos clientes. Coleção aninhada no cliente, recurso plano no " +
-        "item. Escopo `own` para o dono e `:others` para o balcão; " +
-        "falecimento é estado próprio, distinto de exclusão.",
-    },
-    {
-      name: "Audit",
-      description:
-        "Trilha durável de ações sensíveis (append-only, só leitura). " +
-        "Paginação por cursor; o IP sai mascarado sem `read:audit-log:full`.",
-    },
-    {
-      name: "Logs",
-      description:
-        "Buffer de logs em memória do processo — volátil e por réplica. " +
-        "Leitura via `read:log`.",
-    },
-  ],
+  tags: ROUTE_TAGS.map((name) => ({
+    name,
+    description: TAG_DESCRIPTIONS[name],
+  })),
   components: { securitySchemes },
   // Bearer por padrão; operações públicas sobrescrevem com `security: []`.
   security: [{ bearerAuth: [] }],

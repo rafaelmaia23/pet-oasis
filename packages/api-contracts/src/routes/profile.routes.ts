@@ -81,4 +81,4 @@ export const profileRoutes = {
     responses: { 204: noContent },
     errors: profileErrors,
   },
-} satisfies RouteGroup;
+} as const satisfies RouteGroup;

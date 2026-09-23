@@ -83,6 +83,48 @@ Dump agendado do banco do deploy, com um *restore* de fato testado — backup nu
 
 ---
 
+## Arquitetura e fronteiras
+
+> Itens levantados pelos esforços de profundidade da Fase 12 (`.scratch/fase-12-module-depth/`):
+> decisões de **fronteira** — o que é do contrato e o que fica no app — que uma issue esbarrou e
+> conscientemente não tomou de passagem.
+
+### `ERROR_CODES` como fonte do valor, não só do tipo — **P**
+
+**Problema:** a issue 03 de `fase-12-module-depth`
+(`.scratch/fase-12-module-depth/issues/03-errorcode-do-contrato-tipa-o-erro-da-api.md`) amarrou o
+`code` do erro da API ao enum do contrato **por tipo**: `AppErrorParams.code` é `ErrorCode`, então
+uma grafia fora do enum não compila. Os 12 literais, porém, continuam digitados em
+`apps/api/src/errors/AppErrors.ts`, e `ERROR_CODES` segue sem consumidor de **runtime** em `src/` —
+só `import type`, apagado no build. A letra da issue dizia "cada classe de erro tira o code do
+contrato", e o que se entregou é a leitura mais fraca dela: divergência ficou impossível por
+compilador, não por dono único do valor. A revisão de dois eixos apontou a diferença.
+
+**Decisão a tomar:** o corte atual se apoia em
+`apps/api/docs/adr/0095-fronteira-featurename-string.md` — tipo estreito vale onde se digita o
+literal, e é aqui. A alternativa é o contrato exportar um objeto de lookup (`ERROR_CODE.CONFLICT`,
+derivado de `ERROR_CODES` sem redigitar), e as classes lerem o valor de lá. Ganha: o valor tem um
+dono só, e o enum passa a ter consumidor de runtime. Perde: acrescenta export ao contrato para um
+problema que o compilador já resolve, e `ERROR_CODE.CONFLICT` é mais indireto que `"CONFLICT"` na
+leitura. É decisão de fronteira de contrato, não de implementação.
+
+### `ValidationErrorFields` está declarado nos dois lados — **P**
+
+**Problema:** o mesmo tipo (`Record<string, string[]>`, o `errors` por campo do 422) existe em
+`packages/api-contracts` como `validationErrorFieldsSchema`/`ValidationErrorFields` e de novo em
+`apps/api/src/errors/AppErrors.ts`, declarado à mão. São estruturalmente idênticos, então nada
+quebra hoje — e é exatamente por isso que podem divergir sem ninguém ver, que é a mesma classe de
+problema que a issue 03 resolveu para o `code`. Unificar chegou a ser feito no ramo da issue 03 e
+foi **revertido**: nem a issue nem a spec pediam, e "o que é contrato compartilhado e o que fica no
+app" não se decide de passagem.
+
+**Decisão a tomar:** se o `errors` por campo é do contrato pelo mesmo motivo que o `code` (é o
+cliente quem o lê), o tipo da API vira alias do tipo do contrato — uma linha, e o reexport mora no
+barril `apps/api/src/errors/index.ts`, não no arquivo das classes. Se não for, vale um comentário
+dizendo por que os dois existem, para o próximo leitor não "consertar" a duplicação.
+
+---
+
 ## Produto e domínio
 
 ### ~~Dummy data para a demo~~ — ✅ resolvido (Fase 9.11)

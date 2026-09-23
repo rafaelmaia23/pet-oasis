@@ -12,18 +12,17 @@ import {
   verifyEmailSchema,
 } from "@pet-oasis/api-contracts/auth";
 import type { Request, Response } from "express";
-import { env } from "@/config/env";
 import { ACCESS_TOKEN_TTL_SECONDS } from "@/lib/accessToken";
 import { listEnvelope } from "@/lib/pagination";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user/user.presenter";
 import * as accountReactivationService from "./accountReactivation.service";
-import {
-  REFRESH_TOKEN_COOKIE_NAME,
-  REFRESH_TOKEN_COOKIE_PATH,
-  REFRESH_TOKEN_TTL_MS,
-} from "./auth.constants";
 import { accessTokenPresenter, sessionPresenter } from "./auth.presenter";
+import {
+  clearRefreshCookie,
+  readRefreshCookie,
+  setRefreshCookie,
+} from "./auth.refreshCookie";
 import * as authService from "./auth.service";
 import * as emailChangeService from "./emailChange.service";
 import * as passwordService from "./password.service";
@@ -155,21 +154,13 @@ export const login = async (req: Request, res: Response) => {
     ipAddress: req.ip,
   });
 
-  res.cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: env.NODE_ENV === "production",
-    path: REFRESH_TOKEN_COOKIE_PATH,
-    maxAge: REFRESH_TOKEN_TTL_MS,
-  });
+  setRefreshCookie(res, refreshToken);
 
   res.status(200).json(presentAccessToken(accessToken));
 };
 
 export const refresh = async (req: Request, res: Response) => {
-  const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE_NAME] as
-    | string
-    | undefined;
+  const refreshToken = readRefreshCookie(req);
 
   const { accessToken, refreshToken: newRefreshToken } =
     await authService.refresh(refreshToken, {
@@ -177,34 +168,22 @@ export const refresh = async (req: Request, res: Response) => {
       ipAddress: req.ip,
     });
 
-  res.cookie(REFRESH_TOKEN_COOKIE_NAME, newRefreshToken, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: env.NODE_ENV === "production",
-    path: REFRESH_TOKEN_COOKIE_PATH,
-    maxAge: REFRESH_TOKEN_TTL_MS,
-  });
+  setRefreshCookie(res, newRefreshToken);
 
   res.status(200).json(presentAccessToken(accessToken));
 };
 
 export const logout = async (req: Request, res: Response) => {
-  const refreshToken = req.cookies[REFRESH_TOKEN_COOKIE_NAME] as
-    | string
-    | undefined;
+  const refreshToken = readRefreshCookie(req);
 
   await authService.logout(refreshToken, getAuthUser(req).id);
 
-  res.clearCookie(REFRESH_TOKEN_COOKIE_NAME, {
-    path: REFRESH_TOKEN_COOKIE_PATH,
-  });
+  clearRefreshCookie(res);
   res.status(204).send();
 };
 
 export const listSessions = async (req: Request, res: Response) => {
-  const currentRefreshToken = req.cookies[REFRESH_TOKEN_COOKIE_NAME] as
-    | string
-    | undefined;
+  const currentRefreshToken = readRefreshCookie(req);
 
   const sessions = await authService.listSessions(
     getAuthUser(req).id,

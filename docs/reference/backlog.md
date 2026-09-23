@@ -194,6 +194,18 @@ Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real 
 
 ## Bugs
 
+### `Role.description` é nulável no banco e `z.string()` na view — **P**
+Levantado ao migrar `GET /me` para o `registerRoute` (Fase 12, esforço
+`fase-12-module-depth`, issue 08), quando o typecheck pôs os dois lados frente a frente pela
+primeira vez. `Role.description` é `String?` em `prisma/schema.prisma`, mas `roleSummaryView`
+(`packages/api-contracts/src/me/me.views.ts`) a promete como `z.string()` — e a mesma view
+aparece em `/me` e nas views de usuário. Uma role sem descrição vira **500** (a view recusa a
+resposta), não um campo ausente. Hoje é inalcançável: roles são read-only, semeadas sempre com
+descrição por `role.constants.ts`. **As saídas são três, e a escolha é de contrato:** tornar a
+coluna `String` com migration, declarar a view `.nullable()` (muda o `/openapi.json` e o
+cliente), ou deixar como está e registrar que a nulidade é resíduo de schema. Nada foi mudado
+na issue 08 — o comportamento em runtime é o mesmo de antes dela.
+
 ### ~~Seed fatal derruba a aplicação no boot~~ — ✅ resolvido (Fase 10.3)
 O entrypoint tratava falha de seed como fatal, e um `EACCES` ao gravar imagem de catálogo pôs a
 API inteira em crash loop por causa de dado de demonstração. A proposta era "one-shot ou

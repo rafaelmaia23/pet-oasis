@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { hashToken } from "@/lib/token";
 import {
-  consumeToken,
   findVerificationTokenByHash,
+  markUsedAndApply,
   type VerificationTokenRow,
 } from "@/modules/auth/verificationToken.repository";
 import {
@@ -152,16 +152,31 @@ describe("o consumo de um token de verificação contra o banco", () => {
 
   it("entrega ao efeito o token que autorizou a ação", async () => {
     const user = await buildCustomer();
-    const { rawToken, token } = await issueFor(user.id);
-
-    const seen = await consumeVerificationToken({
-      rawToken,
-      purpose: "EMAIL_VERIFICATION",
-      invalidTokenError: { message: "inválido", action: "peça outro" },
-      plan: async () => ({ effect: async (_tx, given) => given.id }),
+    const rawToken = await issueVerificationToken({
+      userId: user.id,
+      purpose: "EMAIL_CHANGE",
+      newEmail: "congelado@exemplo.com",
     });
 
-    expect(seen.id).toBe(token.id);
+    // O efeito não recebe nem o dono nem o alvo por argumento: os dois saem do
+    // token. Se chegasse o token errado, a escrita abaixo iria para outro
+    // usuário, ou com outro endereço.
+    await consumeVerificationToken({
+      rawToken,
+      purpose: "EMAIL_CHANGE",
+      invalidTokenError: { message: "inválido", action: "peça outro" },
+      plan: async () => ({
+        effect: (tx, given) =>
+          tx.user.update({
+            where: { id: given.userId },
+            data: { pendingEmail: given.newEmail },
+          }),
+      }),
+    });
+
+    expect(
+      (await prisma.user.findUnique({ where: { id: user.id } }))?.pendingEmail,
+    ).toBe("congelado@exemplo.com");
   });
 
   it("não deixa o token queimado — nem rastro — quando o efeito falha", async () => {
@@ -224,10 +239,10 @@ describe("o consumo de um token de verificação contra o banco", () => {
     const user = await buildCustomer();
     const { token } = await issueFor(user.id);
 
-    await consumeToken(
+    await markUsedAndApply(
       token,
       async () => ({ restoredPets: 3 }),
-      (counts) => ({
+      (counts: { restoredPets: number }) => ({
         action: "ACCOUNT_REACTIVATION_COMPLETED",
         targetType: "User",
         targetId: user.id,

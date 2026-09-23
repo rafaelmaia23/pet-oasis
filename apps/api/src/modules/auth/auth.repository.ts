@@ -135,7 +135,7 @@ export async function findLiveSessionByIdForUser(id: string, userId: string) {
  */
 
 /** `EMAIL_VERIFICATION`: a prova de posse do email ativa a conta. */
-export function activateUser(): VerificationTokenEffect<{ id: string }> {
+export function activateUser(): VerificationTokenEffect<unknown> {
   return (tx, token) =>
     tx.user.update({
       where: { id: token.userId },

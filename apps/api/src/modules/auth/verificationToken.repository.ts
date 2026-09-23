@@ -58,11 +58,15 @@ export type VerificationTokenAudit<T> =
   | AuditDescriptor
   | ((result: T) => AuditDescriptor);
 
-export type NewVerificationToken = {
-  userId: string;
+/** O que o banco guarda no lugar do valor cru: o hash, o purpose e o prazo. */
+export type StoredVerificationToken = {
   tokenHash: string;
   purpose: VerificationPurpose;
   expiresAt: Date;
+};
+
+export type NewVerificationToken = StoredVerificationToken & {
+  userId: string;
   /** Só com `purpose = EMAIL_CHANGE`: o alvo da troca, congelado no token. */
   newEmail?: string;
   /** Só com `purpose = ACCOUNT_REACTIVATION`: a escolha do ator, congelada. */
@@ -70,26 +74,48 @@ export type NewVerificationToken = {
   restoreRoleIds?: string[];
 };
 
+/** Por que um token não serve — para o log, nunca para a resposta (ADR-0071). */
+export type VerificationTokenRefusal =
+  | "UNKNOWN_TOKEN"
+  | "WRONG_PURPOSE"
+  | "ALREADY_USED"
+  | "EXPIRED";
+
 /**
- * As três cláusulas da validade, num lugar só: é deste purpose, ainda não foi
- * usado e ainda não expirou. O token que não existe entra aqui como `null` de
+ * As cláusulas da validade, numa lista só: é deste purpose, ainda não foi usado
+ * e ainda não expirou. O token que não existe entra aqui como `null` de
  * propósito — quem consome não tem um quarto desfecho para ele
  * (`docs/adr/0071-token-invalido-expirado-usado-400-generico.md`).
  *
  * A fronteira do prazo é `>`, como o `gt` do banco: um token que expira
  * exatamente agora já não serve.
+ *
+ * Devolve o **motivo**, e não um booleano, porque julgar e explicar são a mesma
+ * leitura: `isUsableVerificationToken` é esta função sem o motivo. O log
+ * distingue os quatro casos e a resposta não distingue nenhum — essa é a única
+ * assimetria entre os dois, e ela fica aqui, numa lista que uma cláusula nova
+ * não tem como atualizar pela metade.
  */
+export function verificationTokenRefusal(
+  token: VerificationTokenLifecycle | null,
+  purpose: VerificationPurpose,
+  now: Date = new Date(),
+): VerificationTokenRefusal | null {
+  if (token === null) return "UNKNOWN_TOKEN";
+  if (token.purpose !== purpose) return "WRONG_PURPOSE";
+  if (token.usedAt !== null) return "ALREADY_USED";
+  if (token.expiresAt <= now) return "EXPIRED";
+
+  return null;
+}
+
+/** O mesmo julgamento, como guarda de tipo: sem motivo de recusa, serve. */
 export function isUsableVerificationToken<T extends VerificationTokenLifecycle>(
   token: T | null,
   purpose: VerificationPurpose,
   now: Date = new Date(),
 ): token is T {
-  return (
-    token !== null &&
-    token.purpose === purpose &&
-    token.usedAt === null &&
-    token.expiresAt > now
-  );
+  return verificationTokenRefusal(token, purpose, now) === null;
 }
 
 /** O `where` do token pendente de um purpose — o que a emissão supera. */
@@ -182,7 +208,7 @@ export async function findVerificationTokenByHash(tokenHash: string) {
  * único caminho): aqui a marca é incondicional, como era em cada uma das quatro
  * transações que este corpo substituiu.
  */
-export async function consumeToken<T>(
+export async function markUsedAndApply<T>(
   token: VerificationTokenRow,
   effect: VerificationTokenEffect<T>,
   audit?: VerificationTokenAudit<T>,

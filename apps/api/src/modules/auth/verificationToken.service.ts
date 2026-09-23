@@ -12,14 +12,14 @@ import {
   PASSWORD_RESET_TTL_MS,
 } from "./auth.constants";
 import {
-  consumeToken,
   createVerificationToken,
   findVerificationTokenByHash,
-  isUsableVerificationToken,
-  type NewVerificationToken,
+  markUsedAndApply,
+  type StoredVerificationToken,
   type VerificationTokenAudit,
   type VerificationTokenEffect,
   type VerificationTokenRow,
+  verificationTokenRefusal,
 } from "./verificationToken.repository";
 
 const log = logger.child({ module: "verification-token" });
@@ -51,8 +51,8 @@ export const VERIFICATION_TOKEN_TTL_MS: Record<VerificationPurpose, number> = {
 export type MintedVerificationToken = {
   /** O valor que vai no link do email — é a credencial, e não se guarda. */
   rawToken: string;
-  /** O que o banco recebe: o hash, o purpose e o prazo. */
-  stored: Pick<NewVerificationToken, "tokenHash" | "purpose" | "expiresAt">;
+  /** O que o banco recebe no lugar dele. */
+  stored: StoredVerificationToken;
 };
 
 /**
@@ -76,15 +76,28 @@ export function mintVerificationToken(
   };
 }
 
-export type IssueVerificationTokenSpec = {
+/**
+ * O que cada purpose congela no token, pelo purpose — dois deles carregam uma
+ * carga própria, e os outros dois não carregam nenhuma.
+ *
+ * É união discriminada pela mesma razão do `Record` de TTL acima: emitir um
+ * `EMAIL_CHANGE` sem o alvo, ou um `EMAIL_VERIFICATION` com ele, deixa de ser
+ * possível de escrever em vez de ser possível de errar.
+ */
+type VerificationTokenPayload =
+  | { purpose: "EMAIL_VERIFICATION" | "PASSWORD_RESET" }
+  /** O alvo da troca: quem confirma tem o link, não o endereço. */
+  | { purpose: "EMAIL_CHANGE"; newEmail: string }
+  /** A escolha do ator: quem confirma é o dono da conta, não quem escolheu. */
+  | {
+      purpose: "ACCOUNT_REACTIVATION";
+      restore: { profiles: ProfileKind[]; roleIds: string[] };
+    };
+
+export type IssueVerificationTokenSpec = VerificationTokenPayload & {
   userId: string;
-  purpose: VerificationPurpose;
   /** Queima o pendente do mesmo purpose — um pedido novo cancela o anterior. */
   supersedePending?: boolean;
-  /** Só com `EMAIL_CHANGE`: o alvo da troca, congelado no token. */
-  newEmail?: string;
-  /** Só com `ACCOUNT_REACTIVATION`: a escolha do ator, congelada no token. */
-  restore?: { profiles: ProfileKind[]; roleIds: string[] };
   /** O que mais a emissão escreve, na mesma transação. */
   effect?: VerificationTokenEffect<unknown>;
   audit?: AuditDescriptor;
@@ -111,8 +124,8 @@ export async function issueVerificationToken(
     {
       userId: spec.userId,
       ...stored,
-      ...(spec.newEmail !== undefined && { newEmail: spec.newEmail }),
-      ...(spec.restore && {
+      ...("newEmail" in spec && { newEmail: spec.newEmail }),
+      ...("restore" in spec && {
         restoreProfiles: spec.restore.profiles,
         restoreRoleIds: spec.restore.roleIds,
       }),
@@ -135,8 +148,6 @@ export type ConsumeVerificationTokenSpec<T> = {
   purpose: VerificationPurpose;
   /** O corpo do 400 genérico deste purpose (ADR-0071). */
   invalidTokenError: { message: string; action: string };
-  /** Uma cláusula de validade que só este purpose tem (ex.: `newEmail` gravado). */
-  alsoUsable?: (token: VerificationTokenRow) => boolean;
   /**
    * O que fazer com um token válido, decidido **fora** da transação: os guards
    * que ainda faltam (conta suspensa, usuário sumido) e o trabalho caro (hash
@@ -162,16 +173,14 @@ export async function consumeVerificationToken<T>(
   spec: ConsumeVerificationTokenSpec<T>,
 ): Promise<VerificationTokenRow> {
   const token = await findVerificationTokenByHash(hashToken(spec.rawToken));
+  const refusal = verificationTokenRefusal(token, spec.purpose);
 
-  if (
-    !isUsableVerificationToken(token, spec.purpose) ||
-    (spec.alsoUsable && !spec.alsoUsable(token))
-  ) {
+  if (refusal !== null || token === null) {
     log.warn(
       {
         purpose: spec.purpose,
         ...(token && { userId: token.userId }),
-        reason: refusalReason(token, spec.purpose),
+        reason: refusal,
       },
       "verification token refused",
     );
@@ -181,19 +190,7 @@ export async function consumeVerificationToken<T>(
 
   const plan = await spec.plan(token);
 
-  await consumeToken(token, plan.effect, plan.audit);
+  await markUsedAndApply(token, plan.effect, plan.audit);
 
   return token;
-}
-
-/** Por que o token foi recusado — para o log, nunca para a resposta. */
-function refusalReason(
-  token: VerificationTokenRow | null,
-  purpose: VerificationPurpose,
-): string {
-  if (!token) return "UNKNOWN_TOKEN";
-  if (token.purpose !== purpose) return "WRONG_PURPOSE";
-  if (token.usedAt !== null) return "ALREADY_USED";
-  if (token.expiresAt <= new Date()) return "EXPIRED";
-  return "PURPOSE_CLAUSE";
 }

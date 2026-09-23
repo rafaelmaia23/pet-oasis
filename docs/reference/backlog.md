@@ -193,14 +193,15 @@ O glossário da API (`apps/api/CONTEXT.md`, Fase 11, issue 08) fixou `User`/usu�
 
 ### Trocar de email não derruba sessão nenhuma — decisão pendente — **P**
 Levantado no fecho da issue 05 de `fase-12-module-depth`, que esperava encontrar quatro sites de
-invalidação de sessão — ban, reset, **troca de email** e deleção — e achou só três: `consumeEmailChange`
-(`apps/api/src/modules/auth/auth.repository.ts`) não toca em `Session`, nem antes nem depois da issue.
+invalidação de sessão — ban, reset, **troca de email** e deleção — e achou só três: o efeito da troca
+de email (`applyEmailChange`, `apps/api/src/modules/auth/auth.repository.ts` — chamava-se
+`consumeEmailChange` até a issue 06) não toca em `Session`, nem antes nem depois da issue.
 O quarto site real é a **troca de senha**. Se isso é lacuna ou é intencional é **regra de negócio, do
 dono do projeto**: trocar o email muda o identificador de login, e há argumento dos dois lados — derrubar
 trata a troca como evento de credencial (é o que ban e reset fazem); não derrubar trata o email como
 dado de perfil, e quem trocou o próprio email não é um invasor por isso. **Se a decisão for derrubar**, o
-trabalho é uma linha: `invalidateSessionsOfUser(tx, userId, new Date())` dentro da transação que já
-existe, mais um caso de integração — a operação e o filtro já têm dono
+trabalho é uma linha: `invalidateSessionsOfUser(tx, token.userId, new Date())` dentro do efeito, que já
+roda na transação do consumo, mais um caso de integração — a operação e o filtro já têm dono
 (`apps/api/src/modules/auth/auth.liveSession.repository.ts`).
 
 

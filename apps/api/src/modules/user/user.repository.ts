@@ -4,8 +4,10 @@ import type { UserStatus } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { invalidateSessionsOfUser } from "@/modules/auth/auth.liveSession.repository";
-import { createVerificationTokenIn } from "@/modules/auth/verificationToken.repository";
-import type { MintedVerificationToken } from "@/modules/auth/verificationToken.service";
+import {
+  createVerificationTokenIn,
+  type StoredVerificationToken,
+} from "@/modules/auth/verificationToken.repository";
 import {
   type CascadeCounts,
   cascadeDeleteUserGraph,
@@ -223,7 +225,7 @@ export async function banUserAndInvalidateSessions(
 
 export async function forcePasswordResetAndInvalidateSessions(
   userId: string,
-  token: MintedVerificationToken["stored"],
+  token: StoredVerificationToken,
   audit?: AuditDescriptor,
 ) {
   return prisma.$transaction(async (tx) => {

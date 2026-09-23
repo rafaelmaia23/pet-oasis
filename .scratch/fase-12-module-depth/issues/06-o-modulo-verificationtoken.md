@@ -31,7 +31,7 @@ usa: `apps/api/src/modules/auth/verificationToken.repository.ts` (a validade, a 
 prazo por purpose, o sorteio do token, a recusa genérica e a ordem dos passos). Quem toca o
 Prisma continua sendo só o repository, e nenhum service abre transação.
 
-**Consumir virou uma operação só.** `consumeToken(token, effect, audit)` marca `usedAt`, roda o
+**Consumir virou uma operação só.** `markUsedAndApply(token, effect, audit)` marca `usedAt`, roda o
 efeito do purpose e grava a linha de auditoria na mesma transação — as quatro transações de
 `auth.repository.ts` colapsaram nesse corpo. O efeito recebe **o token que autorizou a ação**, e
 é dele que saem o dono e a escolha congelada (`restoreProfiles`, `restoreRoleIds`, `newEmail`):
@@ -53,35 +53,49 @@ TTL e o hash continuam vindo de um lugar só; `user.service.ts` não conhece mai
 por purpose", que troca de email e reativação repetiam, virou a opção `supersedePending`.
 
 **O prazo agora é um `Record<VerificationPurpose, number>`:** um `purpose` novo sem TTL declarado
-não compila. Ele também tornou visível uma coisa que estava escondida em duas constantes com o
-mesmo valor — a troca de email usa o TTL da verificação de email (24h). Comportamento inalterado,
-só explícito.
+não compila. Ele também tornou visível que a troca de email nunca teve prazo próprio — ela importa
+o `EMAIL_VERIFICATION_TTL_MS`, e a reativação tem constante própria com o mesmo valor (24h).
+Comportamento inalterado, só explícito. Pela mesma razão, o que cada purpose **congela** no token
+virou união discriminada: emitir um `EMAIL_CHANGE` sem o alvo, ou um `EMAIL_VERIFICATION` com ele,
+deixou de ser possível de escrever em vez de continuar possível de errar.
 
-**O predicado de validade é um lugar só, e um type guard.** `isUsableVerificationToken(token,
-purpose, now)` recebe `null` de propósito: o token desconhecido não é um quarto desfecho, é o
-mesmo (ADR-0071). A fronteira do prazo é `>`, como o `gt` do banco. O log de recusa passou a ser
-uma linha só, com `purpose` e `reason` estruturados (`UNKNOWN_TOKEN`, `WRONG_PURPOSE`,
-`ALREADY_USED`, `EXPIRED`) — antes eram quatro mensagens com **dois** vocabulários de `reason`
-diferentes, e um deles chamava purpose errado de "expirado".
+**O predicado de validade é uma lista de cláusulas só, lida de dois jeitos.**
+`verificationTokenRefusal(token, purpose, now)` devolve o motivo (`UNKNOWN_TOKEN`,
+`WRONG_PURPOSE`, `ALREADY_USED`, `EXPIRED`) ou `null`, e `isUsableVerificationToken` **é** essa
+função sem o motivo — não há como uma cláusula nova entrar em só um dos dois. O token desconhecido
+entra como `null` de propósito: não é um quarto desfecho, é o mesmo (ADR-0071). O log passou a ser
+uma linha só, com `purpose` e `reason` estruturados; antes eram quatro mensagens com **dois**
+vocabulários de `reason` diferentes, e um deles chamava purpose errado de "expirado".
 
-**Os quatro services sobreviveram como arquivos, e encolheram.** `verification.service.ts` (86 →
-69 linhas), `password.service.ts`, `emailChange.service.ts` e `accountReactivation.service.ts`
+**Os quatro services sobreviveram como arquivos, e encolheram.** `verification.service.ts` (93 →
+70 linhas), `password.service.ts`, `emailChange.service.ts` e `accountReactivation.service.ts`
 mantêm a orquestração que o ADR-0072 exige que fique neles — o email, os guards próprios, o corpo
 do 400 e qual efeito aplicar — e perderam o `generateOpaqueToken`/`hashToken`/`findVerificationToken`
 /`if (purpose !== … || usedAt !== null || expiresAt < new Date())` que cada um repetia.
 
-**Os testes.** `tests/unit/modules/auth/verificationToken.test.ts` (18 casos) prova o que é puro:
-os quatro motivos de recusa, que **nada no corpo do 400 os distingue**, que a busca é pelo hash e
-nunca pelo valor cru, que o plano só é montado depois da validação (`["find", "plan", "consume"]`)
-e que a recusa não chama o repositório. `tests/integration/modules/auth/verificationToken.test.ts`
+**Os testes.** `tests/unit/modules/auth/verificationToken.test.ts` (22 casos) prova o que é puro:
+os quatro motivos de recusa, que o predicado e o motivo concordam caso a caso, que **nada no corpo
+do 400 os distingue**, que a busca é pelo hash e nunca pelo valor cru, que o plano só é montado
+depois da validação (`["find", "plan", "consume"]`) e que a recusa não chama o repositório. `tests/integration/modules/auth/verificationToken.test.ts`
 (9 casos) prova o que só o banco prova: o hash guardado, a escolha congelada, que
 `supersedePending` queima o pendente do mesmo purpose **e só ele**, e — o caso que justifica a
 transação — que **um efeito que falha não deixa o token queimado, nem o efeito parcial, nem a
 linha de auditoria**. Nenhum teste de integração foi apagado; dois tiveram a chamada de setup
 adaptada à API nova (`audit.test.ts`, `auth.liveSession.test.ts`).
 
-**Comportamento externo:** idêntico. 1457 testes em 85 arquivos, verdes; `typecheck`, `lint` e
-`docs:check` limpos.
+**Comportamento externo:** idêntico em todo caminho que a suíte cobre, com **duas mudanças de
+corner anunciadas**, as duas verificadas na revisão e mantidas de propósito:
+
+- **A fronteira do prazo virou `>`, como o `gt` do banco.** Os quatro services usavam
+  `expiresAt < new Date()`, que fazia um token expirando *exatamente agora* ainda valer; agora não
+  vale. A janela é de um milissegundo, e o alinhamento é o mesmo que a issue 05 fez para sessão —
+  o corte é o do banco, nos dois lados.
+- **O `verify-email` ganhou uma ida ao banco.** Era a única das quatro que usava
+  `$transaction([...])` em lote; virou transação interativa, porque é o corpo único que as quatro
+  passaram a compartilhar. Mesmas escrituras, um round trip a mais, num fluxo que roda uma vez por
+  usuário. Custo aceito conscientemente: a alternativa era manter a quarta cópia.
+
+1461 testes em 85 arquivos, verdes; `typecheck`, `lint` e `docs:check` limpos.
 
 **Um achado que não é meu para resolver, e por isso foi para o backlog.** Uso único é
 leitura-depois-escrita: duas requisições simultâneas com o mesmo token válido passam as duas pelo
@@ -89,6 +103,17 @@ predicado. O estado é o mesmo de antes deste esforço (o módulo herdou a forma
 transações), a correção é conhecida (`updateMany` com `usedAt: null` no `where`), mas **o que a
 segunda requisição recebe** é regra de negócio. Está em `docs/reference/backlog.md`, na seção de
 segurança, com as opções e o custo.
+
+**O que a revisão de dois eixos mudou.** O eixo de **standards** achou uma violação de camada
+dura — `user.repository.ts` importava um tipo de `verificationToken.service.ts`, e repository não
+fala com service; o tipo (`StoredVerificationToken`) desceu para o repository e o service passou a
+apelidá-lo. Achou também que o motivo da recusa era uma **segunda** cópia das cláusulas, dentro do
+service: virou a lista única descrita acima. Saiu o gancho `alsoUsable`, que tinha um caller só e
+era reconferido dentro do plano dele. E `consumeToken` virou `markUsedAndApply`, porque dentro de
+`modules/auth` "token" sozinho também quer dizer refresh token. O eixo de **spec** achou uma
+asserção vazia no teste de integração ("entrega ao efeito o token que autorizou"): ela comparava o
+token consigo mesmo e passaria com qualquer efeito. Agora o efeito escreve o `newEmail` congelado
+no token no `userId` do token, e a asserção é sobre o banco — token errado, escrita errada.
 
 **Onde a decisão passou a morar:** `apps/api/docs/adr/0069-verificationtoken-generico-purpose.md`
 ganhou o lado que faltava — o modelo genérico agora tem um módulo genérico —, como a spec previa

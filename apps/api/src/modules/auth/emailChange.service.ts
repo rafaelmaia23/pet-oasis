@@ -117,12 +117,12 @@ export async function confirmEmailChange(token: string) {
     rawToken: token,
     purpose: "EMAIL_CHANGE",
     invalidTokenError: INVALID_TOKEN_ERROR,
-    // O alvo da troca é congelado no token: um `EMAIL_CHANGE` sem ele não tem
-    // o que promover, e é tão imprestável quanto um expirado.
-    alsoUsable: (changeToken) => changeToken.newEmail !== null,
     plan: async (changeToken) => {
       const user = await findUserById(changeToken.userId);
 
+      // Sem usuário ou sem o alvo congelado no token, não há o que promover — e
+      // um `EMAIL_CHANGE` nesse estado é tão imprestável quanto um expirado, com
+      // a mesma resposta.
       if (!user || !changeToken.newEmail) {
         throw createBadRequestError(INVALID_TOKEN_ERROR);
       }

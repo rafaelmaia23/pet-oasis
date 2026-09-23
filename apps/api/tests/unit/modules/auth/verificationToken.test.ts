@@ -3,10 +3,11 @@ import { BadRequestError } from "@/errors";
 import type { VerificationPurpose } from "@/generated/prisma/enums";
 import { hashToken } from "@/lib/token";
 import {
-  consumeToken,
   findVerificationTokenByHash,
   isUsableVerificationToken,
+  markUsedAndApply,
   type VerificationTokenRow,
+  verificationTokenRefusal,
 } from "@/modules/auth/verificationToken.repository";
 import {
   consumeVerificationToken,
@@ -27,13 +28,13 @@ vi.mock(
     return {
       ...actual,
       findVerificationTokenByHash: vi.fn(),
-      consumeToken: vi.fn(),
+      markUsedAndApply: vi.fn(),
     };
   },
 );
 
 const mockedFind = vi.mocked(findVerificationTokenByHash);
-const mockedConsume = vi.mocked(consumeToken);
+const mockedConsume = vi.mocked(markUsedAndApply);
 
 // O predicado puro é exercitado contra um instante fixo; o consumo, que lê o
 // relógio de verdade, contra um prazo relativo a agora.
@@ -249,23 +250,30 @@ describe("o consumo de um token de verificação", () => {
     expect(order).toEqual(["find", "plan", "consume"]);
   });
 
-  it("aceita uma cláusula extra de validade do purpose, e a recusa é o mesmo 400", async () => {
-    mockedFind.mockResolvedValue(makeToken({ newEmail: null }));
+  it.each([
+    ["UNKNOWN_TOKEN", null],
+    ["WRONG_PURPOSE", makeToken({ purpose: "PASSWORD_RESET" })],
+    ["ALREADY_USED", makeToken({ usedAt: EARLIER })],
+    ["EXPIRED", makeToken({ expiresAt: EARLIER })],
+  ])("o log sabe que o motivo foi %s, e a resposta não", (reason, row) => {
+    // Julgar e explicar são a mesma leitura: o que o predicado recusa é
+    // exatamente o que tem motivo, e vice-versa.
+    expect(verificationTokenRefusal(row, "EMAIL_VERIFICATION", NOW)).toBe(
+      reason,
+    );
+    expect(isUsableVerificationToken(row, "EMAIL_VERIFICATION", NOW)).toBe(
+      false,
+    );
+  });
 
-    const plan = vi.fn(async () => ({ effect: async () => undefined }));
-
-    await expect(
-      consumeVerificationToken({
-        rawToken: "cru",
-        purpose: "EMAIL_VERIFICATION",
-        invalidTokenError: INVALID,
-        alsoUsable: (token) => token.newEmail !== null,
-        plan,
-      }),
-    ).rejects.toMatchObject({ statusCode: 400, message: INVALID.message });
-
-    expect(plan).not.toHaveBeenCalled();
-    expect(mockedConsume).not.toHaveBeenCalled();
+  it("não tem motivo de recusa para o token que serve", () => {
+    expect(
+      verificationTokenRefusal(
+        makeToken({ expiresAt: LATER }),
+        "EMAIL_VERIFICATION",
+        NOW,
+      ),
+    ).toBeNull();
   });
 });
 

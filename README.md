@@ -24,6 +24,20 @@ corepack enable                      # uma vez por máquina; instala o pnpm pina
 pnpm install                         # o workspace inteiro, da raiz
 ```
 
+Para `git push` e PR sem senha a cada vez, o remoto é **SSH** e o `gh` é o que abre PR e mostra o
+CI pela linha de comando:
+
+```bash
+git remote -v                        # espera-se `git@github.com:rafaelmaia23/pet-oasis.git`
+sudo dnf install gh                  # Fedora 44: está no repo `updates`
+gh auth login                        # GitHub.com → SSH → a chave já cadastrada → Skip o upload
+gh auth status                       # confirma o login e o protocolo `ssh`
+```
+
+Um remoto HTTPS faz o `git push` cair no askpass do desktop, que não existe num terminal sem
+sessão gráfica — é o que trava quem trabalha por agente. O `gh` aqui é para **push, PR e CI**:
+GitHub Issues não está em uso ([`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md)).
+
 ## Comandos da raiz
 
 Cada script da raiz (menos `docs:check`) é `turbo run <task>`: o Turbo roda o script de mesmo

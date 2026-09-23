@@ -34,7 +34,12 @@ import userRouter from "@/modules/user/user.routes";
 const v1Router = Router();
 
 // PÚBLICAS — sem authenticate
-v1Router.use("/status", statusRouter);
+//
+// Os routers **sem prefixo** são os que já passaram pelo `registerRoute`: o
+// path inteiro vem da entrada da tabela de rotas, então montá-los num prefixo
+// o duplicaria. Enquanto a migração corre (issues 08–15 de
+// `.scratch/fase-12-module-depth/`), as duas formas convivem aqui.
+v1Router.use(statusRouter);
 v1Router.use("/auth", authRouter);
 // Vitrine do catálogo (9.1): responde sem token porque o e-commerce vive de
 // quem chega pelo Google sem usuário. `/breeds` fica aqui, seco: é só leitura, não

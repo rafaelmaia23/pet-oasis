@@ -173,8 +173,8 @@
 - 🔄 **`fase-12-module-depth`**: aprofundar os módulos da API e do contrato — o route entry passa
   a construir o handler (79 rotas, lista de erros do `/openapi.json` derivada), `ERROR_CODES` do
   contrato passa a tipar o erro da API, e os invariantes que hoje vivem em cópia (token de
-  verificação, sessão viva, cookie de refresh, autorizar-antes-de-buscar) ganham um dono. A pasta
-  nasce com o planejamento.
+  verificação, sessão viva, cookie de refresh, autorizar-antes-de-buscar) ganham um dono. Spec e
+  issues em `.scratch/fase-12-module-depth/`.
 - ⬜ **`fase-12-web-auth-spine`**: herdado do `pet-oasis-web` no import (Fase 11, issue 11), com o
   conteúdo com que o web congelou — do bootstrap ao fluxo completo de conta: sessão em BFF, login
   e os estados bloqueados, guarda de rota, renovação automática, signup, verificação de email,

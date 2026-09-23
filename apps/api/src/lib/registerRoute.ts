@@ -116,9 +116,8 @@ function isLadder(
  * registrador ainda não sabe registrar falham **no registro** — na carga do
  * módulo, não no primeiro request —, com o par método + path na mensagem.
  */
-function successOf(entry: RouteDefinition) {
+function successOf(entry: RouteDefinition, where: string) {
   const statuses = Object.keys(entry.responses).map(Number);
-  const where = `${entry.method} ${entry.path}`;
 
   const [status] = statuses;
   if (statuses.length !== 1 || status === undefined) {
@@ -145,7 +144,10 @@ export function registerRoute<E extends RouteDefinition>(
   entry: E,
   { before = [], handler }: RouteRegistration<E>,
 ): void {
-  const { status, view } = successOf(entry);
+  // O par método + path, montado uma vez: nomeia a rota tanto na recusa do
+  // registro quanto no contexto do erro de apresentação.
+  const where = `${entry.method} ${entry.path}`;
+  const { status, view } = successOf(entry, where);
 
   const dispatch: RequestHandler = async (req, res, next) => {
     try {
@@ -172,11 +174,7 @@ export function registerRoute<E extends RouteDefinition>(
         return;
       }
 
-      res
-        .status(status)
-        .json(
-          presentWith(view, result, { route: `${entry.method} ${entry.path}` }),
-        );
+      res.status(status).json(presentWith(view, result, { route: where }));
     } catch (error) {
       next(error);
     }

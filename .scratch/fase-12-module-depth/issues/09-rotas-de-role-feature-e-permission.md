@@ -12,3 +12,9 @@ schema, status e view no controller e passam a sair da entrada da tabela.
       alteração
 - [ ] O guard de feature de cada rota continua o mesmo, agora como parâmetro do registro
 - [ ] Os guards de não-escalação de permissão continuam provados pelos testes que já os provam
+
+**Antes de começar, leia a seção "Duas consequências do registrador, descobertas na issue 08" da
+`spec.md`.** A primeira delas — o `authenticate` descendo do prefixo para a rota, e com ele um 401
+virando 404 em método inexistente — alcança `/roles`, `/features` e `/users/:userId` desta issue, e
+**é decisão do dono do projeto**, não desta issue. Se ela ainda não tiver resposta, pergunte antes
+de migrar a primeira rota: reverter depois custa as onze.

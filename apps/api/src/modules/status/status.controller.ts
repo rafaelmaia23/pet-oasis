@@ -1,4 +1,5 @@
 import type { routes } from "@pet-oasis/api-contracts/routes";
+import { createInternalServerError } from "@/errors";
 import { prisma } from "@/lib/prisma";
 import type { RouteHandler } from "@/lib/registerRoute";
 
@@ -10,7 +11,11 @@ import type { RouteHandler } from "@/lib/registerRoute";
  */
 function firstRow<T>(rows: T[], what: string): T {
   const row = rows[0];
-  if (!row) throw new Error(`o banco respondeu sem ${what}`);
+  if (!row) {
+    throw createInternalServerError({
+      message: `O banco respondeu sem ${what}`,
+    });
+  }
   return row;
 }
 

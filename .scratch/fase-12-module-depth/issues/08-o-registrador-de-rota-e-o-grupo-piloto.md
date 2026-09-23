@@ -99,6 +99,23 @@ inalcançável — roles são read-only e semeadas sempre com descrição —, e
 `.nullable()` na view ou "resíduo de schema" é decisão de contrato. Foi para
 `docs/reference/backlog.md`, seção *Bugs*.
 
+**A revisão (`code-review`, eixos Standards e Spec) apontou seis coisas, todas endereçadas.** O
+`firstRow` lançava `Error` cru num caminho de request e passou a usar `createInternalServerError`,
+como manda a regra de erros do `apps/api/CLAUDE.md`. O `as const` que o `log.service.ts` ganhara
+virou inerte quando o retorno do handler deixou de derivar da view, e o comentário ao lado afirmava
+uma restrição que já não existia: os dois foram revertidos. O par método + path era montado duas
+vezes no registrador e passou a ser um só. O `spyOn` do teste não espiona nada e colidia com o
+`vi.spyOn`: virou `fakeHandler`. O bloco novo do `apps/api/CLAUDE.md` repetia o guia em vez de
+apontar para ele, e encolheu. E o eixo Standards achou que `GET /status` fala com o Prisma direto,
+sem service nem repository — dívida anterior a esta fase, que a migração não criou nem curou, agora
+em `docs/reference/backlog.md`.
+
+**As duas consequências que alcançam as issues 09–15 foram anotadas para a frente**, na `spec.md`
+(seção "Duas consequências do registrador, descobertas na issue 08") e na issue 09, e não aqui: o
+401→404 se repete em todo prefixo autenticado e **é decisão do dono do projeto**, não desta issue.
+Anotá-lo só neste arquivo fechado seria exatamente a anotação para trás que o `CLAUDE.md` da raiz
+proíbe.
+
 A documentação acompanhou: `apps/api/docs/guides/documenting-endpoints.md` ganhou a seção
 "3. Registrar a rota na API — `registerRoute`" (e o aviso de que rota nova nasce nele), e o
 `apps/api/CLAUDE.md` passou a descrever a camada de rota pelo registrador. **Nenhum ADR novo aqui**:

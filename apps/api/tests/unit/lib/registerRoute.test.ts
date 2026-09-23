@@ -99,11 +99,11 @@ function makeApp(register: (router: Router) => void, actor?: AuthUser) {
 const someActor = () => makeAuthUser(["read:user"]);
 
 /**
- * O handler falso, tipado pelo contexto que a entrada produz. O parâmetro não
- * está aqui só para o `mock.calls`: é ele que faz o typecheck reprovar um
+ * Um handler de mentira, tipado pelo contexto que a entrada produz. O parâmetro
+ * não está aqui só para o `mock.calls`: é ele que faz o typecheck reprovar um
  * handler que espere um campo que a entrada não declara.
  */
-const spyOn = <E extends RouteDefinition, R>(
+const fakeHandler = <E extends RouteDefinition, R>(
   _entry: E,
   result: R,
 ): Mock<(context: RouteHandlerContext<E>) => Promise<R>> =>
@@ -156,7 +156,7 @@ describe("registerRoute", () => {
 
   describe("o envelope chega ao handler já validado", () => {
     it("entrega params e query parseados pelo schema da entrada", async () => {
-      const handler = spyOn(readThing, THING);
+      const handler = fakeHandler(readThing, THING);
       const app = makeApp(
         (router) => registerRoute(router, readThing, { handler }),
         someActor(),
@@ -172,7 +172,7 @@ describe("registerRoute", () => {
     });
 
     it("entrega o body parseado pelo schema da entrada", async () => {
-      const handler = spyOn(createThing, THING);
+      const handler = fakeHandler(createThing, THING);
       const app = makeApp(
         (router) => registerRoute(router, createThing, { handler }),
         someActor(),
@@ -186,7 +186,7 @@ describe("registerRoute", () => {
     });
 
     it("envelope inválido vira 422 e o handler nunca roda", async () => {
-      const handler = spyOn(readThing, THING);
+      const handler = fakeHandler(readThing, THING);
       const app = makeApp(
         (router) => registerRoute(router, readThing, { handler }),
         someActor(),
@@ -203,7 +203,7 @@ describe("registerRoute", () => {
   describe("o ator", () => {
     it("entrega o ator autenticado numa rota bearer", async () => {
       const actor = someActor();
-      const handler = spyOn(readThing, THING);
+      const handler = fakeHandler(readThing, THING);
       const app = makeApp(
         (router) => registerRoute(router, readThing, { handler }),
         actor,
@@ -215,7 +215,7 @@ describe("registerRoute", () => {
     });
 
     it("rota bearer sem ator é 401 — o handler não roda sem identidade", async () => {
-      const handler = spyOn(readThing, THING);
+      const handler = fakeHandler(readThing, THING);
       const app = makeApp((router) =>
         registerRoute(router, readThing, { handler }),
       );
@@ -227,7 +227,7 @@ describe("registerRoute", () => {
     });
 
     it("rota pública roda sem ator", async () => {
-      const handler = spyOn(publicThing, THING);
+      const handler = fakeHandler(publicThing, THING);
       const app = makeApp((router) =>
         registerRoute(router, publicThing, { handler }),
       );
@@ -302,7 +302,7 @@ describe("registerRoute", () => {
     });
 
     it("um `before` que recusa impede o handler", async () => {
-      const handler = spyOn(readThing, THING);
+      const handler = fakeHandler(readThing, THING);
       const app = makeApp(
         (router) =>
           registerRoute(router, readThing, {

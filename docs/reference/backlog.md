@@ -194,6 +194,16 @@ Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real 
 
 ## Bugs
 
+### `GET /status` pula camadas: `$queryRaw` no controller — **P**
+O `status.controller.ts` fala com o Prisma direto, com três `$queryRaw`, sem service e sem
+repository. Contraria duas regras do `apps/api/CLAUDE.md` ao mesmo tempo ("Repository é a ÚNICA que
+toca o Prisma… Nunca pule camadas" e "SQL cru vive exclusivamente no repository", que lista os três
+pontos legítimos — este não é um deles). É anterior à Fase 12 e sobreviveu à migração da rota para o
+`registerRoute` (issue 08 do esforço `fase-12-module-depth`), que só trocou a camada de rota. A
+correção é mecânica: `status.repository.ts` com as três consultas, `status.service.ts` montando o
+retorno. **Consequência de não fazer:** é o precedente que qualquer rota nova pode citar para falar
+com o banco do controller.
+
 ### `Role.description` é nulável no banco e `z.string()` na view — **P**
 Levantado ao migrar `GET /me` para o `registerRoute` (Fase 12, esforço
 `fase-12-module-depth`, issue 08), quando o typecheck pôs os dois lados frente a frente pela

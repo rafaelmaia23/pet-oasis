@@ -78,14 +78,23 @@ describe("forma do pacote", () => {
       specifiersOf(file)
         .filter((specifier) => {
           if (!specifier.startsWith(".")) return false;
+          // O índice do pacote é o barril dos barris: é o lugar de onde os
+          // índices de domínio são reexportados, e o único isento.
+          if (relative(SRC_DIR, file) === "index.ts") return false;
           const target = resolve(dirname(file), specifier);
-          const targetDomain = domainOf(target);
-          // Dentro do próprio domínio o índice é o barril do domínio e
-          // ninguém o importa; o que esta regra proíbe é atravessar domínio
-          // por ele.
-          if (targetDomain === domainOf(file)) return false;
-          const name = target.split("/").pop() ?? "";
-          return name === "index" || name === "index.ts" || name === "";
+          // Dentro do próprio domínio o índice é o barril dele e ninguém o
+          // importa; o que esta regra proíbe é atravessar domínio por ele.
+          if (domainOf(target) === domainOf(file)) return false;
+
+          const parts = relative(SRC_DIR, target).split("/");
+          // As duas grafias do mesmo erro: apontar para o índice do outro
+          // domínio (`../errors/index`) e apontar para a pasta dele
+          // (`../errors`), que o Node resolve para o mesmo arquivo.
+          return (
+            parts.length === 1 ||
+            parts.at(-1) === "index" ||
+            parts.at(-1) === "index.ts"
+          );
         })
         .map((specifier) => `${relative(PACKAGE_ROOT, file)} → ${specifier}`),
     );

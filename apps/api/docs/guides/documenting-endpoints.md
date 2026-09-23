@@ -47,8 +47,13 @@ export const roleRoutes = {
       404: errorResponses[404],
     },
   },
-} satisfies RouteGroup;
+} as const satisfies RouteGroup;
 ```
+
+O `as const` não é enfeite: é ele que faz `path`, `tag` e `summary` serem **literais** para quem
+consome a tabela — sem ele `path` vira `string` e montar a URL de uma rota com `:param` sai do
+alcance do compilador. `packages/api-contracts/tests/route-table.test.ts` não compila se um grupo
+o perder.
 
 Peças reutilizáveis (de `src/routes/responses.ts` e `src/pagination/list-envelope.ts`):
 - **`view`** — a view do presenter. Uma listagem envolve a view num envelope:
@@ -72,9 +77,12 @@ para ser declarada, a peça que precisa disso é do servidor — vá para `src/d
 1. Criar `packages/api-contracts/src/routes/<mod>.routes.ts` exportando `<mod>Routes` e
    acrescentar a entrada em `src/routes/index.ts` (a ordem ali é a ordem dos paths no
    `/openapi.json`).
-2. Em `apps/api/src/docs/openapi.ts`: acrescentar uma entrada em `tags: [...]` — a prosa do
-   grupo é do documento, e a tag usada em cada rota vem da tabela. **Os paths não são tocados**:
-   `buildPathsFromRouteTable()` já os monta da tabela inteira.
+2. Se o módulo estreia uma **tag**: acrescentá-la em
+   `packages/api-contracts/src/routes/route.tags.ts` (`ROUTE_TAGS`, na mesma ordem dos domínios)
+   **e** a prosa dela em `TAG_DESCRIPTIONS`, em `apps/api/src/docs/openapi.ts`. A tag é do
+   contrato, a prosa é do documento, e o `Record<RouteTag, string>` não compila se um dos dois
+   faltar. **Os paths não são tocados**: `buildPathsFromRouteTable()` já os monta da tabela
+   inteira.
 3. Montar o router do Express no `src/routes/index.ts` da API. O
    `tests/unit/contracts/routeParity.test.ts` fica vermelho até os dois lados casarem — é ele
    que garante que o documento não descreve rota que não existe, nem esquece rota que existe.

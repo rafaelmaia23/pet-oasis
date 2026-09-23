@@ -15,6 +15,30 @@ import type { RouteDefinition } from "../src/routes/route.types";
 /** `true` só quando `T` é um literal — `string` largo reprova. */
 type IsLiteral<T extends string> = string extends T ? false : true;
 
+/**
+ * Os nomes das entradas (`user.get`) cujo `path` ou `tag` **não** é literal —
+ * `never` enquanto os 18 grupos mantiverem o `as const`. A prova vale para a
+ * tabela inteira, e não para a entrada que o teste escolheu citar.
+ *
+ * `summary` fica de fora **da checagem**, não do `as const`: catorze entradas
+ * escrevem a prosa como `"…" + "…"` para caber na coluna, e o TypeScript alarga
+ * a soma de dois literais para `string`. Quebrar essas frases em linha única
+ * para ganhar um literal não serve a consumidor nenhum — quem monta URL precisa
+ * de `path`, quem agrupa a referência precisa de `tag`.
+ */
+type NonLiteralEntries = {
+  [D in keyof typeof routes]: {
+    [O in keyof (typeof routes)[D]]: (typeof routes)[D][O] extends {
+      path: infer P extends string;
+      tag: infer G extends string;
+    }
+      ? [IsLiteral<P>, IsLiteral<G>][number] extends true
+        ? never
+        : `${D & string}.${O & string}`
+      : `${D & string}.${O & string}`;
+  }[keyof (typeof routes)[D]];
+}[keyof typeof routes];
+
 type Entry = {
   /** `user.get` — o mesmo nome que vira `operationId` no documento. */
   id: string;
@@ -37,9 +61,19 @@ function shapeKeys(schema: z.ZodType): string[] {
   return schema instanceof z.ZodObject ? Object.keys(schema.shape) : [];
 }
 
-/** Tira `.optional()`/`.nullable()` de cima para chegar no que carrega forma. */
+/**
+ * Tira os embrulhos que não mudam a forma (`.optional()`, `.nullable()`,
+ * `.default()`, `.readonly()`) para chegar no que carrega os campos — sem
+ * isso, um degrau embrulhado pararia a comparação e levaria a subárvore
+ * inteira junto.
+ */
 function unwrap(schema: z.ZodType): z.ZodType {
-  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
+  if (
+    schema instanceof z.ZodOptional ||
+    schema instanceof z.ZodNullable ||
+    schema instanceof z.ZodDefault ||
+    schema instanceof z.ZodReadonly
+  ) {
     return unwrap(schema.unwrap() as z.ZodType);
   }
   return schema;
@@ -94,27 +128,29 @@ const ladders = entries.flatMap(({ id, route }) =>
 );
 
 describe("tabela de rotas", () => {
-  it("percorre pelo menos uma entrada por domínio", () => {
-    expect(entries.length).toBe(
-      Object.values(routes).reduce(
-        (total, group) => total + Object.keys(group).length,
-        0,
-      ),
+  it("não deixa domínio sem operação", () => {
+    // Um grupo vazio é um domínio que existe no índice e não endereça nada —
+    // some do documento sem ninguém perceber.
+    const empty = Object.keys(routes).filter(
+      (domain) => !entries.some(({ id }) => id.startsWith(`${domain}.`)),
     );
+
+    expect(empty).toEqual([]);
     expect(entries.length).toBeGreaterThan(0);
   });
 
-  it("declara `path`, `tag` e `summary` como literais", () => {
+  it("declara `path` e `tag` como literais em toda a tabela", () => {
     // Prova de **tipo**, não de runtime: se um grupo perder o `as const`, o
-    // campo volta a ser `string`, `IsLiteral` vira `false` e a linha para de
-    // compilar. É o que o cliente HTTP precisa para montar a URL de uma rota
-    // com `:param` sob o olho do compilador — e o que nenhuma asserção de
-    // runtime alcança.
-    const path: IsLiteral<typeof routes.user.get.path> = true;
-    const tag: IsLiteral<typeof routes.user.get.tag> = true;
-    const summary: IsLiteral<typeof routes.status.get.summary> = true;
+    // campo volta a ser `string` e `NonLiteralEntries` deixa de ser `never` —
+    // vira o nome da entrada culpada, que não é atribuível a `true`, e o
+    // `typecheck` aponta quem quebrou. É o que o cliente HTTP precisa para
+    // montar a URL de uma rota com `:param` sob o olho do compilador, e o que
+    // nenhuma asserção de runtime alcança.
+    const everyEntryIsLiteral: [NonLiteralEntries] extends [never]
+      ? true
+      : NonLiteralEntries = true;
 
-    expect([path, tag, summary]).toEqual([true, true, true]);
+    expect(everyEntryIsLiteral).toBe(true);
   });
 
   it("casa os `:param` do path com as chaves do `params` do request", () => {
@@ -158,6 +194,19 @@ describe("tabela de rotas", () => {
 
   it("mantém cada escada de views contida no degrau seguinte", () => {
     expect(ladders.length).toBeGreaterThan(0);
+
+    // Antes de comparar, exigir que cada degrau seja um objeto: um degrau que
+    // fosse união, `lazy` ou pipe passaria pela comparação sem nada a
+    // comparar, e o teste ficaria verde por vacuidade.
+    const notObjects = ladders.flatMap(({ id, steps }) =>
+      steps.flatMap((step, index) =>
+        unwrap(step) instanceof z.ZodObject
+          ? []
+          : [`${id} · degrau ${index} não é objeto`],
+      ),
+    );
+
+    expect(notObjects).toEqual([]);
 
     const offenders = ladders.flatMap(({ id, steps }) =>
       steps.slice(1).flatMap((step, index) => {

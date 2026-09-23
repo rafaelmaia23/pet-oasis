@@ -12,12 +12,17 @@ monkey-patch do router do Express e um de integração que sobe a aplicação in
 
 O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
 
-- [x] Os 18 grupos passaram a `as const satisfies RouteGroup`, então `path`, `tag` e `summary` são
-      literais. O `typecheck` do monorepo inteiro (contrato, API e web) segue verde: o adaptador do
-      OpenAPI lê a tabela por `Object.entries` e `readonly` não o alcança. A prova de que o literal
-      continua literal é de **tipo**, não de runtime — `IsLiteral<typeof routes.user.get.path>` em
-      `tests/route-table.test.ts`, que para de compilar se um grupo perder o `as const` (verificado
-      tirando o `as const` de um grupo: `TS2322`).
+- [x] Os 18 grupos passaram a `as const satisfies RouteGroup`. O `typecheck` do monorepo inteiro
+      (contrato, API e web) segue verde: o adaptador do OpenAPI lê a tabela por `Object.entries` e
+      `readonly` não o alcança. A prova é de **tipo**, não de runtime, e vale para a **tabela
+      inteira**: `NonLiteralEntries` em `tests/route-table.test.ts` é `never` enquanto todo grupo
+      mantiver o `as const`, e vira o nome da entrada culpada quando um perde (verificado tirando o
+      `as const` de um grupo que o teste nem cita: `TS2322`).
+      **Divergência do pedido:** a checagem cobre `path` e `tag`, não `summary`. Catorze entradas
+      escrevem a prosa como `"…" + "…"` para caber na coluna, e o TypeScript alarga a soma de dois
+      literais para `string` — o `as const` está lá, mas o literal não sobrevive à concatenação.
+      Quebrá-las em linha única daria um literal que nenhum consumidor usa; quem monta URL precisa
+      de `path`, quem agrupa a referência precisa de `tag`.
 - [x] `packages/api-contracts/tests/route-table.test.ts`: uma travessia só da tabela, lida por todos
       os `it`. Todo `:param` do path tem chave no `params` do request — e, **acrescentado ao
       pedido**, também o contrário (chave de `params` sem `:param` no path é validação que nunca
@@ -50,6 +55,15 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
 - [x] Nenhum teste foi apagado. A suíte do contrato foi de 50 para 58 testes (6 arquivos → 7); a
       suíte da API continua inteira e verde (79 arquivos, 1367 testes), rodada contra um Postgres e
       um Redis próprios desta worktree para não disputar o banco de teste com outro agente.
+
+A revisão (`code-review`, eixos Standards e Spec) apontou seis coisas, todas endereçadas: o guia
+`apps/api/docs/guides/documenting-endpoints.md` ensinava a forma velha (`} satisfies RouteGroup` e
+`tags: [...]` no `openapi.ts`) e foi atualizado; a prova de literal cobria 2 entradas de 79 e passou
+a cobrir a tabela inteira; o `it` que "percorria um por domínio" era tautológico e virou "não deixa
+domínio sem operação"; a escada passava vacuamente para degrau que não fosse objeto e agora exige
+que cada degrau seja um; `unwrap` ignorava `.default()`/`.readonly()`, que pulavam a subárvore; e a
+regra de folha não pegava a forma de diretório (`from "../errors"`), que o Node resolve para o mesmo
+índice — pega agora, com o índice do pacote (`src/index.ts`, o barril dos barris) isento.
 
 O README do pacote ganhou a seção "O que a tabela promete, provado aqui dentro" e as linhas de
 `ROUTE_TAGS` e das folhas de `errors`. Nenhum ADR novo: a tabela ser a fonte e o documento ser

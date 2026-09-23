@@ -8,15 +8,45 @@ a suíte fica verde, e `secure` em produção não é alcançado por nenhum test
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Um módulo com três operações — emitir o cookie numa resposta, ler da requisição, limpar — dono
-      dos atributos e do path
-- [ ] O controller de auth para de conhecer o ambiente, o TTL e o cast do jar de cookies
-- [ ] `set` e `clear` usam o mesmo path por construção, não por dois literais iguais
-- [ ] Teste unitário contra uma resposta falsa cobrindo os atributos por ambiente, **incluindo**
-      `secure` em produção
-- [ ] Os testes de integração de login, refresh, logout e listagem de sessões seguem verdes, sem
-      alteração
-- [ ] O cabeçalho do módulo registra que o BFF do web espelha esta política (esforço
+- [x] Um módulo com três operações — emitir o cookie numa resposta, ler da requisição, limpar — dono
+      dos atributos e do path (`apps/api/src/modules/auth/auth.refreshCookie.ts`)
+- [x] O controller de auth para de conhecer o ambiente, o TTL e o cast do jar de cookies — o import
+      de `@/config/env` saiu do arquivo
+- [x] `set` e `clear` usam o mesmo path por construção, não por dois literais iguais: os dois saem
+      de `refreshCookiePolicy()`, e um teste afirma a igualdade
+- [x] Teste unitário contra uma resposta falsa cobrindo os atributos por ambiente, **incluindo**
+      `secure` em produção (`apps/api/tests/unit/modules/auth/auth.refreshCookie.test.ts`, 15 casos)
+- [x] Os testes de integração de login, refresh, logout e listagem de sessões seguem verdes, sem
+      alteração — `tests/integration/v1/auth.test.ts`, 163 casos, arquivo não tocado
+- [x] O cabeçalho do módulo registra que o BFF do web espelha esta política (esforço
       `fase-12-web-auth-spine`), para que as duas não divirjam
+
+## O que ficou
+
+**A interface é de três operações e não conhece Express.** `setRefreshCookie(res, token)`,
+`readRefreshCookie(req)` e `clearRefreshCookie(res)` pedem só o jar — dois tipos estruturais
+(`RefreshCookieResponse`, `RefreshCookieRequest`) que o `Response`/`Request` do Express satisfazem
+sem cast e que uma resposta falsa satisfaz sem subir HTTP. Foi isso que tornou a política
+alcançável por teste unitário: a suíte de integração roda em `NODE_ENV=test`, onde `secure` é falso
+por definição, e nenhum teste dela poderia provar produção.
+
+**O ambiente é lido a cada chamada, não no import.** `refreshCookiePolicy()` é função, não
+constante: além de ser o que permite ao teste variar `NODE_ENV`, é o que impede o módulo de guardar
+uma cópia de uma decisão que o processo já tomou em `env`.
+
+**`maxAge` ficou fora da política compartilhada.** A política são os atributos que protegem e
+endereçam o cookie (`httpOnly`, `sameSite`, `secure`, `path`); o prazo entra só no `set`, porque
+limpar não tem prazo. O Express 5 apaga `maxAge` do `clearCookie` de qualquer jeito, mas depender
+disso seria depender de um detalhe de implementação de terceiro — o corte deixa a intenção no
+código.
+
+**A leitura deixou de ser um cast.** `req.cookies[NAME] as string | undefined` prometia um tipo sem
+verificar nada, e o valor vem do cliente: um nome de cookie repetido chega como array. Agora o tipo
+é conferido e o que não for texto é tratado como ausência — quatro casos no teste.
+
+**Nada de comportamento mudou**, e a prova é a suíte de integração de auth intacta e verde.
+Nenhum ADR novo: a spec do esforço já registrou que o cookie completa decisões existentes
+(`apps/api/docs/adr/0055-design-session-access-jwt-15min-refresh-opaco-rotativo.md`) em vez de abrir
+uma nova.

@@ -8,11 +8,14 @@ import type { ProfileKind } from "@/generated/prisma/enums";
 import { send } from "@/lib/email";
 import { logger } from "@/lib/logger";
 import { hashPassword } from "@/lib/password";
-import { generateOpaqueToken, hashToken } from "@/lib/token";
 import { getRolesByNames } from "@/modules/role/role.repository";
 import { findDeletedUserById } from "@/modules/user/user.repository";
-import { ACCOUNT_REACTIVATION_TTL_MS } from "./auth.constants";
+import type { AccountReactivationCounts } from "./auth.repository";
 import * as authRepository from "./auth.repository";
+import {
+  consumeVerificationToken,
+  issueVerificationToken,
+} from "./verificationToken.service";
 
 const log = logger.child({ module: "account-reactivation" });
 
@@ -73,17 +76,14 @@ export async function requestAccountReactivation(
   source: ReactivationSource,
   choice: ReactivationChoice,
 ) {
-  const rawToken = generateOpaqueToken();
-
-  await authRepository.requestAccountReactivation(
-    {
-      userId: user.id,
-      tokenHash: hashToken(rawToken),
-      expiresAt: new Date(Date.now() + ACCOUNT_REACTIVATION_TTL_MS),
-      restoreProfiles: choice.profiles,
-      restoreRoleIds: choice.roleIds,
-    },
-    {
+  // Mesmo idioma da troca de email: um pedido novo queima o anterior, então há
+  // no máximo uma reativação pendente por usuário.
+  const rawToken = await issueVerificationToken({
+    userId: user.id,
+    purpose: "ACCOUNT_REACTIVATION",
+    supersedePending: true,
+    restore: { profiles: choice.profiles, roleIds: choice.roleIds },
+    audit: {
       action: "ACCOUNT_REACTIVATION_REQUESTED",
       targetType: "User",
       targetId: user.id,
@@ -93,7 +93,7 @@ export async function requestAccountReactivation(
         roles: choice.roleIds.length,
       },
     },
-  );
+  });
 
   const { subject, html, text } = buildAccountReactivationEmail(
     rawToken,
@@ -115,90 +115,71 @@ export async function confirmAccountReactivation(
   newPassword: string,
   phone?: string,
 ) {
-  const reactivationToken = await authRepository.findVerificationTokenByHash(
-    hashToken(token),
-  );
+  const { userId, restoreProfiles } = await consumeVerificationToken({
+    rawToken: token,
+    purpose: "ACCOUNT_REACTIVATION",
+    invalidTokenError: INVALID_TOKEN_ERROR,
+    plan: async (reactivationToken) => {
+      // `findUserById` filtra `deletedAt: null` e não enxergaria o alvo.
+      // Ausente aqui = usuário já reativado por um token anterior, ou apagado
+      // de vez: a resposta é a mesma do token desconhecido, sem revelar qual
+      // dos dois.
+      const user = await findDeletedUserById(reactivationToken.userId);
 
-  if (
-    reactivationToken?.purpose !== "ACCOUNT_REACTIVATION" ||
-    reactivationToken.usedAt !== null ||
-    reactivationToken.expiresAt < new Date()
-  ) {
-    log.warn(
-      {
-        ...(reactivationToken ? { userId: reactivationToken.userId } : {}),
-        reason: !reactivationToken
-          ? "UNKNOWN_TOKEN"
-          : reactivationToken.usedAt
-            ? "ALREADY_USED"
-            : "EXPIRED_OR_WRONG_PURPOSE",
-      },
-      "account reactivation refused",
-    );
-    throw createBadRequestError(INVALID_TOKEN_ERROR);
-  }
+      if (!user) {
+        throw createBadRequestError(INVALID_TOKEN_ERROR);
+      }
 
-  // `findUserById` filtra `deletedAt: null` e não enxergaria o alvo. Ausente
-  // aqui = usuário já reativado por um token anterior, ou apagada de vez: a
-  // resposta é a mesma do token desconhecido, sem revelar qual dos dois.
-  const user = await findDeletedUserById(reactivationToken.userId);
+      if (user.bannedAt !== null) {
+        log.warn(
+          { userId: user.id },
+          "account reactivation refused for banned account",
+        );
+        throw createForbiddenError(BANNED_ACCOUNT_ERROR);
+      }
 
-  if (!user) {
-    throw createBadRequestError(INVALID_TOKEN_ERROR);
-  }
+      // Mesmo idioma "uma rota, dois ramos" da 8.3: o estado do banco decide.
+      // Há linha do perfil (morta, porque o usuário está morto) → restaura;
+      // não há → nasce do zero. Criar do zero só vale para o de cliente: o de
+      // funcionário é ato próprio, com o usuário vivo
+      // (`POST /users/:id/employee`).
+      const mustCreateCustomer =
+        reactivationToken.restoreProfiles.includes("CUSTOMER") &&
+        !user.customer;
 
-  if (user.bannedAt !== null) {
-    log.warn(
-      { userId: user.id },
-      "account reactivation refused for banned account",
-    );
-    throw createForbiddenError(BANNED_ACCOUNT_ERROR);
-  }
+      if (mustCreateCustomer && !phone) {
+        throw createValidationError({
+          errors: {
+            phone: ["Telefone é obrigatório para criar o perfil de cliente"],
+          },
+        });
+      }
 
-  // Mesmo idioma "uma rota, dois ramos" da 8.3: o estado do banco decide. Há
-  // linha do perfil (morta, porque o usuário está morto) → restaura; não há →
-  // nasce do zero. Criar do zero só vale para o de cliente: o de funcionário é
-  // ato próprio, com o usuário vivo (`POST /users/:id/employee`).
-  const kinds = reactivationToken.restoreProfiles;
-  const mustCreateCustomer = kinds.includes("CUSTOMER") && !user.customer;
+      const customerRoleIds = mustCreateCustomer
+        ? (await getRolesByNames(["customer"])).map((role) => role.id)
+        : [];
 
-  if (mustCreateCustomer && !phone) {
-    throw createValidationError({
-      errors: {
-        phone: ["Telefone é obrigatório para criar o perfil de cliente"],
-      },
-    });
-  }
-
-  const customerRoleIds = mustCreateCustomer
-    ? (await getRolesByNames(["customer"])).map((role) => role.id)
-    : [];
-
-  const passwordHash = await hashPassword(newPassword);
-
-  await authRepository.consumeAccountReactivation(
-    {
-      tokenId: reactivationToken.id,
-      userId: user.id,
-      passwordHash,
-      kinds,
-      roleIds: reactivationToken.restoreRoleIds,
-      ...(mustCreateCustomer && phone && { newCustomer: { phone } }),
-      customerRoleIds,
+      return {
+        effect: authRepository.applyAccountReactivation({
+          passwordHash: await hashPassword(newPassword),
+          ...(mustCreateCustomer && phone && { newCustomer: { phone } }),
+          customerRoleIds,
+        }),
+        // As contagens só existem dentro da transação, então o audit vai como
+        // thunk — idioma do K6/K8. Restaurada ≠ concedida: só a segunda é
+        // autoridade nova, decidida por alguém.
+        audit: (counts: AccountReactivationCounts) => ({
+          action: "ACCOUNT_REACTIVATION_COMPLETED" as const,
+          targetType: "User" as const,
+          targetId: user.id,
+          metadata: { ...counts },
+        }),
+      };
     },
-    // As contagens só existem dentro da transação, então o audit vai como
-    // thunk — idioma do K6/K8. Restaurada ≠ concedida: só a segunda é
-    // autoridade nova, decidida por alguém.
-    (counts) => ({
-      action: "ACCOUNT_REACTIVATION_COMPLETED",
-      targetType: "User",
-      targetId: user.id,
-      metadata: { ...counts },
-    }),
-  );
+  });
 
   log.info(
-    { userId: user.id, profiles: kinds },
+    { userId, profiles: restoreProfiles },
     "account reactivation completed",
   );
 }

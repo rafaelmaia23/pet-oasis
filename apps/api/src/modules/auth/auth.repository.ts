@@ -1,7 +1,4 @@
-import type {
-  ProfileKind,
-  VerificationPurpose,
-} from "@/generated/prisma/enums";
+import type { ProfileKind } from "@/generated/prisma/enums";
 import { type AuditDescriptor, record } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import {
@@ -9,6 +6,7 @@ import {
   liveSessionsOfUserWhere,
   liveSessionWhere,
 } from "@/modules/auth/auth.liveSession.repository";
+import type { VerificationTokenEffect } from "@/modules/auth/verificationToken.repository";
 import {
   grantRolesToUser,
   restoreProfilesOfUser,
@@ -124,193 +122,98 @@ export async function findLiveSessionByIdForUser(id: string, userId: string) {
   });
 }
 
-type CreateVerificationTokenData = {
-  userId: string;
-  tokenHash: string;
-  purpose: VerificationPurpose;
-  expiresAt: Date;
-  newEmail?: string;
-};
+/**
+ * Os efeitos de cada `purpose` de `VerificationToken`: o que o consumo do token
+ * aplica **dentro** da transação que marca o uso. Quem os roda é
+ * `consumeToken` (`verificationToken.repository.ts`); quem escolhe qual, o
+ * service do purpose.
+ *
+ * Eles não recebem o `userId` nem a escolha congelada: o token que autorizou a
+ * ação vem junto, e é dele que tudo sai. Uma ação de reativação não pode
+ * restaurar um perfil que o token não trouxe — e agora isso é a única leitura
+ * possível, não uma combinação a manter alinhada entre service e repository.
+ */
 
-export async function createVerificationToken(
-  data: CreateVerificationTokenData,
-  audit?: AuditDescriptor,
-) {
-  if (!audit) return prisma.verificationToken.create({ data });
-
-  return prisma.$transaction(async (tx) => {
-    const token = await tx.verificationToken.create({ data });
-    await record(audit, tx);
-    return token;
-  });
-}
-
-export async function findVerificationTokenByHash(tokenHash: string) {
-  return prisma.verificationToken.findUnique({ where: { tokenHash } });
-}
-
-export async function consumeEmailVerification(
-  tokenId: string,
-  userId: string,
-) {
-  return prisma.$transaction([
-    prisma.verificationToken.update({
-      where: { id: tokenId },
-      data: { usedAt: new Date() },
-    }),
-    prisma.user.update({
-      where: { id: userId },
+/** `EMAIL_VERIFICATION`: a prova de posse do email ativa a conta. */
+export function activateUser(): VerificationTokenEffect<unknown> {
+  return (tx, token) =>
+    tx.user.update({
+      where: { id: token.userId },
       data: { status: "ACTIVE" },
-    }),
-  ]);
+    });
 }
 
-export async function consumePasswordReset(
-  tokenId: string,
-  userId: string,
-  passwordHash: string,
-  audit?: AuditDescriptor,
-) {
-  return prisma.$transaction(async (tx) => {
-    await tx.verificationToken.update({
-      where: { id: tokenId },
-      data: { usedAt: new Date() },
+/**
+ * `EMAIL_CHANGE`, na **emissão**: o alvo fica pendente no `User` enquanto o
+ * token vive. O endereço vai também no token, que é quem a confirmação lê.
+ */
+export function setPendingEmail(
+  newEmail: string,
+): VerificationTokenEffect<unknown> {
+  return (tx, token) =>
+    tx.user.update({
+      where: { id: token.userId },
+      data: { pendingEmail: newEmail },
     });
+}
+
+/**
+ * `PASSWORD_RESET`: senha nova e toda sessão viva derrubada — a senha trocada
+ * por quem tinha o link não deixa de pé a sessão de quem tinha a antiga.
+ */
+export function applyPasswordReset(
+  passwordHash: string,
+): VerificationTokenEffect<void> {
+  return async (tx, token) => {
     await tx.user.update({
-      where: { id: userId },
+      where: { id: token.userId },
       data: { passwordHash, mustChangePassword: false },
     });
-    await invalidateSessionsOfUser(tx, userId, new Date());
-    if (audit) await record(audit, tx);
-  });
-}
-
-type RequestEmailChangeData = {
-  userId: string;
-  tokenHash: string;
-  newEmail: string;
-  expiresAt: Date;
-};
-
-/**
- * Invalidates any pending EMAIL_CHANGE token for the user before creating the
- * new one — at most one live pending email change per user (same "unicidade
- * do ativo por código" idiom already used by UserFeature/UserRole), which
- * also doubles as the implicit cancel mechanism for a change in progress.
- */
-export async function requestEmailChange(
-  data: RequestEmailChangeData,
-  audit?: AuditDescriptor,
-) {
-  return prisma.$transaction(async (tx) => {
-    await tx.verificationToken.updateMany({
-      where: { userId: data.userId, purpose: "EMAIL_CHANGE", usedAt: null },
-      data: { usedAt: new Date() },
-    });
-    await tx.user.update({
-      where: { id: data.userId },
-      data: { pendingEmail: data.newEmail },
-    });
-    const token = await tx.verificationToken.create({
-      data: {
-        userId: data.userId,
-        tokenHash: data.tokenHash,
-        purpose: "EMAIL_CHANGE",
-        expiresAt: data.expiresAt,
-        newEmail: data.newEmail,
-      },
-    });
-    if (audit) await record(audit, tx);
-    return token;
-  });
+    await invalidateSessionsOfUser(tx, token.userId, new Date());
+  };
 }
 
 /**
- * No pre-check for a last-minute conflict here: if someone else took
- * `newEmail` between the request and the confirmation, this `user.update`
- * throws P2002, which the error handler already maps to 409 — same idiom
- * used everywhere else unique constraints are the backstop.
+ * `EMAIL_CHANGE`, no **consumo**: promove o pendente a `email` e guarda o
+ * antigo no histórico.
+ *
+ * Sem pré-checagem de conflito de última hora: se outra pessoa tomou o
+ * `newEmail` entre o pedido e a confirmação, este `user.update` lança P2002, e
+ * o error handler já o mapeia para 409 — mesmo idioma de toda unicidade do
+ * projeto.
  */
-export async function consumeEmailChange(
-  tokenId: string,
-  userId: string,
+export function applyEmailChange(
   newEmail: string,
   oldEmail: string,
-  audit?: AuditDescriptor,
-) {
-  return prisma.$transaction(async (tx) => {
-    await tx.verificationToken.update({
-      where: { id: tokenId },
-      data: { usedAt: new Date() },
-    });
+): VerificationTokenEffect<void> {
+  return async (tx, token) => {
     await tx.user.update({
-      where: { id: userId },
+      where: { id: token.userId },
       data: { email: newEmail, pendingEmail: null },
     });
     await tx.previousEmail.create({
-      data: { userId, email: oldEmail, replacedAt: new Date() },
+      data: { userId: token.userId, email: oldEmail, replacedAt: new Date() },
     });
-    if (audit) await record(audit, tx);
-  });
+  };
 }
 
-type RequestAccountReactivationData = {
-  userId: string;
-  tokenHash: string;
-  expiresAt: Date;
-  restoreProfiles: ProfileKind[];
-  restoreRoleIds: string[];
-};
-
-/**
- * Mesmo idioma do `requestEmailChange`: invalida o token de reativação pendente
- * antes de criar o novo, então há no máximo um vivo por usuário e um segundo
- * pedido cancela o primeiro implicitamente.
- *
- * A escolha do ator viaja no token porque quem confirma é outra pessoa — o dono
- * do usuário, que só tem o link do email.
- */
-export async function requestAccountReactivation(
-  data: RequestAccountReactivationData,
-  audit?: AuditDescriptor,
-) {
-  return prisma.$transaction(async (tx) => {
-    await tx.verificationToken.updateMany({
-      where: {
-        userId: data.userId,
-        purpose: "ACCOUNT_REACTIVATION",
-        usedAt: null,
-      },
-      data: { usedAt: new Date() },
-    });
-    const token = await tx.verificationToken.create({
-      data: {
-        userId: data.userId,
-        tokenHash: data.tokenHash,
-        purpose: "ACCOUNT_REACTIVATION",
-        expiresAt: data.expiresAt,
-        restoreProfiles: data.restoreProfiles,
-        restoreRoleIds: data.restoreRoleIds,
-      },
-    });
-    if (audit) await record(audit, tx);
-    return token;
-  });
-}
-
-type ConsumeAccountReactivationData = {
-  tokenId: string;
-  userId: string;
+export type AccountReactivationData = {
   passwordHash: string;
-  kinds: ProfileKind[];
-  roleIds: string[];
   newCustomer?: { phone: string };
   customerRoleIds: string[];
 };
 
+export type AccountReactivationCounts = {
+  profilesRestored: ProfileKind[];
+  profilesCreated: ProfileKind[];
+  restoredRoles: number;
+  grantedRoles: number;
+  restoredPets: number;
+};
+
 /**
- * Reativa o `User` inteiro numa transação. **Único ponto do projeto que escreve
- * `deletedAt: null` num `User`** — a inversa exata de
+ * `ACCOUNT_REACTIVATION`: reativa o `User` inteiro. **Único ponto do projeto
+ * que escreve `deletedAt: null` num `User`** — a inversa exata de
  * `softDeleteUserAndInvalidateSessions`.
  *
  * Não invalida sessões: a deleção do usuário já derrubou todas e nenhuma pôde
@@ -318,26 +221,17 @@ type ConsumeAccountReactivationData = {
  *
  * `status: ACTIVE` porque consumir o token **é** a prova de posse do email que
  * o `verify-email` exige; `mustChangePassword: false` porque a senha acabou de
- * ser trocada, mesmo raciocínio do `consumePasswordReset`.
+ * ser trocada, mesmo raciocínio do `applyPasswordReset`.
+ *
+ * Que perfis e que roles voltam é a escolha do ator, congelada no token no
+ * pedido — quem confirma é o dono da conta, não quem escolheu.
  */
-export async function consumeAccountReactivation(
-  data: ConsumeAccountReactivationData,
-  describeAudit?: (counts: {
-    profilesRestored: ProfileKind[];
-    profilesCreated: ProfileKind[];
-    restoredRoles: number;
-    grantedRoles: number;
-    restoredPets: number;
-  }) => AuditDescriptor,
-) {
-  return prisma.$transaction(async (tx) => {
-    await tx.verificationToken.update({
-      where: { id: data.tokenId },
-      data: { usedAt: new Date() },
-    });
-
+export function applyAccountReactivation(
+  data: AccountReactivationData,
+): VerificationTokenEffect<AccountReactivationCounts> {
+  return async (tx, token) => {
     await tx.user.update({
-      where: { id: data.userId },
+      where: { id: token.userId },
       data: {
         deletedAt: null,
         passwordHash: data.passwordHash,
@@ -346,18 +240,20 @@ export async function consumeAccountReactivation(
       },
     });
 
-    const restored = await restoreProfilesOfUser(tx, data.userId, {
-      kinds: data.kinds,
-      ...(data.roleIds.length > 0 && { roleIds: data.roleIds }),
+    const roleIds = token.restoreRoleIds;
+
+    const restored = await restoreProfilesOfUser(tx, token.userId, {
+      kinds: token.restoreProfiles,
+      ...(roleIds.length > 0 && { roleIds }),
     });
 
     const profilesCreated: ProfileKind[] = [];
 
     if (data.newCustomer) {
       await tx.customer.create({
-        data: { userId: data.userId, phone: data.newCustomer.phone },
+        data: { userId: token.userId, phone: data.newCustomer.phone },
       });
-      await grantRolesToUser(tx, data.userId, data.customerRoleIds);
+      await grantRolesToUser(tx, token.userId, data.customerRoleIds);
       profilesCreated.push("CUSTOMER");
     }
 
@@ -365,21 +261,16 @@ export async function consumeAccountReactivation(
     // alcançada pela correlação por data — então é **concedida**, reusando a
     // linha do par (K15/K21). `grantRolesToUser` é idempotente, então passar o
     // conjunto nomeado inteiro é seguro.
-    const grantedRoles = await grantRolesToUser(tx, data.userId, data.roleIds);
+    const grantedRoles = await grantRolesToUser(tx, token.userId, roleIds);
 
-    if (describeAudit) {
-      await record(
-        describeAudit({
-          profilesRestored: restored.profiles,
-          profilesCreated,
-          restoredRoles: restored.roles,
-          grantedRoles,
-          restoredPets: restored.pets,
-        }),
-        tx,
-      );
-    }
-  });
+    return {
+      profilesRestored: restored.profiles,
+      profilesCreated,
+      restoredRoles: restored.roles,
+      grantedRoles,
+      restoredPets: restored.pets,
+    };
+  };
 }
 
 export async function updatePasswordAndInvalidateSessions(

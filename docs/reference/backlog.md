@@ -11,6 +11,23 @@
 ### ~~Timing attack no login e enumeração de usuário~~ — ✅ resolvido (Fase 10.9)
 Medido com o custo real do bcrypt: email desconhecido respondia em 5 ms e senha errada em 172 ms. O ramo sem usuário passou a verificar contra um hash de ninguém (`simulatePasswordVerification`, `src/lib/password.ts`) e as medianas ficaram em 171 ms contra 172 ms. Racional e método da medição em `apps/api/docs/adr/0064-relogio-login-nao-oraculo-email-desconhecido-paga-bcrypt.md`.
 
+### Uso único do `VerificationToken` é de leitura-depois-escrita, não do banco — **P**
+
+O consumo julga a validade numa leitura e marca `usedAt` numa escrita seguinte
+(`consumeToken`, `apps/api/src/modules/auth/verificationToken.repository.ts`). Duas requisições
+simultâneas com o **mesmo** token válido passam as duas pelo predicado e aplicam o efeito duas
+vezes — reset de senha aplicado em dobro, reativação tentada em dobro. A janela é de
+milissegundos e exige o token na mão, então não é vazamento; é uma dupla aplicação. O estado é o
+mesmo de antes da Fase 12 (o módulo herdou a forma das quatro transações que substituiu), e por
+isso não foi mexido lá.
+
+**Correção possível:** trocar o `update` por um `updateMany` com `usedAt: null` no `where` e
+tratar `count === 0` como perda da corrida — o banco vira o árbitro do uso único. **O que é
+decisão de negócio, e por isso não foi tomada:** o que a segunda requisição recebe. O 400 genérico
+de [`0071`](../../apps/api/docs/adr/0071-token-invalido-expirado-usado-400-generico.md) (é
+verdade: o token já foi usado) ou o 409 de concorrência? E se o efeito de um purpose for
+idempotente, vale responder 204 como se tivesse sido a primeira?
+
 ### Resíduo de tempo no login: o contador de lockout só no ramo com usuário — **P**
 Depois da 10.9 sobra ~1 ms entre as duas recusas: o ramo com usuário grava o contador de lockout no Redis (`lockout.recordFailure`) e o ramo sem usuário não. Em rede local é ruído; em Redis remoto pode voltar a ser mensurável. **Correção possível:** uma escrita dummy no Redis no ramo sem usuário, ou medir com o Redis de produção antes de decidir que não vale o custo. Decisão de produto, não tomada.
 
@@ -176,14 +193,15 @@ O glossário da API (`apps/api/CONTEXT.md`, Fase 11, issue 08) fixou `User`/usu�
 
 ### Trocar de email não derruba sessão nenhuma — decisão pendente — **P**
 Levantado no fecho da issue 05 de `fase-12-module-depth`, que esperava encontrar quatro sites de
-invalidação de sessão — ban, reset, **troca de email** e deleção — e achou só três: `consumeEmailChange`
-(`apps/api/src/modules/auth/auth.repository.ts`) não toca em `Session`, nem antes nem depois da issue.
+invalidação de sessão — ban, reset, **troca de email** e deleção — e achou só três: o efeito da troca
+de email (`applyEmailChange`, `apps/api/src/modules/auth/auth.repository.ts` — chamava-se
+`consumeEmailChange` até a issue 06) não toca em `Session`, nem antes nem depois da issue.
 O quarto site real é a **troca de senha**. Se isso é lacuna ou é intencional é **regra de negócio, do
 dono do projeto**: trocar o email muda o identificador de login, e há argumento dos dois lados — derrubar
 trata a troca como evento de credencial (é o que ban e reset fazem); não derrubar trata o email como
 dado de perfil, e quem trocou o próprio email não é um invasor por isso. **Se a decisão for derrubar**, o
-trabalho é uma linha: `invalidateSessionsOfUser(tx, userId, new Date())` dentro da transação que já
-existe, mais um caso de integração — a operação e o filtro já têm dono
+trabalho é uma linha: `invalidateSessionsOfUser(tx, token.userId, new Date())` dentro do efeito, que já
+roda na transação do consumo, mais um caso de integração — a operação e o filtro já têm dono
 (`apps/api/src/modules/auth/auth.liveSession.repository.ts`).
 
 

@@ -12,9 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "@/app";
 import * as auditLog from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
-import { generateOpaqueToken, hashToken } from "@/lib/token";
-import { PASSWORD_RESET_TTL_MS } from "@/modules/auth/auth.constants";
-import * as authRepository from "@/modules/auth/auth.repository";
+import { issueVerificationToken } from "@/modules/auth/verificationToken.service";
 import { getFeatureByName } from "@/modules/feature/feature.repository";
 import { getRoleByName } from "@/modules/role/role.repository";
 import * as userRepository from "@/modules/user/user.repository";
@@ -355,12 +353,9 @@ describe("Audit log", () => {
 
   it("records PASSWORD_RESET_COMPLETED on reset-password", async () => {
     const user = await buildCustomer();
-    const rawToken = generateOpaqueToken();
-    await authRepository.createVerificationToken({
+    const rawToken = await issueVerificationToken({
       userId: user.id,
-      tokenHash: hashToken(rawToken),
       purpose: "PASSWORD_RESET",
-      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
     });
 
     await request(app)

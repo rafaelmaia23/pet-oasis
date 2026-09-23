@@ -26,13 +26,12 @@ import { logger } from "@/lib/logger";
 import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
 import { hashPassword } from "@/lib/password";
 import { consumeEmailTargetLimit, emailTargetLimiter } from "@/lib/rateLimit";
-import { generateOpaqueToken, hashToken } from "@/lib/token";
 import * as userRepository from "@/modules/user/user.repository";
 import { validateRoles } from "@/utils/validateRoles";
 import { requestAccountReactivation } from "../auth/accountReactivation.service";
-import { PASSWORD_RESET_TTL_MS } from "../auth/auth.constants";
 import { buildPasswordResetEmail } from "../auth/password.service";
 import { issueEmailVerification } from "../auth/verification.service";
+import { mintVerificationToken } from "../auth/verificationToken.service";
 import {
   assertAdminForRoleAssignment,
   getRolesRestorableWithProfiles,
@@ -622,12 +621,14 @@ export async function forcePasswordReset(
     });
   }
 
-  const rawToken = generateOpaqueToken();
+  // O token do reset forçado nasce dentro da mesma transação que marca o
+  // `mustChangePassword` e derruba as sessões: ou o usuário fica travado **com**
+  // o caminho de volta no email, ou nada acontece.
+  const { rawToken, stored } = mintVerificationToken("PASSWORD_RESET");
 
   await userRepository.forcePasswordResetAndInvalidateSessions(
     targetId,
-    hashToken(rawToken),
-    new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    stored,
     { action: "PASSWORD_CHANGE_FORCED", targetType: "User", targetId },
   );
 

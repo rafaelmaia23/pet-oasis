@@ -8,6 +8,7 @@ import {
   findLiveSessionsByUserId,
   updatePasswordAndInvalidateSessions,
 } from "@/modules/auth/auth.repository";
+import { mintVerificationToken } from "@/modules/auth/verificationToken.service";
 import {
   banUserAndInvalidateSessions,
   forcePasswordResetAndInvalidateSessions,
@@ -149,8 +150,7 @@ describe("derrubar as sessões de um usuário", () => {
         (id) =>
           forcePasswordResetAndInvalidateSessions(
             id,
-            hashToken(generateOpaqueToken()),
-            new Date(Date.now() + HOUR_MS),
+            mintVerificationToken("PASSWORD_RESET").stored,
           ),
       ],
       [

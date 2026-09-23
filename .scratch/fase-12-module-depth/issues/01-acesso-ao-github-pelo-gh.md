@@ -7,7 +7,7 @@ todo push e todo PR do esforço param e esperam o dono da máquina.
 **Blocked by:** None (can start immediately). Não bloqueia nenhuma outra issue deste esforço — o
 esforço corre inteiro sem ela, com push e PR manuais.
 
-**Status:** done
+**Status:** fechada em 2026-09-23
 
 Exige `sudo` para instalar o pacote e um login interativo no navegador: são passos que só o dono da
 máquina executa. A **forma de acesso é decisão dele**, entre duas:

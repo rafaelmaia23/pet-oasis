@@ -8,7 +8,7 @@ o 409 de violação de unicidade monta o envelope à mão, numa quarta grafia.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** done
+**Status:** fechada em 2026-09-23
 
 - [x] O `code` do erro da API é o tipo do contrato, não `string`: um code fora do enum não compila
 - [x] Cada classe de erro tira o code do contrato, em vez de declarar o seu

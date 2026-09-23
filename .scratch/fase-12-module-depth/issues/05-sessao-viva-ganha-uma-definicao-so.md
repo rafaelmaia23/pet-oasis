@@ -8,7 +8,7 @@ conjuntos não são o mesmo, e o próximo site de escrita é cara ou coroa.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** done
+**Status:** fechada em 2026-09-23
 
 - [x] Uma definição de sessão viva exportada, composta por **toda** leitura e **toda** invalidação
 - [x] Uma operação "derruba toda sessão viva deste usuário", compartilhada pelos sites de ban, reset,

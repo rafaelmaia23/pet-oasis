@@ -8,7 +8,7 @@ a suíte fica verde, e `secure` em produção não é alcançado por nenhum test
 
 **Blocked by:** None (can start immediately).
 
-**Status:** done
+**Status:** fechada em 2026-09-23
 
 - [x] Um módulo com três operações — emitir o cookie numa resposta, ler da requisição, limpar — dono
       dos atributos e do path (`apps/api/src/modules/auth/auth.refreshCookie.ts`)

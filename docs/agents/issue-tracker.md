@@ -75,6 +75,11 @@ Sequencie como expand–contract em issues próprias, em vez de forçar numa fat
 
 ## Fechar uma issue
 
+A linha `Status:` vira `fechada em <AAAA-MM-DD>` — a mesma forma do `Status:` da spec, com a
+data do dia em que a issue de fato fechou (não a de hoje, quando se está regravando uma
+antiga). `done` **não** é a grafia: sem a data, o tracker não diz quando o trabalho aconteceu,
+que é a única coisa que a linha acrescenta ao checkbox já marcado.
+
 Marque os critérios de aceite e descreva o que de fato ficou pronto, não o que estava
 planejado. Item que veio do backlog também é marcado lá
 ([`docs/reference/backlog.md`](../reference/backlog.md)), senão a entrada vira lixo que

@@ -8,7 +8,7 @@ Nada de domínio ainda. Este é o "make the change easy" de todos os tickets seg
 
 **Blocked by:** None (can start immediately)
 
-**Status:** done
+**Status:** fechada em 2026-09-04
 
 - [x] Repositório Git inicializado, com `main` criada
 - [x] Next 16 com App Router e TypeScript em modo estrito

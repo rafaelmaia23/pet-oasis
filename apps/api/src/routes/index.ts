@@ -64,7 +64,7 @@ v1Router.use("/products", optionalAuthenticate, productRouter);
 v1Router.use(meRouter);
 v1Router.use("/users", authenticate, userRouter);
 v1Router.use("/users/:userId", authenticate, userProfileRouter);
-v1Router.use("/users/:userId", authenticate, permissionRouter);
+v1Router.use(permissionRouter);
 // Pet (9.4): coleção aninhada no cliente, recurso plano no item. As duas
 // exigem token — a vitrine pública é do catálogo, não da ficha do pet.
 v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);

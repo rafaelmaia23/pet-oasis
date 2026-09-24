@@ -1,14 +1,15 @@
 import {
   deleteUserRoleParamsSchema,
-  getPermissionParamsSchema,
   getUserPermissionsParamsSchema,
   getUserRolesParamsSchema,
   postUserRoleParamsSchema,
   removePermissionParamsSchema,
   upsertPermissionParamsSchema,
 } from "@pet-oasis/api-contracts/permission";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
+import type { RouteHandler } from "@/lib/registerRoute";
 import * as permissionService from "@/modules/permission/permission.service";
 import { rolePresenter } from "@/modules/role/role.presenter";
 import { getAuthUser } from "@/utils/getAuthUser";
@@ -17,14 +18,14 @@ import {
   userFeaturePresenter,
 } from "./permission.presenter";
 
-export const getUserFeatures = async (req: Request, res: Response) => {
-  const { params } = getPermissionParamsSchema.parse({ params: req.params });
-
+export const getUserFeatures: RouteHandler<
+  typeof routes.permission.listFeatures
+> = async ({ params }) => {
+  // Sem paginação: são os overrides de um usuário, coleção pequena por
+  // construção (docs/adr/0004-pagination.md).
   const features = await permissionService.getUserFeatures(params.userId);
 
-  res
-    .status(200)
-    .json(listEnvelope(userFeaturePresenter.presentMany(features, "default")));
+  return listEnvelope(features);
 };
 
 export const getUserRoles = async (req: Request, res: Response) => {

@@ -1,35 +1,47 @@
+import { routes } from "@pet-oasis/api-contracts/routes";
 import { Router } from "express";
+import { registerRoute } from "@/lib/registerRoute";
+import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
 import * as permissionController from "./permission.controller";
 
-const permissionRouter = Router({ mergeParams: true });
+// Montado **sem prefixo** em `src/routes/index.ts`: o path inteiro vem da
+// tabela. Por isso o `mergeParams` saiu — ele existia para que `:userId` do
+// prefixo `/users/:userId` chegasse ao handler, e agora o parâmetro é da
+// própria rota. Enquanto a issue 09 migra uma rota por commit, o que ainda
+// está na forma antiga soletra o path inteiro e carrega o `authenticate` que
+// antes vinha do prefixo.
+const permissionRouter = Router();
+
+registerRoute(permissionRouter, routes.permission.listFeatures, {
+  before: [authenticate, canAccess("read:permission")],
+  handler: permissionController.getUserFeatures,
+});
 
 permissionRouter.get(
-  "/features",
-  canAccess("read:permission"),
-  permissionController.getUserFeatures,
-);
-
-permissionRouter.get(
-  "/roles",
+  "/users/:userId/roles",
+  authenticate,
   canAccess("read:permission"),
   permissionController.getUserRoles,
 );
 
 permissionRouter.get(
-  "/permissions",
+  "/users/:userId/permissions",
+  authenticate,
   canAccess("read:permission"),
   permissionController.getUserPermissions,
 );
 
 permissionRouter.post(
-  "/roles/:roleId",
+  "/users/:userId/roles/:roleId",
+  authenticate,
   canAccess("manage:permission"),
   permissionController.addUserRole,
 );
 
 permissionRouter.delete(
-  "/roles/:roleId",
+  "/users/:userId/roles/:roleId",
+  authenticate,
   canAccess("manage:permission"),
   permissionController.removeUserRole,
 );
@@ -37,13 +49,15 @@ permissionRouter.delete(
 // A role vai no path porque a identidade do override é a tripla
 // (user, role, feature) — body não identifica recurso (D9).
 permissionRouter.put(
-  "/roles/:roleId/features/:featureId",
+  "/users/:userId/roles/:roleId/features/:featureId",
+  authenticate,
   canAccess("manage:permission"),
   permissionController.upsertUserFeature,
 );
 
 permissionRouter.delete(
-  "/roles/:roleId/features/:featureId",
+  "/users/:userId/roles/:roleId/features/:featureId",
+  authenticate,
   canAccess("manage:permission"),
   permissionController.removeUserFeature,
 );

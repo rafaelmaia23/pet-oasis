@@ -33,12 +33,10 @@ registerRoute(permissionRouter, routes.permission.assignRole, {
   handler: permissionController.addUserRole,
 });
 
-permissionRouter.delete(
-  "/users/:userId/roles/:roleId",
-  authenticate,
-  canAccess("manage:permission"),
-  permissionController.removeUserRole,
-);
+registerRoute(permissionRouter, routes.permission.revokeRole, {
+  before: [authenticate, canAccess("manage:permission")],
+  handler: permissionController.removeUserRole,
+});
 
 // A role vai no path porque a identidade do override é a tripla
 // (user, role, feature) — body não identifica recurso (D9).

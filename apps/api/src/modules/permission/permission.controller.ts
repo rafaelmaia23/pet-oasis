@@ -1,5 +1,4 @@
 import {
-  deleteUserRoleParamsSchema,
   removePermissionParamsSchema,
   upsertPermissionParamsSchema,
 } from "@pet-oasis/api-contracts/permission";
@@ -38,20 +37,14 @@ export const addUserRole: RouteHandler<
 > = async ({ params, actor }) =>
   permissionService.addUserRole(actor.id, params.userId, params.roleId);
 
-export const removeUserRole = async (req: Request, res: Response) => {
-  const { params } = deleteUserRoleParamsSchema.parse({
-    params: req.params,
-  });
-
-  const requestingUser = getAuthUser(req);
-
+export const removeUserRole: RouteHandler<
+  typeof routes.permission.revokeRole
+> = async ({ params, actor }) => {
   await permissionService.removeUserRole(
-    requestingUser.id,
+    actor.id,
     params.userId,
     params.roleId,
   );
-
-  res.status(204).send();
 };
 
 export const upsertUserFeature = async (req: Request, res: Response) => {

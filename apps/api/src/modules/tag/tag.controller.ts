@@ -1,6 +1,4 @@
-import { tagParamsSchema } from "@pet-oasis/api-contracts/catalog";
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
 import * as tagService from "./tag.service";
@@ -19,10 +17,8 @@ export const updateTag: RouteHandler<typeof routes.tag.update> = ({
   body,
 }) => tagService.updateTag(params.tagId, body);
 
-export const deleteTag = async (req: Request, res: Response) => {
-  const { params } = tagParamsSchema.parse({ params: req.params });
-
+export const deleteTag: RouteHandler<typeof routes.tag.delete> = async ({
+  params,
+}) => {
   await tagService.deleteTag(params.tagId);
-
-  return res.status(204).send();
 };

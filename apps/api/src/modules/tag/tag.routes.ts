@@ -27,11 +27,9 @@ registerRoute(tagRouter, routes.tag.update, {
   handler: tagController.updateTag,
 });
 
-tagRouter.delete(
-  "/tags/:tagId",
-  authenticate,
-  canAccess("manage:catalog-structure"),
-  tagController.deleteTag,
-);
+registerRoute(tagRouter, routes.tag.delete, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: tagController.deleteTag,
+});
 
 export default tagRouter;

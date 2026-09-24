@@ -1,14 +1,9 @@
-import {
-  loginSchema,
-  sessionParamsSchema,
-  signupSchema,
-} from "@pet-oasis/api-contracts/auth";
+import { loginSchema, signupSchema } from "@pet-oasis/api-contracts/auth";
 import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { ACCESS_TOKEN_TTL_SECONDS } from "@/lib/accessToken";
 import { listEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
-import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user/user.presenter";
 import * as accountReactivationService from "./accountReactivation.service";
 import { accessTokenPresenter } from "./auth.presenter";
@@ -170,10 +165,8 @@ export const listSessions: RouteHandler<
   return listEnvelope(sessions);
 };
 
-export const revokeSession = async (req: Request, res: Response) => {
-  const { params } = sessionParamsSchema.parse({ params: req.params });
-
-  await authService.revokeSession(getAuthUser(req).id, params.id);
-
-  res.status(204).send();
+export const revokeSession: RouteHandler<
+  typeof routes.auth.revokeSession
+> = async ({ params, actor }) => {
+  await authService.revokeSession(actor.id, params.id);
 };

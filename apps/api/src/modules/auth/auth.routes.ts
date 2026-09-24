@@ -90,6 +90,12 @@ registerRoute(authRouter, routes.auth.revokeSession, {
   handler: authController.revokeSession,
 });
 
+registerRoute(authRouter, routes.auth.login, {
+  before: [rateLimitByIp(loginIpLimiter, "login")],
+  context: authTransport,
+  handler: authController.login,
+});
+
 /** A forma antiga, com o path partido entre o prefixo e a chamada. */
 export const legacyAuthRouter = Router();
 
@@ -97,11 +103,6 @@ legacyAuthRouter.post(
   "/signup",
   rateLimitByIp(signupIpLimiter, "signup"),
   authController.signup,
-);
-legacyAuthRouter.post(
-  "/login",
-  rateLimitByIp(loginIpLimiter, "login"),
-  authController.login,
 );
 legacyAuthRouter.post("/refresh", authController.refresh);
 

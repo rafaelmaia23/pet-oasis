@@ -1,4 +1,4 @@
-import { loginSchema, signupSchema } from "@pet-oasis/api-contracts/auth";
+import { signupSchema } from "@pet-oasis/api-contracts/auth";
 import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { ACCESS_TOKEN_TTL_SECONDS } from "@/lib/accessToken";
@@ -110,24 +110,19 @@ export const confirmEmailChange: RouteHandler<
  * pela janela de graça anuncia o mesmo prazo que o par emitido, e o cliente
  * conta do recebimento — é a convenção OAuth2, imune a diferença de relógio.
  */
-function presentAccessToken(accessToken: string) {
-  return accessTokenPresenter.present(
-    { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS },
-    "default",
-  );
+function accessTokenBody(accessToken: string) {
+  return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS };
 }
 
-export const login = async (req: Request, res: Response) => {
-  const { body } = loginSchema.parse({ body: req.body });
+export const login: RouteHandler<
+  typeof routes.auth.login,
+  AuthTransport
+> = async ({ body, client, issueRefreshToken }) => {
+  const { accessToken, refreshToken } = await authService.login(body, client);
 
-  const { accessToken, refreshToken } = await authService.login(body, {
-    userAgent: req.headers["user-agent"],
-    ipAddress: req.ip,
-  });
+  issueRefreshToken(refreshToken);
 
-  setRefreshCookie(res, refreshToken);
-
-  res.status(200).json(presentAccessToken(accessToken));
+  return accessTokenBody(accessToken);
 };
 
 export const refresh = async (req: Request, res: Response) => {
@@ -141,7 +136,11 @@ export const refresh = async (req: Request, res: Response) => {
 
   setRefreshCookie(res, newRefreshToken);
 
-  res.status(200).json(presentAccessToken(accessToken));
+  res
+    .status(200)
+    .json(
+      accessTokenPresenter.present(accessTokenBody(accessToken), "default"),
+    );
 };
 
 export const logout: RouteHandler<

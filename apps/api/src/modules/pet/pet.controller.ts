@@ -33,13 +33,10 @@ export const listPets: RouteHandler<typeof routes.pet.list> = async ({
   return offsetEnvelope(pets, query, total);
 };
 
-export const getPetById = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  const pet = await petService.getPetById(getAuthUser(req), params.petId);
-
-  return res.status(200).json(petPresenter.present(pet, "default"));
-};
+export const getPetById: RouteHandler<typeof routes.pet.get> = async ({
+  params,
+  actor,
+}) => petService.getPetById(actor, params.petId);
 
 export const updatePet = async (req: Request, res: Response) => {
   const { params, body } = updatePetSchema.parse({

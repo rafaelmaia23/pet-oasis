@@ -1,6 +1,10 @@
 # Spec — Profundidade nos módulos da API e do contrato
 
-Status: ready-for-agent
+Status: fechada em 2026-09-24 — porquê promovido a `apps/api/docs/adr/0203-authenticate-desce-do-grupo-para-rota-404-vence-401.md`,
+`apps/api/docs/adr/0204-escada-declara-par-passo-feature-contrato-continua-so-declarando.md`,
+`apps/api/docs/adr/0205-writeaudited-colapsa-escrita-auditada-descritor-obrigatorio.md`,
+`apps/api/docs/adr/0206-registerroute-tabela-ganha-segundo-adapter-teste-de-paridade-morre.md` e
+`docs/todo.md`
 
 O primeiro dos dois **esforços** da Fase 12, e ele vem antes por dependência: muda exatamente o
 que o esforço `fase-12-web-auth-spine` vai consumir (`.scratch/fase-12-web-auth-spine/`). A forma

@@ -222,6 +222,31 @@ roda na transação do consumo, mais um caso de integração — a operação e 
 ### LGPD: base legal, anonimização e direitos do titular — **G**
 Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real de titular. Quando entrar, os pontos são: base legal para reter log de segurança (legítimo interesse / obrigação legal); o que acontece com `actorId` e `targetId` no `AuditLog` quando um usuário exerce direito de eliminação — hoje o soft delete **preserva** os dois; e o mecanismo de resposta a requisição de titular (exportação e eliminação). A tensão central é real: apagar destrói a trilha de segurança, manter conflita com o direito de eliminação, e a saída usual é **anonimizar** o ator preservando ação e timestamp.
 
+## Testes
+
+### Enxugar a suíte de integração depois dos aprofundamentos da Fase 12 — **G**
+
+**Problema:** `fase-12-module-depth` deu dono único a seis invariantes que antes só falhavam via
+HTTP (token de verificação, sessão viva, cookie de refresh, autorizar-antes-de-buscar, escada de
+view, `writeAudited`) e acrescentou teste unitário puro para cada uma — mas a regra dura da spec
+("nenhum teste de integração é apagado neste esforço") deixou a suíte de `tests/integration/v1/`
+com **19.080 linhas** em 86 arquivos, provando de novo, por HTTP, exatamente o que o unitário novo
+já prova sem banco. Não é estimativa: `auth.test.ts` (3.172 linhas) tem casos de token
+usado/expirado/inválido para cada `purpose` que `verificationToken.test.ts` agora cobre com um
+único `consume` parametrizado, e `user.test.ts` (2.176 linhas) mais `account-reactivation.test.ts`
+(957) repetem a mesma matriz. O par HTTP↔unitário virou fonte dupla de verdade: um teste HTTP que
+falha por regressão na regra e um unitário que falha pelo mesmo motivo custam bisect e manutenção
+em dobro, sem ganho de cobertura.
+
+**Correção possível:** por invariante migrada, decidir se o caso de integração vira **um** caso
+de fumaça (prova que o fluxo HTTP chega até a regra) e a matriz completa (usado × expirado ×
+purpose errado, atributos de cookie por ambiente, ordem autorizar-então-carregar) fica só no
+unitário — ou se as duas continuam por decisão consciente de dupla prova. **O que é decisão de
+processo, não tomada aqui:** que grau de redundância a suíte deve tolerar, e se cortar caso de
+integração é seguro sem medir cobertura antes e depois (a regra da spec foi cautelar, não uma
+afirmação de que o corte é sempre seguro). Tamanho **G** porque toca os 86 arquivos e exige revisão
+caso a caso, não um padrão mecânico único.
+
 ## Bugs
 
 ### `GET /status` pula camadas: `$queryRaw` no controller — **P**

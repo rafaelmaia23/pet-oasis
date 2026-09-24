@@ -62,6 +62,11 @@ registerRoute(authRouter, routes.auth.confirmAccountReactivation, {
   handler: authController.confirmAccountReactivation,
 });
 
+registerRoute(authRouter, routes.auth.changePassword, {
+  before: [authenticate],
+  handler: authController.changePassword,
+});
+
 /** A forma antiga, com o path partido entre o prefixo e a chamada. */
 export const legacyAuthRouter = Router();
 
@@ -76,11 +81,6 @@ legacyAuthRouter.post(
   authController.login,
 );
 legacyAuthRouter.post("/refresh", authController.refresh);
-legacyAuthRouter.post(
-  "/change-password",
-  authenticate,
-  authController.changePassword,
-);
 legacyAuthRouter.post(
   "/change-email",
   authenticate,

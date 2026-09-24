@@ -1,6 +1,5 @@
 import {
   changeEmailSchema,
-  changePasswordSchema,
   loginSchema,
   sessionParamsSchema,
   signupSchema,
@@ -88,16 +87,14 @@ export const resetPassword: RouteHandler<
   await passwordService.resetPassword(body.token, body.newPassword);
 };
 
-export const changePassword = async (req: Request, res: Response) => {
-  const { body } = changePasswordSchema.parse({ body: req.body });
-
+export const changePassword: RouteHandler<
+  typeof routes.auth.changePassword
+> = async ({ body, actor }) => {
   await passwordService.changePassword(
-    getAuthUser(req).id,
+    actor.id,
     body.currentPassword,
     body.newPassword,
   );
-
-  res.status(204).send();
 };
 
 export const changeEmail = async (req: Request, res: Response) => {

@@ -1,6 +1,11 @@
 import type { RouteDefinition } from "@pet-oasis/api-contracts/routes";
 import { makeAuthUser } from "@tests/factories/user.factory";
-import express, { type RequestHandler, Router } from "express";
+import express, {
+  type Request,
+  type RequestHandler,
+  type Response,
+  Router,
+} from "express";
 import request from "supertest";
 import { describe, expect, it, type Mock, vi } from "vitest";
 import { z } from "zod";
@@ -68,6 +73,39 @@ const publicThing = {
   summary: "lê sem token",
   responses: { 200: { description: "a coisa", view: thingView } },
   errors: {},
+} as const satisfies RouteDefinition;
+
+const messageView = z
+  .object({ message: z.string() })
+  .meta({ id: "TestMessage" });
+
+/**
+ * A forma de `POST /auth/signup`: dois status de sucesso, um por desfecho, cada
+ * um com a **sua** view. Quem escolhe entre eles é o handler — é o único caso
+ * em que a tabela não decide sozinha o status.
+ */
+const createOrAccept = {
+  method: "POST",
+  path: "/things-or-nothing",
+  tag: "Status",
+  auth: "public",
+  summary: "cria, ou aceita sem criar",
+  request: z.object({ body: z.object({ name: z.string().min(2) }) }),
+  responses: {
+    201: { description: "criada", view: thingView },
+    202: { description: "aceita", view: messageView },
+  },
+  errors: {},
+} as const satisfies RouteDefinition;
+
+/** O mesmo, com um dos desfechos sem corpo. */
+const createOrNothing = {
+  ...createOrAccept,
+  path: "/things-or-silence",
+  responses: {
+    201: { description: "criada", view: thingView },
+    204: { description: "nada a fazer" },
+  },
 } as const satisfies RouteDefinition;
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -341,21 +379,194 @@ describe("registerRoute", () => {
     });
   });
 
-  describe("entradas que o registrador ainda não sabe registrar", () => {
-    it("recusa no registro a entrada com mais de um status de sucesso", () => {
-      const twoSuccesses = {
-        ...createThing,
-        responses: {
-          201: { description: "criada", view: thingView },
-          202: { description: "aceita", view: thingView },
-        },
-      } as const satisfies RouteDefinition;
+  describe("a entrada com mais de um status de sucesso", () => {
+    it("responde o status que o handler etiqueta, com a view daquele status", async () => {
+      const app = makeApp((router) =>
+        registerRoute(router, createOrAccept, {
+          handler: async ({ body }) =>
+            body.name === "nova"
+              ? { status: 201, body: THING }
+              : { status: 202, body: { message: "aceito" } },
+        }),
+      );
 
-      expect(() =>
-        registerRoute(Router(), twoSuccesses, { handler: async () => THING }),
-      ).toThrow(/POST \/things/);
+      const created = await request(app)
+        .post("/things-or-nothing")
+        .send({ name: "nova" });
+      const accepted = await request(app)
+        .post("/things-or-nothing")
+        .send({ name: "velha" });
+
+      expect(created.status).toBe(201);
+      expect(created.body).toEqual(THING);
+      expect(accepted.status).toBe(202);
+      expect(accepted.body).toEqual({ message: "aceito" });
     });
 
+    it("aplica a whitelist da view do status escolhido", async () => {
+      const app = makeApp((router) =>
+        registerRoute(router, createOrAccept, {
+          handler: async () => ({
+            status: 202,
+            body: { message: "aceito", senha: "vazou" },
+          }),
+        }),
+      );
+
+      const response = await request(app)
+        .post("/things-or-nothing")
+        .send({ name: "velha" });
+
+      expect(response.body).toEqual({ message: "aceito" });
+      expect(response.body).not.toHaveProperty("senha");
+    });
+
+    it("o status escolhido sem view responde sem corpo", async () => {
+      const app = makeApp((router) =>
+        registerRoute(router, createOrNothing, {
+          handler: async () => ({ status: 204 }),
+        }),
+      );
+
+      const response = await request(app)
+        .post("/things-or-silence")
+        .send({ name: "velha" });
+
+      expect(response.status).toBe(204);
+      expect(response.text).toBe("");
+    });
+
+    it("status que a entrada não declara é erro de apresentação (500)", async () => {
+      const app = makeApp((router) =>
+        registerRoute(router, createOrAccept, {
+          // O handler escolhe **entre** os status declarados; inventar um é o
+          // mesmo tipo de quebra que devolver uma forma que a view desmente.
+          handler: async () =>
+            ({ status: 200, body: THING }) as unknown as {
+              status: 201;
+              body: unknown;
+            },
+        }),
+      );
+
+      const response = await request(app)
+        .post("/things-or-nothing")
+        .send({ name: "nova" });
+
+      expect(response.status).toBe(500);
+      expect(response.body.code).toBe("PRESENTATION_ERROR");
+    });
+  });
+
+  describe("o contexto que o módulo acrescenta", () => {
+    it("espalha no contexto do handler o que o `context` devolve", async () => {
+      const handler = vi.fn(
+        async (
+          context: RouteHandlerContext<
+            typeof readThing,
+            { ip: string | undefined }
+          >,
+        ) => ({ ...THING, name: context.ip ?? "sem ip" }),
+      );
+      const app = makeApp(
+        (router) =>
+          registerRoute(router, readThing, {
+            context: (req: Request) => ({ ip: req.ip }),
+            handler,
+          }),
+        someActor(),
+      );
+
+      await request(app).get(`/things/${ID}`);
+
+      expect(handler.mock.calls[0]?.[0].ip).toBeTruthy();
+    });
+
+    it("alcança a resposta — é por aqui que o cookie do módulo sai", async () => {
+      const app = makeApp((router) =>
+        registerRoute(router, publicThing, {
+          // O registrador não sabe o que é um cookie: ele chama o `context` do
+          // módulo e repassa o que vier. É assim que `/auth/login` emite o
+          // refresh sem o handler tocar `res`.
+          // Os parâmetros vêm anotados de propósito: um arrow cujos tipos o
+          // registrador teria de fornecer é *context-sensitive*, e o TS só o
+          // resolve depois de já ter fixado o contexto do handler. Na API o
+          // `context` é sempre uma função nomeada do módulo, e o caso não
+          // aparece.
+          context: (_req: Request, res: Response) => ({
+            issue: () => {
+              res.cookie("teste", "valor", { httpOnly: true, path: "/" });
+            },
+          }),
+          handler: async ({ issue }) => {
+            issue();
+            return THING;
+          },
+        }),
+      );
+
+      const response = await request(app).get("/public-things");
+
+      expect(response.status).toBe(200);
+      expect(response.headers["set-cookie"]?.[0]).toContain("teste=valor");
+    });
+
+    it("não roda quando o envelope é inválido", async () => {
+      const context = vi.fn(() => ({ marca: 1 }));
+      const app = makeApp(
+        (router) =>
+          registerRoute(router, readThing, {
+            context,
+            handler: async () => THING,
+          }),
+        someActor(),
+      );
+
+      const response = await request(app).get("/things/nao-e-uuid");
+
+      expect(response.status).toBe(422);
+      expect(context).not.toHaveBeenCalled();
+    });
+
+    it("não roda quando um `before` recusa", async () => {
+      const context = vi.fn(() => ({ marca: 1 }));
+      const app = makeApp(
+        (router) =>
+          registerRoute(router, readThing, {
+            before: [
+              (_req, res) => {
+                res.status(429).json({ code: "TOO_MANY_REQUESTS" });
+              },
+            ],
+            context,
+            handler: async () => THING,
+          }),
+        someActor(),
+      );
+
+      await request(app).get(`/things/${ID}`);
+
+      expect(context).not.toHaveBeenCalled();
+    });
+
+    it("o envelope da tabela vence uma chave de mesmo nome", async () => {
+      const handler = fakeHandler(readThing, THING);
+      const app = makeApp(
+        (router) =>
+          registerRoute(router, readThing, {
+            context: () => ({ params: { id: "inventado" } }),
+            handler,
+          }),
+        someActor(),
+      );
+
+      await request(app).get(`/things/${ID}`);
+
+      expect(handler.mock.calls[0]?.[0].params).toEqual({ id: ID });
+    });
+  });
+
+  describe("entradas que o registrador ainda não sabe registrar", () => {
     it("recusa no registro a entrada cuja view é uma escada", () => {
       const ladder = {
         ...readThing,

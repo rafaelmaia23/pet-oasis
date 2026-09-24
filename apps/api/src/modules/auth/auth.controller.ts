@@ -1,36 +1,17 @@
-import {
-  changeEmailSchema,
-  changePasswordSchema,
-  confirmAccountReactivationSchema,
-  confirmEmailChangeSchema,
-  forgotPasswordSchema,
-  loginSchema,
-  resendVerificationSchema,
-  resetPasswordSchema,
-  sessionParamsSchema,
-  signupSchema,
-  verifyEmailSchema,
-} from "@pet-oasis/api-contracts/auth";
-import type { Request, Response } from "express";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import { ACCESS_TOKEN_TTL_SECONDS } from "@/lib/accessToken";
 import { listEnvelope } from "@/lib/pagination";
-import { getAuthUser } from "@/utils/getAuthUser";
-import { userPresenter } from "../user/user.presenter";
+import type { RouteHandler } from "@/lib/registerRoute";
 import * as accountReactivationService from "./accountReactivation.service";
-import { accessTokenPresenter, sessionPresenter } from "./auth.presenter";
-import {
-  clearRefreshCookie,
-  readRefreshCookie,
-  setRefreshCookie,
-} from "./auth.refreshCookie";
 import * as authService from "./auth.service";
+import type { AuthTransport } from "./auth.transport";
 import * as emailChangeService from "./emailChange.service";
 import * as passwordService from "./password.service";
 import * as verificationService from "./verification.service";
 
-export const signup = async (req: Request, res: Response) => {
-  const { body } = signupSchema.parse({ body: req.body });
-
+export const signup: RouteHandler<typeof routes.auth.signup> = async ({
+  body,
+}) => {
   const result = await authService.signup(body);
 
   // Nada foi criado: o email pertencia a um usuário soft-deletado, o cpf bateu, e
@@ -38,99 +19,86 @@ export const signup = async (req: Request, res: Response) => {
   // fora da request (K18). A mensagem é condicional para não confirmar que a
   // usuário existe.
   if (!result) {
-    res.status(202).json({
-      message:
-        "Se houver uma conta correspondente, um email com instruções de reativação foi enviado",
-    });
-    return;
+    return {
+      status: 202,
+      body: {
+        message:
+          "Se houver uma conta correspondente, um email com instruções de reativação foi enviado",
+      },
+    };
   }
 
-  res.status(201).json(userPresenter.present(result, "owner"));
+  return { status: 201, body: result };
 };
 
-export const confirmAccountReactivation = async (
-  req: Request,
-  res: Response,
-) => {
-  const { body } = confirmAccountReactivationSchema.parse({ body: req.body });
-
+export const confirmAccountReactivation: RouteHandler<
+  typeof routes.auth.confirmAccountReactivation
+> = async ({ body }) => {
   await accountReactivationService.confirmAccountReactivation(
     body.token,
     body.newPassword,
     body.phone,
   );
-
-  res.status(204).send();
 };
 
-export const verifyEmail = async (req: Request, res: Response) => {
-  const { body } = verifyEmailSchema.parse({ body: req.body });
-
+export const verifyEmail: RouteHandler<
+  typeof routes.auth.verifyEmail
+> = async ({ body }) => {
   await verificationService.verifyEmail(body.token);
-
-  res.status(204).send();
 };
 
-export const resendVerification = async (req: Request, res: Response) => {
-  const { body } = resendVerificationSchema.parse({ body: req.body });
-
+export const resendVerification: RouteHandler<
+  typeof routes.auth.resendVerification
+> = async ({ body }) => {
   await verificationService.resendVerification(body.email);
 
-  res.status(200).json({
+  return {
     message:
       "Se houver uma conta pendente com este email, um novo link de verificação foi enviado",
-  });
+  };
 };
 
-export const forgotPassword = async (req: Request, res: Response) => {
-  const { body } = forgotPasswordSchema.parse({ body: req.body });
-
+export const forgotPassword: RouteHandler<
+  typeof routes.auth.forgotPassword
+> = async ({ body }) => {
   await passwordService.requestPasswordReset(body.email);
 
-  res.status(200).json({
+  return {
     message:
       "Se houver uma conta ativa com este email, um link de redefinição de senha foi enviado",
-  });
+  };
 };
 
-export const resetPassword = async (req: Request, res: Response) => {
-  const { body } = resetPasswordSchema.parse({ body: req.body });
-
+export const resetPassword: RouteHandler<
+  typeof routes.auth.resetPassword
+> = async ({ body }) => {
   await passwordService.resetPassword(body.token, body.newPassword);
-
-  res.status(204).send();
 };
 
-export const changePassword = async (req: Request, res: Response) => {
-  const { body } = changePasswordSchema.parse({ body: req.body });
-
+export const changePassword: RouteHandler<
+  typeof routes.auth.changePassword
+> = async ({ body, actor }) => {
   await passwordService.changePassword(
-    getAuthUser(req).id,
+    actor.id,
     body.currentPassword,
     body.newPassword,
   );
-
-  res.status(204).send();
 };
 
-export const changeEmail = async (req: Request, res: Response) => {
-  const { body } = changeEmailSchema.parse({ body: req.body });
-
+export const changeEmail: RouteHandler<
+  typeof routes.auth.changeEmail
+> = async ({ body, actor }) => {
   await emailChangeService.changeEmail(
-    getAuthUser(req).id,
+    actor.id,
     body.currentPassword,
     body.newEmail,
   );
-
-  res.status(204).send();
 };
 
-export const confirmEmailChange = async (req: Request, res: Response) => {
-  const { body } = confirmEmailChangeSchema.parse({ body: req.body });
-
+export const confirmEmailChange: RouteHandler<
+  typeof routes.auth.confirmEmailChange
+> = async ({ body }) => {
   await emailChangeService.confirmEmailChange(body.token);
-
-  res.status(204).send();
 };
 
 /**
@@ -139,66 +107,58 @@ export const confirmEmailChange = async (req: Request, res: Response) => {
  * pela janela de graça anuncia o mesmo prazo que o par emitido, e o cliente
  * conta do recebimento — é a convenção OAuth2, imune a diferença de relógio.
  */
-function presentAccessToken(accessToken: string) {
-  return accessTokenPresenter.present(
-    { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS },
-    "default",
-  );
+function accessTokenBody(accessToken: string) {
+  return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS };
 }
 
-export const login = async (req: Request, res: Response) => {
-  const { body } = loginSchema.parse({ body: req.body });
+export const login: RouteHandler<
+  typeof routes.auth.login,
+  AuthTransport
+> = async ({ body, client, issueRefreshToken }) => {
+  const { accessToken, refreshToken } = await authService.login(body, client);
 
-  const { accessToken, refreshToken } = await authService.login(body, {
-    userAgent: req.headers["user-agent"],
-    ipAddress: req.ip,
-  });
+  issueRefreshToken(refreshToken);
 
-  setRefreshCookie(res, refreshToken);
-
-  res.status(200).json(presentAccessToken(accessToken));
+  return accessTokenBody(accessToken);
 };
 
-export const refresh = async (req: Request, res: Response) => {
-  const refreshToken = readRefreshCookie(req);
-
-  const { accessToken, refreshToken: newRefreshToken } =
-    await authService.refresh(refreshToken, {
-      userAgent: req.headers["user-agent"],
-      ipAddress: req.ip,
-    });
-
-  setRefreshCookie(res, newRefreshToken);
-
-  res.status(200).json(presentAccessToken(accessToken));
-};
-
-export const logout = async (req: Request, res: Response) => {
-  const refreshToken = readRefreshCookie(req);
-
-  await authService.logout(refreshToken, getAuthUser(req).id);
-
-  clearRefreshCookie(res);
-  res.status(204).send();
-};
-
-export const listSessions = async (req: Request, res: Response) => {
-  const currentRefreshToken = readRefreshCookie(req);
-
-  const sessions = await authService.listSessions(
-    getAuthUser(req).id,
-    currentRefreshToken,
+export const refresh: RouteHandler<
+  typeof routes.auth.refresh,
+  AuthTransport
+> = async ({ client, presentedRefreshToken, issueRefreshToken }) => {
+  const { accessToken, refreshToken } = await authService.refresh(
+    presentedRefreshToken,
+    client,
   );
 
-  res
-    .status(200)
-    .json(listEnvelope(sessionPresenter.presentMany(sessions, "default")));
+  issueRefreshToken(refreshToken);
+
+  return accessTokenBody(accessToken);
 };
 
-export const revokeSession = async (req: Request, res: Response) => {
-  const { params } = sessionParamsSchema.parse({ params: req.params });
+export const logout: RouteHandler<
+  typeof routes.auth.logout,
+  AuthTransport
+> = async ({ actor, presentedRefreshToken, clearRefreshToken }) => {
+  await authService.logout(presentedRefreshToken, actor.id);
 
-  await authService.revokeSession(getAuthUser(req).id, params.id);
+  clearRefreshToken();
+};
 
-  res.status(204).send();
+export const listSessions: RouteHandler<
+  typeof routes.auth.listSessions,
+  AuthTransport
+> = async ({ actor, presentedRefreshToken }) => {
+  const sessions = await authService.listSessions(
+    actor.id,
+    presentedRefreshToken,
+  );
+
+  return listEnvelope(sessions);
+};
+
+export const revokeSession: RouteHandler<
+  typeof routes.auth.revokeSession
+> = async ({ params, actor }) => {
+  await authService.revokeSession(actor.id, params.id);
 };

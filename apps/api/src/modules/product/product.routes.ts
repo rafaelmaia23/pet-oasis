@@ -77,14 +77,13 @@ registerRoute(productRouter, routes.product.update, {
   handler: productController.updateProduct,
 });
 
+registerRoute(productRouter, routes.product.delete, {
+  before: [optionalAuthenticate, canAccess("manage:product")],
+  handler: productController.deleteProduct,
+});
+
 /** O que ainda está na forma antiga — sai quando a última rota migrar. */
 export const productLegacyRouter = Router();
-
-productLegacyRouter.delete(
-  "/:productId",
-  canAccess("manage:product"),
-  productController.deleteProduct,
-);
 
 /**
  * Imagens (9.10). O item é **aninhado** (`/products/:productId/images/:imageId`)

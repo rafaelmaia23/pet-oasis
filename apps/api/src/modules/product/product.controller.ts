@@ -1,6 +1,4 @@
-import { productParamsSchema } from "@pet-oasis/api-contracts/catalog";
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import type { Request, Response } from "express";
 import { offsetEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
 import * as productService from "./product.service";
@@ -43,10 +41,8 @@ export const updateProduct: RouteHandler<
 > = async ({ params, body }) =>
   productService.updateProduct(params.productId, body);
 
-export const deleteProduct = async (req: Request, res: Response) => {
-  const { params } = productParamsSchema.parse({ params: req.params });
-
+export const deleteProduct: RouteHandler<
+  typeof routes.product.delete
+> = async ({ params }) => {
   await productService.deleteProduct(params.productId);
-
-  return res.status(204).send();
 };

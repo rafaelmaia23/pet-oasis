@@ -2,7 +2,6 @@ import type { routes } from "@pet-oasis/api-contracts/routes";
 import {
   createCustomerProfileSchema,
   createEmployeeProfileSchema,
-  deleteEmployeeProfileSchema,
 } from "@pet-oasis/api-contracts/user";
 import type { Request, Response } from "express";
 import type { RouteHandler } from "@/lib/registerRoute";
@@ -51,12 +50,8 @@ export const deleteCustomerProfile: RouteHandler<
   await userProfileService.deleteCustomerProfile(params.userId);
 };
 
-export const deleteEmployeeProfile = async (req: Request, res: Response) => {
-  const { params } = deleteEmployeeProfileSchema.parse({
-    params: req.params,
-  });
-
+export const deleteEmployeeProfile: RouteHandler<
+  typeof routes.profile.deleteEmployee
+> = async ({ params }) => {
   await userProfileService.deleteEmployeeProfile(params.userId);
-
-  return res.status(204).send();
 };

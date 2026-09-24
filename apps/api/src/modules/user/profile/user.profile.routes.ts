@@ -18,6 +18,11 @@ registerRoute(userProfileRouter, routes.profile.deleteCustomer, {
   handler: userProfileController.deleteCustomerProfile,
 });
 
+registerRoute(userProfileRouter, routes.profile.deleteEmployee, {
+  before: [authenticate, canAccess("delete:profile")],
+  handler: userProfileController.deleteEmployeeProfile,
+});
+
 /** O que ainda está na forma antiga — sai quando a última rota migrar. */
 export const userProfileLegacyRouter = Router({ mergeParams: true });
 
@@ -35,12 +40,6 @@ userProfileLegacyRouter.post(
   "/employee",
   canAccess(["create:employee-profile", "reactivate:employee-profile"]),
   userProfileController.createEmployeeProfile,
-);
-
-userProfileLegacyRouter.delete(
-  "/employee",
-  canAccess("delete:profile"),
-  userProfileController.deleteEmployeeProfile,
 );
 
 export default userProfileRouter;

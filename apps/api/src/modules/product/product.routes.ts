@@ -108,16 +108,17 @@ registerRoute(productRouter, routes.product.addImage, {
   handler: productImageController.uploadProductImage,
 });
 
-/** O que ainda está na forma antiga — sai quando a última rota migrar. */
-export const productLegacyRouter = Router();
-
 // Antes do item: `:imageId` casaria com o literal `order` se viessem na ordem
 // inversa — mas são métodos diferentes, então isto é higiene, não necessidade.
-productLegacyRouter.patch(
-  "/:productId/images/order",
-  canAccess("manage:product"),
-  productImageController.reorderProductImages,
-);
+// Isso vale para a ordem de registro no Express; aqui o path vem inteiro da
+// tabela, mas continua valendo contra o `productLegacyRouter` abaixo.
+registerRoute(productRouter, routes.product.reorderImages, {
+  before: [optionalAuthenticate, canAccess("manage:product")],
+  handler: productImageController.reorderProductImages,
+});
+
+/** O que ainda está na forma antiga — sai quando a última rota migrar. */
+export const productLegacyRouter = Router();
 
 productLegacyRouter.delete(
   "/:productId/images/:imageId",

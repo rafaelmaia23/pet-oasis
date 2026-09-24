@@ -1,12 +1,8 @@
-import {
-  productImageParamsSchema,
-  reorderProductImagesSchema,
-} from "@pet-oasis/api-contracts/catalog";
+import { productImageParamsSchema } from "@pet-oasis/api-contracts/catalog";
 import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import type { RouteHandler } from "@/lib/registerRoute";
 import * as imageService from "./product.image.service";
-import { productImagePresenter } from "./product.presenter";
 import type { ProductTransport } from "./product.transport";
 
 /**
@@ -27,18 +23,18 @@ export const deleteProductImage = async (req: Request, res: Response) => {
   return res.status(204).send();
 };
 
-export const reorderProductImages = async (req: Request, res: Response) => {
-  const { params, body } = reorderProductImagesSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
+/**
+ * `{ data }` sai **cru**: a view (`productImageListSchema`, uma view só, sem
+ * escada) faz a whitelist do array inteiro no registrador — presentear aqui
+ * duplicaria a decisão.
+ */
+export const reorderProductImages: RouteHandler<
+  typeof routes.product.reorderImages
+> = async ({ params, body }) => {
   const images = await imageService.reorderImages(
     params.productId,
     body.images,
   );
 
-  return res
-    .status(200)
-    .json({ data: productImagePresenter.presentMany(images, "default") });
+  return { data: images };
 };

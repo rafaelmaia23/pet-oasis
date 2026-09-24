@@ -22,12 +22,10 @@ registerRoute(tagRouter, routes.tag.create, {
   handler: tagController.createTag,
 });
 
-tagRouter.patch(
-  "/tags/:tagId",
-  authenticate,
-  canAccess("manage:catalog-structure"),
-  tagController.updateTag,
-);
+registerRoute(tagRouter, routes.tag.update, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: tagController.updateTag,
+});
 
 tagRouter.delete(
   "/tags/:tagId",

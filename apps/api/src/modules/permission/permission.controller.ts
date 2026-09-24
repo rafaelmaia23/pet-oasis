@@ -1,6 +1,5 @@
 import {
   deleteUserRoleParamsSchema,
-  postUserRoleParamsSchema,
   removePermissionParamsSchema,
   upsertPermissionParamsSchema,
 } from "@pet-oasis/api-contracts/permission";
@@ -9,7 +8,6 @@ import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
 import * as permissionService from "@/modules/permission/permission.service";
-import { rolePresenter } from "@/modules/role/role.presenter";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userFeaturePresenter } from "./permission.presenter";
 
@@ -35,21 +33,10 @@ export const getUserPermissions: RouteHandler<
   typeof routes.permission.listEffectiveFeatures
 > = async ({ params }) => permissionService.getUserPermissions(params.userId);
 
-export const addUserRole = async (req: Request, res: Response) => {
-  const { params } = postUserRoleParamsSchema.parse({
-    params: req.params,
-  });
-
-  const requestingUser = getAuthUser(req);
-
-  const role = await permissionService.addUserRole(
-    requestingUser.id,
-    params.userId,
-    params.roleId,
-  );
-
-  res.status(201).json(rolePresenter.present(role, "default"));
-};
+export const addUserRole: RouteHandler<
+  typeof routes.permission.assignRole
+> = async ({ params, actor }) =>
+  permissionService.addUserRole(actor.id, params.userId, params.roleId);
 
 export const removeUserRole = async (req: Request, res: Response) => {
   const { params } = deleteUserRoleParamsSchema.parse({

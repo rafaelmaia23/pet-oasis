@@ -28,12 +28,10 @@ registerRoute(permissionRouter, routes.permission.listEffectiveFeatures, {
   handler: permissionController.getUserPermissions,
 });
 
-permissionRouter.post(
-  "/users/:userId/roles/:roleId",
-  authenticate,
-  canAccess("manage:permission"),
-  permissionController.addUserRole,
-);
+registerRoute(permissionRouter, routes.permission.assignRole, {
+  before: [authenticate, canAccess("manage:permission")],
+  handler: permissionController.addUserRole,
+});
 
 permissionRouter.delete(
   "/users/:userId/roles/:roleId",

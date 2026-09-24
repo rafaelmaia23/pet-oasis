@@ -8,10 +8,7 @@ import {
   scalarBundleFile,
   scalarBundleRoot,
 } from "@/docs/reference";
-import {
-  authenticate,
-  optionalAuthenticate,
-} from "@/middlewares/authenticate.middleware";
+import { optionalAuthenticate } from "@/middlewares/authenticate.middleware";
 import auditLogRouter from "@/modules/audit-log/audit-log.routes";
 import authRouter from "@/modules/auth/auth.routes";
 import brandRouter from "@/modules/brand/brand.routes";
@@ -21,7 +18,6 @@ import featureRouter from "@/modules/feature/feature.routes";
 import logRouter from "@/modules/log/log.routes";
 import meRouter from "@/modules/me/me.routes";
 import permissionRouter from "@/modules/permission/permission.routes";
-import petCustomerRouter from "@/modules/pet/pet.customer.routes";
 import petRouter from "@/modules/pet/pet.routes";
 import productRouter from "@/modules/product/product.routes";
 import variantRouter from "@/modules/product/product.variant.routes";
@@ -70,10 +66,9 @@ v1Router.use(meRouter);
 v1Router.use(userRouter);
 v1Router.use(userProfileRouter);
 v1Router.use(permissionRouter);
-// Pet (9.4): coleção aninhada no cliente, recurso plano no item. As duas
-// exigem token — a vitrine pública é do catálogo, não da ficha do pet.
-v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);
-v1Router.use("/pets", authenticate, petRouter);
+// Pet (9.4): coleção aninhada no cliente, recurso plano no item — os dois
+// paths já vêm inteiros da tabela de rotas.
+v1Router.use(petRouter);
 v1Router.use(variantRouter);
 v1Router.use(featureRouter);
 v1Router.use(roleRouter);

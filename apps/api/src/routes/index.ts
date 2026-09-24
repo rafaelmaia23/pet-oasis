@@ -70,7 +70,7 @@ v1Router.use("/users/:userId", authenticate, permissionRouter);
 v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);
 v1Router.use("/pets", authenticate, petRouter);
 v1Router.use("/variants", authenticate, variantRouter);
-v1Router.use("/features", authenticate, featureRouter);
+v1Router.use(featureRouter);
 v1Router.use(roleRouter);
 v1Router.use(auditLogRouter);
 // Já sob o `registerRoute`: o `authenticate` desceu do prefixo para o `before`

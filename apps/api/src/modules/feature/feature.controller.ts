@@ -1,15 +1,18 @@
 import { featureParamsSchema } from "@pet-oasis/api-contracts/feature";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
+import type { RouteHandler } from "@/lib/registerRoute";
 import { featurePresenter } from "./feature.presenter";
 import * as featureService from "./feature.service";
 
-export const getAllFeatures = async (_req: Request, res: Response) => {
+export const getAllFeatures: RouteHandler<
+  typeof routes.feature.list
+> = async () => {
+  // Sem paginação: catálogo de referência limitado (docs/adr/0004-pagination.md).
   const features = await featureService.getAllFeatures();
 
-  res
-    .status(200)
-    .json(listEnvelope(featurePresenter.presentMany(features, "default")));
+  return listEnvelope(features);
 };
 
 export const getFeatureById = async (req: Request, res: Response) => {

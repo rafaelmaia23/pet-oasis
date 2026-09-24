@@ -1,5 +1,4 @@
 import {
-  createProductSchema,
   productParamsSchema,
   updateProductSchema,
 } from "@pet-oasis/api-contracts/catalog";
@@ -40,20 +39,9 @@ export const getProductByIdOrSlug: RouteHandler<
 > = async ({ params, actor }) =>
   productService.getProductByIdOrSlug(actor, params.idOrSlug);
 
-export const createProduct = async (req: Request, res: Response) => {
-  const { body } = createProductSchema.parse({ body: req.body });
-
-  const product = await productService.createProduct(body);
-
-  return res
-    .status(201)
-    .json(
-      productPresenter.present(
-        product,
-        productService.viewFor(getAuthUser(req)),
-      ),
-    );
-};
+export const createProduct: RouteHandler<
+  typeof routes.product.create
+> = async ({ body }) => productService.createProduct(body);
 
 export const updateProduct = async (req: Request, res: Response) => {
   const { params, body } = updateProductSchema.parse({

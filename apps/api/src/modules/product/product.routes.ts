@@ -16,6 +16,7 @@ import * as variantController from "./product.variant.controller";
 import {
   chooseProductListView,
   chooseProductReadView,
+  chooseProductWriteView,
 } from "./product.view-resolver";
 
 /**
@@ -59,14 +60,19 @@ registerRoute(productRouter, routes.product.get, {
   handler: productController.getProductByIdOrSlug,
 });
 
+// A escrita não tem `authenticate` — nunca teve, aqui: o router inteiro é
+// montado com `optionalAuthenticate` (comentário acima), e quem exige
+// identidade é o `canAccess`, que responde 401 sozinho sem `req.user`. Trocar
+// por `authenticate` mudaria a mensagem do 401 com token inválido (K26), que a
+// issue 14 não pode mudar.
+registerRoute(productRouter, routes.product.create, {
+  before: [optionalAuthenticate, canAccess("manage:product")],
+  chooseView: chooseProductWriteView,
+  handler: productController.createProduct,
+});
+
 /** O que ainda está na forma antiga — sai quando a última rota migrar. */
 export const productLegacyRouter = Router();
-
-productLegacyRouter.post(
-  "/",
-  canAccess("manage:product"),
-  productController.createProduct,
-);
 
 productLegacyRouter.patch(
   "/:productId",

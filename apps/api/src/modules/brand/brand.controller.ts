@@ -1,7 +1,4 @@
-import {
-  brandParamsSchema,
-  updateBrandSchema,
-} from "@pet-oasis/api-contracts/catalog";
+import { brandParamsSchema } from "@pet-oasis/api-contracts/catalog";
 import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
@@ -23,16 +20,10 @@ export const createBrand: RouteHandler<typeof routes.brand.create> = ({
   body,
 }) => brandService.createBrand(body);
 
-export const updateBrand = async (req: Request, res: Response) => {
-  const { params, body } = updateBrandSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
-  const brand = await brandService.updateBrand(params.brandId, body);
-
-  return res.status(200).json(brandPresenter.present(brand, "default"));
-};
+export const updateBrand: RouteHandler<typeof routes.brand.update> = ({
+  params,
+  body,
+}) => brandService.updateBrand(params.brandId, body);
 
 export const updateBrandLogo = async (req: Request, res: Response) => {
   const { params } = brandParamsSchema.parse({ params: req.params });

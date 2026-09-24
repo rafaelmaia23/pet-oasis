@@ -34,12 +34,10 @@ registerRoute(brandRouter, routes.brand.create, {
   handler: brandController.createBrand,
 });
 
-brandRouter.patch(
-  "/brands/:brandId",
-  authenticate,
-  canAccess("manage:catalog-structure"),
-  brandController.updateBrand,
-);
+registerRoute(brandRouter, routes.brand.update, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: brandController.updateBrand,
+});
 
 /**
  * Logo (9.10): mesma feature da escrita da marca — `manage:catalog-structure`.

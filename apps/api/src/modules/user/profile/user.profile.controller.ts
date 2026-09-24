@@ -1,10 +1,11 @@
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import {
   createCustomerProfileSchema,
   createEmployeeProfileSchema,
-  deleteCustomerProfileSchema,
   deleteEmployeeProfileSchema,
 } from "@pet-oasis/api-contracts/user";
 import type { Request, Response } from "express";
+import type { RouteHandler } from "@/lib/registerRoute";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user.presenter";
 import { resolveUserView } from "../user.view-resolver";
@@ -44,14 +45,10 @@ export const createEmployeeProfile = async (req: Request, res: Response) => {
     .json(userPresenter.present(response, resolveUserView(getAuthUser(req))));
 };
 
-export const deleteCustomerProfile = async (req: Request, res: Response) => {
-  const { params } = deleteCustomerProfileSchema.parse({
-    params: req.params,
-  });
-
+export const deleteCustomerProfile: RouteHandler<
+  typeof routes.profile.deleteCustomer
+> = async ({ params }) => {
   await userProfileService.deleteCustomerProfile(params.userId);
-
-  return res.status(204).send();
 };
 
 export const deleteEmployeeProfile = async (req: Request, res: Response) => {

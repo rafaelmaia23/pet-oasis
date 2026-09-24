@@ -1,4 +1,5 @@
 import { buildCustomer } from "@tests/factories/user.factory";
+import { fixtureAudit } from "@tests/helpers/audit";
 import { clearDatabase } from "@tests/helpers/database";
 import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
@@ -143,19 +144,63 @@ describe("derrubar as sessões de um usuário", () => {
 
   it("é a mesma operação em todo site de escrita: nenhum deixa o elo rotacionado de pé", async () => {
     const sites: Array<[string, (userId: string) => Promise<unknown>]> = [
-      ["ban", (id) => banUserAndInvalidateSessions(id, "admin-1", "fraude")],
-      ["deleção", (id) => softDeleteUserAndInvalidateSessions(id)],
+      [
+        "ban",
+        (id) =>
+          banUserAndInvalidateSessions(
+            id,
+            "admin-1",
+            "fraude",
+            fixtureAudit({
+              action: "USER_BANNED",
+              targetType: "User",
+              targetId: id,
+              metadata: { reasonProvided: true },
+            }),
+          ),
+      ],
+      [
+        "deleção",
+        (id) =>
+          softDeleteUserAndInvalidateSessions(id, (counts) =>
+            fixtureAudit({
+              action: "USER_DELETED",
+              targetType: "User",
+              targetId: id,
+              metadata: {
+                cascadedProfiles: counts.profiles,
+                cascadedRoles: counts.roles,
+                cascadedOverrides: counts.overrides,
+                cascadedPets: counts.pets,
+              },
+            }),
+          ),
+      ],
       [
         "reset forçado",
         (id) =>
           forcePasswordResetAndInvalidateSessions(
             id,
             mintVerificationToken("PASSWORD_RESET").stored,
+            fixtureAudit({
+              action: "PASSWORD_CHANGE_FORCED",
+              targetType: "User",
+              targetId: id,
+            }),
           ),
       ],
       [
         "troca de senha",
-        (id) => updatePasswordAndInvalidateSessions(id, "hash-novo"),
+        (id) =>
+          updatePasswordAndInvalidateSessions(
+            id,
+            "hash-novo",
+            fixtureAudit({
+              action: "PASSWORD_CHANGED",
+              targetType: "User",
+              targetId: id,
+            }),
+          ),
       ],
     ];
 

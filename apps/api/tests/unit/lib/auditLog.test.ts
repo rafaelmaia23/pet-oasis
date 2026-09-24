@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { record } from "@/lib/auditLog";
+import { record, writeAudited } from "@/lib/auditLog";
 import { logBuffer } from "@/lib/logBuffer";
 import { prisma } from "@/lib/prisma";
 import { runWithRequestContext } from "@/lib/requestContext";
@@ -98,5 +98,53 @@ describe("auditLog.record", () => {
     await expect(
       record({ action: "USER_BANNED", targetType: "User" }, tx),
     ).rejects.toThrow("tx boom");
+  });
+});
+
+describe("auditLog.writeAudited", () => {
+  beforeEach(async () => {
+    await prisma.auditLog.deleteMany();
+    await prisma.tag.deleteMany();
+  });
+
+  it("should run the work inside a transaction, write the audit row and return the work's result", async () => {
+    const result = await writeAudited(
+      { action: "TAG_CREATED", targetType: "Tag" },
+      (tx) => tx.tag.create({ data: { name: "collar", slug: "collar" } }),
+    );
+
+    expect(result.name).toBe("collar");
+
+    const rows = await prisma.auditLog.findMany();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ action: "TAG_CREATED", targetType: "Tag" });
+  });
+
+  it("should build the descriptor from the work's result when a builder is passed", async () => {
+    const tag = await writeAudited(
+      (created: { id: string }) => ({
+        action: "TAG_CREATED",
+        targetType: "Tag",
+        targetId: created.id,
+      }),
+      (tx) => tx.tag.create({ data: { name: "leash", slug: "leash" } }),
+    );
+
+    const [row] = await prisma.auditLog.findMany();
+    expect(row?.targetId).toBe(tag.id);
+  });
+
+  // §4.5 — mutação e audit vivem na mesma `$transaction`: qualquer falha depois
+  // da mutação (a gravação do audit incluída) desfaz o que já rodou.
+  it("should undo the mutation when the transaction fails after it", async () => {
+    await expect(
+      writeAudited({ action: "TAG_CREATED", targetType: "Tag" }, async (tx) => {
+        await tx.tag.create({ data: { name: "bowl", slug: "bowl" } });
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+
+    const tags = await prisma.tag.findMany();
+    expect(tags).toHaveLength(0);
   });
 });

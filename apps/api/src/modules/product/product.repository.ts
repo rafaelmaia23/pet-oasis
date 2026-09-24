@@ -2,7 +2,7 @@ import type { UpdateProductInput } from "@pet-oasis/api-contracts/catalog";
 import type { Prisma } from "@/generated/prisma/client";
 import type { PetSpecies } from "@/generated/prisma/enums";
 import { ProductStatus } from "@/generated/prisma/enums";
-import { type AuditDescriptor, record } from "@/lib/auditLog";
+import { type AuditDescriptor, writeAudited } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
 
@@ -341,22 +341,20 @@ export async function createProduct(
   data: Omit<Prisma.ProductUncheckedCreateInput, "id">,
   variants: Prisma.ProductVariantCreateWithoutProductInput[],
   links: { categoryIds: string[]; tagIds: string[] },
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
-    const product = await tx.product.create({
-      data: {
-        ...data,
-        variants: { create: variants },
-        ...linkData(links.categoryIds, links.tagIds),
-      },
-      include: productInclude,
-    });
-
-    if (audit) await record({ ...audit, targetId: product.id }, tx);
-
-    return product;
-  });
+  return writeAudited(
+    (product: { id: string }) => ({ ...audit, targetId: product.id }),
+    (tx) =>
+      tx.product.create({
+        data: {
+          ...data,
+          variants: { create: variants },
+          ...linkData(links.categoryIds, links.tagIds),
+        },
+        include: productInclude,
+      }),
+  );
 }
 
 /**
@@ -368,9 +366,9 @@ export async function updateProduct(
   id: string,
   data: Omit<UpdateProductInput, "categories" | "tags">,
   links: { categoryIds?: string[]; tagIds?: string[] },
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return writeAudited(audit, async (tx) => {
     if (links.categoryIds) {
       await tx.productCategory.deleteMany({ where: { productId: id } });
       await tx.productCategory.createMany({
@@ -388,15 +386,11 @@ export async function updateProduct(
       });
     }
 
-    const product = await tx.product.update({
+    return tx.product.update({
       where: { id, deletedAt: null },
       data: definedOnly(data),
       include: productInclude,
     });
-
-    if (audit) await record(audit, tx);
-
-    return product;
   });
 }
 
@@ -411,23 +405,26 @@ export async function updateProduct(
  */
 export async function softDeleteProduct(
   id: string,
-  buildAudit?: (counts: { variants: number }) => AuditDescriptor,
+  buildAudit: (counts: { variants: number }) => AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
-    const deletedAt = new Date();
+  const { product } = await writeAudited(
+    (result: { variants: number }) => buildAudit(result),
+    async (tx) => {
+      const deletedAt = new Date();
 
-    const { count } = await tx.productVariant.updateMany({
-      where: { productId: id, deletedAt: null },
-      data: { deletedAt },
-    });
+      const { count } = await tx.productVariant.updateMany({
+        where: { productId: id, deletedAt: null },
+        data: { deletedAt },
+      });
 
-    const product = await tx.product.update({
-      where: { id, deletedAt: null },
-      data: { deletedAt },
-    });
+      const product = await tx.product.update({
+        where: { id, deletedAt: null },
+        data: { deletedAt },
+      });
 
-    if (buildAudit) await record(buildAudit({ variants: count }), tx);
+      return { product, variants: count };
+    },
+  );
 
-    return product;
-  });
+  return product;
 }

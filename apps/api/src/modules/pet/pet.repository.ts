@@ -4,7 +4,7 @@ import type {
 } from "@pet-oasis/api-contracts/pet";
 import type { Prisma } from "@/generated/prisma/client";
 import type { PetSex, PetSpecies } from "@/generated/prisma/enums";
-import { type AuditDescriptor, record } from "@/lib/auditLog";
+import { type AuditDescriptor, writeAudited } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
 
@@ -93,56 +93,46 @@ export async function findAllPets(
 
 export async function createPet(
   data: CreatePetInput & { customerId: string },
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
   // Os obrigatórios saem nomeados para continuarem obrigatórios; o resto passa
   // pelo `definedOnly`, que é o que reconcilia o opcional do Zod com o do
   // Prisma sob `exactOptionalPropertyTypes`.
   const { customerId, name, species, ...optional } = data;
 
-  const args = {
-    data: { customerId, name, species, ...definedOnly(optional) },
-    include: petInclude,
-  };
-
-  if (!audit) return prisma.pet.create(args);
-
-  return prisma.$transaction(async (tx) => {
-    const pet = await tx.pet.create(args);
-
-    await record({ ...audit, targetId: pet.id }, tx);
-
-    return pet;
-  });
+  return writeAudited(
+    (pet: { id: string }) => ({ ...audit, targetId: pet.id }),
+    (tx) =>
+      tx.pet.create({
+        data: { customerId, name, species, ...definedOnly(optional) },
+        include: petInclude,
+      }),
+  );
 }
 
 async function applyUpdate(
   id: string,
   data: Prisma.PetUncheckedUpdateInput,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  const args = { where: { id, deletedAt: null }, data, include: petInclude };
-
-  if (!audit) return prisma.pet.update(args);
-
-  return prisma.$transaction(async (tx) => {
-    const pet = await tx.pet.update(args);
-
-    await record(audit, tx);
-
-    return pet;
-  });
+  return writeAudited(audit, (tx) =>
+    tx.pet.update({
+      where: { id, deletedAt: null },
+      data,
+      include: petInclude,
+    }),
+  );
 }
 
 export async function updatePet(
   id: string,
   data: UpdatePetInput,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
   return applyUpdate(id, definedOnly(data), audit);
 }
 
-export async function softDeletePet(id: string, audit?: AuditDescriptor) {
+export async function softDeletePet(id: string, audit: AuditDescriptor) {
   return applyUpdate(id, { deletedAt: new Date() }, audit);
 }
 
@@ -155,7 +145,7 @@ export async function softDeletePet(id: string, audit?: AuditDescriptor) {
 export async function setPetPhotoPath(
   id: string,
   photoPath: string | null,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
   return applyUpdate(id, { photoPath }, audit);
 }
@@ -163,7 +153,7 @@ export async function setPetPhotoPath(
 export async function setPetDeceasedAt(
   id: string,
   deceasedAt: Date | null,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
   return applyUpdate(id, { deceasedAt }, audit);
 }

@@ -1,6 +1,6 @@
 import type { UpdateCategoryInput } from "@pet-oasis/api-contracts/catalog";
 import type { Prisma } from "@/generated/prisma/client";
-import { type AuditDescriptor, record } from "@/lib/auditLog";
+import { type AuditDescriptor, writeAudited } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
 
@@ -55,47 +55,32 @@ export async function countActiveProducts(categoryId: string) {
 
 export async function createCategory(
   data: Prisma.CategoryUncheckedCreateInput,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  const args = { data };
-
-  if (!audit) return prisma.category.create(args);
-
-  return prisma.$transaction(async (tx) => {
-    const category = await tx.category.create(args);
-
-    await record({ ...audit, targetId: category.id }, tx);
-
-    return category;
-  });
+  return writeAudited(
+    (category: { id: string }) => ({ ...audit, targetId: category.id }),
+    (tx) => tx.category.create({ data }),
+  );
 }
 
 async function applyUpdate(
   id: string,
   data: Prisma.CategoryUncheckedUpdateInput,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  const args = { where: { id, deletedAt: null }, data };
-
-  if (!audit) return prisma.category.update(args);
-
-  return prisma.$transaction(async (tx) => {
-    const category = await tx.category.update(args);
-
-    await record(audit, tx);
-
-    return category;
-  });
+  return writeAudited(audit, (tx) =>
+    tx.category.update({ where: { id, deletedAt: null }, data }),
+  );
 }
 
 export async function updateCategory(
   id: string,
   data: UpdateCategoryInput,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
   return applyUpdate(id, definedOnly(data), audit);
 }
 
-export async function softDeleteCategory(id: string, audit?: AuditDescriptor) {
+export async function softDeleteCategory(id: string, audit: AuditDescriptor) {
   return applyUpdate(id, { deletedAt: new Date() }, audit);
 }

@@ -1,4 +1,5 @@
 import { createPetSchema } from "@pet-oasis/api-contracts/pet";
+import type { AuditDescriptor } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { storeImage } from "@/lib/storage";
 import * as petRepository from "@/modules/pet/pet.repository";
@@ -8,6 +9,10 @@ import {
   type FakePet,
   fakePetOwnerEmail,
 } from "./fakePets.constants";
+
+// Sem FK (idioma de AuditLog.actorId) — não há um ator humano real por trás de
+// uma escrita feita pelo seed.
+const SEED_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 
 export type SeedFakePetsResult = {
   createdCount: number;
@@ -115,12 +120,25 @@ export async function seedFakePets(
 
     const breedId = await resolveBreedId(definition);
 
-    // Pelo repositório, não pelo service: o service exige ator autorizado e
-    // gravaria linha de audit por pet. Mesmo corte de `seedFakeUsers`.
-    const pet = await petRepository.createPet({
-      ...toPetInput(definition, breedId),
-      customerId: owner.id,
-    });
+    // Pelo repositório, não pelo service: o service exige ator autorizado
+    // (o mesmo corte de `seedFakeUsers`), mas a escrita audita do mesmo jeito
+    // — `STAFF` é o valor mais próximo do enum fechado (SELF/STAFF) para uma
+    // criação em nome do dono, feita por infraestrutura.
+    const petAudit: AuditDescriptor = {
+      action: "PET_CREATED",
+      targetType: "Pet",
+      actorId: SEED_ACTOR_ID,
+      metadata: {
+        customerId: owner.id,
+        species: definition.species,
+        source: "STAFF",
+      },
+    };
+
+    const pet = await petRepository.createPet(
+      { ...toPetInput(definition, breedId), customerId: owner.id },
+      petAudit,
+    );
 
     result.createdCount++;
 
@@ -134,7 +152,13 @@ export async function seedFakePets(
         buffer: fakeImageBuffer(definition.photo),
       });
 
-      await petRepository.setPetPhotoPath(pet.id, photoPath);
+      await petRepository.setPetPhotoPath(pet.id, photoPath, {
+        action: "PET_PHOTO_UPDATED",
+        targetType: "Pet",
+        targetId: pet.id,
+        actorId: SEED_ACTOR_ID,
+        metadata: { customerId: owner.id },
+      });
       result.photosStored++;
     }
 
@@ -148,6 +172,13 @@ export async function seedFakePets(
       await petRepository.setPetDeceasedAt(
         pet.id,
         new Date(definition.deceasedAt),
+        {
+          action: "PET_DECEASED",
+          targetType: "Pet",
+          targetId: pet.id,
+          actorId: SEED_ACTOR_ID,
+          metadata: { customerId: owner.id },
+        },
       );
     }
 

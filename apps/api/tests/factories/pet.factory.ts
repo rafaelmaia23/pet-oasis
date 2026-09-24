@@ -3,6 +3,7 @@ import {
   type CreatePetInput,
   createPetSchema,
 } from "@pet-oasis/api-contracts/pet";
+import { fixtureAudit } from "@tests/helpers/audit";
 import { PetSpecies } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { SRD_BREED_NAME } from "@/modules/breed/breed.constants";
@@ -70,5 +71,12 @@ export async function buildPet(
 ) {
   const data = await makePetData(overrides);
 
-  return createPet({ ...data, customerId });
+  return createPet(
+    { ...data, customerId },
+    fixtureAudit({
+      action: "PET_CREATED",
+      targetType: "Pet",
+      metadata: { customerId, species: data.species, source: "STAFF" },
+    }),
+  );
 }

@@ -1,6 +1,6 @@
 import type { UpdateBrandInput } from "@pet-oasis/api-contracts/catalog";
 import type { Prisma } from "@/generated/prisma/client";
-import { type AuditDescriptor, record } from "@/lib/auditLog";
+import { type AuditDescriptor, writeAudited } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
 
@@ -35,43 +35,28 @@ export async function findAllBrands() {
 
 export async function createBrand(
   data: Prisma.BrandUncheckedCreateInput,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  const args = { data };
-
-  if (!audit) return prisma.brand.create(args);
-
-  return prisma.$transaction(async (tx) => {
-    const brand = await tx.brand.create(args);
-
-    await record({ ...audit, targetId: brand.id }, tx);
-
-    return brand;
-  });
+  return writeAudited(
+    (brand: { id: string }) => ({ ...audit, targetId: brand.id }),
+    (tx) => tx.brand.create({ data }),
+  );
 }
 
 async function applyUpdate(
   id: string,
   data: Prisma.BrandUncheckedUpdateInput,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  const args = { where: { id, deletedAt: null }, data };
-
-  if (!audit) return prisma.brand.update(args);
-
-  return prisma.$transaction(async (tx) => {
-    const brand = await tx.brand.update(args);
-
-    await record(audit, tx);
-
-    return brand;
-  });
+  return writeAudited(audit, (tx) =>
+    tx.brand.update({ where: { id, deletedAt: null }, data }),
+  );
 }
 
 export async function updateBrand(
   id: string,
   data: UpdateBrandInput,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
   // `definedOnly` é o que reconcilia o opcional do Zod (`campo?: T | undefined`)
   // com o do Prisma (`campo?: T`) sob `exactOptionalPropertyTypes`.
@@ -85,11 +70,11 @@ export async function updateBrand(
 export async function setBrandLogoPath(
   id: string,
   logoPath: string | null,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
   return applyUpdate(id, { logoPath }, audit);
 }
 
-export async function softDeleteBrand(id: string, audit?: AuditDescriptor) {
+export async function softDeleteBrand(id: string, audit: AuditDescriptor) {
   return applyUpdate(id, { deletedAt: new Date() }, audit);
 }

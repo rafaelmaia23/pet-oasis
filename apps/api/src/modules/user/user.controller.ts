@@ -1,22 +1,12 @@
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import { createEmployeeSchema } from "@pet-oasis/api-contracts/user";
-import type { Request, Response } from "express";
 import { offsetEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
-import { getAuthUser } from "@/utils/getAuthUser";
-import { userPresenter } from "./user.presenter";
 import * as userService from "./user.service";
-import { resolveUserView } from "./user.view-resolver";
 
-export const createEmployee = async (req: Request, res: Response) => {
-  const { body } = createEmployeeSchema.parse({ body: req.body });
-
-  const user = await userService.createEmployee(getAuthUser(req).id, body);
-
-  return res
-    .status(201)
-    .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
-};
+export const createEmployee: RouteHandler<typeof routes.user.create> = async ({
+  body,
+  actor,
+}) => userService.createEmployee(actor.id, body);
 
 export const getAllUsers: RouteHandler<typeof routes.user.list> = async ({
   query,

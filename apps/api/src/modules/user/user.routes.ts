@@ -7,10 +7,9 @@ import * as userController from "./user.controller";
 import { chooseUserView } from "./user.view-resolver";
 
 /**
- * As rotas de usuário já sob o `registerRoute`: montadas **sem prefixo**, com o
- * path inteiro vindo da entrada da tabela. Enquanto a migração da issue 11 de
- * `.scratch/fase-12-module-depth/` corre, o que falta fica no
- * `userLegacyRouter` abaixo, ainda montado sob `/users`.
+ * As rotas de usuário, montadas **sem prefixo**: o path inteiro vem da entrada
+ * da tabela, e o `authenticate` que ficava no prefixo desceu para o `before` de
+ * cada uma.
  */
 const userRouter = Router();
 
@@ -61,13 +60,10 @@ registerRoute(userRouter, routes.user.update, {
   handler: userController.updateUser,
 });
 
-/** O que ainda está na forma antiga — sai quando a última rota migrar. */
-export const userLegacyRouter = Router();
-
-userLegacyRouter.post(
-  "/",
-  canAccess("create:user"),
-  userController.createEmployee,
-);
+registerRoute(userRouter, routes.user.create, {
+  before: [authenticate, canAccess("create:user")],
+  chooseView: chooseUserView,
+  handler: userController.createEmployee,
+});
 
 export default userRouter;

@@ -1,7 +1,6 @@
 import type { routes } from "@pet-oasis/api-contracts/routes";
 import {
   createEmployeeSchema,
-  forcePasswordResetSchema,
   updateUserSchema,
   userParamsSchema,
 } from "@pet-oasis/api-contracts/user";
@@ -94,10 +93,8 @@ export const reactivateAccount: RouteHandler<
   });
 };
 
-export const forcePasswordReset = async (req: Request, res: Response) => {
-  const { params } = forcePasswordResetSchema.parse({ params: req.params });
-
-  await userService.forcePasswordReset(getAuthUser(req).id, params.id);
-
-  return res.status(204).send();
+export const forcePasswordReset: RouteHandler<
+  typeof routes.user.forcePasswordReset
+> = async ({ params, actor }) => {
+  await userService.forcePasswordReset(actor.id, params.id);
 };

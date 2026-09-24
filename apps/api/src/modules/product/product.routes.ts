@@ -14,6 +14,7 @@ import * as productController from "./product.controller";
 import * as productImageController from "./product.image.controller";
 import { productTransport } from "./product.transport";
 import * as variantController from "./product.variant.controller";
+import { chooseVariantWriteView } from "./product.variant.view-resolver";
 import {
   chooseProductListView,
   chooseProductReadView,
@@ -21,10 +22,10 @@ import {
 } from "./product.view-resolver";
 
 /**
- * As rotas de produto já sob o `registerRoute`: montadas **sem prefixo**, com
- * o path inteiro vindo da entrada da tabela. Enquanto a migração da issue 14
- * de `.scratch/fase-12-module-depth/` corre, o que falta fica no
- * `productLegacyRouter` abaixo, ainda montado sob `/products`.
+ * As rotas de produto e a criação de variante, todas sob o `registerRoute` e
+ * montadas **sem prefixo**: o path inteiro vem da entrada da tabela (issue 14
+ * de `.scratch/fase-12-module-depth/`). `PATCH`/`DELETE /variants/:variantId`
+ * moram em `product.variant.routes.ts`.
  *
  * Toda escrita de produto e de variante é `manage:product` (9.1) — a exceção é
  * o ajuste de estoque, que mora no `PATCH /variants/:variantId` e é decidido
@@ -47,11 +48,6 @@ registerRoute(productRouter, routes.product.list, {
   handler: productController.listProducts,
 });
 
-// Vem depois da coleção e antes de tudo que é aninhado: `:idOrSlug` casa com
-// qualquer segmento, então uma rota literal registrada abaixo dele nunca seria
-// alcançada. Isso não é ordem de registro no Express **aqui** — o path vem
-// inteiro da tabela —, mas continua valendo contra o `productLegacyRouter`
-// abaixo, que ainda tem rotas literais sob `/:productId`.
 registerRoute(productRouter, routes.product.get, {
   before: [
     optionalAuthenticate,
@@ -108,10 +104,6 @@ registerRoute(productRouter, routes.product.addImage, {
   handler: productImageController.uploadProductImage,
 });
 
-// Antes do item: `:imageId` casaria com o literal `order` se viessem na ordem
-// inversa — mas são métodos diferentes, então isto é higiene, não necessidade.
-// Isso vale para a ordem de registro no Express; aqui o path vem inteiro da
-// tabela, mas continua valendo contra o `productLegacyRouter` abaixo.
 registerRoute(productRouter, routes.product.reorderImages, {
   before: [optionalAuthenticate, canAccess("manage:product")],
   handler: productImageController.reorderProductImages,
@@ -122,15 +114,13 @@ registerRoute(productRouter, routes.product.deleteImage, {
   handler: productImageController.deleteProductImage,
 });
 
-/** O que ainda está na forma antiga — sai quando a última rota migrar. */
-export const productLegacyRouter = Router();
-
 // Coleção aninhada: criar variante precisa do produto na URL. O item é plano
-// (`/variants/:variantId`), mesmo racional dos pets — o id é global.
-productLegacyRouter.post(
-  "/:productId/variants",
-  canAccess("manage:product"),
-  variantController.createVariant,
-);
+// (`/variants/:variantId`), mesmo racional dos pets — o id é global — e mora em
+// `product.variant.routes.ts`.
+registerRoute(productRouter, routes.variant.create, {
+  before: [optionalAuthenticate, canAccess("manage:product")],
+  chooseView: chooseVariantWriteView,
+  handler: variantController.createVariant,
+});
 
 export default productRouter;

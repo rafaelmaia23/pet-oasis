@@ -1,8 +1,5 @@
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import {
-  createCustomerProfileSchema,
-  createEmployeeProfileSchema,
-} from "@pet-oasis/api-contracts/user";
+import { createEmployeeProfileSchema } from "@pet-oasis/api-contracts/user";
 import type { Request, Response } from "express";
 import type { RouteHandler } from "@/lib/registerRoute";
 import { getAuthUser } from "@/utils/getAuthUser";
@@ -10,22 +7,10 @@ import { userPresenter } from "../user.presenter";
 import { resolveUserView } from "../user.view-resolver";
 import * as userProfileService from "./user.profile.service";
 
-export const createCustomerProfile = async (req: Request, res: Response) => {
-  const { params, body } = createCustomerProfileSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
-  const response = await userProfileService.createCustomerProfile(
-    getAuthUser(req),
-    params.userId,
-    body,
-  );
-
-  return res
-    .status(201)
-    .json(userPresenter.present(response, resolveUserView(getAuthUser(req))));
-};
+export const createCustomerProfile: RouteHandler<
+  typeof routes.profile.createCustomer
+> = async ({ params, body, actor }) =>
+  userProfileService.createCustomerProfile(actor, params.userId, body);
 
 export const createEmployeeProfile = async (req: Request, res: Response) => {
   const { params, body } = createEmployeeProfileSchema.parse({

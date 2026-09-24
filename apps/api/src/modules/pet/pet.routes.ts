@@ -1,10 +1,31 @@
+import { routes } from "@pet-oasis/api-contracts/routes";
 import { Router } from "express";
 import { rateLimitByUser, uploadUserLimiter } from "@/lib/rateLimit";
+import { registerRoute } from "@/lib/registerRoute";
+import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
 import { uploadSingleImage } from "@/middlewares/upload.middleware";
 import * as petController from "./pet.controller";
 
 /**
+ * O router **sem prefixo**: as rotas já declaradas num lugar só, com o path
+ * inteiro vindo da entrada da tabela (`packages/api-contracts/src/routes/pet.routes.ts`).
+ * Enquanto a migração corre (issue 12 de `.scratch/fase-12-module-depth/`), ele
+ * convive com o `legacyPetRouter` abaixo (ainda montado em `/pets`) e com o
+ * `petCustomerRouter` de `pet.customer.routes.ts` (ainda montado em
+ * `/customers/:customerId`). Os três nunca disputam um path: uma rota está
+ * numa forma ou na outra.
+ */
+const petRouter = Router();
+
+registerRoute(petRouter, routes.pet.create, {
+  before: [authenticate, canAccess("manage:pet")],
+  handler: petController.createPet,
+});
+
+/**
+ * A forma antiga, com o path partido entre o prefixo e a chamada.
+ *
  * Recurso **plano** (`/pets/:petId`), coleção aninhada
  * (`/customers/:customerId/pets`, ver `pet.customer.routes.ts`): `petId` é UUID
  * global, então repetir o `customerId` no item seria redundante — e redundante
@@ -15,18 +36,26 @@ import * as petController from "./pet.controller";
  * sufixo `:others`, e quem separa dono de staff é o `pet.service`. A exceção é a
  * listagem geral abaixo.
  */
-const petRouter = Router();
+export const legacyPetRouter = Router();
 
 // Única rota do módulo que exige a forma `:others` direto (como `GET /users`
 // exige `read:user:others`): listar pet de terceiro é a definição dela, não um
 // ramo que o service possa separar depois. Por isso o service não recebe ator.
-petRouter.get("/", canAccess("read:pet:others"), petController.listPets);
+legacyPetRouter.get("/", canAccess("read:pet:others"), petController.listPets);
 
-petRouter.get("/:petId", canAccess("read:pet"), petController.getPetById);
+legacyPetRouter.get("/:petId", canAccess("read:pet"), petController.getPetById);
 
-petRouter.patch("/:petId", canAccess("manage:pet"), petController.updatePet);
+legacyPetRouter.patch(
+  "/:petId",
+  canAccess("manage:pet"),
+  petController.updatePet,
+);
 
-petRouter.delete("/:petId", canAccess("manage:pet"), petController.deletePet);
+legacyPetRouter.delete(
+  "/:petId",
+  canAccess("manage:pet"),
+  petController.deletePet,
+);
 
 /**
  * Foto (9.10). Valor **único** num endereço fixo, então `PUT` substitui e
@@ -37,7 +66,7 @@ petRouter.delete("/:petId", canAccess("manage:pet"), petController.deletePet);
  * staff). Não existe cargo que edite a ficha do pet mas não possa trocar a foto
  * — que é o critério de granularidade firmado na 9.1.
  */
-petRouter.put(
+legacyPetRouter.put(
   "/:petId/photo",
   canAccess("manage:pet"),
   rateLimitByUser(uploadUserLimiter, "image-upload"),
@@ -45,7 +74,7 @@ petRouter.put(
   petController.updatePetPhoto,
 );
 
-petRouter.delete(
+legacyPetRouter.delete(
   "/:petId/photo",
   canAccess("manage:pet"),
   petController.deletePetPhoto,
@@ -54,13 +83,13 @@ petRouter.delete(
 // Falecimento tem rota própria, no idioma de `POST`/`DELETE /users/:id/ban`:
 // é transição de estado com significado (e ação de audit) próprios, não um
 // campo de update. Feature: `manage:pet` comum — `deceasedAt` não destrói nada.
-petRouter.post(
+legacyPetRouter.post(
   "/:petId/deceased",
   canAccess("manage:pet"),
   petController.markPetDeceased,
 );
 
-petRouter.delete(
+legacyPetRouter.delete(
   "/:petId/deceased",
   canAccess("manage:pet"),
   petController.unmarkPetDeceased,

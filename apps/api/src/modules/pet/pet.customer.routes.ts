@@ -13,12 +13,6 @@ import * as petController from "./pet.controller";
  */
 const petCustomerRouter = Router({ mergeParams: true });
 
-petCustomerRouter.post(
-  "/pets",
-  canAccess("manage:pet"),
-  petController.createPet,
-);
-
 petCustomerRouter.get(
   "/pets",
   canAccess("read:pet"),

@@ -1,31 +1,23 @@
 import {
-  createPetSchema,
   listCustomerPetsSchema,
   listPetsSchema,
   petParamsSchema,
   updatePetSchema,
 } from "@pet-oasis/api-contracts/pet";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
+import type { RouteHandler } from "@/lib/registerRoute";
 import { uploadedFile } from "@/middlewares/upload.middleware";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { petPresenter } from "./pet.presenter";
 import * as petService from "./pet.service";
 
-export const createPet = async (req: Request, res: Response) => {
-  const { params, body } = createPetSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
-  const pet = await petService.createPet(
-    getAuthUser(req),
-    params.customerId,
-    body,
-  );
-
-  return res.status(201).json(petPresenter.present(pet, "default"));
-};
+export const createPet: RouteHandler<typeof routes.pet.create> = async ({
+  params,
+  body,
+  actor,
+}) => petService.createPet(actor, params.customerId, body);
 
 export const listCustomerPets = async (req: Request, res: Response) => {
   const { params } = listCustomerPetsSchema.parse({ params: req.params });

@@ -71,7 +71,7 @@ v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);
 v1Router.use("/pets", authenticate, petRouter);
 v1Router.use("/variants", authenticate, variantRouter);
 v1Router.use("/features", authenticate, featureRouter);
-v1Router.use("/roles", authenticate, roleRouter);
+v1Router.use(roleRouter);
 v1Router.use(auditLogRouter);
 // Já sob o `registerRoute`: o `authenticate` desceu do prefixo para o `before`
 // da rota, onde a tabela o exige — ver `src/modules/log/log.routes.ts`.

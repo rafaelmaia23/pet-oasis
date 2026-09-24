@@ -27,6 +27,14 @@ registerRoute(authRouter, routes.auth.verifyEmail, {
   handler: authController.verifyEmail,
 });
 
+registerRoute(authRouter, routes.auth.resendVerification, {
+  before: [
+    rateLimitByIp(emailIpLimiter, "verify-email-resend"),
+    rateLimitByEmailTarget(emailTargetLimiter, "verify-email-resend"),
+  ],
+  handler: authController.resendVerification,
+});
+
 /** A forma antiga, com o path partido entre o prefixo e a chamada. */
 export const legacyAuthRouter = Router();
 
@@ -41,12 +49,6 @@ legacyAuthRouter.post(
   authController.login,
 );
 legacyAuthRouter.post("/refresh", authController.refresh);
-legacyAuthRouter.post(
-  "/verify-email/resend",
-  rateLimitByIp(emailIpLimiter, "verify-email-resend"),
-  rateLimitByEmailTarget(emailTargetLimiter, "verify-email-resend"),
-  authController.resendVerification,
-);
 legacyAuthRouter.post(
   "/forgot-password",
   rateLimitByIp(emailIpLimiter, "forgot-password"),

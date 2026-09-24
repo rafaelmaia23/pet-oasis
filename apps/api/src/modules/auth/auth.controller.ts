@@ -5,7 +5,6 @@ import {
   confirmEmailChangeSchema,
   forgotPasswordSchema,
   loginSchema,
-  resendVerificationSchema,
   resetPasswordSchema,
   sessionParamsSchema,
   signupSchema,
@@ -70,15 +69,15 @@ export const verifyEmail: RouteHandler<
   await verificationService.verifyEmail(body.token);
 };
 
-export const resendVerification = async (req: Request, res: Response) => {
-  const { body } = resendVerificationSchema.parse({ body: req.body });
-
+export const resendVerification: RouteHandler<
+  typeof routes.auth.resendVerification
+> = async ({ body }) => {
   await verificationService.resendVerification(body.email);
 
-  res.status(200).json({
+  return {
     message:
       "Se houver uma conta pendente com este email, um novo link de verificação foi enviado",
-  });
+  };
 };
 
 export const forgotPassword = async (req: Request, res: Response) => {

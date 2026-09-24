@@ -1,8 +1,4 @@
-import {
-  listPetsSchema,
-  petParamsSchema,
-  updatePetSchema,
-} from "@pet-oasis/api-contracts/pet";
+import { petParamsSchema, updatePetSchema } from "@pet-oasis/api-contracts/pet";
 import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
@@ -29,16 +25,12 @@ export const listCustomerPets: RouteHandler<
   return listEnvelope(pets);
 };
 
-export const listPets = async (req: Request, res: Response) => {
-  const { query } = listPetsSchema.parse({ query: req.query });
-
+export const listPets: RouteHandler<typeof routes.pet.list> = async ({
+  query,
+}) => {
   const { pets, total } = await petService.getAllPets(query);
 
-  return res
-    .status(200)
-    .json(
-      offsetEnvelope(petPresenter.presentMany(pets, "default"), query, total),
-    );
+  return offsetEnvelope(pets, query, total);
 };
 
 export const getPetById = async (req: Request, res: Response) => {

@@ -26,6 +26,14 @@ registerRoute(petRouter, routes.pet.listByCustomer, {
   handler: petController.listCustomerPets,
 });
 
+// Única rota do módulo que exige a forma `:others` direto (como `GET /users`
+// exige `read:user:others`): listar pet de terceiro é a definição dela, não um
+// ramo que o service possa separar depois. Por isso o service não recebe ator.
+registerRoute(petRouter, routes.pet.list, {
+  before: [authenticate, canAccess("read:pet:others")],
+  handler: petController.listPets,
+});
+
 /**
  * A forma antiga, com o path partido entre o prefixo e a chamada.
  *
@@ -37,15 +45,9 @@ registerRoute(petRouter, routes.pet.listByCustomer, {
  * criou.
  *
  * As features vão na forma base (`read:pet`/`manage:pet`): `can()` já admite o
- * sufixo `:others`, e quem separa dono de staff é o `pet.service`. A exceção é a
- * listagem geral abaixo.
+ * sufixo `:others`, e quem separa dono de staff é o `pet.service`.
  */
 export const legacyPetRouter = Router();
-
-// Única rota do módulo que exige a forma `:others` direto (como `GET /users`
-// exige `read:user:others`): listar pet de terceiro é a definição dela, não um
-// ramo que o service possa separar depois. Por isso o service não recebe ator.
-legacyPetRouter.get("/", canAccess("read:pet:others"), petController.listPets);
 
 legacyPetRouter.get("/:petId", canAccess("read:pet"), petController.getPetById);
 

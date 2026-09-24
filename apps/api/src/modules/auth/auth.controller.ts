@@ -6,8 +6,6 @@ import { listEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
 import { userPresenter } from "../user/user.presenter";
 import * as accountReactivationService from "./accountReactivation.service";
-import { accessTokenPresenter } from "./auth.presenter";
-import { readRefreshCookie, setRefreshCookie } from "./auth.refreshCookie";
 import * as authService from "./auth.service";
 import type { AuthTransport } from "./auth.transport";
 import * as emailChangeService from "./emailChange.service";
@@ -125,22 +123,18 @@ export const login: RouteHandler<
   return accessTokenBody(accessToken);
 };
 
-export const refresh = async (req: Request, res: Response) => {
-  const refreshToken = readRefreshCookie(req);
+export const refresh: RouteHandler<
+  typeof routes.auth.refresh,
+  AuthTransport
+> = async ({ client, presentedRefreshToken, issueRefreshToken }) => {
+  const { accessToken, refreshToken } = await authService.refresh(
+    presentedRefreshToken,
+    client,
+  );
 
-  const { accessToken, refreshToken: newRefreshToken } =
-    await authService.refresh(refreshToken, {
-      userAgent: req.headers["user-agent"],
-      ipAddress: req.ip,
-    });
+  issueRefreshToken(refreshToken);
 
-  setRefreshCookie(res, newRefreshToken);
-
-  res
-    .status(200)
-    .json(
-      accessTokenPresenter.present(accessTokenBody(accessToken), "default"),
-    );
+  return accessTokenBody(accessToken);
 };
 
 export const logout: RouteHandler<

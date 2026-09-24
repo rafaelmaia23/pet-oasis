@@ -96,6 +96,11 @@ registerRoute(authRouter, routes.auth.login, {
   handler: authController.login,
 });
 
+registerRoute(authRouter, routes.auth.refresh, {
+  context: authTransport,
+  handler: authController.refresh,
+});
+
 /** A forma antiga, com o path partido entre o prefixo e a chamada. */
 export const legacyAuthRouter = Router();
 
@@ -104,6 +109,5 @@ legacyAuthRouter.post(
   rateLimitByIp(signupIpLimiter, "signup"),
   authController.signup,
 );
-legacyAuthRouter.post("/refresh", authController.refresh);
 
 export default authRouter;

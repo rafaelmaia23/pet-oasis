@@ -23,7 +23,9 @@ import meRouter from "@/modules/me/me.routes";
 import permissionRouter from "@/modules/permission/permission.routes";
 import petCustomerRouter from "@/modules/pet/pet.customer.routes";
 import petRouter from "@/modules/pet/pet.routes";
-import productRouter from "@/modules/product/product.routes";
+import productRouter, {
+  productLegacyRouter,
+} from "@/modules/product/product.routes";
 import variantRouter from "@/modules/product/product.variant.routes";
 import roleRouter from "@/modules/role/role.routes";
 import statusRouter from "@/modules/status/status.routes";
@@ -58,7 +60,8 @@ v1Router.use("/tags", optionalAuthenticate, tagRouter);
 // o `GET` sem remontar o router, e o 401 da escrita continua vindo do
 // `canAccess`. `/variants` fica do lado protegido — variante não tem leitura
 // pública própria, ela aparece dentro do produto.
-v1Router.use("/products", optionalAuthenticate, productRouter);
+v1Router.use(productRouter);
+v1Router.use("/products", optionalAuthenticate, productLegacyRouter);
 
 // PROTEGIDAS — com authenticate
 //

@@ -18,7 +18,7 @@ import {
 import {
   productImageListSchema,
   productImageViews,
-  productListSchema,
+  productListLadder,
   productViews,
   variantViews,
 } from "../catalog/product.views";
@@ -64,9 +64,9 @@ export const productRoutes = {
     responses: {
       200: {
         description: "Catálogo",
-        // Sem escada aqui, ao contrário do detalhe — o porquê está no
-        // `productListSchema`.
-        view: productListSchema,
+        // Escada de envelopes, um por degrau — o porquê está no
+        // `productListSchema` (`packages/api-contracts/src/catalog/product.views.ts`).
+        view: productListLadder,
       },
     },
     errors: { 422: errorResponses[422], 429: errorResponses[429] },

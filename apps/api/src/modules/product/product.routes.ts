@@ -1,3 +1,4 @@
+import { routes } from "@pet-oasis/api-contracts/routes";
 import { Router } from "express";
 import {
   catalogIpLimiter,
@@ -5,18 +6,20 @@ import {
   rateLimitByUser,
   uploadUserLimiter,
 } from "@/lib/rateLimit";
+import { registerRoute } from "@/lib/registerRoute";
+import { optionalAuthenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
 import { uploadSingleImage } from "@/middlewares/upload.middleware";
 import * as productController from "./product.controller";
 import * as productImageController from "./product.image.controller";
 import * as variantController from "./product.variant.controller";
+import { chooseProductListView } from "./product.view-resolver";
 
 /**
- * Leitura pública e escrita protegida no mesmo router, como marca e categoria
- * (9.6). O router é montado com `optionalAuthenticate` em `src/routes/index.ts`
- * — os dois `GET` respondem sem token e escolhem a view pela feature efetiva do ator
- * (9.8), e quem exige identidade no resto é o `canAccess`, que devolve 401
- * sozinho sem `req.user`.
+ * As rotas de produto já sob o `registerRoute`: montadas **sem prefixo**, com
+ * o path inteiro vindo da entrada da tabela. Enquanto a migração da issue 14
+ * de `.scratch/fase-12-module-depth/` corre, o que falta fica no
+ * `productLegacyRouter` abaixo, ainda montado sob `/products`.
  *
  * Toda escrita de produto e de variante é `manage:product` (9.1) — a exceção é
  * o ajuste de estoque, que mora no `PATCH /variants/:variantId` e é decidido
@@ -26,34 +29,44 @@ const productRouter = Router();
 
 // As duas leituras dividem o balde `catalog-read` com marcas, categorias, tags
 // e raças: separar por rota daria N orçamentos ao mesmo scraper.
-productRouter.get(
-  "/",
-  rateLimitByIp(catalogIpLimiter, "catalog-read"),
-  productController.listProducts,
-);
+//
+// `optionalAuthenticate` entra em `before` porque a rota é pública (`auth:
+// "public"` na tabela) mas a view varia com a feature efetiva do ator quando
+// ele existe (9.8) — é o middleware que popula `req.user` antes do dispatch.
+registerRoute(productRouter, routes.product.list, {
+  before: [
+    optionalAuthenticate,
+    rateLimitByIp(catalogIpLimiter, "catalog-read"),
+  ],
+  chooseView: chooseProductListView,
+  handler: productController.listProducts,
+});
+
+/** O que ainda está na forma antiga — sai quando a última rota migrar. */
+export const productLegacyRouter = Router();
 
 // Vem depois da coleção e antes de tudo que é aninhado: `:idOrSlug` casa com
 // qualquer segmento, então uma rota literal registrada abaixo dele nunca seria
 // alcançada.
-productRouter.get(
+productLegacyRouter.get(
   "/:idOrSlug",
   rateLimitByIp(catalogIpLimiter, "catalog-read"),
   productController.getProductByIdOrSlug,
 );
 
-productRouter.post(
+productLegacyRouter.post(
   "/",
   canAccess("manage:product"),
   productController.createProduct,
 );
 
-productRouter.patch(
+productLegacyRouter.patch(
   "/:productId",
   canAccess("manage:product"),
   productController.updateProduct,
 );
 
-productRouter.delete(
+productLegacyRouter.delete(
   "/:productId",
   canAccess("manage:product"),
   productController.deleteProduct,
@@ -71,7 +84,7 @@ productRouter.delete(
  * nenhum; e o limiter antes do multer, para que a cota seja cobrada antes de o
  * corpo inteiro ser lido para a memória.
  */
-productRouter.post(
+productLegacyRouter.post(
   "/:productId/images",
   canAccess("manage:product"),
   rateLimitByUser(uploadUserLimiter, "image-upload"),
@@ -81,13 +94,13 @@ productRouter.post(
 
 // Antes do item: `:imageId` casaria com o literal `order` se viessem na ordem
 // inversa — mas são métodos diferentes, então isto é higiene, não necessidade.
-productRouter.patch(
+productLegacyRouter.patch(
   "/:productId/images/order",
   canAccess("manage:product"),
   productImageController.reorderProductImages,
 );
 
-productRouter.delete(
+productLegacyRouter.delete(
   "/:productId/images/:imageId",
   canAccess("manage:product"),
   productImageController.deleteProductImage,
@@ -95,7 +108,7 @@ productRouter.delete(
 
 // Coleção aninhada: criar variante precisa do produto na URL. O item é plano
 // (`/variants/:variantId`), mesmo racional dos pets — o id é global.
-productRouter.post(
+productLegacyRouter.post(
   "/:productId/variants",
   canAccess("manage:product"),
   variantController.createVariant,

@@ -1,35 +1,35 @@
+import { routes } from "@pet-oasis/api-contracts/routes";
 import { Router } from "express";
 import { catalogIpLimiter, rateLimitByIp } from "@/lib/rateLimit";
+import { registerRoute } from "@/lib/registerRoute";
+import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
 import * as categoryController from "./category.controller";
 
-// Leitura pública, escrita sob `manage:catalog-structure` — mesmo desenho dos
-// módulos de marca e tag. Montado com `optionalAuthenticate` em
-// `src/routes/index.ts`.
+/**
+ * Montado **sem prefixo** em `src/routes/index.ts` (issue 13 de
+ * `.scratch/fase-12-module-depth/`) — mesmo desenho de marca.
+ */
 const categoryRouter = Router();
 
-categoryRouter.get(
-  "/",
-  rateLimitByIp(catalogIpLimiter, "catalog-read"),
-  categoryController.listCategories,
-);
+registerRoute(categoryRouter, routes.category.list, {
+  before: [rateLimitByIp(catalogIpLimiter, "catalog-read")],
+  handler: categoryController.listCategories,
+});
 
-categoryRouter.post(
-  "/",
-  canAccess("manage:catalog-structure"),
-  categoryController.createCategory,
-);
+registerRoute(categoryRouter, routes.category.create, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: categoryController.createCategory,
+});
 
-categoryRouter.patch(
-  "/:categoryId",
-  canAccess("manage:catalog-structure"),
-  categoryController.updateCategory,
-);
+registerRoute(categoryRouter, routes.category.update, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: categoryController.updateCategory,
+});
 
-categoryRouter.delete(
-  "/:categoryId",
-  canAccess("manage:catalog-structure"),
-  categoryController.deleteCategory,
-);
+registerRoute(categoryRouter, routes.category.delete, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: categoryController.deleteCategory,
+});
 
 export default categoryRouter;

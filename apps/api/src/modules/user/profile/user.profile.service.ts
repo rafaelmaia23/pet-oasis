@@ -5,15 +5,15 @@ import type {
 } from "@pet-oasis/api-contracts/user";
 import {
   createConflictError,
-  createForbiddenError,
   createNotFoundError,
 } from "@/errors/errorFactory";
 import type { ProfileKind } from "@/generated/prisma/enums";
 import type { AuditDescriptor } from "@/lib/auditLog";
 import {
   type AuthUser,
-  canActOnResource,
-  hasFeature,
+  assertCanActOnResource,
+  assertHasAnyFeature,
+  authorizeThenLoad,
 } from "@/lib/authorization";
 import { assertAdminForRoleAssignment } from "@/modules/permission/permission.service";
 import { getRolesByNames } from "@/modules/role/role.repository";
@@ -25,52 +25,53 @@ import * as userProfileRepository from "./user.profile.repository";
 const DEFAULT_CUSTOMER_ROLES: RoleName[] = ["customer"];
 const DEFAULT_EMPLOYEE_ROLES: RoleName[] = ["attendant"];
 
-const FORBIDDEN_MESSAGE = "Você não tem permissão para acessar este recurso";
-
-const describeFeatures = (features: string[]) =>
-  features.length === 1
-    ? `Verifique se você tem acesso a feature "${features[0]}"`
-    : `Verifique se você tem acesso a uma das features: ${features
-        .map((feature) => `"${feature}"`)
-        .join(", ")}`;
+/**
+ * O 404 de usuário **das rotas de perfil**. A ação difere da do módulo de
+ * usuário ("Verifique o ID e tente novamente") porque a resposta destas rotas
+ * sempre foi assim; unificar as duas mudaria corpo já publicado.
+ */
+const USER_NOT_FOUND = {
+  message: "Usuário não encontrado",
+  action: "Verifique o ID do usuário",
+};
 
 /**
- * Autorização do perfil de **cliente**, que tem par self/`:others` — o ator age
- * sobre si mesmo sempre, sobre terceiros só com a versão `:others`.
- *
- * A mensagem nomeia a variante que faltou de verdade: pedir `:others` a quem
- * está agindo sobre o próprio `User` mandaria o usuário atrás da feature errada.
+ * Autoriza e **então** carrega o alvo do perfil de **cliente**, que tem par
+ * self/`:others` — o ator age sobre si mesmo sempre, sobre terceiros só com a
+ * versão `:others`. O dono é o próprio id da URL, daí o modo `owner-in-url`.
  */
-function assertCanActOnCustomerProfile(
+const loadUserForCustomerProfile = (
   actor: AuthUser,
   targetUserId: string,
   features: string[],
-) {
-  if (features.some((f) => canActOnResource(actor, f, targetUserId))) return;
-
-  const scope = (feature: string) =>
-    actor.id === targetUserId ? feature : `${feature}:others`;
-
-  throw createForbiddenError({
-    message: FORBIDDEN_MESSAGE,
-    action: describeFeatures(features.map(scope)),
+) =>
+  authorizeThenLoad({
+    actor,
+    feature: features,
+    mode: "owner-in-url",
+    ownerId: targetUserId,
+    load: () => findUserById(targetUserId),
+    notFound: USER_NOT_FOUND,
   });
-}
 
 /**
- * Autorização do perfil de **funcionário**. Sem par self/`:others` de propósito:
- * nunca há self-service para virar funcionário (D11), então a feature já é, por
- * definição, a de agir sobre outro — e `canActOnResource` aqui restringiria ao
+ * O mesmo para o perfil de **funcionário**, no modo `no-owner`: nunca há
+ * self-service para virar funcionário (D11), então a feature já é, por
+ * definição, a de agir sobre outro — o par self/`:others` restringiria ao
  * próprio, que é o oposto do pretendido.
  */
-function assertCanActOnEmployeeProfile(actor: AuthUser, features: string[]) {
-  if (features.some((feature) => hasFeature(actor, feature))) return;
-
-  throw createForbiddenError({
-    message: FORBIDDEN_MESSAGE,
-    action: describeFeatures(features),
+const loadUserForEmployeeProfile = (
+  actor: AuthUser,
+  targetUserId: string,
+  features: string[],
+) =>
+  authorizeThenLoad({
+    actor,
+    feature: features,
+    mode: "no-owner",
+    load: () => findUserById(targetUserId),
+    notFound: USER_NOT_FOUND,
   });
-}
 
 const describeProfileCreation =
   (userId: string, profileKind: ProfileKind) =>
@@ -133,19 +134,10 @@ export async function createCustomerProfile(
   userId: string,
   data: CreateCustomerProfileInput,
 ) {
-  assertCanActOnCustomerProfile(actor, userId, [
+  const user = await loadUserForCustomerProfile(actor, userId, [
     "create:customer-profile",
     "reactivate:customer-profile",
   ]);
-
-  const user = await findUserById(userId);
-
-  if (!user) {
-    throw createNotFoundError({
-      message: "Usuário não encontrado",
-      action: "Verifique o ID do usuário",
-    });
-  }
 
   if (user.customer && user.customer.deletedAt === null) {
     throw createConflictError({
@@ -155,9 +147,7 @@ export async function createCustomerProfile(
   }
 
   if (user.customer) {
-    assertCanActOnCustomerProfile(actor, userId, [
-      "reactivate:customer-profile",
-    ]);
+    assertCanActOnResource(actor, ["reactivate:customer-profile"], userId);
 
     // Sem escolha de roles: o perfil de cliente tem uma só, então vale o default
     // do D8 — volta o que morreu na cascata dele.
@@ -169,7 +159,7 @@ export async function createCustomerProfile(
     );
   }
 
-  assertCanActOnCustomerProfile(actor, userId, ["create:customer-profile"]);
+  assertCanActOnResource(actor, ["create:customer-profile"], userId);
 
   const rolesList = await getRolesByNames(DEFAULT_CUSTOMER_ROLES);
 
@@ -193,19 +183,10 @@ export async function createEmployeeProfile(
   userId: string,
   data: CreateEmployeeProfileInput,
 ) {
-  assertCanActOnEmployeeProfile(actor, [
+  const user = await loadUserForEmployeeProfile(actor, userId, [
     "create:employee-profile",
     "reactivate:employee-profile",
   ]);
-
-  const user = await findUserById(userId);
-
-  if (!user) {
-    throw createNotFoundError({
-      message: "Usuário não encontrado",
-      action: "Verifique o ID do usuário",
-    });
-  }
 
   if (user.employee && user.employee.deletedAt === null) {
     throw createConflictError({
@@ -228,7 +209,7 @@ export async function createEmployeeProfile(
   }
 
   if (user.employee) {
-    assertCanActOnEmployeeProfile(actor, ["reactivate:employee-profile"]);
+    assertHasAnyFeature(actor, ["reactivate:employee-profile"]);
 
     // `roleNames` explícito = as roles com que o perfil volta (K15). Ausente =
     // default do D8, tudo o que morreu na cascata.
@@ -244,7 +225,7 @@ export async function createEmployeeProfile(
     );
   }
 
-  assertCanActOnEmployeeProfile(actor, ["create:employee-profile"]);
+  assertHasAnyFeature(actor, ["create:employee-profile"]);
 
   return await userProfileRepository.createEmployeeProfile(
     userId,
@@ -257,10 +238,7 @@ export async function deleteCustomerProfile(userId: string) {
   const user = await findUserById(userId);
 
   if (!user) {
-    throw createNotFoundError({
-      message: "Usuário não encontrado",
-      action: "Verifique o ID do usuário",
-    });
+    throw createNotFoundError(USER_NOT_FOUND);
   }
 
   if (!user.customer) {
@@ -297,10 +275,7 @@ export async function deleteEmployeeProfile(userId: string) {
   const user = await findUserById(userId);
 
   if (!user) {
-    throw createNotFoundError({
-      message: "Usuário não encontrado",
-      action: "Verifique o ID do usuário",
-    });
+    throw createNotFoundError(USER_NOT_FOUND);
   }
 
   if (!user.employee) {

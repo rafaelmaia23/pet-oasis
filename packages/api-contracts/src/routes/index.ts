@@ -17,6 +17,7 @@ import { tagRoutes } from "./tag.routes";
 import { userRoutes } from "./user.routes";
 
 export * from "./responses";
+export * from "./route.tags";
 export * from "./route.types";
 
 /**

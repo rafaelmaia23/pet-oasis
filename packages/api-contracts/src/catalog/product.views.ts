@@ -1,9 +1,17 @@
 import { z } from "zod";
+import type { FeatureName } from "../feature/feature.names";
 import { offsetMetaSchema } from "../pagination/pagination.schema";
 import { petSpeciesSchema } from "../pet/pet.enums";
 import { brandViews } from "./brand.views";
 import { productStatusSchema } from "./catalog.enums";
 import { tagViews } from "./tag.views";
+
+/** Um degrau da escada: a view e a feature que o destrava — `null` no degrau
+ * base, que todo ator recebe (inclusive o anônimo). */
+type ViewLadder<V extends z.ZodType> = readonly {
+  view: V;
+  feature: FeatureName | null;
+}[];
 
 /**
  * Três views em **escada**, cada degrau contendo o anterior (9.8/Y9):
@@ -225,6 +233,45 @@ export const variantViews = {
 
 export type VariantView = keyof typeof variantViews;
 
+/**
+ * A escada da **leitura** do catálogo (9.8/Y9), em pares: o degrau que o
+ * visitante anônimo recebe (base, `feature: null`), o que
+ * `read:product:internal` destrava e o que `read:product:cost` destrava por
+ * cima — `read:product:cost` **implica** a visão interna (quem vê margem vê
+ * estoque e rascunho), e é por isso que `chooseView`
+ * (`apps/api/src/lib/viewLadder.ts`) percorre os pares em ordem e deixa o
+ * degrau mais alto alcançado vencer, em vez de tratar as duas features como
+ * independentes.
+ */
+export const productReadLadder = [
+  { view: publicView, feature: null },
+  { view: internalView, feature: "read:product:internal" },
+  { view: costView, feature: "read:product:cost" },
+] as const satisfies ViewLadder<z.ZodType>;
+
+/** Só os schemas, na ordem — a forma que a tabela de rotas declara. */
+export const productReadSchemas = productReadLadder.map((rung) => rung.view);
+
+/**
+ * A escrita nunca devolve o degrau público — quem chega aqui já tem
+ * `manage:product` —, então o degrau base é `internal`, e só o custo continua
+ * atrás de feature própria.
+ */
+export const productWriteLadder = [
+  { view: internalView, feature: null },
+  { view: costView, feature: "read:product:cost" },
+] as const satisfies ViewLadder<z.ZodType>;
+
+export const productWriteSchemas = productWriteLadder.map((rung) => rung.view);
+
+/** O equivalente de `productWriteLadder` para a variante sozinha. */
+export const variantWriteLadder = [
+  { view: variantInternalView, feature: null },
+  { view: variantCostView, feature: "read:product:cost" },
+] as const satisfies ViewLadder<z.ZodType>;
+
+export const variantWriteSchemas = variantWriteLadder.map((rung) => rung.view);
+
 export const productImageViews = {
   default: productImageView,
 } as const;
@@ -265,10 +312,37 @@ export const productImageListSchema = z.object({
  * listagem, com o eco da busca — e é justamente por isso que ele mora aqui, ao
  * lado das views, e não montado na entrada da tabela de rotas.
  *
- * A listagem não tem escada: o degrau é escolhido uma vez para a página
- * inteira, e uma união de três envelopes esconderia o `meta` de quem lê a spec.
+ * **A listagem tem escada, apesar do custo de legibilidade no `/openapi.json`.**
+ * A leitura original desta função dizia que a listagem "não tem escada": o
+ * degrau seria escolhido uma vez para a página inteira, e uma união de três
+ * envelopes esconderia o `meta` de quem lê a spec. Isso ficou desatualizado —
+ * o controller sempre variou a view por item conforme a feature efetiva do
+ * ator (9.8/Y9), e a issue 14 de `.scratch/fase-12-module-depth/` migrou a
+ * rota para o registrador sem poder mudar esse comportamento. Como o
+ * `chooseView` do registrador escolhe **um** schema por status a partir de uma
+ * escada declarada na entrada da tabela, a escada teve de subir para o nível
+ * do envelope inteiro — item por item continuaria escondendo a variação do
+ * corpo do registrador. `productListSchemaFor` é o envelope parametrizado pela
+ * view do item; `productListLadder` é a escada dos três, nos mesmos pares
+ * (degrau, feature) de `productReadLadder` — é a mesma feature que decide
+ * o item e o envelope que o contém, então as duas nunca divergem.
  */
-export const productListSchema = z.object({
-  data: z.array(publicListView),
-  meta: productListMetaSchema,
-});
+export const productListSchemaFor = (itemView: z.ZodType) =>
+  z.object({
+    data: z.array(itemView),
+    meta: productListMetaSchema,
+  });
+
+export const productListLadder = [
+  { view: productListSchemaFor(publicListView), feature: null },
+  {
+    view: productListSchemaFor(internalListView),
+    feature: "read:product:internal",
+  },
+  { view: productListSchemaFor(costListView), feature: "read:product:cost" },
+] as const satisfies ViewLadder<z.ZodType>;
+
+export const productListSchemas = productListLadder.map((rung) => rung.view);
+
+/** Alias do primeiro degrau — mantido para quem ainda importa o envelope público sozinho. */
+export const productListSchema = productListSchemas[0];

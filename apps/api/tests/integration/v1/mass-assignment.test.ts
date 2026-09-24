@@ -12,6 +12,7 @@ import {
   makeEmployeeData,
 } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
+import { describeUserDeletedAudit } from "@tests/helpers/audit";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
 import { flushRedis } from "@tests/helpers/redis";
@@ -29,7 +30,14 @@ import app from "@/app";
 import { prisma } from "@/lib/prisma";
 import { getFeatureByName } from "@/modules/feature/feature.repository";
 import { getRoleByName } from "@/modules/role/role.repository";
-import { softDeleteUserAndInvalidateSessions } from "@/modules/user/user.repository";
+import { softDeleteUserAndInvalidateSessions as softDeleteUserAndInvalidateSessionsWithAudit } from "@/modules/user/user.repository";
+
+/** Deleta o usuário-alvo, com o descritor que a taxonomia exige (USER_DELETED). */
+const softDeleteUserAndInvalidateSessions = (userId: string) =>
+  softDeleteUserAndInvalidateSessionsWithAudit(
+    userId,
+    describeUserDeletedAudit(userId),
+  );
 
 /**
  * Regressão explícita de mass assignment (10.12).

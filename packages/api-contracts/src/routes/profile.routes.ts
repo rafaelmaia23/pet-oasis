@@ -4,7 +4,7 @@ import {
   deleteCustomerProfileSchema,
   deleteEmployeeProfileSchema,
 } from "../user/user.profile.schema";
-import { userViewLadder } from "../user/user.views";
+import { userViewSchemas } from "../user/user.views";
 import { errorResponses, noContent } from "./responses";
 import type { RouteGroup } from "./route.types";
 
@@ -32,7 +32,7 @@ export const profileRoutes = {
       "roles que morreram na cascata voltam; os overrides delas, não.",
     request: createCustomerProfileSchema,
     responses: {
-      201: { description: "Perfil criado ou reativado", view: userViewLadder },
+      201: { description: "Perfil criado ou reativado", view: userViewSchemas },
     },
     errors: { ...profileErrors, 422: errorResponses[422] },
   },
@@ -65,7 +65,7 @@ export const profileRoutes = {
       "morreu na cascata. Nomear uma role privilegiada sem ser admin → 403.",
     request: createEmployeeProfileSchema,
     responses: {
-      201: { description: "Perfil criado ou reativado", view: userViewLadder },
+      201: { description: "Perfil criado ou reativado", view: userViewSchemas },
     },
     errors: { ...profileErrors, 422: errorResponses[422] },
   },
@@ -81,4 +81,4 @@ export const profileRoutes = {
     responses: { 204: noContent },
     errors: profileErrors,
   },
-} satisfies RouteGroup;
+} as const satisfies RouteGroup;

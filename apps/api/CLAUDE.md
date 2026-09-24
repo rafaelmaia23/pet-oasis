@@ -12,13 +12,21 @@ TypeScript (tsconfig strict: `exactOptionalPropertyTypes`, `noUncheckedIndexedAc
 
 ## Arquitetura — camadas
 
-Fluxo rígido: **route → controller (Zod parse) → service (regras de negócio) → repository (Prisma)**. Cada camada só fala com a adjacente. Repository é a ÚNICA que toca o Prisma. Controller só faz parse + chama service + responde. Service tem as regras e orquestra. Nunca pule camadas.
+Fluxo rígido: **route → controller → service (regras de negócio) → repository (Prisma)**. Cada camada só fala com a adjacente. Repository é a ÚNICA que toca o Prisma. Service tem as regras e orquestra. Nunca pule camadas.
+
+**A rota é declarada num lugar só: a entrada da tabela do contrato.** `registerRoute`
+(`src/lib/registerRoute.ts`) deriva dela tudo que a rota promete, e o controller é o **handler**:
+recebe o envelope já validado e devolve o que a view descreve, sem `req`, sem `res`, sem `.parse()`
+e sem status escrito à mão. O que é do servidor entra por `before`; o que o **transporte** sabe e a
+tabela não descreve (cookie, user agent, IP) entra por `context`, uma função do próprio módulo. As
+79 rotas de domínio já saem do registrador (Fase 12, `.scratch/fase-12-module-depth/`) — não existe
+mais forma antiga. Como se escreve uma rota: `docs/guides/documenting-endpoints.md` §3.
 
 ## Organização de módulos
 
-Cada módulo em `src/modules/<nome>/` com: `*.route.ts`, `*.controller.ts`, `*.service.ts`, `*.repository.ts`, `*.presenter.ts` (o helper de whitelist aplicado sobre a view). **Os schemas Zod de request (create, update, query, path) e as views de resposta vivem no contrato** (`packages/api-contracts/src/<domínio>/`, `*.schema.ts` e `*.views.ts`), e a API os importa de `@pet-oasis/api-contracts/<domínio>` — controller, presenter e testes; não existe `*.schema.ts` em `src/modules/`. **A tabela de rotas também é do contrato** (`packages/api-contracts/src/routes/`): o `/openapi.json` é derivado dela por `src/docs/adapter.ts`, e `tests/unit/contracts/routeParity.test.ts` prova que ela e o router do Express não divergem. O que precisa de algo além de `zod` (helper de servidor, banco) fica na API como composição por cima do schema do contrato (ex.: `catalog.slug.ts`). Módulos: **user** (CRUD + perfis em subarquivos `user.profile.*`), **role** (read-only), **feature** (read-only), **permission** (overrides de feature), **auth** (login/sessão). Constantes de domínio (roles, features) em `*.constants.ts`, lidas pelo seed — os **nomes** vêm do contrato (`@pet-oasis/api-contracts`) e quem precisa deles importa de lá; a API guarda só o que o seed anexa a cada nome (descrição, features por role, `appliesTo`), num `Record<Name, …>` que o typecheck prova completo.
+Cada módulo em `src/modules/<nome>/` com: `*.route.ts`, `*.controller.ts`, `*.service.ts`, `*.repository.ts` e, **na maioria, nenhum** `*.presenter.ts` (o helper de whitelist aplicado sobre a view). Com a rota vinda do `registerRoute`, a view sai da tabela e o presenter deixa de ter função — sumiu assim de cinco módulos; o que sobrevive é o presenter que decide **conteúdo**, não forma (o `maskIp` do audit log). **Os schemas Zod de request (create, update, query, path) e as views de resposta vivem no contrato** (`packages/api-contracts/src/<domínio>/`, `*.schema.ts` e `*.views.ts`), e a API os importa de `@pet-oasis/api-contracts/<domínio>` — controller, presenter e testes; não existe `*.schema.ts` em `src/modules/`. **A tabela de rotas também é do contrato** (`packages/api-contracts/src/routes/`): o `/openapi.json` é derivado dela por `src/docs/adapter.ts`, e o router do Express não tem mais como divergir dela — é construído direto da entrada pelo `registerRoute`. O que precisa de algo além de `zod` (helper de servidor, banco) fica na API como composição por cima do schema do contrato (ex.: `catalog.slug.ts`). Módulos: **user** (CRUD + perfis em subarquivos `user.profile.*`), **role** (read-only), **feature** (read-only), **permission** (overrides de feature), **auth** (login/sessão). Constantes de domínio (roles, features) em `*.constants.ts`, lidas pelo seed — os **nomes** vêm do contrato (`@pet-oasis/api-contracts`) e quem precisa deles importa de lá; a API guarda só o que o seed anexa a cada nome (descrição, features por role, `appliesTo`), num `Record<Name, …>` que o typecheck prova completo.
 
-Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasFeature`/`canActOnResource`), `utils/presenter.ts` (whitelist via Zod), error handler central, `errors/errorFactory.ts` (factories `create*`).
+Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasFeature`/`canActOnResource` e **`authorizeThenLoad`**, a primitiva que ordena autorização e carga — todo acesso a recurso por id passa por ela, ver `docs/adr/0011-autorizacao-sempre-antes-busca.md`), `utils/presenter.ts` (whitelist via Zod), error handler central, `errors/errorFactory.ts` (factories `create*`).
 
 ---
 
@@ -36,7 +44,7 @@ Padrões transversais: `lib/authorization.ts` (cômputo de features, `can`/`hasF
 
 **Cascata e restauração (Fase 8):** deletar desce quatro níveis — `User` → perfis → `UserRole` → `UserFeature` —, com **um único `new Date()` por transação** propagado por toda a cadeia (`user.lifecycle.repository.ts`). Nunca existe filho ativo de pai morto. Restaurar sobe só **dois** (`User` → perfil → `UserRole`): o perfil volta porque foi **nomeado**, as roles dele voltam por **correlação de `deletedAt`** com o do perfil, e **nenhum override ressuscita por efeito colateral** — só por `PUT` explícito na tripla. A assimetria é principiada: deletar demais é fail-closed, restaurar demais é vazamento de privilégio. Racional em `docs/adr/0005-authorization-scope-and-lifecycle.md`. `User` deletado tem caminho de volta (reativação por signup ou por admin, sempre confirmada pelo dono via token); **nunca** existe usuário ativo sem ao menos um perfil ativo.
 
-**Validação:** sintática (Zod, sem banco) no controller; semântica (precisa de banco — appliesTo, etc.) no service. Ambas produzem 422 no mesmo shape (`errors` por campo). Unicidade pelo banco (P2002 → 409 no handler, lê `meta.driverAdapterError.cause.constraint.fields`).
+**Validação:** sintática (Zod, sem banco) pelo `registerRoute`, que faz o `.parse()` do envelope antes de chamar o handler; semântica (precisa de banco — appliesTo, etc.) no service. Ambas produzem 422 no mesmo shape (`errors` por campo). Unicidade pelo banco (P2002 → 409 no handler, lê `meta.driverAdapterError.cause.constraint.fields`).
 
 **Erros:** factories `create*` retornam instâncias de subclasses de `AppError`; o caller dá `throw`. 422 VALIDATION_ERROR, 409 CONFLICT, 404 NOT_FOUND, 403 FORBIDDEN (action nomeia a feature), 401 UNAUTHORIZED.
 

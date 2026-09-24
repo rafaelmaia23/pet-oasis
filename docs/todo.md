@@ -170,11 +170,37 @@
 ## 🔄 Fase 12 — Profundidade nos módulos e a espinha de auth do web
 > Dois **esforços**, nesta ordem — o primeiro muda o que o segundo consome. A forma "uma fase,
 > um ou mais esforços" está em [`adr/0002`](adr/0002-tracker-folders-are-phases.md).
-- 🔄 **`fase-12-module-depth`**: aprofundar os módulos da API e do contrato — o route entry passa
-  a construir o handler (79 rotas, lista de erros do `/openapi.json` derivada), `ERROR_CODES` do
-  contrato passa a tipar o erro da API, e os invariantes que hoje vivem em cópia (token de
-  verificação, sessão viva, cookie de refresh, autorizar-antes-de-buscar) ganham um dono. A pasta
-  nasce com o planejamento.
+- ✅ **`fase-12-module-depth`**: aprofundar os módulos da API e do contrato. 19 issues (os nove
+  aprofundamentos aprovados na grelha de 2026-09-23, mais o acesso ao GitHub e o `contract` do
+  refactor largo de rota, achado na execução), cada uma em feat-branch própria. Racional em
+  `apps/api/docs/adr/README.md#roteamento` (`0203`, `0206`), `apps/api/docs/adr/README.md#views-presenter`
+  (`0204`) e `apps/api/docs/adr/README.md#onde-cada-coisa-vive` (`0205`); o que ficou de fora, com
+  o motivo, em `docs/reference/backlog.md`. Spec e issues em `.scratch/fase-12-module-depth/`.
+  - **A tabela de rotas ganhou o segundo adapter que o `0003` já implicava (08–15):** `registerRoute`
+    deriva de cada entrada o path, o parse do envelope, o status de sucesso e a view — o handler
+    para de tocar `req`/`res`. As 79 rotas de domínio migraram, um commit por rota, até não sobrar
+    forma antiga; o teste de paridade (`routeParity.test.ts`, monkey-patch do router do Express)
+    morreu inteiro, e o único invariante que não ficou tautológico virou função pura em
+    `packages/api-contracts/tests/route-table.test.ts`. Efeito colateral decidido pelo dono do
+    projeto: método inexistente sob prefixo autenticado passa de 401 a 404 (`0203`).
+  - **Identidade e sessão pararam de viver em cópia (04–06):** um módulo de cookie de refresh
+    (emitir, ler, limpar), um filtro só de sessão viva compartilhado pelos quatro sites que a
+    derrubam, e `verificationToken` colapsando 4 `consume*` num só, parametrizado por `purpose`.
+  - **Autorizar-então-carregar virou primitiva (07):** ordena os dois passos e deriva o `action`
+    do 403 da feature recebida; `getUserByEmail`, que invertia a ordem sem nenhum caller, saiu.
+  - **As duas decisões que exigiam ADR antes do código (17, 18):** a escada de views passou a
+    declarar o par `(passo, feature)` no contrato — a API continua decidindo qual degrau cada
+    ator recebe (`0204`) —, e `writeAudited` colapsou o braço duplicado dos 13 repositórios,
+    tornando o descriptor de auditoria obrigatório onde a taxonomia sempre exigiu rastro (`0205`).
+  - **`ERROR_CODES` do contrato passou a tipar o erro da API (03)**, e o `/openapi.json` deixou de
+    sub-declarar status: as 14 rotas com `:param` que já respondiam 422 passaram a documentá-lo,
+    derivado do schema e do middleware em vez de mantido à mão (16).
+  - **Acesso ao GitHub (01):** o remoto virou SSH (reuso de chave já cadastrada) e `gh` autenticado
+    para PR e CI — push e PR deixaram de exigir mão humana no meio de cada entrega.
+  - Fechos: nenhum teste de integração foi apagado (regra dura da spec); o enxugamento da suíte
+    (19.080 linhas de integração hoje duplicando cobertura com o unitário novo) foi para
+    `docs/reference/backlog.md`, seção *Testes*. Suíte (**1452**) + `typecheck` + `lint` +
+    `docs:check` verdes.
 - ⬜ **`fase-12-web-auth-spine`**: herdado do `pet-oasis-web` no import (Fase 11, issue 11), com o
   conteúdo com que o web congelou — do bootstrap ao fluxo completo de conta: sessão em BFF, login
   e os estados bloqueados, guarda de rota, renovação automática, signup, verificação de email,

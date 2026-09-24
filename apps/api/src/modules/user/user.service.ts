@@ -9,7 +9,6 @@ import {
 } from "@pet-oasis/api-contracts/user";
 import {
   createConflictError,
-  createForbiddenError,
   createNotFoundError,
   createValidationError,
 } from "@/errors";
@@ -17,7 +16,7 @@ import type { ProfileKind } from "@/generated/prisma/enums";
 import type { AuthUser } from "@/lib/authorization";
 import {
   assertActorIsAdmin,
-  canActOnResource,
+  authorizeThenLoad,
   computeEffectiveFeatures,
 } from "@/lib/authorization";
 import { send } from "@/lib/email";
@@ -26,13 +25,12 @@ import { logger } from "@/lib/logger";
 import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
 import { hashPassword } from "@/lib/password";
 import { consumeEmailTargetLimit, emailTargetLimiter } from "@/lib/rateLimit";
-import { generateOpaqueToken, hashToken } from "@/lib/token";
 import * as userRepository from "@/modules/user/user.repository";
 import { validateRoles } from "@/utils/validateRoles";
 import { requestAccountReactivation } from "../auth/accountReactivation.service";
-import { PASSWORD_RESET_TTL_MS } from "../auth/auth.constants";
 import { buildPasswordResetEmail } from "../auth/password.service";
 import { issueEmailVerification } from "../auth/verification.service";
+import { mintVerificationToken } from "../auth/verificationToken.service";
 import {
   assertAdminForRoleAssignment,
   getRolesRestorableWithProfiles,
@@ -189,47 +187,28 @@ export async function createCustomer(
   return user;
 }
 
+const USER_NOT_FOUND = {
+  message: "Usuário não encontrado",
+  action: "Verifique o ID e tente novamente",
+};
+
+/**
+ * Autoriza e **então** carrega o alvo das três operações de usuário por id. O
+ * dono do recurso é o próprio id da URL, então ele se conhece antes da busca —
+ * é o modo `owner-in-url` de `authorizeThenLoad`.
+ */
+const loadTargetUser = (actor: AuthUser, feature: string, targetId: string) =>
+  authorizeThenLoad({
+    actor,
+    feature,
+    mode: "owner-in-url",
+    ownerId: targetId,
+    load: () => userRepository.findUserById(targetId),
+    notFound: USER_NOT_FOUND,
+  });
+
 export async function getUserById(requestingUser: AuthUser, targetId: string) {
-  if (!canActOnResource(requestingUser, "read:user", targetId)) {
-    throw createForbiddenError({
-      message: "Você não tem permissão para acessar este recurso",
-      action: 'Verifique se você tem acesso a feature "read:user:others"',
-    });
-  }
-
-  const user = await userRepository.findUserById(targetId);
-
-  if (!user) {
-    throw createNotFoundError({
-      message: "Usuário não encontrado",
-      action: "Verifique o ID e tente novamente",
-    });
-  }
-
-  return user;
-}
-
-export async function getUserByEmail(
-  requestingUser: AuthUser,
-  targetEmail: string,
-) {
-  const user = await userRepository.findUserByEmail(targetEmail);
-
-  if (!user) {
-    throw createNotFoundError({
-      message: "Usuário não encontrado",
-      action: "Verifique o email e tente novamente",
-    });
-  }
-
-  if (!canActOnResource(requestingUser, "read:user", user.id)) {
-    throw createForbiddenError({
-      message: "Você não tem permissão para acessar este recurso",
-      action: 'Verifique se você tem acesso a feature "read:user"',
-    });
-  }
-
-  return user;
+  return loadTargetUser(requestingUser, "read:user", targetId);
 }
 
 export async function getAllUsers(query: ListUsersQuery) {
@@ -248,41 +227,13 @@ export async function updateUser(
   targetId: string,
   data: UpdateUserInput,
 ) {
-  if (!canActOnResource(requestingUser, "update:user", targetId)) {
-    throw createForbiddenError({
-      message: "Você não tem permissão para acessar este recurso",
-      action: 'Verifique se você tem acesso a feature "update:user:others"',
-    });
-  }
-
-  const user = await userRepository.findUserById(targetId);
-
-  if (!user) {
-    throw createNotFoundError({
-      message: "Usuário não encontrado",
-      action: "Verifique o ID e tente novamente",
-    });
-  }
+  await loadTargetUser(requestingUser, "update:user", targetId);
 
   return userRepository.updateUser(targetId, data);
 }
 
 export async function deleteUser(requestingUser: AuthUser, targetId: string) {
-  if (!canActOnResource(requestingUser, "delete:user", targetId)) {
-    throw createForbiddenError({
-      message: "Você não tem permissão para acessar este recurso",
-      action: 'Verifique se você tem acesso a feature "delete:user:others"',
-    });
-  }
-
-  const user = await userRepository.findUserById(targetId);
-
-  if (!user) {
-    throw createNotFoundError({
-      message: "Usuário não encontrado",
-      action: "Verifique o ID e tente novamente",
-    });
-  }
+  await loadTargetUser(requestingUser, "delete:user", targetId);
 
   const deleted = await userRepository.softDeleteUserAndInvalidateSessions(
     targetId,
@@ -622,12 +573,14 @@ export async function forcePasswordReset(
     });
   }
 
-  const rawToken = generateOpaqueToken();
+  // O token do reset forçado nasce dentro da mesma transação que marca o
+  // `mustChangePassword` e derruba as sessões: ou o usuário fica travado **com**
+  // o caminho de volta no email, ou nada acontece.
+  const { rawToken, stored } = mintVerificationToken("PASSWORD_RESET");
 
   await userRepository.forcePasswordResetAndInvalidateSessions(
     targetId,
-    hashToken(rawToken),
-    new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    stored,
     { action: "PASSWORD_CHANGE_FORCED", targetType: "User", targetId },
   );
 

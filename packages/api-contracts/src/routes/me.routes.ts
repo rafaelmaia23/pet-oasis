@@ -17,4 +17,4 @@ export const meRoutes = {
     },
     errors: { 401: errorResponses[401], 403: errorResponses[403] },
   },
-} satisfies RouteGroup;
+} as const satisfies RouteGroup;

@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { RouteTag } from "./route.tags";
 
 /**
  * O vocabulário da tabela de rotas. Uma entrada descreve **uma operação
@@ -7,8 +8,11 @@ import type { z } from "zod";
  * ler o `/openapi.json` nem escrever um path à mão.
  *
  * A tabela é a fonte; o `/openapi.json` da API é derivado dela por um
- * adaptador, e `apps/api/tests/unit/contracts/routeParity.test.ts` é a prova de
- * que o router do Express e esta tabela nunca divergem.
+ * adaptador. O router do Express não tem mais como divergir desta tabela —
+ * toda rota nasce do `registerRoute`, que lê método e path direto da entrada
+ * (issue 15 de `.scratch/fase-12-module-depth/`); o que ainda vale provar em
+ * runtime, como o par método + path não se repetir, está em
+ * `packages/api-contracts/tests/route-table.test.ts`.
  */
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -45,8 +49,11 @@ export type RouteDefinition = {
    * `{id}` do OpenAPI é o adaptador da API.
    */
   path: string;
-  /** O grupo da operação na referência — a mesma tag do OpenAPI. */
-  tag: string;
+  /**
+   * O grupo da operação na referência — a mesma tag do OpenAPI, e só uma das
+   * declaradas em `route.tags.ts`.
+   */
+  tag: RouteTag;
   auth: RouteAuth;
   summary: string;
   description?: string;

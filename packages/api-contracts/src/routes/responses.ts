@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   errorResponseSchema,
   validationErrorResponseSchema,
-} from "../errors/index";
+} from "../errors/error.views";
 import type { RouteErrorResponse, RouteResponse } from "./route.types";
 
 /**

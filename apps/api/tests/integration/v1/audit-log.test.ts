@@ -135,11 +135,14 @@ describe("GET /api/v1/audit-logs", () => {
     const maskedToken = await loginAs(masked.email, masked.password);
     const fullToken = await loginAs(full.email, full.password);
 
+    // Filtrado por action: criar os readers (buildMaskedReader/buildFullReader)
+    // também audita (USER_CREATED), e uma listagem sem filtro pegaria essa
+    // linha em vez da semeada.
     const maskedRes = await request(app)
-      .get("/api/v1/audit-logs")
+      .get("/api/v1/audit-logs?action=USER_BANNED")
       .set("Authorization", `Bearer ${maskedToken}`);
     const fullRes = await request(app)
-      .get("/api/v1/audit-logs")
+      .get("/api/v1/audit-logs?action=USER_BANNED")
       .set("Authorization", `Bearer ${fullToken}`);
 
     expect(maskedRes.status).toBe(200);
@@ -207,10 +210,12 @@ describe("GET /api/v1/audit-logs", () => {
     let cursor: string | null = null;
     let guard = 0;
 
+    // Filtrado por action: criar o reader também audita (USER_CREATED), e a
+    // paginação sem filtro contaria essa linha extra.
     do {
       const url: string = cursor
-        ? `/api/v1/audit-logs?limit=2&cursor=${encodeURIComponent(cursor)}`
-        : "/api/v1/audit-logs?limit=2";
+        ? `/api/v1/audit-logs?action=USER_BANNED&limit=2&cursor=${encodeURIComponent(cursor)}`
+        : "/api/v1/audit-logs?action=USER_BANNED&limit=2";
       const page = await request(app)
         .get(url)
         .set("Authorization", `Bearer ${token}`);

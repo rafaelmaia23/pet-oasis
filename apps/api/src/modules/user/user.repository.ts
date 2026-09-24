@@ -1,8 +1,13 @@
 import type { RoleName } from "@pet-oasis/api-contracts/role";
 import type { Prisma } from "@/generated/prisma/client";
 import type { UserStatus } from "@/generated/prisma/enums";
-import { type AuditDescriptor, record } from "@/lib/auditLog";
+import { type AuditDescriptor, writeAudited } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
+import { invalidateSessionsOfUser } from "@/modules/auth/auth.liveSession.repository";
+import {
+  createVerificationTokenIn,
+  type StoredVerificationToken,
+} from "@/modules/auth/verificationToken.repository";
 import {
   type CascadeCounts,
   cascadeDeleteUserGraph,
@@ -100,66 +105,58 @@ export async function findAllUsers(
 
 export async function createEmployee(
   data: createEmployeeData,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  const createArgs = {
-    data: {
-      name: data.name,
-      cpf: data.cpf,
-      email: data.email,
-      passwordHash: data.passwordHash,
-      roles: {
-        create: data.roleNames.map((name) => ({
-          role: { connect: { name } },
-        })),
-      },
-      employee: {
-        create: {},
-      },
-    },
-    include: userInclude,
-  };
-
-  if (!audit) return prisma.user.create(createArgs);
-
-  return prisma.$transaction(async (tx) => {
-    const user = await tx.user.create(createArgs);
-    await record({ ...audit, targetId: user.id }, tx);
-    return user;
-  });
+  return writeAudited(
+    (user: { id: string }) => ({ ...audit, targetId: user.id }),
+    (tx) =>
+      tx.user.create({
+        data: {
+          name: data.name,
+          cpf: data.cpf,
+          email: data.email,
+          passwordHash: data.passwordHash,
+          roles: {
+            create: data.roleNames.map((name) => ({
+              role: { connect: { name } },
+            })),
+          },
+          employee: {
+            create: {},
+          },
+        },
+        include: userInclude,
+      }),
+  );
 }
 
 export async function createCustomer(
   data: createCustomerData,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  const createArgs = {
-    data: {
-      name: data.name,
-      cpf: data.cpf,
-      email: data.email,
-      passwordHash: data.passwordHash,
-      roles: {
-        create: data.roleNames.map((name) => ({
-          role: { connect: { name } },
-        })),
-      },
-      customer: {
-        create: {
-          phone: data.phone,
+  return writeAudited(
+    (user: { id: string }) => ({ ...audit, targetId: user.id }),
+    (tx) =>
+      tx.user.create({
+        data: {
+          name: data.name,
+          cpf: data.cpf,
+          email: data.email,
+          passwordHash: data.passwordHash,
+          roles: {
+            create: data.roleNames.map((name) => ({
+              role: { connect: { name } },
+            })),
+          },
+          customer: {
+            create: {
+              phone: data.phone,
+            },
+          },
         },
-      },
-    },
-    include: userInclude,
-  };
-
-  if (!audit) return prisma.user.create(createArgs);
-
-  return prisma.$transaction(async (tx) => {
-    const user = await tx.user.create(createArgs);
-    await record({ ...audit, targetId: user.id }, tx);
-    return user;
-  });
+        include: userInclude,
+      }),
+  );
 }
 
 export async function updateUser(id: string, data: updateUserData) {
@@ -183,98 +180,67 @@ export async function updateUser(id: string, data: updateUserData) {
  */
 export async function softDeleteUserAndInvalidateSessions(
   userId: string,
-  describeAudit?: (counts: CascadeCounts) => AuditDescriptor,
+  describeAudit: (counts: CascadeCounts) => AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
-    const deletedAt = new Date();
+  const { user } = await writeAudited(
+    (result: { counts: CascadeCounts }) => describeAudit(result.counts),
+    async (tx) => {
+      const deletedAt = new Date();
 
-    await tx.session.updateMany({
-      where: {
-        userId,
-        usedAt: null,
-        invalidatedAt: null,
-        expiresAt: { gt: deletedAt },
-      },
-      data: { invalidatedAt: deletedAt },
-    });
-    const user = await tx.user.update({
-      where: { id: userId, deletedAt: null },
-      data: { deletedAt },
-    });
+      await invalidateSessionsOfUser(tx, userId, deletedAt);
+      const user = await tx.user.update({
+        where: { id: userId, deletedAt: null },
+        data: { deletedAt },
+      });
 
-    const counts = await cascadeDeleteUserGraph(tx, userId, deletedAt);
+      const counts = await cascadeDeleteUserGraph(tx, userId, deletedAt);
 
-    if (describeAudit) await record(describeAudit(counts), tx);
-    return user;
-  });
+      return { user, counts };
+    },
+  );
+
+  return user;
 }
 
 export async function banUserAndInvalidateSessions(
   userId: string,
   bannedBy: string,
   reason: string,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return writeAudited(audit, async (tx) => {
     const user = await tx.user.update({
       where: { id: userId, deletedAt: null },
       data: { bannedAt: new Date(), bannedBy, banReason: reason },
     });
-    await tx.session.updateMany({
-      where: {
-        userId,
-        usedAt: null,
-        invalidatedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      data: { invalidatedAt: new Date() },
-    });
-    if (audit) await record(audit, tx);
+    await invalidateSessionsOfUser(tx, userId, new Date());
     return user;
   });
 }
 
 export async function forcePasswordResetAndInvalidateSessions(
   userId: string,
-  tokenHash: string,
-  expiresAt: Date,
-  audit?: AuditDescriptor,
+  token: StoredVerificationToken,
+  audit: AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return writeAudited(audit, async (tx) => {
     const user = await tx.user.update({
       where: { id: userId, deletedAt: null },
       data: { mustChangePassword: true },
     });
-    await tx.session.updateMany({
-      where: {
-        userId,
-        usedAt: null,
-        invalidatedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      data: { invalidatedAt: new Date() },
-    });
-    await tx.verificationToken.create({
-      data: { userId, tokenHash, purpose: "PASSWORD_RESET", expiresAt },
-    });
-    if (audit) await record(audit, tx);
+    await invalidateSessionsOfUser(tx, userId, new Date());
+    await createVerificationTokenIn(tx, { userId, ...token });
     return user;
   });
 }
 
-export async function unbanUser(userId: string, audit?: AuditDescriptor) {
-  const updateArgs = {
-    where: { id: userId, deletedAt: null },
-    data: { bannedAt: null, bannedBy: null, banReason: null },
-  };
-
-  if (!audit) return prisma.user.update(updateArgs);
-
-  return prisma.$transaction(async (tx) => {
-    const user = await tx.user.update(updateArgs);
-    await record(audit, tx);
-    return user;
-  });
+export async function unbanUser(userId: string, audit: AuditDescriptor) {
+  return writeAudited(audit, (tx) =>
+    tx.user.update({
+      where: { id: userId, deletedAt: null },
+      data: { bannedAt: null, bannedBy: null, banReason: null },
+    }),
+  );
 }
 
 export async function findDeletedUserByEmail(email: string) {

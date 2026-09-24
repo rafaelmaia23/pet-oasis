@@ -1,5 +1,5 @@
 import type { ProfileKind } from "@/generated/prisma/enums";
-import { type AuditDescriptor, record } from "@/lib/auditLog";
+import { type AuditDescriptor, writeAudited } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import {
   cascadeDeleteOverrides,
@@ -72,45 +72,36 @@ export async function upsertUserFeature(
   userRoleId: string,
   featureId: string,
   granted: boolean,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return writeAudited(audit, async (tx) => {
     const existing = await tx.userFeature.findUnique({
       where: { userRoleId_featureId: { userRoleId, featureId } },
     });
 
-    const userFeature = existing
-      ? await tx.userFeature.update({
+    return existing
+      ? tx.userFeature.update({
           where: { id: existing.id },
           data: { granted, deletedAt: null },
           include: overrideInclude,
         })
-      : await tx.userFeature.create({
+      : tx.userFeature.create({
           data: { userRoleId, featureId, granted },
           include: overrideInclude,
         });
-
-    if (audit) await record(audit, tx);
-    return userFeature;
   });
 }
 
 export async function removeUserFeature(
   userFeatureId: string,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  const updateArgs = {
-    where: { id: userFeatureId, deletedAt: null },
-    data: { deletedAt: new Date() },
-  };
-
-  if (!audit) return prisma.userFeature.update(updateArgs);
-
-  return prisma.$transaction(async (tx) => {
-    const userFeature = await tx.userFeature.update(updateArgs);
-    await record(audit, tx);
-    return userFeature;
-  });
+  return writeAudited(audit, (tx) =>
+    tx.userFeature.update({
+      where: { id: userFeatureId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    }),
+  );
 }
 
 export async function getUserRoles(userId: string) {
@@ -132,18 +123,15 @@ export async function getUserRoles(userId: string) {
 export async function addUserRole(
   userId: string,
   roleId: string,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return writeAudited(audit, async (tx) => {
     await grantRolesToUser(tx, userId, [roleId]);
 
-    const userRole = await tx.userRole.findUniqueOrThrow({
+    return tx.userRole.findUniqueOrThrow({
       where: { userId_roleId: { userId, roleId } },
       include: userRoleInclude,
     });
-
-    if (audit) await record(audit, tx);
-    return userRole;
   });
 }
 
@@ -156,22 +144,27 @@ export async function addUserRole(
  */
 export async function removeUserRole(
   userRoleId: string,
-  describeAudit?: (context: { cascadedOverrides: number }) => AuditDescriptor,
+  describeAudit: (context: { cascadedOverrides: number }) => AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
-    const deletedAt = new Date();
+  const { userRole } = await writeAudited(
+    (result: { cascadedOverrides: number }) => describeAudit(result),
+    async (tx) => {
+      const deletedAt = new Date();
 
-    const userRole = await tx.userRole.update({
-      where: { id: userRoleId, deletedAt: null },
-      data: { deletedAt },
-    });
+      const userRole = await tx.userRole.update({
+        where: { id: userRoleId, deletedAt: null },
+        data: { deletedAt },
+      });
 
-    const count = await cascadeDeleteOverrides(tx, [userRoleId], deletedAt);
+      const cascadedOverrides = await cascadeDeleteOverrides(
+        tx,
+        [userRoleId],
+        deletedAt,
+      );
 
-    if (describeAudit) {
-      await record(describeAudit({ cascadedOverrides: count }), tx);
-    }
+      return { userRole, cascadedOverrides };
+    },
+  );
 
-    return userRole;
-  });
+  return userRole;
 }

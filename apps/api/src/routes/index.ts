@@ -8,10 +8,6 @@ import {
   scalarBundleFile,
   scalarBundleRoot,
 } from "@/docs/reference";
-import {
-  authenticate,
-  optionalAuthenticate,
-} from "@/middlewares/authenticate.middleware";
 import auditLogRouter from "@/modules/audit-log/audit-log.routes";
 import authRouter from "@/modules/auth/auth.routes";
 import brandRouter from "@/modules/brand/brand.routes";
@@ -21,7 +17,6 @@ import featureRouter from "@/modules/feature/feature.routes";
 import logRouter from "@/modules/log/log.routes";
 import meRouter from "@/modules/me/me.routes";
 import permissionRouter from "@/modules/permission/permission.routes";
-import petCustomerRouter from "@/modules/pet/pet.customer.routes";
 import petRouter from "@/modules/pet/pet.routes";
 import productRouter from "@/modules/product/product.routes";
 import variantRouter from "@/modules/product/product.variant.routes";
@@ -34,45 +29,66 @@ import userRouter from "@/modules/user/user.routes";
 const v1Router = Router();
 
 // PÚBLICAS — sem authenticate
-v1Router.use("/status", statusRouter);
-v1Router.use("/auth", authRouter);
+//
+// Todo router aqui já sai do `registerRoute` (issues 08–15 de
+// `.scratch/fase-12-module-depth/`): o path inteiro vem da entrada da tabela
+// de rotas, então nenhum é montado com prefixo — montá-lo duplicaria o path.
+v1Router.use(statusRouter);
+v1Router.use(authRouter);
 // Vitrine do catálogo (9.1): responde sem token porque o e-commerce vive de
 // quem chega pelo Google sem usuário. `/breeds` fica aqui, seco: é só leitura, não
 // tem escrita nem view por feature efetiva, então não precisa nem identificar o ator.
-v1Router.use("/breeds", breedRouter);
+v1Router.use(breedRouter);
+// Marca (issue 13 de `.scratch/fase-12-module-depth/`): já sai do
+// `registerRoute` — a leitura não precisa de ator (nenhuma view por feature
+// efetiva), e a escrita carrega `authenticate` no próprio `before`, então o
+// router não precisa mais de `optionalAuthenticate` no prefixo.
+v1Router.use(brandRouter);
+// Categoria (issue 13): mesmo desenho de marca — leitura sem ator, escrita com
+// `authenticate` no próprio `before`.
+v1Router.use(categoryRouter);
+// Tag (issue 13): mesmo desenho de marca e categoria.
+v1Router.use(tagRouter);
 
 // PÚBLICAS COM AUTENTICAÇÃO OPCIONAL (9.6) — leem sem token, escrevem com
 // feature. O middleware identifica o ator quando o `Bearer` vem e segue anônimo
 // quando não vem (ou quando o token é ruim), sem nunca responder 401; quem
 // exige identidade é o `canAccess` das rotas de escrita, dentro de cada router.
 // A 9.8 depende do mesmo middleware para escolher a view de `/products`.
-v1Router.use("/brands", optionalAuthenticate, brandRouter);
-v1Router.use("/categories", optionalAuthenticate, categoryRouter);
-v1Router.use("/tags", optionalAuthenticate, tagRouter);
-// Produto entra aqui já na 9.7, que só tem escrita: a vitrine da 9.8 acrescenta
-// o `GET` sem remontar o router, e o 401 da escrita continua vindo do
-// `canAccess`. `/variants` fica do lado protegido — variante não tem leitura
-// pública própria, ela aparece dentro do produto.
-v1Router.use("/products", optionalAuthenticate, productRouter);
+// Produto (e a criação de variante, aninhada nele) já sai inteiro pelo
+// `registerRoute` (issue 14) — `optionalAuthenticate` desceu para o `before`
+// de cada rota que precisa dele. `/variants` fica do lado protegido —
+// variante não tem leitura pública própria, ela aparece dentro do produto.
+v1Router.use(productRouter);
 
 // PROTEGIDAS — com authenticate
-v1Router.use("/me", authenticate, meRouter);
-v1Router.use("/users", authenticate, userRouter);
-v1Router.use("/users/:userId", authenticate, userProfileRouter);
-v1Router.use("/users/:userId", authenticate, permissionRouter);
-// Pet (9.4): coleção aninhada no cliente, recurso plano no item. As duas
-// exigem token — a vitrine pública é do catálogo, não da ficha do pet.
-v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);
-v1Router.use("/pets", authenticate, petRouter);
-v1Router.use("/variants", authenticate, variantRouter);
-v1Router.use("/features", authenticate, featureRouter);
-v1Router.use("/roles", authenticate, roleRouter);
-v1Router.use("/audit-logs", authenticate, auditLogRouter);
-v1Router.use("/logs", authenticate, logRouter);
+//
+// Nos routers secos o `authenticate` não está aqui: ele desceu do prefixo para
+// o `before` de cada rota, onde a entrada da tabela o exige — ver
+// `src/modules/role/role.routes.ts`. Consequência decidida em
+// `../../docs/adr/0203-authenticate-desce-do-grupo-para-rota-404-vence-401.md`.
+v1Router.use(meRouter);
+v1Router.use(userRouter);
+v1Router.use(userProfileRouter);
+v1Router.use(permissionRouter);
+// Pet (9.4): coleção aninhada no cliente, recurso plano no item — os dois
+// paths já vêm inteiros da tabela de rotas.
+v1Router.use(petRouter);
+v1Router.use(variantRouter);
+v1Router.use(featureRouter);
+v1Router.use(roleRouter);
+v1Router.use(auditLogRouter);
+v1Router.use(logRouter);
 
 export const router = Router();
 
-// Documentação — pública, fora dos grupos protegidos por `authenticate`
+// Documentação — pública, fora dos grupos protegidos por `authenticate`.
+// Únicas rotas do servidor que não vêm da tabela de rotas do contrato (não há
+// operação de domínio para `/openapi.json` ou o bundle do Scalar) — a
+// existência e o conteúdo de cada uma têm teste próprio
+// (`tests/integration/v1/openapi.test.ts`, `tests/integration/v1/reference.test.ts`),
+// já que não sobrou paridade estrutural nem monkey-patch do router para
+// prová-las (issue 15 de `.scratch/fase-12-module-depth/`).
 router.get("/openapi.json", (_req, res) => {
   res.json(buildOpenApiDocument());
 });

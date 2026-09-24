@@ -3,6 +3,7 @@ import {
   type CreateProductInput,
   createProductSchema,
 } from "@pet-oasis/api-contracts/catalog";
+import { fixtureAudit } from "@tests/helpers/audit";
 import { prisma } from "@/lib/prisma";
 import * as productRepository from "@/modules/product/product.repository";
 import { withResolvedDefault } from "@/modules/product/product.service";
@@ -79,5 +80,6 @@ export async function buildProduct(
     },
     withResolvedDefault(variants),
     { categoryIds: categories, tagIds: tags ?? [] },
+    fixtureAudit({ action: "PRODUCT_CREATED", targetType: "Product" }),
   );
 }

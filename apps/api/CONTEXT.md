@@ -54,8 +54,16 @@ _Avoid_: ativação da conta, ativação do usuário, confirmação de cadastro
 
 **VerificationToken**:
 Token opaco de uso único, guardado só como hash, com um `purpose`: `EMAIL_VERIFICATION`,
-`PASSWORD_RESET`, `EMAIL_CHANGE` ou `ACCOUNT_REACTIVATION`.
+`PASSWORD_RESET`, `EMAIL_CHANGE` ou `ACCOUNT_REACTIVATION`. Emitir e consumir vivem em
+[`verificationToken.repository.ts`](./src/modules/auth/verificationToken.repository.ts) e
+[`verificationToken.service.ts`](./src/modules/auth/verificationToken.service.ts) — ver
+[`0069`](./docs/adr/0069-verificationtoken-generico-purpose.md).
 _Avoid_: código de verificação, link mágico, OTP
+
+**Consumir um token**:
+Marcar `usedAt` **e** aplicar o efeito do `purpose`, na mesma transação — os dois juntos ou
+nenhum. Um token válido cujo efeito falhou continua por usar.
+_Avoid_: validar o token, resgatar o token, usar o token (para dizer só a marca)
 
 **Troca de email**:
 Fluxo em dois passos: o pedido grava o alvo em `User.pendingEmail` e emite um token
@@ -103,9 +111,15 @@ rotativo: cada uso o troca por um novo.
 _Avoid_: token de renovação, token longo
 
 **Sessão viva**:
-`Session` com `usedAt`, `invalidatedAt` nulos e `expiresAt` no futuro. É o que
-`GET /auth/sessions` lista e o que ban, reset e change derrubam.
+`Session` com `usedAt`, `invalidatedAt` nulos e `expiresAt` no futuro, definida em
+`src/modules/auth/auth.liveSession.repository.ts`. É o que `GET /auth/sessions` lista.
 _Avoid_: sessão ativa (colide com o `status`), sessão aberta
+
+**Sessão invalidável**:
+`Session` que ainda não foi morta nem expirou — a viva **mais** o elo já rotacionado. É o que ban,
+reset, troca de senha e deleção derrubam, e o que a janela de graça ainda socorre — ver
+[`0057`](./docs/adr/0057-janela-graca-10s-rotacao.md).
+_Avoid_: sessão viva (é mais larga), sessão pendente
 
 **Reuso de refresh**:
 Apresentar um refresh token que já tem `usedAt`. Dentro da janela de graça da rotação é

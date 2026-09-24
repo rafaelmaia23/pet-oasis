@@ -1,17 +1,56 @@
 import { attachOverrides, buildHybrid } from "@tests/factories/user.factory";
+import { describeUserDeletedAudit, fixtureAudit } from "@tests/helpers/audit";
 import { clearDatabase } from "@tests/helpers/database";
 import { afterEach, assert, describe, expect, it } from "vitest";
 import type { ProfileKind } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import {
-  deleteCustomerProfile,
-  deleteEmployeeProfile,
+  deleteCustomerProfile as deleteCustomerProfileWithAudit,
+  deleteEmployeeProfile as deleteEmployeeProfileWithAudit,
 } from "@/modules/user/profile/user.profile.repository";
+import type { CascadeCounts } from "@/modules/user/user.lifecycle.repository";
 import {
   restoreProfile,
   restoreProfilesOfUser,
 } from "@/modules/user/user.lifecycle.repository";
-import { softDeleteUserAndInvalidateSessions } from "@/modules/user/user.repository";
+import { softDeleteUserAndInvalidateSessions as softDeleteUserAndInvalidateSessionsWithAudit } from "@/modules/user/user.repository";
+
+const describeCascadeAudit = (userId: string) => (counts: CascadeCounts) =>
+  fixtureAudit({
+    action: "USER_PROFILE_DELETED",
+    targetType: "User",
+    targetId: userId,
+    metadata: {
+      profileKind: "EMPLOYEE",
+      cascadedRoles: counts.roles,
+      cascadedOverrides: counts.overrides,
+      cascadedPets: counts.pets,
+    },
+  });
+
+const deleteEmployeeProfile = (userId: string) =>
+  deleteEmployeeProfileWithAudit(userId, describeCascadeAudit(userId));
+
+const deleteCustomerProfile = (userId: string) =>
+  deleteCustomerProfileWithAudit(userId, (counts) =>
+    fixtureAudit({
+      action: "USER_PROFILE_DELETED",
+      targetType: "User",
+      targetId: userId,
+      metadata: {
+        profileKind: "CUSTOMER",
+        cascadedRoles: counts.roles,
+        cascadedOverrides: counts.overrides,
+        cascadedPets: counts.pets,
+      },
+    }),
+  );
+
+const softDeleteUserAndInvalidateSessions = (userId: string) =>
+  softDeleteUserAndInvalidateSessionsWithAudit(
+    userId,
+    describeUserDeletedAudit(userId),
+  );
 
 // A restauração ainda não tem rota (8.3/8.5 a ligam); estes testes dirigem o
 // repositório direto, mesmo idioma de `tests/integration/scripts/`.

@@ -8,7 +8,7 @@ Direção "Eucalipto & Creme", conforme o documento de design system.
 
 **Blocked by:** 01
 
-**Status:** done
+**Status:** fechada em 2026-09-04
 
 - [x] Todos os tokens definidos como custom properties, no espaço de cor do Tailwind 4
 - [x] **Cada token tem par claro e escuro.** Nenhuma cor existe só num dos temas

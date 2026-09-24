@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -35,6 +35,11 @@ function isInsideSrc(file: string, specifier: string): boolean {
   return !relative(SRC_DIR, target).startsWith("..");
 }
 
+/** `src/routes/responses.ts` → `routes`. */
+function domainOf(file: string): string {
+  return relative(SRC_DIR, file).split("/")[0] ?? "";
+}
+
 describe("pureza do contrato", () => {
   it("declara `zod` como única dependência de runtime", () => {
     const manifest = JSON.parse(
@@ -59,5 +64,69 @@ describe("pureza do contrato", () => {
     );
 
     expect(offenders).toEqual([]);
+  });
+});
+
+// Forma do pacote: o que o `exports` publica e como os domínios se enxergam.
+// Os dois existem pelo mesmo motivo do teste acima — quem consome o contrato o
+// faz de fora, do fonte TS, e o erro que essas duas regras pegam só apareceria
+// no consumidor (entrada que não resolve, ciclo `user → role → user` que vira
+// `undefined` na inicialização).
+describe("forma do pacote", () => {
+  it("importa a folha do outro domínio, nunca o índice dele", () => {
+    const offenders = listSourceFiles(SRC_DIR).flatMap((file) =>
+      specifiersOf(file)
+        .filter((specifier) => {
+          if (!specifier.startsWith(".")) return false;
+          // O índice do pacote é o barril dos barris: é o lugar de onde os
+          // índices de domínio são reexportados, e o único isento.
+          if (relative(SRC_DIR, file) === "index.ts") return false;
+          const target = resolve(dirname(file), specifier);
+          // Dentro do próprio domínio o índice é o barril dele e ninguém o
+          // importa; o que esta regra proíbe é atravessar domínio por ele.
+          if (domainOf(target) === domainOf(file)) return false;
+
+          const parts = relative(SRC_DIR, target).split("/");
+          // As duas grafias do mesmo erro: apontar para o índice do outro
+          // domínio (`../errors/index`) e apontar para a pasta dele
+          // (`../errors`), que o Node resolve para o mesmo arquivo.
+          return (
+            parts.length === 1 ||
+            parts.at(-1) === "index" ||
+            parts.at(-1) === "index.ts"
+          );
+        })
+        .map((specifier) => `${relative(PACKAGE_ROOT, file)} → ${specifier}`),
+    );
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("publica no `exports` exatamente os índices que existem em `src/`", () => {
+    const manifest = JSON.parse(
+      readFileSync(join(PACKAGE_ROOT, "package.json"), "utf8"),
+    ) as { exports?: Record<string, string> };
+
+    const published = Object.entries(manifest.exports ?? {}).map(
+      ([entry, target]) => `${entry} → ${target}`,
+    );
+
+    const onDisk = [
+      ". → ./src/index.ts",
+      ...readdirSync(SRC_DIR, { withFileTypes: true })
+        .filter((dir) => dir.isDirectory())
+        .map((dir) => `./${dir.name} → ./src/${dir.name}/index.ts`),
+    ];
+
+    expect([...published].sort()).toEqual([...onDisk].sort());
+
+    // E cada alvo publicado é um arquivo de verdade: o `exports` de um pacote
+    // consumido do fonte é resolvido pelo Node do consumidor, então uma
+    // entrada que não resolve só apareceria lá.
+    const missing = Object.values(manifest.exports ?? {}).filter(
+      (target) => !existsSync(join(PACKAGE_ROOT, target)),
+    );
+
+    expect(missing).toEqual([]);
   });
 });

@@ -13,4 +13,4 @@ export const statusRoutes = {
     },
     errors: {},
   },
-} satisfies RouteGroup;
+} as const satisfies RouteGroup;

@@ -7,10 +7,12 @@ import {
 import { send } from "@/lib/email";
 import { logger } from "@/lib/logger";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { generateOpaqueToken, hashToken } from "@/lib/token";
 import { findUserByEmail, findUserById } from "@/modules/user/user.repository";
-import { PASSWORD_RESET_TTL_MS } from "./auth.constants";
 import * as authRepository from "./auth.repository";
+import {
+  consumeVerificationToken,
+  issueVerificationToken,
+} from "./verificationToken.service";
 
 const log = logger.child({ module: "password" });
 
@@ -41,21 +43,15 @@ export async function requestPasswordReset(email: string) {
     return;
   }
 
-  const rawToken = generateOpaqueToken();
-
-  await authRepository.createVerificationToken(
-    {
-      userId: user.id,
-      tokenHash: hashToken(rawToken),
-      purpose: "PASSWORD_RESET",
-      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
-    },
-    {
+  const rawToken = await issueVerificationToken({
+    userId: user.id,
+    purpose: "PASSWORD_RESET",
+    audit: {
       action: "PASSWORD_RESET_REQUESTED",
       targetType: "User",
       targetId: user.id,
     },
-  );
+  });
 
   const { subject, html, text } = buildPasswordResetEmail(rawToken);
 
@@ -65,57 +61,39 @@ export async function requestPasswordReset(email: string) {
 }
 
 export async function resetPassword(token: string, newPassword: string) {
-  const resetToken = await authRepository.findVerificationTokenByHash(
-    hashToken(token),
-  );
+  const { userId } = await consumeVerificationToken({
+    rawToken: token,
+    purpose: "PASSWORD_RESET",
+    invalidTokenError: INVALID_TOKEN_ERROR,
+    plan: async (resetToken) => {
+      const user = await findUserById(resetToken.userId);
 
-  if (
-    resetToken?.purpose !== "PASSWORD_RESET" ||
-    resetToken.usedAt !== null ||
-    resetToken.expiresAt < new Date()
-  ) {
-    log.warn(
-      {
-        ...(resetToken ? { userId: resetToken.userId } : {}),
-        reason: !resetToken
-          ? "UNKNOWN_TOKEN"
-          : resetToken.usedAt
-            ? "ALREADY_USED"
-            : "EXPIRED_OR_WRONG_PURPOSE",
-      },
-      "password reset refused",
-    );
-    throw createBadRequestError(INVALID_TOKEN_ERROR);
-  }
+      if (!user) {
+        throw createBadRequestError(INVALID_TOKEN_ERROR);
+      }
 
-  const user = await findUserById(resetToken.userId);
+      if (user.bannedAt !== null) {
+        log.warn(
+          { userId: user.id },
+          "password reset refused for banned account",
+        );
+        throw createForbiddenError(BANNED_ACCOUNT_ERROR);
+      }
 
-  if (!user) {
-    throw createBadRequestError(INVALID_TOKEN_ERROR);
-  }
-
-  if (user.bannedAt !== null) {
-    log.warn({ userId: user.id }, "password reset refused for banned account");
-    throw createForbiddenError(BANNED_ACCOUNT_ERROR);
-  }
-
-  const passwordHash = await hashPassword(newPassword);
-
-  await authRepository.consumePasswordReset(
-    resetToken.id,
-    resetToken.userId,
-    passwordHash,
-    {
-      action: "PASSWORD_RESET_COMPLETED",
-      targetType: "User",
-      targetId: resetToken.userId,
+      return {
+        effect: authRepository.applyPasswordReset(
+          await hashPassword(newPassword),
+        ),
+        audit: {
+          action: "PASSWORD_RESET_COMPLETED",
+          targetType: "User",
+          targetId: user.id,
+        },
+      } as const;
     },
-  );
+  });
 
-  log.info(
-    { userId: user.id },
-    "password reset completed, all sessions invalidated",
-  );
+  log.info({ userId }, "password reset completed, all sessions invalidated");
 }
 
 export async function changePassword(

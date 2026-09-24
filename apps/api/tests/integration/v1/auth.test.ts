@@ -9,6 +9,7 @@ import {
   expectValidationError,
   expectValidUuid,
 } from "@tests/helpers/assertions";
+import { describeUserDeletedAudit } from "@tests/helpers/audit";
 import {
   extractRefreshCookie,
   loginAs,
@@ -43,8 +44,15 @@ import {
 } from "@/modules/auth/auth.constants";
 import {
   findUserById,
-  softDeleteUserAndInvalidateSessions,
+  softDeleteUserAndInvalidateSessions as softDeleteUserAndInvalidateSessionsWithAudit,
 } from "@/modules/user/user.repository";
+
+/** Deleta o usuário-alvo, com o descritor que a taxonomia exige (USER_DELETED). */
+const softDeleteUserAndInvalidateSessions = (userId: string) =>
+  softDeleteUserAndInvalidateSessionsWithAudit(
+    userId,
+    describeUserDeletedAudit(userId),
+  );
 
 const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }));
 

@@ -4,19 +4,18 @@ import {
   PET_SORT,
   type UpdatePetInput,
 } from "@pet-oasis/api-contracts/pet";
-import {
-  createForbiddenError,
-  createNotFoundError,
-  createValidationError,
-} from "@/errors";
+import { createValidationError } from "@/errors";
 import type { PetSpecies } from "@/generated/prisma/enums";
-import { type AuthUser, hasFeature } from "@/lib/authorization";
+import { type AuthUser, authorizeThenLoad } from "@/lib/authorization";
 import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
 import { deleteImage, imageUrls, storeImage } from "@/lib/storage";
 import { SPECIES_WITH_BREED } from "@/modules/breed/breed.constants";
 import { findBreedById } from "@/modules/breed/breed.repository";
 import { findActiveCustomerById } from "@/modules/user/profile/user.profile.repository";
 import * as petRepository from "./pet.repository";
+
+/** As duas features de pet que têm par self/`:others`. */
+type PetFeature = "read:pet" | "manage:pet";
 
 /**
  * Autorização de escopo (`own` × `:others`) em duas etapas, no idioma da 8.3.
@@ -26,64 +25,42 @@ import * as petRepository from "./pet.repository";
  * banco, porque o dono de um pet não está na URL: `/customers/:customerId` traz
  * o id do *perfil*, não o do usuário.
  *
- * Por isso a ordem canônica do projeto ("autorizar antes de buscar") não se
- * aplica literalmente, e o que a preserva em espírito é o alvo inexistente
- * **falhar fechado**: sem `:others`, qualquer alvo que não seja o próprio é
- * 403, inclusive o que não existe. Do contrário a rota viraria oráculo de
- * existência de `customerId` para qualquer cliente logado.
+ * É exatamente o modo `fail-closed` de `authorizeThenLoad`: a ordem canônica do
+ * projeto ("autorizar antes de buscar") não se aplica literalmente, e o que a
+ * preserva em espírito é o alvo inexistente **falhar fechado** — sem `:others`,
+ * qualquer alvo que não seja o próprio é 403, inclusive o que não existe. Do
+ * contrário a rota viraria oráculo de existência de `customerId` para qualquer
+ * cliente logado.
  */
-function assertScope(
-  actor: AuthUser,
-  feature: "read:pet" | "manage:pet",
-  ownerUserId: string | undefined,
-) {
-  if (hasFeature(actor, `${feature}:others`)) return;
-
-  if (ownerUserId === actor.id) return;
-
-  throw createForbiddenError({
-    message: "Você não tem permissão para acessar este recurso",
-    action: `Verifique se você tem acesso a feature "${feature}:others"`,
-  });
-}
-
-async function resolveCustomer(
+const resolveCustomer = (
   actor: AuthUser,
   customerId: string,
-  feature: "read:pet" | "manage:pet",
-) {
-  const customer = await findActiveCustomerById(customerId);
-
-  assertScope(actor, feature, customer?.userId);
-
-  if (!customer) {
-    throw createNotFoundError({
+  feature: PetFeature,
+) =>
+  authorizeThenLoad({
+    actor,
+    feature,
+    mode: "fail-closed",
+    ownerOf: (customer) => customer.userId,
+    load: () => findActiveCustomerById(customerId),
+    notFound: {
       message: "Cliente não encontrado",
       action: "Verifique o ID e tente novamente",
-    });
-  }
+    },
+  });
 
-  return customer;
-}
-
-async function resolvePet(
-  actor: AuthUser,
-  petId: string,
-  feature: "read:pet" | "manage:pet",
-) {
-  const pet = await petRepository.findPetById(petId);
-
-  assertScope(actor, feature, pet?.customer.userId);
-
-  if (!pet) {
-    throw createNotFoundError({
+const resolvePet = (actor: AuthUser, petId: string, feature: PetFeature) =>
+  authorizeThenLoad({
+    actor,
+    feature,
+    mode: "fail-closed",
+    ownerOf: (pet) => pet.customer.userId,
+    load: () => petRepository.findPetById(petId),
+    notFound: {
       message: "Pet não encontrado",
       action: "Verifique o ID e tente novamente",
-    });
-  }
-
-  return pet;
-}
+    },
+  });
 
 /**
  * As três regras de espécie×raça do `docs/adr/0006-pet-domain-modeling.md`. São
@@ -190,7 +167,7 @@ export async function getCustomerPets(actor: AuthUser, customerId: string) {
 }
 
 /**
- * Listagem geral de balcão. **Sem `assertScope` e sem ator**: a rota já exige
+ * Listagem geral de balcão. **Sem escopo e sem ator**: a rota já exige
  * `read:pet:others` na forma privilegiada — listar pet de terceiro é a definição
  * dela, não um ramo a separar aqui. Mesmo desenho de `userService.getAllUsers`.
  */

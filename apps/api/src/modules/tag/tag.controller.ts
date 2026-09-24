@@ -1,42 +1,24 @@
-import {
-  createTagSchema,
-  tagParamsSchema,
-  updateTagSchema,
-} from "@pet-oasis/api-contracts/catalog";
-import type { Request, Response } from "express";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import { listEnvelope } from "@/lib/pagination";
-import { tagPresenter } from "./tag.presenter";
+import type { RouteHandler } from "@/lib/registerRoute";
 import * as tagService from "./tag.service";
 
-export const listTags = async (_req: Request, res: Response) => {
+export const listTags: RouteHandler<typeof routes.tag.list> = async () => {
   const tags = await tagService.getTags();
 
-  res.status(200).json(listEnvelope(tagPresenter.presentMany(tags, "default")));
+  return listEnvelope(tags);
 };
 
-export const createTag = async (req: Request, res: Response) => {
-  const { body } = createTagSchema.parse({ body: req.body });
+export const createTag: RouteHandler<typeof routes.tag.create> = ({ body }) =>
+  tagService.createTag(body);
 
-  const tag = await tagService.createTag(body);
+export const updateTag: RouteHandler<typeof routes.tag.update> = ({
+  params,
+  body,
+}) => tagService.updateTag(params.tagId, body);
 
-  return res.status(201).json(tagPresenter.present(tag, "default"));
-};
-
-export const updateTag = async (req: Request, res: Response) => {
-  const { params, body } = updateTagSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
-  const tag = await tagService.updateTag(params.tagId, body);
-
-  return res.status(200).json(tagPresenter.present(tag, "default"));
-};
-
-export const deleteTag = async (req: Request, res: Response) => {
-  const { params } = tagParamsSchema.parse({ params: req.params });
-
+export const deleteTag: RouteHandler<typeof routes.tag.delete> = async ({
+  params,
+}) => {
   await tagService.deleteTag(params.tagId);
-
-  return res.status(204).send();
 };

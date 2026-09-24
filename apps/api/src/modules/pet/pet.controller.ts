@@ -1,117 +1,72 @@
-import {
-  createPetSchema,
-  listCustomerPetsSchema,
-  listPetsSchema,
-  petParamsSchema,
-  updatePetSchema,
-} from "@pet-oasis/api-contracts/pet";
-import type { Request, Response } from "express";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
-import { uploadedFile } from "@/middlewares/upload.middleware";
-import { getAuthUser } from "@/utils/getAuthUser";
-import { petPresenter } from "./pet.presenter";
+import type { RouteHandler } from "@/lib/registerRoute";
 import * as petService from "./pet.service";
+import type { PetPhotoTransport } from "./pet.transport";
 
-export const createPet = async (req: Request, res: Response) => {
-  const { params, body } = createPetSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
+export const createPet: RouteHandler<typeof routes.pet.create> = async ({
+  params,
+  body,
+  actor,
+}) => petService.createPet(actor, params.customerId, body);
 
-  const pet = await petService.createPet(
-    getAuthUser(req),
-    params.customerId,
-    body,
-  );
-
-  return res.status(201).json(petPresenter.present(pet, "default"));
-};
-
-export const listCustomerPets = async (req: Request, res: Response) => {
-  const { params } = listCustomerPetsSchema.parse({ params: req.params });
-
-  const pets = await petService.getCustomerPets(
-    getAuthUser(req),
-    params.customerId,
-  );
+export const listCustomerPets: RouteHandler<
+  typeof routes.pet.listByCustomer
+> = async ({ params, actor }) => {
+  const pets = await petService.getCustomerPets(actor, params.customerId);
 
   // Sem paginação: a coleção é limitada pelo dono (mesma classe de
   // `GET /users/:userId/roles`). O envelope existe mesmo assim para que
   // paginar amanhã seja aditivo, não breaking.
-  res.status(200).json(listEnvelope(petPresenter.presentMany(pets, "default")));
+  return listEnvelope(pets);
 };
 
-export const listPets = async (req: Request, res: Response) => {
-  const { query } = listPetsSchema.parse({ query: req.query });
-
+export const listPets: RouteHandler<typeof routes.pet.list> = async ({
+  query,
+}) => {
   const { pets, total } = await petService.getAllPets(query);
 
-  return res
-    .status(200)
-    .json(
-      offsetEnvelope(petPresenter.presentMany(pets, "default"), query, total),
-    );
+  return offsetEnvelope(pets, query, total);
 };
 
-export const getPetById = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
+export const getPetById: RouteHandler<typeof routes.pet.get> = async ({
+  params,
+  actor,
+}) => petService.getPetById(actor, params.petId);
 
-  const pet = await petService.getPetById(getAuthUser(req), params.petId);
+export const updatePet: RouteHandler<typeof routes.pet.update> = async ({
+  params,
+  body,
+  actor,
+}) => petService.updatePet(actor, params.petId, body);
 
-  return res.status(200).json(petPresenter.present(pet, "default"));
+export const deletePet: RouteHandler<typeof routes.pet.delete> = async ({
+  params,
+  actor,
+}) => {
+  await petService.deletePet(actor, params.petId);
 };
 
-export const updatePet = async (req: Request, res: Response) => {
-  const { params, body } = updatePetSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
+export const updatePetPhoto: RouteHandler<
+  typeof routes.pet.setPhoto,
+  PetPhotoTransport
+> = async ({ params, actor, file }) =>
+  petService.setPetPhoto(actor, params.petId, file);
 
-  const pet = await petService.updatePet(getAuthUser(req), params.petId, body);
-
-  return res.status(200).json(petPresenter.present(pet, "default"));
+export const deletePetPhoto: RouteHandler<
+  typeof routes.pet.deletePhoto
+> = async ({ params, actor }) => {
+  await petService.removePetPhoto(actor, params.petId);
 };
 
-export const deletePet = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  await petService.deletePet(getAuthUser(req), params.petId);
-
-  return res.status(204).send();
+export const markPetDeceased: RouteHandler<
+  typeof routes.pet.markDeceased
+> = async ({ params, actor }) => {
+  await petService.markPetDeceased(actor, params.petId);
 };
 
-export const updatePetPhoto = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  const pet = await petService.setPetPhoto(
-    getAuthUser(req),
-    params.petId,
-    uploadedFile(req),
-  );
-
-  return res.status(200).json(petPresenter.present(pet, "default"));
-};
-
-export const deletePetPhoto = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  await petService.removePetPhoto(getAuthUser(req), params.petId);
-
-  return res.status(204).send();
-};
-
-export const markPetDeceased = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  await petService.markPetDeceased(getAuthUser(req), params.petId);
-
-  return res.status(204).send();
-};
-
-export const unmarkPetDeceased = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  await petService.unmarkPetDeceased(getAuthUser(req), params.petId);
-
-  return res.status(204).send();
+export const unmarkPetDeceased: RouteHandler<
+  typeof routes.pet.unmarkDeceased
+> = async ({ params, actor }) => {
+  await petService.unmarkPetDeceased(actor, params.petId);
 };

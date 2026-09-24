@@ -2,16 +2,17 @@ import {
   type CreateProductInput,
   type ListProductsQuery,
   PRODUCT_SORT,
-  type ProductView,
+  productReadLadder,
   type UpdateProductInput,
   type VariantInput,
 } from "@pet-oasis/api-contracts/catalog";
 import { z } from "zod";
 import { createNotFoundError, createValidationError } from "@/errors";
 import { ProductStatus } from "@/generated/prisma/enums";
-import { type AuthUser, hasFeature } from "@/lib/authorization";
+import type { AuthUser } from "@/lib/authorization";
 import { buildOffsetArgs, buildOrderBy } from "@/lib/pagination";
 import { imageUrls } from "@/lib/storage";
+import { reachesBeyondBase } from "@/lib/viewLadder";
 import * as brandRepository from "@/modules/brand/brand.repository";
 import { withLogo } from "@/modules/brand/brand.service";
 import { resolveSlug } from "@/modules/catalog/catalog.slug";
@@ -44,43 +45,18 @@ export async function resolveProduct(productId: string) {
 }
 
 /**
- * A view é do **ator**, não da rota: quem escreve sempre tem `manage:product`,
- * mas custo é delegado à parte (`read:product:cost`, 9.1), e um autor sem essa
- * feature não pode ver a margem só porque acabou de salvar o produto.
- */
-export function viewFor(actor: AuthUser): ProductView {
-  return hasFeature(actor, "read:product:cost") ? "cost" : "internal";
-}
-
-/**
  * O portão do catálogo interno (9.8/Y9): rascunho, descontinuado, estoque exato
  * e o campo `status`. `read:product:cost` **implica** a visão interna — quem vê
- * margem vê o resto —, então o predicado é uma disjunção e não duas perguntas.
+ * margem vê o resto —, e é a mesma implicação que `productReadLadder` declara
+ * — daí ler daqui em vez de repetir o predicado.
  *
  * Existe como função própria porque é usado em dois lugares que não podem
- * divergir: o `where` da listagem e a escolha da view. Se divergissem, a
- * resposta mostraria um campo do conjunto que a lista diz não existir.
+ * divergir: o `where` da listagem e a escolha da view. Sai da **mesma**
+ * declaração que escolhe a view (`chooseView`, em `product.view-resolver.ts`),
+ * então não há como os dois divergirem.
  */
 export function canSeeInternal(actor: AuthUser | undefined): boolean {
-  if (!actor) return false;
-
-  return (
-    hasFeature(actor, "read:product:internal") ||
-    hasFeature(actor, "read:product:cost")
-  );
-}
-
-/**
- * A view da **leitura**, que difere da escrita em um ponto: aqui o ator pode
- * não existir. Visitante anônimo não é erro, é o caso comum da vitrine (N15) —
- * daí `public` em vez de 401.
- */
-export function readViewFor(actor: AuthUser | undefined): ProductView {
-  if (!actor) return "public";
-  if (hasFeature(actor, "read:product:cost")) return "cost";
-  if (hasFeature(actor, "read:product:internal")) return "internal";
-
-  return "public";
+  return reachesBeyondBase(productReadLadder, actor);
 }
 
 /**

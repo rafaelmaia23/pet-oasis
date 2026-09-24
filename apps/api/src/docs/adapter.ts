@@ -5,7 +5,7 @@ import type {
   RouteErrorResponse,
   RouteResponse,
 } from "@pet-oasis/api-contracts/routes";
-import { routes } from "@pet-oasis/api-contracts/routes";
+import { errorResponses, routes } from "@pet-oasis/api-contracts/routes";
 import { z } from "zod";
 import type {
   ZodObjectInput,
@@ -26,16 +26,26 @@ import { imageUploadBody } from "./components";
  * - `:id` do Express → `{id}` do template OpenAPI;
  * - envelope `{ body, params, query }` → `requestBody` e `parameters`;
  * - escada de views → `anyOf`;
- * - `<domínio>.<operação>` da tabela → `operationId`.
+ * - `<domínio>.<operação>` da tabela → `operationId`;
+ * - os dois erros que o próprio `registerRoute` garante (401 de toda rota
+ *   `bearer`, 422 de toda rota com `request`) entram sozinhos — não são lidos
+ *   de `route.errors`, são **derivados** (`derivedErrors` abaixo). A tabela
+ *   listava os dois à mão em cada entrada, e a lista divergia da API real: a
+ *   issue 16 de `.scratch/fase-12-module-depth/` achou catorze rotas com
+ *   parâmetro que respondem 422 e não o declaravam. `route.errors` continua
+ *   sendo onde cada rota lista o que só ela sabe (403/404/409/413/429/503) —
+ *   o que o registrador não garante estruturalmente.
  *
  * A escada vira `anyOf`, e não `oneOf`, de propósito: os degraus se **contêm**
  * (quem vê custo vê também o que a view interna mostra), e `oneOf` exigiria que
  * o corpo casasse com exatamente um deles — um produto com custo casaria com
  * dois, e a spec passaria a acusar como inválido o que a API realmente devolve.
  *
- * Quem prova que a tabela não divergiu do router é
- * `tests/unit/contracts/routeParity.test.ts`; quem prova que o documento
- * continua o mesmo é `tests/integration/v1/openapi.test.ts`.
+ * A tabela não pode mais divergir do router: toda rota de domínio nasce do
+ * `registerRoute`, que lê método e path direto da entrada (issue 15 de
+ * `.scratch/fase-12-module-depth/`) — não sobra comparação a rodar. Quem prova
+ * que o documento continua o mesmo é `tests/integration/v1/openapi.test.ts`,
+ * e quem prova que ele não sub-declara é `tests/unit/docs/adapter.test.ts`.
  */
 
 function toPathTemplate(expressPath: string): string {
@@ -109,15 +119,34 @@ function fromEnvelope(
   return parts;
 }
 
+/**
+ * Os dois erros que `registerRoute` produz para **qualquer** entrada, sem
+ * olhar para o service: toda rota `bearer` passa por `getAuthUser` (401 se o
+ * ator faltar) e toda entrada com `request` passa pelo `.parse()` do envelope
+ * (422 se o corpo não bater). Nenhum dos dois depende do que a rota faz — só
+ * do que ela declara —, e é por isso que entram aqui e não em `route.errors`.
+ */
+function derivedErrors(
+  route: RouteDefinition,
+): Record<number, RouteErrorResponse> {
+  return {
+    ...(route.auth === "bearer" ? { 401: errorResponses[401] } : {}),
+    ...(route.request ? { 422: errorResponses[422] } : {}),
+  };
+}
+
 function toOperation(
   operationId: string,
   route: RouteDefinition,
 ): ZodOpenApiOperationObject {
   const responses: Record<string, ZodOpenApiResponseObject> = {};
+  // `route.errors` vence em caso de conflito: uma rota que precise de prosa
+  // própria num destes dois status (não existe hoje) ainda pode sobrescrever.
+  const errors = { ...derivedErrors(route), ...route.errors };
   for (const [status, response] of Object.entries(route.responses)) {
     responses[status] = toResponse(response);
   }
-  for (const [status, error] of Object.entries(route.errors)) {
+  for (const [status, error] of Object.entries(errors)) {
     responses[status] = toErrorResponse(error);
   }
 

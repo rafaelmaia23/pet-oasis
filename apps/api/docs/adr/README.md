@@ -211,6 +211,7 @@ derruba campos não listados → nada sensível vaza por omissão.
 - [`0087`](0087-user-progressao-feature-efetiva.md) User — progressão por feature efetiva
 - [`0088`](0088-views-dos-demais-recursos.md) Demais recursos
 - [`0089`](0089-view-de-get-me.md) `GET /me`
+- [`0204`](0204-escada-declara-par-passo-feature-contrato-continua-so-declarando.md) A escada de views declara o par (passo, feature que destrava); o contrato continua só declarando (12.17)
 
 #### Superfície pública
 
@@ -245,12 +246,15 @@ perfil o user continua existindo, só o `Customer`/`Employee` é soft-deletado.
 
 - [`0096`](0096-authenticate-saiu-app-ts-global-foi-grupo-rota.md) `authenticate` saiu do `app.ts` (global) e foi para o grupo de rota
 - [`0097`](0097-optionalauthenticate-terceiro-modo-vitrine-publica.md) `optionalAuthenticate` — o terceiro modo, para a vitrine pública (9.6)
+- [`0203`](0203-authenticate-desce-do-grupo-para-rota-404-vence-401.md) `authenticate` desce do grupo para a rota, e o 404 passa a vencer o 401 (12.08)
+- [`0206`](0206-registerroute-tabela-ganha-segundo-adapter-teste-de-paridade-morre.md) `registerRoute` é o segundo adapter da tabela; o teste de paridade morre (12.08, 12.15)
 
 #### Onde cada coisa vive
 
 - [`0098`](0098-gravacao-transacional-audit-vive-repository-service.md) A gravação transacional do audit vive no repository; o service passa o descritor
 - [`0099`](0099-record-lib-observabilidade-nao-repository.md) `record` é lib de observabilidade, não repository
 - [`0100`](0100-src-lib-nao-conhece-modulo-nenhum.md) `src/lib/` não conhece módulo nenhum
+- [`0205`](0205-writeaudited-colapsa-escrita-auditada-descritor-obrigatorio.md) `writeAudited` colapsa a escrita transacional do audit; o descritor deixa de ser opcional (12.18)
 - [`0101`](0101-src-scripts-codigo-infra-agendamento.md) `src/scripts/` é código; `infra/` é agendamento
 - [`0102`](0102-sql-cru-vive-exclusivamente-repository.md) SQL cru vive exclusivamente no repository
 - [`0103`](0103-tsconfig-biome-api-estendem-presets-workspace.md) O tsconfig e o Biome da API estendem presets do workspace (11.3)

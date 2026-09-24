@@ -2,11 +2,14 @@ import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import {
   AppError,
+  type AppErrorJson,
   createBadRequestError,
+  createConflictError,
   createPayloadTooLargeError,
   createValidationError,
   InternalServerError,
   PresentationError,
+  type ValidationErrorFields,
 } from "@/errors";
 import { PrismaClientKnownRequestError } from "@/generated/prisma/internal/prismaNamespace";
 import { logger } from "@/lib/logger";
@@ -48,7 +51,11 @@ function isPayloadTooLargeError(err: unknown): boolean {
 function respond(
   res: Response,
   statusCode: number,
-  body: Record<string, unknown>,
+  // O envelope que a API emite (`errors` por campo só no 422). É o `toJson()`
+  // de um erro daqui que satisfaz esse tipo: um corpo montado à mão teria de
+  // reconstruir o envelope inteiro, e com um `code` do enum — o que sobrou de
+  // liberdade não dá para escrever uma grafia nova sem querer.
+  body: AppErrorJson & { errors?: ValidationErrorFields },
   error: unknown,
 ) {
   const requestId = getRequestContext()?.requestId;
@@ -134,18 +141,14 @@ export function errorHandler(
       fields[0] ??
       "{ERROR: name of field was not identified in the error object}";
 
-    return respond(
-      res,
-      409,
-      {
-        name: "ConflictError",
-        message: `O ${field} informado já está em uso`,
-        action: `Tente outro valor para o campo ${field}`,
-        statusCode: 409,
-        code: "CONFLICT",
-      },
-      err,
-    );
+    // Passa pela mesma classe dos outros — o envelope (nome, status, `code`)
+    // sai de um lugar só, e não de uma quarta grafia montada à mão aqui.
+    const conflictError = createConflictError({
+      message: `O ${field} informado já está em uso`,
+      action: `Tente outro valor para o campo ${field}`,
+    });
+
+    return respond(res, conflictError.statusCode, conflictError.toJson(), err);
   }
 
   if (err instanceof PresentationError) {

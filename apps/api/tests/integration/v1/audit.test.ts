@@ -10,14 +10,10 @@ import { flushRedis } from "@tests/helpers/redis";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "@/app";
-import * as auditLog from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
-import { generateOpaqueToken, hashToken } from "@/lib/token";
-import { PASSWORD_RESET_TTL_MS } from "@/modules/auth/auth.constants";
-import * as authRepository from "@/modules/auth/auth.repository";
+import { issueVerificationToken } from "@/modules/auth/verificationToken.service";
 import { getFeatureByName } from "@/modules/feature/feature.repository";
 import { getRoleByName } from "@/modules/role/role.repository";
-import * as userRepository from "@/modules/user/user.repository";
 
 // Sem mailpit no test, o envio real daria 503; o mock deixa criação/verificação
 // chegarem ao ponto de audit (padrão de auth.test / logging.test).
@@ -78,10 +74,17 @@ describe("Audit log", () => {
         password: "SenhaForte123!",
       });
 
-    const rows = await auditRows("USER_CREATED");
+    const created = await prisma.user.findUnique({
+      where: { email: "func@example.com" },
+    });
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
+    // `buildEmployee` também audita a criação do admin (docs/adr/0205) — o que
+    // se verifica aqui é a linha do endpoint, achada pelo alvo.
+    const row = (await auditRows("USER_CREATED")).find(
+      (r) => r.targetId === created?.id,
+    );
+
+    expect(row).toMatchObject({
       actorId: admin.id,
       metadata: { source: "ADMIN" },
     });
@@ -355,12 +358,9 @@ describe("Audit log", () => {
 
   it("records PASSWORD_RESET_COMPLETED on reset-password", async () => {
     const user = await buildCustomer();
-    const rawToken = generateOpaqueToken();
-    await authRepository.createVerificationToken({
+    const rawToken = await issueVerificationToken({
       userId: user.id,
-      tokenHash: hashToken(rawToken),
       purpose: "PASSWORD_RESET",
-      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
     });
 
     await request(app)
@@ -416,25 +416,9 @@ describe("Audit log", () => {
 
   // ─── Consistência transacional (§4.5) ────────────────────────────────────────
 
-  it("writes no audit row when the audited mutation rolls back", async () => {
-    const admin = await buildEmployee({ grants: ["manage:user:status"] });
-    const target = await buildCustomer();
-
-    // Força o record dentro da tx a falhar → a $transaction inteira reverte.
-    vi.spyOn(auditLog, "record").mockRejectedValueOnce(new Error("audit down"));
-
-    await expect(
-      userRepository.banUserAndInvalidateSessions(target.id, admin.id, "x", {
-        action: "USER_BANNED",
-        targetType: "User",
-        targetId: target.id,
-      }),
-    ).rejects.toThrow("audit down");
-
-    const stillActive = await prisma.user.findUnique({
-      where: { id: target.id },
-    });
-    expect(stillActive?.bannedAt).toBeNull();
-    expect(await auditRows("USER_BANNED")).toHaveLength(0);
-  });
+  // A semântica "audit falha → mutação desfaz" mora num lugar só desde o
+  // ADR-0205: tests/unit/lib/auditLog.test.ts (`writeAudited`). Não dá para
+  // provar de novo aqui por spy — `writeAudited` chama `record` como binding
+  // local do mesmo arquivo, e nenhum mock de fora do módulo alcança essa
+  // chamada.
 });

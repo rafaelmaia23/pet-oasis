@@ -29,9 +29,9 @@ como composição por cima do schema do contrato.
 | `…/audit-log` | `AUDIT_ACTIONS`, `AUDIT_TARGET_TYPES`; `listAuditLogsSchema`; `auditLogViews` |
 | `…/log` | `listRecentLogsSchema`; `recentLogsViews` |
 | `…/status` | `statusViews` (o health check) |
-| `…/routes` | `routes` — a **tabela de rotas** (ver abaixo); `errorResponses`, `noContent` e os tipos `RouteDefinition`/`RouteGroup`/`RouteTable` |
+| `…/routes` | `routes` — a **tabela de rotas** (ver abaixo); `ROUTE_TAGS`/`RouteTag`, `errorResponses`, `noContent` e os tipos `RouteDefinition`/`RouteGroup`/`RouteTable` |
 | `…/pagination` | `offsetQuerySchema`, `cursorQuerySchema`, `buildOffsetQuerySchema`, `defineSortConfig`, `offsetMetaSchema`, `cursorMetaSchema`, `DEFAULT_LIMIT`/`MAX_LIMIT`; os envelopes `offsetList`/`cursorList`/`staticList` |
-| `…/errors` | `ERROR_CODES`/`ErrorCode`, `errorResponseSchema`, `validationErrorResponseSchema` e os tipos |
+| `…/errors` | `ERROR_CODES`/`ErrorCode` (folha `error.codes.ts`), `errorResponseSchema`, `validationErrorResponseSchema` e os tipos (folha `error.views.ts`) |
 
 Cada domínio é uma entrada própria do `exports` para o consumidor importar só o que usa; o
 índice reexporta tudo. Domínio novo = pasta nova em `src/` + entrada nova no `exports` + módulo
@@ -83,13 +83,41 @@ Duas coisas que a tabela **não** faz, de propósito:
 - **Falar de multipart.** Uma rota de upload traz só `upload: "image"`. O formato aceito e o
   teto de tamanho são do servidor (vêm de env var) e vivem na API.
 
-O path fica na forma do **Express** (`:id`) porque é assim que ele é comparado com o router:
-`apps/api/tests/unit/contracts/routeParity.test.ts` bate o conjunto `método + path` dos dois
-lados, e rota sem entrada — ou entrada sem rota — é vermelho. O template `{id}` do OpenAPI sai
-do adaptador. Quando a forma da resposta muda com a feature efetiva de quem chama, `view` é a
+O path fica na forma do **Express** (`:id`) porque é assim que o `registerRoute` monta a rota
+direto da entrada — o router não tem como divergir da tabela, já que ele é construído a partir
+dela. O template `{id}` do OpenAPI sai do adaptador. Quando a forma da resposta muda com a feature efetiva de quem chama, `view` é a
 **escada de capability** em ordem (`[público, interno, custo]`), e o adaptador a publica como
 união. O racional está em
 [`docs/adr/0003`](../../docs/adr/0003-route-table-is-contract-openapi-is-derived.md).
+
+Os grupos são `as const`, então `path`, `tag` e `summary` são **literais**: quem monta a URL de
+uma rota com `:param` faz isso sob o olho do compilador, e não sobre `string`.
+
+### O que a tabela promete, provado aqui dentro
+
+`tests/route-table.test.ts` percorre a tabela **uma vez** e prova, como função pura — sem
+Postgres e sem aplicação de pé —, o que antes só falharia por HTTP:
+
+- todo `:param` do path tem chave no `params` do request, e toda chave de `params` tem `:param`
+  no path (um `:param` sem chave chega ao handler sem validação; uma chave sem `:param` é
+  validação que nunca roda);
+- o envelope de request só usa `body`, `params` e `query` — uma quarta chave é ignorada pelo
+  adaptador, então ela é vermelho aqui;
+- as tags usadas são exatamente as de `ROUTE_TAGS`, na ordem em que a tabela as apresenta;
+- cada **escada** de views é contida — o degrau de cima tem todo campo do de baixo, inclusive
+  dentro de objeto e de array aninhados. É a premissa de o adaptador emitir `anyOf` em vez de
+  `oneOf`.
+
+As **tags** moram em `src/routes/route.tags.ts` e são o tipo do campo `tag`: usar uma tag fora
+da lista não compila. A prosa que descreve cada grupo continua na API — `openapi.ts` declara um
+`Record<RouteTag, string>`, então descrever uma tag que a tabela não usa, ou esquecer de
+descrever uma que ela usa, também não compila. Os dois sentidos ficam amarrados sem o documento
+e a tabela se repetirem.
+
+`tests/purity.test.ts` cuida da forma do pacote: além da pureza (só `zod`), prova que o
+`exports` do manifesto lista exatamente os índices que existem em `src/` e que **import entre
+domínios aponta para a folha, nunca para o índice** do outro domínio — é o que impede um ciclo
+(`user → role → user`) de virar `undefined` na inicialização do consumidor.
 
 ## Consumido do fonte TS, sem build
 
@@ -144,7 +172,7 @@ Prisma — tudo é teste vermelho, não bug em produção.
 ```bash
 pnpm --filter @pet-oasis/api-contracts typecheck   # src como biblioteca + tests como Node
 pnpm --filter @pet-oasis/api-contracts lint
-pnpm --filter @pet-oasis/api-contracts test        # pureza, shape de erro, registro de enums, paginação, audit
+pnpm --filter @pet-oasis/api-contracts test        # pureza e forma do pacote, invariantes da tabela de rotas, shape de erro, registro de enums, paginação, audit
 ```
 
 Os três também rodam pelo Turbo da raiz (`pnpm typecheck`, `pnpm lint`, `pnpm test`).

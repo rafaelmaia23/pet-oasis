@@ -117,4 +117,4 @@ export const permissionRoutes = {
     responses: { 204: noContent },
     errors: readErrors,
   },
-} satisfies RouteGroup;
+} as const satisfies RouteGroup;

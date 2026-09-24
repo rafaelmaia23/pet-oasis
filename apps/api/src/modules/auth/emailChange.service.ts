@@ -8,10 +8,12 @@ import {
 import { send } from "@/lib/email";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
-import { generateOpaqueToken, hashToken } from "@/lib/token";
 import { findUserByEmail, findUserById } from "@/modules/user/user.repository";
-import { EMAIL_VERIFICATION_TTL_MS } from "./auth.constants";
 import * as authRepository from "./auth.repository";
+import {
+  consumeVerificationToken,
+  issueVerificationToken,
+} from "./verificationToken.service";
 
 const log = logger.child({ module: "email-change" });
 
@@ -85,17 +87,20 @@ export async function changeEmail(
     throw createConflictError(EMAIL_IN_USE_ERROR);
   }
 
-  const rawToken = generateOpaqueToken();
-
-  await authRepository.requestEmailChange(
-    {
-      userId,
-      tokenHash: hashToken(rawToken),
-      newEmail,
-      expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
+  // No máximo uma troca pendente por usuário: o pedido novo queima o token
+  // anterior, o que de quebra é o cancelamento implícito de uma troca em curso.
+  const rawToken = await issueVerificationToken({
+    userId,
+    purpose: "EMAIL_CHANGE",
+    supersedePending: true,
+    newEmail,
+    effect: authRepository.setPendingEmail(newEmail),
+    audit: {
+      action: "EMAIL_CHANGE_REQUESTED",
+      targetType: "User",
+      targetId: userId,
     },
-    { action: "EMAIL_CHANGE_REQUESTED", targetType: "User", targetId: userId },
-  );
+  });
 
   const { subject, html, text } = buildEmailChangeNotice(rawToken, newEmail);
 
@@ -108,43 +113,33 @@ export async function changeEmail(
 }
 
 export async function confirmEmailChange(token: string) {
-  const changeToken = await authRepository.findVerificationTokenByHash(
-    hashToken(token),
-  );
+  const { userId } = await consumeVerificationToken({
+    rawToken: token,
+    purpose: "EMAIL_CHANGE",
+    invalidTokenError: INVALID_TOKEN_ERROR,
+    plan: async (changeToken) => {
+      const user = await findUserById(changeToken.userId);
 
-  if (
-    changeToken?.purpose !== "EMAIL_CHANGE" ||
-    changeToken.usedAt !== null ||
-    changeToken.expiresAt < new Date() ||
-    !changeToken.newEmail
-  ) {
-    log.warn(
-      {
-        ...(changeToken ? { userId: changeToken.userId } : {}),
-        reason: !changeToken ? "UNKNOWN_TOKEN" : "USED_OR_EXPIRED",
-      },
-      "email change confirmation refused",
-    );
-    throw createBadRequestError(INVALID_TOKEN_ERROR);
-  }
+      // Sem usuário ou sem o alvo congelado no token, não há o que promover — e
+      // um `EMAIL_CHANGE` nesse estado é tão imprestável quanto um expirado, com
+      // a mesma resposta.
+      if (!user || !changeToken.newEmail) {
+        throw createBadRequestError(INVALID_TOKEN_ERROR);
+      }
 
-  const user = await findUserById(changeToken.userId);
-
-  if (!user) {
-    throw createBadRequestError(INVALID_TOKEN_ERROR);
-  }
-
-  await authRepository.consumeEmailChange(
-    changeToken.id,
-    changeToken.userId,
-    changeToken.newEmail,
-    user.email,
-    {
-      action: "EMAIL_CHANGE_COMPLETED",
-      targetType: "User",
-      targetId: changeToken.userId,
+      return {
+        effect: authRepository.applyEmailChange(
+          changeToken.newEmail,
+          user.email,
+        ),
+        audit: {
+          action: "EMAIL_CHANGE_COMPLETED",
+          targetType: "User",
+          targetId: changeToken.userId,
+        },
+      } as const;
     },
-  );
+  });
 
-  log.info({ userId: changeToken.userId }, "email change completed");
+  log.info({ userId }, "email change completed");
 }

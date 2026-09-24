@@ -11,6 +11,23 @@
 ### ~~Timing attack no login e enumeração de usuário~~ — ✅ resolvido (Fase 10.9)
 Medido com o custo real do bcrypt: email desconhecido respondia em 5 ms e senha errada em 172 ms. O ramo sem usuário passou a verificar contra um hash de ninguém (`simulatePasswordVerification`, `src/lib/password.ts`) e as medianas ficaram em 171 ms contra 172 ms. Racional e método da medição em `apps/api/docs/adr/0064-relogio-login-nao-oraculo-email-desconhecido-paga-bcrypt.md`.
 
+### Uso único do `VerificationToken` é de leitura-depois-escrita, não do banco — **P**
+
+O consumo julga a validade numa leitura e marca `usedAt` numa escrita seguinte
+(`consumeToken`, `apps/api/src/modules/auth/verificationToken.repository.ts`). Duas requisições
+simultâneas com o **mesmo** token válido passam as duas pelo predicado e aplicam o efeito duas
+vezes — reset de senha aplicado em dobro, reativação tentada em dobro. A janela é de
+milissegundos e exige o token na mão, então não é vazamento; é uma dupla aplicação. O estado é o
+mesmo de antes da Fase 12 (o módulo herdou a forma das quatro transações que substituiu), e por
+isso não foi mexido lá.
+
+**Correção possível:** trocar o `update` por um `updateMany` com `usedAt: null` no `where` e
+tratar `count === 0` como perda da corrida — o banco vira o árbitro do uso único. **O que é
+decisão de negócio, e por isso não foi tomada:** o que a segunda requisição recebe. O 400 genérico
+de [`0071`](../../apps/api/docs/adr/0071-token-invalido-expirado-usado-400-generico.md) (é
+verdade: o token já foi usado) ou o 409 de concorrência? E se o efeito de um purpose for
+idempotente, vale responder 204 como se tivesse sido a primeira?
+
 ### Resíduo de tempo no login: o contador de lockout só no ramo com usuário — **P**
 Depois da 10.9 sobra ~1 ms entre as duas recusas: o ramo com usuário grava o contador de lockout no Redis (`lockout.recordFailure`) e o ramo sem usuário não. Em rede local é ruído; em Redis remoto pode voltar a ser mensurável. **Correção possível:** uma escrita dummy no Redis no ramo sem usuário, ou medir com o Redis de produção antes de decidir que não vale o custo. Decisão de produto, não tomada.
 
@@ -83,6 +100,60 @@ Dump agendado do banco do deploy, com um *restore* de fato testado — backup nu
 
 ---
 
+## Arquitetura e fronteiras
+
+> Itens levantados pelos esforços de profundidade da Fase 12 (`.scratch/fase-12-module-depth/`):
+> decisões de **fronteira** — o que é do contrato e o que fica no app — que uma issue esbarrou e
+> conscientemente não tomou de passagem.
+
+### `ERROR_CODES` como fonte do valor, não só do tipo — **P**
+
+**Problema:** a issue 03 de `fase-12-module-depth`
+(`.scratch/fase-12-module-depth/issues/03-errorcode-do-contrato-tipa-o-erro-da-api.md`) amarrou o
+`code` do erro da API ao enum do contrato **por tipo**: `AppErrorParams.code` é `ErrorCode`, então
+uma grafia fora do enum não compila. Os 12 literais, porém, continuam digitados em
+`apps/api/src/errors/AppErrors.ts`, e `ERROR_CODES` segue sem consumidor de **runtime** em `src/` —
+só `import type`, apagado no build. A letra da issue dizia "cada classe de erro tira o code do
+contrato", e o que se entregou é a leitura mais fraca dela: divergência ficou impossível por
+compilador, não por dono único do valor. A revisão de dois eixos apontou a diferença.
+
+**Decisão a tomar:** o corte atual se apoia em
+`apps/api/docs/adr/0095-fronteira-featurename-string.md` — tipo estreito vale onde se digita o
+literal, e é aqui. A alternativa é o contrato exportar um objeto de lookup (`ERROR_CODE.CONFLICT`,
+derivado de `ERROR_CODES` sem redigitar), e as classes lerem o valor de lá. Ganha: o valor tem um
+dono só, e o enum passa a ter consumidor de runtime. Perde: acrescenta export ao contrato para um
+problema que o compilador já resolve, e `ERROR_CODE.CONFLICT` é mais indireto que `"CONFLICT"` na
+leitura. É decisão de fronteira de contrato, não de implementação.
+
+### `ValidationErrorFields` está declarado nos dois lados — **P**
+
+**Problema:** o mesmo tipo (`Record<string, string[]>`, o `errors` por campo do 422) existe em
+`packages/api-contracts` como `validationErrorFieldsSchema`/`ValidationErrorFields` e de novo em
+`apps/api/src/errors/AppErrors.ts`, declarado à mão. São estruturalmente idênticos, então nada
+quebra hoje — e é exatamente por isso que podem divergir sem ninguém ver, que é a mesma classe de
+problema que a issue 03 resolveu para o `code`. Unificar chegou a ser feito no ramo da issue 03 e
+foi **revertido**: nem a issue nem a spec pediam, e "o que é contrato compartilhado e o que fica no
+app" não se decide de passagem.
+
+**Decisão a tomar:** se o `errors` por campo é do contrato pelo mesmo motivo que o `code` (é o
+cliente quem o lê), o tipo da API vira alias do tipo do contrato — uma linha, e o reexport mora no
+barril `apps/api/src/errors/index.ts`, não no arquivo das classes. Se não for, vale um comentário
+dizendo por que os dois existem, para o próximo leitor não "consertar" a duplicação.
+
+### A tripla `(user, role, feature)` do override viaja como três strings — **P**
+
+**Problema:** a identidade de um override de feature é a tripla `(user, role, feature)` — o comentário de `apps/api/src/modules/permission/permission.routes.ts` a nomeia assim, e é ela que justifica os três `:param` no path. No código ela não existe como coisa: `upsertUserFeature` e `removeUserFeature` recebem `actor.id, params.userId, params.roleId, params.featureId` como quatro strings posicionais, em `permission.controller.ts`, `permission.service.ts` e `permission.repository.ts`. Trocar duas de lugar compila. Levantado pela revisão da issue 09 de `fase-12-module-depth` (`.scratch/fase-12-module-depth/issues/09-rotas-de-role-feature-e-permission.md`), que migrou as sete rotas de permission sem mexer no serviço.
+
+**Decisão a tomar:** se a tripla ganha um tipo (`OverrideRef`), onde ele mora — é vocabulário de domínio da API, não forma de resposta, então seria `src/modules/permission/`, não o contrato — e se o `actor` entra nele ou continua parâmetro separado (ele não é parte da identidade do override; é quem age sobre ela). Ganha: a ordem dos três deixa de ser posicional em três camadas. Perde: um tipo novo numa área estável, cujos únicos callers são os sete handlers.
+
+### `getUserPermissions` devolve features efetivas — **P**
+
+**Problema:** a operação se chama `listEffectiveFeatures` na tabela de rotas do contrato e `getUserPermissions` no controller, no serviço e no schema (`getUserPermissionsParamsSchema`). O que ela devolve são as **features efetivas** de um usuário — `effectiveFeaturesViews.default` —, e "permissions" no nome sugere a outra coisa que o módulo tem (os overrides, que são `listFeatures`). Enquanto a rota não tinha nome próprio, o descompasso não tinha como aparecer; agora a tabela nomeia a operação e os dois nomes ficam lado a lado. Levantado pela revisão da issue 09 de `fase-12-module-depth`.
+
+**Decisão a tomar:** renomear alinha o código ao vocabulário de `apps/api/CONTEXT.md` (onde "feature efetiva" é termo e "permission" é o módulo), mas atravessa controller, serviço, repositório e o nome de um schema **do contrato** — e schema do contrato é fronteira, não renomeação local. Não vale de passagem numa issue de migração de rota.
+
+---
+
 ## Produto e domínio
 
 ### ~~Dummy data para a demo~~ — ✅ resolvido (Fase 9.11)
@@ -132,12 +203,73 @@ O glossário da API (`apps/api/CONTEXT.md`, Fase 11, issue 08) fixou `User`/usu�
 
 ---
 
+### Trocar de email não derruba sessão nenhuma — decisão pendente — **P**
+Levantado no fecho da issue 05 de `fase-12-module-depth`, que esperava encontrar quatro sites de
+invalidação de sessão — ban, reset, **troca de email** e deleção — e achou só três: o efeito da troca
+de email (`applyEmailChange`, `apps/api/src/modules/auth/auth.repository.ts` — chamava-se
+`consumeEmailChange` até a issue 06) não toca em `Session`, nem antes nem depois da issue.
+O quarto site real é a **troca de senha**. Se isso é lacuna ou é intencional é **regra de negócio, do
+dono do projeto**: trocar o email muda o identificador de login, e há argumento dos dois lados — derrubar
+trata a troca como evento de credencial (é o que ban e reset fazem); não derrubar trata o email como
+dado de perfil, e quem trocou o próprio email não é um invasor por isso. **Se a decisão for derrubar**, o
+trabalho é uma linha: `invalidateSessionsOfUser(tx, token.userId, new Date())` dentro do efeito, que já
+roda na transação do consumo, mais um caso de integração — a operação e o filtro já têm dono
+(`apps/api/src/modules/auth/auth.liveSession.repository.ts`).
+
+
 ## Conformidade
 
 ### LGPD: base legal, anonimização e direitos do titular — **G**
 Deixado inteiramente fora da Fase 7 por o projeto ser portfólio, sem dado real de titular. Quando entrar, os pontos são: base legal para reter log de segurança (legítimo interesse / obrigação legal); o que acontece com `actorId` e `targetId` no `AuditLog` quando um usuário exerce direito de eliminação — hoje o soft delete **preserva** os dois; e o mecanismo de resposta a requisição de titular (exportação e eliminação). A tensão central é real: apagar destrói a trilha de segurança, manter conflita com o direito de eliminação, e a saída usual é **anonimizar** o ator preservando ação e timestamp.
 
+## Testes
+
+### Enxugar a suíte de integração depois dos aprofundamentos da Fase 12 — **G**
+
+**Problema:** `fase-12-module-depth` deu dono único a seis invariantes que antes só falhavam via
+HTTP (token de verificação, sessão viva, cookie de refresh, autorizar-antes-de-buscar, escada de
+view, `writeAudited`) e acrescentou teste unitário puro para cada uma — mas a regra dura da spec
+("nenhum teste de integração é apagado neste esforço") deixou a suíte de `tests/integration/v1/`
+com **19.080 linhas** em 86 arquivos, provando de novo, por HTTP, exatamente o que o unitário novo
+já prova sem banco. Não é estimativa: `auth.test.ts` (3.172 linhas) tem casos de token
+usado/expirado/inválido para cada `purpose` que `verificationToken.test.ts` agora cobre com um
+único `consume` parametrizado, e `user.test.ts` (2.176 linhas) mais `account-reactivation.test.ts`
+(957) repetem a mesma matriz. O par HTTP↔unitário virou fonte dupla de verdade: um teste HTTP que
+falha por regressão na regra e um unitário que falha pelo mesmo motivo custam bisect e manutenção
+em dobro, sem ganho de cobertura.
+
+**Correção possível:** por invariante migrada, decidir se o caso de integração vira **um** caso
+de fumaça (prova que o fluxo HTTP chega até a regra) e a matriz completa (usado × expirado ×
+purpose errado, atributos de cookie por ambiente, ordem autorizar-então-carregar) fica só no
+unitário — ou se as duas continuam por decisão consciente de dupla prova. **O que é decisão de
+processo, não tomada aqui:** que grau de redundância a suíte deve tolerar, e se cortar caso de
+integração é seguro sem medir cobertura antes e depois (a regra da spec foi cautelar, não uma
+afirmação de que o corte é sempre seguro). Tamanho **G** porque toca os 86 arquivos e exige revisão
+caso a caso, não um padrão mecânico único.
+
 ## Bugs
+
+### `GET /status` pula camadas: `$queryRaw` no controller — **P**
+O `status.controller.ts` fala com o Prisma direto, com três `$queryRaw`, sem service e sem
+repository. Contraria duas regras do `apps/api/CLAUDE.md` ao mesmo tempo ("Repository é a ÚNICA que
+toca o Prisma… Nunca pule camadas" e "SQL cru vive exclusivamente no repository", que lista os três
+pontos legítimos — este não é um deles). É anterior à Fase 12 e sobreviveu à migração da rota para o
+`registerRoute` (issue 08 do esforço `fase-12-module-depth`), que só trocou a camada de rota. A
+correção é mecânica: `status.repository.ts` com as três consultas, `status.service.ts` montando o
+retorno. **Consequência de não fazer:** é o precedente que qualquer rota nova pode citar para falar
+com o banco do controller.
+
+### `Role.description` é nulável no banco e `z.string()` na view — **P**
+Levantado ao migrar `GET /me` para o `registerRoute` (Fase 12, esforço
+`fase-12-module-depth`, issue 08), quando o typecheck pôs os dois lados frente a frente pela
+primeira vez. `Role.description` é `String?` em `prisma/schema.prisma`, mas `roleSummaryView`
+(`packages/api-contracts/src/me/me.views.ts`) a promete como `z.string()` — e a mesma view
+aparece em `/me` e nas views de usuário. Uma role sem descrição vira **500** (a view recusa a
+resposta), não um campo ausente. Hoje é inalcançável: roles são read-only, semeadas sempre com
+descrição por `role.constants.ts`. **As saídas são três, e a escolha é de contrato:** tornar a
+coluna `String` com migration, declarar a view `.nullable()` (muda o `/openapi.json` e o
+cliente), ou deixar como está e registrar que a nulidade é resíduo de schema. Nada foi mudado
+na issue 08 — o comportamento em runtime é o mesmo de antes dela.
 
 ### ~~Seed fatal derruba a aplicação no boot~~ — ✅ resolvido (Fase 10.3)
 O entrypoint tratava falha de seed como fatal, e um `EACCES` ao gravar imagem de catálogo pôs a

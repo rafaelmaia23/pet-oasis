@@ -8,6 +8,7 @@ import {
   makeCustomerData,
 } from "@tests/factories/user.factory";
 import { expectValidationError } from "@tests/helpers/assertions";
+import { describeUserDeletedAudit } from "@tests/helpers/audit";
 import { loginAs } from "@tests/helpers/auth";
 import { clearDatabase } from "@tests/helpers/database";
 import { makePassword } from "@tests/helpers/primitives";
@@ -26,7 +27,14 @@ import app from "@/app";
 import { env } from "@/config/env";
 import { prisma } from "@/lib/prisma";
 import { generateOpaqueToken, hashToken } from "@/lib/token";
-import { softDeleteUserAndInvalidateSessions } from "@/modules/user/user.repository";
+import { softDeleteUserAndInvalidateSessions as softDeleteUserAndInvalidateSessionsWithAudit } from "@/modules/user/user.repository";
+
+/** Deleta o usuário-alvo, com o descritor que a taxonomia exige (USER_DELETED). */
+const softDeleteUserAndInvalidateSessions = (userId: string) =>
+  softDeleteUserAndInvalidateSessionsWithAudit(
+    userId,
+    describeUserDeletedAudit(userId),
+  );
 
 // A reativação atravessa dois routers (o signup em `/auth`, a ação do admin em
 // `/users`) e converge numa confirmação pública só — por isso mora num arquivo

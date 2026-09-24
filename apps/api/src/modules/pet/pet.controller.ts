@@ -1,9 +1,6 @@
-import { petParamsSchema } from "@pet-oasis/api-contracts/pet";
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import type { Request, Response } from "express";
 import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
-import { getAuthUser } from "@/utils/getAuthUser";
 import * as petService from "./pet.service";
 import type { PetPhotoTransport } from "./pet.transport";
 
@@ -56,12 +53,10 @@ export const updatePetPhoto: RouteHandler<
 > = async ({ params, actor, file }) =>
   petService.setPetPhoto(actor, params.petId, file);
 
-export const deletePetPhoto = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  await petService.removePetPhoto(getAuthUser(req), params.petId);
-
-  return res.status(204).send();
+export const deletePetPhoto: RouteHandler<
+  typeof routes.pet.deletePhoto
+> = async ({ params, actor }) => {
+  await petService.removePetPhoto(actor, params.petId);
 };
 
 export const markPetDeceased: RouteHandler<

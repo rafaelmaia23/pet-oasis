@@ -9,11 +9,18 @@ import * as petController from "./pet.controller";
 import { petPhotoTransport } from "./pet.transport";
 
 /**
- * O router **sem prefixo**: as rotas já declaradas num lugar só, com o path
- * inteiro vindo da entrada da tabela (`packages/api-contracts/src/routes/pet.routes.ts`).
- * Enquanto a migração corre (issue 12 de `.scratch/fase-12-module-depth/`), ele
- * convive com o `legacyPetRouter` abaixo, ainda montado em `/pets`. Os dois
- * nunca disputam um path: uma rota está numa forma ou na outra.
+ * As dez rotas de pet, montadas **sem prefixo**: o path inteiro (aninhado sob
+ * `/customers/:customerId` na criação/listagem, plano em `/pets/...` no resto)
+ * já vem da entrada da tabela (`packages/api-contracts/src/routes/pet.routes.ts`),
+ * e o `authenticate` que ficava nos dois prefixos antigos
+ * (`/customers/:customerId`, `/pets`) desceu para o `before` de cada rota.
+ *
+ * As features vão na forma base (`read:pet`/`manage:pet`): `can()` já admite o
+ * sufixo `:others`, e quem separa dono de staff é o `pet.service` — via
+ * `resolveCustomer`/`resolvePet` (fail-closed, dono fora da URL). A exceção é
+ * a listagem geral, que exige a forma `:others` direto (como `GET /users`
+ * exige `read:user:others`): listar pet de terceiro é a definição dela, não
+ * um ramo que o service possa separar depois.
  */
 const petRouter = Router();
 
@@ -27,9 +34,6 @@ registerRoute(petRouter, routes.pet.listByCustomer, {
   handler: petController.listCustomerPets,
 });
 
-// Única rota do módulo que exige a forma `:others` direto (como `GET /users`
-// exige `read:user:others`): listar pet de terceiro é a definição dela, não um
-// ramo que o service possa separar depois. Por isso o service não recebe ator.
 registerRoute(petRouter, routes.pet.list, {
   before: [authenticate, canAccess("read:pet:others")],
   handler: petController.listPets,
@@ -84,25 +88,9 @@ registerRoute(petRouter, routes.pet.setPhoto, {
   handler: petController.updatePetPhoto,
 });
 
-/**
- * A forma antiga, com o path partido entre o prefixo e a chamada.
- *
- * Recurso **plano** (`/pets/:petId`) — a coleção aninhada
- * (`/customers/:customerId/pets`) já saiu daqui, para o `petRouter` acima.
- * `petId` é UUID global, então repetir o `customerId` no item seria
- * redundante — e redundante significa que pode **discordar** do dono real,
- * obrigando a inventar uma regra para um caso que só existe porque a rota o
- * criou.
- *
- * As features vão na forma base (`read:pet`/`manage:pet`): `can()` já admite o
- * sufixo `:others`, e quem separa dono de staff é o `pet.service`.
- */
-export const legacyPetRouter = Router();
-
-legacyPetRouter.delete(
-  "/:petId/photo",
-  canAccess("manage:pet"),
-  petController.deletePetPhoto,
-);
+registerRoute(petRouter, routes.pet.deletePhoto, {
+  before: [authenticate, canAccess("manage:pet")],
+  handler: petController.deletePetPhoto,
+});
 
 export default petRouter;

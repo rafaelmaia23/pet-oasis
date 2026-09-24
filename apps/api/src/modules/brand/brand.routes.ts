@@ -1,4 +1,5 @@
 import { routes } from "@pet-oasis/api-contracts/routes";
+import type { Request } from "express";
 import { Router } from "express";
 import {
   catalogIpLimiter,
@@ -9,8 +10,19 @@ import {
 import { registerRoute } from "@/lib/registerRoute";
 import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
-import { uploadSingleImage } from "@/middlewares/upload.middleware";
+import {
+  uploadedFile,
+  uploadSingleImage,
+} from "@/middlewares/upload.middleware";
 import * as brandController from "./brand.controller";
+
+/**
+ * O que o upload de imagem dá ao handler e a tabela não descreve — o
+ * `uploadSingleImage` já garantiu a presença do arquivo em `before`.
+ */
+function uploadedFileContext(req: Request): { file: Buffer } {
+  return { file: uploadedFile(req) };
+}
 
 /**
  * Montado **sem prefixo** em `src/routes/index.ts` (issue 13 de
@@ -43,14 +55,16 @@ registerRoute(brandRouter, routes.brand.update, {
  * Logo (9.10): mesma feature da escrita da marca — `manage:catalog-structure`.
  * Não existe cargo que renomeie a marca mas não possa trocar o logo dela.
  */
-brandRouter.put(
-  "/brands/:brandId/logo",
-  authenticate,
-  canAccess("manage:catalog-structure"),
-  rateLimitByUser(uploadUserLimiter, "image-upload"),
-  uploadSingleImage,
-  brandController.updateBrandLogo,
-);
+registerRoute(brandRouter, routes.brand.setLogo, {
+  before: [
+    authenticate,
+    canAccess("manage:catalog-structure"),
+    rateLimitByUser(uploadUserLimiter, "image-upload"),
+    uploadSingleImage,
+  ],
+  context: uploadedFileContext,
+  handler: brandController.updateBrandLogo,
+});
 
 brandRouter.delete(
   "/brands/:brandId/logo",

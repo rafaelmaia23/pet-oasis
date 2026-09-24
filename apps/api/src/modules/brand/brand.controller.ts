@@ -3,8 +3,6 @@ import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
-import { uploadedFile } from "@/middlewares/upload.middleware";
-import { brandPresenter } from "./brand.presenter";
 import * as brandService from "./brand.service";
 
 export const listBrands: RouteHandler<typeof routes.brand.list> = async () => {
@@ -25,16 +23,10 @@ export const updateBrand: RouteHandler<typeof routes.brand.update> = ({
   body,
 }) => brandService.updateBrand(params.brandId, body);
 
-export const updateBrandLogo = async (req: Request, res: Response) => {
-  const { params } = brandParamsSchema.parse({ params: req.params });
-
-  const brand = await brandService.setBrandLogo(
-    params.brandId,
-    uploadedFile(req),
-  );
-
-  return res.status(200).json(brandPresenter.present(brand, "default"));
-};
+export const updateBrandLogo: RouteHandler<
+  typeof routes.brand.setLogo,
+  { file: Buffer }
+> = ({ params, file }) => brandService.setBrandLogo(params.brandId, file);
 
 export const deleteBrandLogo = async (req: Request, res: Response) => {
   const { params } = brandParamsSchema.parse({ params: req.params });

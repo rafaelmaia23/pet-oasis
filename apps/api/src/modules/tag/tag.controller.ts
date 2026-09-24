@@ -3,15 +3,17 @@ import {
   tagParamsSchema,
   updateTagSchema,
 } from "@pet-oasis/api-contracts/catalog";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
+import type { RouteHandler } from "@/lib/registerRoute";
 import { tagPresenter } from "./tag.presenter";
 import * as tagService from "./tag.service";
 
-export const listTags = async (_req: Request, res: Response) => {
+export const listTags: RouteHandler<typeof routes.tag.list> = async () => {
   const tags = await tagService.getTags();
 
-  res.status(200).json(listEnvelope(tagPresenter.presentMany(tags, "default")));
+  return listEnvelope(tags);
 };
 
 export const createTag = async (req: Request, res: Response) => {

@@ -1,7 +1,6 @@
 import type {
   CreateVariantInput,
   UpdateVariantInput,
-  VariantView,
 } from "@pet-oasis/api-contracts/catalog";
 import {
   createConflictError,
@@ -35,10 +34,6 @@ const STOCK_FIELDS = [
 
 const isStockField = (field: string): boolean =>
   (STOCK_FIELDS as readonly string[]).includes(field);
-
-export function viewFor(actor: AuthUser): VariantView {
-  return hasFeature(actor, "read:product:cost") ? "cost" : "internal";
-}
 
 async function resolveVariant(variantId: string) {
   const variant = await variantRepository.findVariantById(variantId);

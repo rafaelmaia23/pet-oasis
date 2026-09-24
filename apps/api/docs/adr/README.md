@@ -211,6 +211,7 @@ derruba campos não listados → nada sensível vaza por omissão.
 - [`0087`](0087-user-progressao-feature-efetiva.md) User — progressão por feature efetiva
 - [`0088`](0088-views-dos-demais-recursos.md) Demais recursos
 - [`0089`](0089-view-de-get-me.md) `GET /me`
+- [`0204`](0204-escada-declara-par-passo-feature-contrato-continua-so-declarando.md) A escada de views declara o par (passo, feature que destrava); o contrato continua só declarando (12.17)
 
 #### Superfície pública
 

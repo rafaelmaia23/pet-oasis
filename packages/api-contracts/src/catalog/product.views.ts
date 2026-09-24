@@ -1,9 +1,17 @@
 import { z } from "zod";
+import type { FeatureName } from "../feature/feature.names";
 import { offsetMetaSchema } from "../pagination/pagination.schema";
 import { petSpeciesSchema } from "../pet/pet.enums";
 import { brandViews } from "./brand.views";
 import { productStatusSchema } from "./catalog.enums";
 import { tagViews } from "./tag.views";
+
+/** Um degrau da escada: a view e a feature que o destrava — `null` no degrau
+ * base, que todo ator recebe (inclusive o anônimo). */
+type ViewLadder<V extends z.ZodType> = readonly {
+  view: V;
+  feature: FeatureName | null;
+}[];
 
 /**
  * Três views em **escada**, cada degrau contendo o anterior (9.8/Y9):
@@ -225,6 +233,45 @@ export const variantViews = {
 
 export type VariantView = keyof typeof variantViews;
 
+/**
+ * A escada da **leitura** do catálogo (9.8/Y9), em pares: o degrau que o
+ * visitante anônimo recebe (base, `feature: null`), o que
+ * `read:product:internal` destrava e o que `read:product:cost` destrava por
+ * cima — `read:product:cost` **implica** a visão interna (quem vê margem vê
+ * estoque e rascunho), e é por isso que `chooseView`
+ * (`apps/api/src/lib/viewLadder.ts`) percorre os pares em ordem e deixa o
+ * degrau mais alto alcançado vencer, em vez de tratar as duas features como
+ * independentes.
+ */
+export const productReadLadder = [
+  { view: publicView, feature: null },
+  { view: internalView, feature: "read:product:internal" },
+  { view: costView, feature: "read:product:cost" },
+] as const satisfies ViewLadder<z.ZodType>;
+
+/** Só os schemas, na ordem — a forma que a tabela de rotas declara. */
+export const productReadSchemas = productReadLadder.map((rung) => rung.view);
+
+/**
+ * A escrita nunca devolve o degrau público — quem chega aqui já tem
+ * `manage:product` —, então o degrau base é `internal`, e só o custo continua
+ * atrás de feature própria.
+ */
+export const productWriteLadder = [
+  { view: internalView, feature: null },
+  { view: costView, feature: "read:product:cost" },
+] as const satisfies ViewLadder<z.ZodType>;
+
+export const productWriteSchemas = productWriteLadder.map((rung) => rung.view);
+
+/** O equivalente de `productWriteLadder` para a variante sozinha. */
+export const variantWriteLadder = [
+  { view: variantInternalView, feature: null },
+  { view: variantCostView, feature: "read:product:cost" },
+] as const satisfies ViewLadder<z.ZodType>;
+
+export const variantWriteSchemas = variantWriteLadder.map((rung) => rung.view);
+
 export const productImageViews = {
   default: productImageView,
 } as const;
@@ -276,8 +323,9 @@ export const productImageListSchema = z.object({
  * escada declarada na entrada da tabela, a escada teve de subir para o nível
  * do envelope inteiro — item por item continuaria escondendo a variação do
  * corpo do registrador. `productListSchemaFor` é o envelope parametrizado pela
- * view do item; `productListLadder` é a escada dos três, na mesma ordem de
- * `productReadLadder`.
+ * view do item; `productListLadder` é a escada dos três, nos mesmos pares
+ * (degrau, feature) de `productReadLadder` — é a mesma feature que decide
+ * o item e o envelope que o contém, então as duas nunca divergem.
  */
 export const productListSchemaFor = (itemView: z.ZodType) =>
   z.object({
@@ -286,10 +334,15 @@ export const productListSchemaFor = (itemView: z.ZodType) =>
   });
 
 export const productListLadder = [
-  productListSchemaFor(publicListView),
-  productListSchemaFor(internalListView),
-  productListSchemaFor(costListView),
-] as const;
+  { view: productListSchemaFor(publicListView), feature: null },
+  {
+    view: productListSchemaFor(internalListView),
+    feature: "read:product:internal",
+  },
+  { view: productListSchemaFor(costListView), feature: "read:product:cost" },
+] as const satisfies ViewLadder<z.ZodType>;
+
+export const productListSchemas = productListLadder.map((rung) => rung.view);
 
 /** Alias do primeiro degrau — mantido para quem ainda importa o envelope público sozinho. */
-export const productListSchema = productListLadder[0];
+export const productListSchema = productListSchemas[0];

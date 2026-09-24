@@ -18,9 +18,10 @@ import {
 import {
   productImageListSchema,
   productImageViews,
-  productListLadder,
-  productViews,
-  variantViews,
+  productListSchemas,
+  productReadSchemas,
+  productWriteSchemas,
+  variantWriteSchemas,
 } from "../catalog/product.views";
 import { errorResponses, noContent } from "./responses";
 import type { RouteGroup } from "./route.types";
@@ -37,21 +38,6 @@ const VIEW_NOTE =
 const SEARCH_NOTE =
   "`?q=` busca em nome e descrição do produto e no nome da marca, sem acento e por radical. Quando a busca literal não encontra nada, **o erro de digitação é corrigido palavra a palavra**: cada palavra que não existe no catálogo é trocada pela mais parecida e a busca roda de novo — e o que de fato foi buscado volta em `meta.search.applied`. Palavra sem vizinha parecida vai como está: a busca devolve vazio em vez de descartá-la em silêncio. Ter `?q=` torna `relevance` a ordenação default; `sort=relevance` **sem** `?q=` é 422. O dicionário de correção conhece só o catálogo público e é atualizado pelo seed, não a cada escrita — produto recém-cadastrado é encontrado na hora pela busca literal, mas só entra na correção de typo depois da próxima atualização. Numa busca o `meta.total` é **limitado**: contam-se no máximo 500 resultados.";
 
-// A escada da leitura do catálogo (9.8/Y9), em ordem: o degrau que o visitante
-// anônimo recebe, o que `read:product:internal` destrava e o que
-// `read:product:cost` destrava por cima.
-const productReadLadder = [
-  productViews.public,
-  productViews.internal,
-  productViews.cost,
-] as const;
-
-// Na escrita não há degrau público: quem chega aqui tem `manage:product`, e o
-// que varia é só o custo.
-const productWriteLadder = [productViews.internal, productViews.cost] as const;
-
-const variantWriteLadder = [variantViews.internal, variantViews.cost] as const;
-
 export const productRoutes = {
   list: {
     method: "GET",
@@ -66,7 +52,7 @@ export const productRoutes = {
         description: "Catálogo",
         // Escada de envelopes, um por degrau — o porquê está no
         // `productListSchema` (`packages/api-contracts/src/catalog/product.views.ts`).
-        view: productListLadder,
+        view: productListSchemas,
       },
     },
     errors: { 422: errorResponses[422], 429: errorResponses[429] },
@@ -80,7 +66,7 @@ export const productRoutes = {
     description: `${VARIANT_NOTE} O \`slug\` é derivado do nome e congelado depois; \`categories\` exige no mínimo uma e \`targetSpecies\` vazio significa "qualquer espécie". ${COST_NOTE}`,
     request: createProductSchema,
     responses: {
-      201: { description: "Produto criado", view: productWriteLadder },
+      201: { description: "Produto criado", view: productWriteSchemas },
     },
     errors: {
       401: errorResponses[401],
@@ -97,7 +83,7 @@ export const productRoutes = {
     summary: "Detalha um produto por id ou slug — público, sem token",
     description: `${VIEW_NOTE}\n\nO valor no path é o **id ou o slug**: quem tem forma de UUID é tratado como id, o resto como slug — e a escrita recusa slug com forma de UUID, então não há caso ambíguo. Produto fora do conjunto visível do ator devolve **404**, com a mesma mensagem de inexistente: um 403 confirmaria o slug do rascunho para qualquer visitante. As variantes vêm com a default primeiro; variante excluída não acompanha o produto vivo.`,
     request: productDetailParamsSchema,
-    responses: { 200: { description: "Produto", view: productReadLadder } },
+    responses: { 200: { description: "Produto", view: productReadSchemas } },
     errors: {
       404: errorResponses[404],
       422: errorResponses[422],
@@ -114,7 +100,7 @@ export const productRoutes = {
       "Renomear **não** muda o slug. `categories` e `tags` são substituição total: o array enviado passa a ser o conjunto, e o campo ausente preserva os vínculos atuais. Variantes têm rotas próprias e não entram aqui.",
     request: updateProductSchema,
     responses: {
-      200: { description: "Produto atualizado", view: productWriteLadder },
+      200: { description: "Produto atualizado", view: productWriteSchemas },
     },
     errors: {
       401: errorResponses[401],
@@ -214,7 +200,7 @@ export const variantRoutes = {
     description: `${VARIANT_NOTE} \`isDefault: true\` rebaixa a variante default anterior na mesma transação. O SKU é único **globalmente**, inclusive contra variantes excluídas.`,
     request: createVariantSchema,
     responses: {
-      201: { description: "Variante criada", view: variantWriteLadder },
+      201: { description: "Variante criada", view: variantWriteSchemas },
     },
     errors: {
       401: errorResponses[401],
@@ -234,7 +220,7 @@ export const variantRoutes = {
       "A feature é exigida **por campo presente**: `stockQuantity` pede `manage:stock`, qualquer outro campo pede `manage:product`, e um corpo que mistura os dois pede as duas — assim o repositor conta prateleira sem poder editar o catálogo. Ajuste de estoque vira uma ação própria no audit (`PRODUCT_STOCK_ADJUSTED`). `isDefault` só aceita `true`: para trocar a default, promova a outra.",
     request: updateVariantSchema,
     responses: {
-      200: { description: "Variante atualizada", view: variantWriteLadder },
+      200: { description: "Variante atualizada", view: variantWriteSchemas },
     },
     errors: {
       401: errorResponses[401],

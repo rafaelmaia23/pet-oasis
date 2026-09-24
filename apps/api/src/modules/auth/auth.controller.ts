@@ -3,7 +3,6 @@ import {
   changePasswordSchema,
   confirmAccountReactivationSchema,
   confirmEmailChangeSchema,
-  forgotPasswordSchema,
   loginSchema,
   resetPasswordSchema,
   sessionParamsSchema,
@@ -80,15 +79,15 @@ export const resendVerification: RouteHandler<
   };
 };
 
-export const forgotPassword = async (req: Request, res: Response) => {
-  const { body } = forgotPasswordSchema.parse({ body: req.body });
-
+export const forgotPassword: RouteHandler<
+  typeof routes.auth.forgotPassword
+> = async ({ body }) => {
   await passwordService.requestPasswordReset(body.email);
 
-  res.status(200).json({
+  return {
     message:
       "Se houver uma conta ativa com este email, um link de redefinição de senha foi enviado",
-  });
+  };
 };
 
 export const resetPassword = async (req: Request, res: Response) => {

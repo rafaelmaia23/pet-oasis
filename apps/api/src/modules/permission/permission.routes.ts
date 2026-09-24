@@ -40,12 +40,10 @@ registerRoute(permissionRouter, routes.permission.revokeRole, {
 
 // A role vai no path porque a identidade do override é a tripla
 // (user, role, feature) — body não identifica recurso (D9).
-permissionRouter.put(
-  "/users/:userId/roles/:roleId/features/:featureId",
-  authenticate,
-  canAccess("manage:permission"),
-  permissionController.upsertUserFeature,
-);
+registerRoute(permissionRouter, routes.permission.upsertOverride, {
+  before: [authenticate, canAccess("manage:permission")],
+  handler: permissionController.upsertUserFeature,
+});
 
 permissionRouter.delete(
   "/users/:userId/roles/:roleId/features/:featureId",

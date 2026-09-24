@@ -38,6 +38,11 @@ registerRoute(userRouter, routes.user.unlock, {
   handler: userController.unlockAccount,
 });
 
+registerRoute(userRouter, routes.user.reactivate, {
+  before: [authenticate, canAccess("reactivate:user")],
+  handler: userController.reactivateAccount,
+});
+
 /** O que ainda está na forma antiga — sai quando a última rota migrar. */
 export const userLegacyRouter = Router();
 
@@ -55,11 +60,6 @@ userLegacyRouter.patch(
   "/:id",
   canAccess("update:user"),
   userController.updateUser,
-);
-userLegacyRouter.post(
-  "/:id/reactivate",
-  canAccess("reactivate:user"),
-  userController.reactivateAccount,
 );
 userLegacyRouter.post(
   "/:id/force-password-reset",

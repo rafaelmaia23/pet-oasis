@@ -2,7 +2,6 @@ import type { routes } from "@pet-oasis/api-contracts/routes";
 import {
   createEmployeeSchema,
   forcePasswordResetSchema,
-  reactivateAccountSchema,
   updateUserSchema,
   userParamsSchema,
 } from "@pet-oasis/api-contracts/user";
@@ -86,18 +85,13 @@ export const unlockAccount: RouteHandler<typeof routes.user.unlock> = async ({
   await userService.unlockAccount(actor.id, params.id);
 };
 
-export const reactivateAccount = async (req: Request, res: Response) => {
-  const { params, body } = reactivateAccountSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
-  await userService.reactivateAccount(getAuthUser(req).id, params.id, {
+export const reactivateAccount: RouteHandler<
+  typeof routes.user.reactivate
+> = async ({ params, body, actor }) => {
+  await userService.reactivateAccount(actor.id, params.id, {
     profiles: body.profiles,
     ...(body.roleNames && { roleNames: body.roleNames }),
   });
-
-  return res.status(204).send();
 };
 
 export const forcePasswordReset = async (req: Request, res: Response) => {

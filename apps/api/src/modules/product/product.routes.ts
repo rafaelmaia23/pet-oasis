@@ -13,7 +13,10 @@ import { uploadSingleImage } from "@/middlewares/upload.middleware";
 import * as productController from "./product.controller";
 import * as productImageController from "./product.image.controller";
 import * as variantController from "./product.variant.controller";
-import { chooseProductListView } from "./product.view-resolver";
+import {
+  chooseProductListView,
+  chooseProductReadView,
+} from "./product.view-resolver";
 
 /**
  * As rotas de produto já sob o `registerRoute`: montadas **sem prefixo**, com
@@ -42,17 +45,22 @@ registerRoute(productRouter, routes.product.list, {
   handler: productController.listProducts,
 });
 
-/** O que ainda está na forma antiga — sai quando a última rota migrar. */
-export const productLegacyRouter = Router();
-
 // Vem depois da coleção e antes de tudo que é aninhado: `:idOrSlug` casa com
 // qualquer segmento, então uma rota literal registrada abaixo dele nunca seria
-// alcançada.
-productLegacyRouter.get(
-  "/:idOrSlug",
-  rateLimitByIp(catalogIpLimiter, "catalog-read"),
-  productController.getProductByIdOrSlug,
-);
+// alcançada. Isso não é ordem de registro no Express **aqui** — o path vem
+// inteiro da tabela —, mas continua valendo contra o `productLegacyRouter`
+// abaixo, que ainda tem rotas literais sob `/:productId`.
+registerRoute(productRouter, routes.product.get, {
+  before: [
+    optionalAuthenticate,
+    rateLimitByIp(catalogIpLimiter, "catalog-read"),
+  ],
+  chooseView: chooseProductReadView,
+  handler: productController.getProductByIdOrSlug,
+});
+
+/** O que ainda está na forma antiga — sai quando a última rota migrar. */
+export const productLegacyRouter = Router();
 
 productLegacyRouter.post(
   "/",

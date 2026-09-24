@@ -67,6 +67,11 @@ registerRoute(authRouter, routes.auth.changePassword, {
   handler: authController.changePassword,
 });
 
+registerRoute(authRouter, routes.auth.changeEmail, {
+  before: [authenticate, canAccess("update:user")],
+  handler: authController.changeEmail,
+});
+
 /** A forma antiga, com o path partido entre o prefixo e a chamada. */
 export const legacyAuthRouter = Router();
 
@@ -81,12 +86,6 @@ legacyAuthRouter.post(
   authController.login,
 );
 legacyAuthRouter.post("/refresh", authController.refresh);
-legacyAuthRouter.post(
-  "/change-email",
-  authenticate,
-  canAccess("update:user"),
-  authController.changeEmail,
-);
 legacyAuthRouter.post(
   "/logout",
   authenticate,

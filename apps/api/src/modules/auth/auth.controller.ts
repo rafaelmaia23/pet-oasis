@@ -1,5 +1,4 @@
 import {
-  changeEmailSchema,
   loginSchema,
   sessionParamsSchema,
   signupSchema,
@@ -97,16 +96,14 @@ export const changePassword: RouteHandler<
   );
 };
 
-export const changeEmail = async (req: Request, res: Response) => {
-  const { body } = changeEmailSchema.parse({ body: req.body });
-
+export const changeEmail: RouteHandler<
+  typeof routes.auth.changeEmail
+> = async ({ body, actor }) => {
   await emailChangeService.changeEmail(
-    getAuthUser(req).id,
+    actor.id,
     body.currentPassword,
     body.newEmail,
   );
-
-  res.status(204).send();
 };
 
 export const confirmEmailChange: RouteHandler<

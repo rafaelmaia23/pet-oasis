@@ -23,10 +23,10 @@ import meRouter from "@/modules/me/me.routes";
 import permissionRouter from "@/modules/permission/permission.routes";
 import petCustomerRouter from "@/modules/pet/pet.customer.routes";
 import petRouter from "@/modules/pet/pet.routes";
-import productRouter, {
-  productLegacyRouter,
-} from "@/modules/product/product.routes";
-import variantRouter from "@/modules/product/product.variant.routes";
+import productRouter from "@/modules/product/product.routes";
+import variantRouter, {
+  variantLegacyRouter,
+} from "@/modules/product/product.variant.routes";
 import roleRouter from "@/modules/role/role.routes";
 import statusRouter from "@/modules/status/status.routes";
 import tagRouter from "@/modules/tag/tag.routes";
@@ -56,12 +56,11 @@ v1Router.use(breedRouter);
 v1Router.use("/brands", optionalAuthenticate, brandRouter);
 v1Router.use("/categories", optionalAuthenticate, categoryRouter);
 v1Router.use("/tags", optionalAuthenticate, tagRouter);
-// Produto entra aqui já na 9.7, que só tem escrita: a vitrine da 9.8 acrescenta
-// o `GET` sem remontar o router, e o 401 da escrita continua vindo do
-// `canAccess`. `/variants` fica do lado protegido — variante não tem leitura
-// pública própria, ela aparece dentro do produto.
+// Produto (e a criação de variante, aninhada nele) já sai inteiro pelo
+// `registerRoute` (issue 14) — `optionalAuthenticate` desceu para o `before`
+// de cada rota que precisa dele. `/variants` fica do lado protegido —
+// variante não tem leitura pública própria, ela aparece dentro do produto.
 v1Router.use(productRouter);
-v1Router.use("/products", optionalAuthenticate, productLegacyRouter);
 
 // PROTEGIDAS — com authenticate
 //
@@ -77,7 +76,8 @@ v1Router.use(permissionRouter);
 // exigem token — a vitrine pública é do catálogo, não da ficha do pet.
 v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);
 v1Router.use("/pets", authenticate, petRouter);
-v1Router.use("/variants", authenticate, variantRouter);
+v1Router.use(variantRouter);
+v1Router.use("/variants", authenticate, variantLegacyRouter);
 v1Router.use(featureRouter);
 v1Router.use(roleRouter);
 v1Router.use(auditLogRouter);

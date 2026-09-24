@@ -128,6 +128,34 @@ export type RouteHandler<E extends RouteDefinition, C = NoModuleContext> =
         context: RouteHandlerContext<E, C>,
       ) => Promise<RouteOutcome<E>> | RouteOutcome<E>;
 
+/**
+ * Os degraus que **esta entrada** declara. A tabela é escrita com `as const`,
+ * então a tupla sobrevive ao typecheck e o degrau devolvido pode ser conferido
+ * em compilação em vez de só em runtime. Numa entrada que declara uma view só,
+ * isto é `never` — e é o que faz `chooseView` ali ser recusado pelo compilador,
+ * antes mesmo da recusa no registro.
+ */
+type LadderStep<E extends RouteDefinition> =
+  E["responses"][SuccessStatus<E>] extends { view: infer V }
+    ? V extends readonly (infer Step)[]
+      ? Step
+      : never
+    : never;
+
+/**
+ * Qual degrau da escada de capability este ator recebe.
+ *
+ * A entrada da tabela **declara** a escada; quem **decide** continua sendo a
+ * API (`apps/api/docs/adr/0199-schemas-de-request-e-views-sao-codigo-do-contrato.md`),
+ * e é por isso que a escolha entra pelo registro e não pela tabela. A
+ * correspondência degrau → feature ainda é prosa em cada módulo: dar um dono a
+ * ela é a issue 17 de `.scratch/fase-12-module-depth/`, e quando isso
+ * acontecer é este ponto — um só — que passa a lê-la.
+ */
+export type ViewChooser<E extends RouteDefinition> = (
+  actor: RouteActor<E>,
+) => LadderStep<E>;
+
 export type RouteRegistration<E extends RouteDefinition, C> = {
   /** Middleware de servidor, na ordem em que roda. */
   before?: RequestHandler[];
@@ -145,6 +173,11 @@ export type RouteRegistration<E extends RouteDefinition, C> = {
    * handler receberia o contexto vazio.
    */
   context?: (req: Request, res: Response) => C;
+  /**
+   * Obrigatório onde a entrada declara escada, recusado onde ela declara uma
+   * view só — nos dois casos, no registro.
+   */
+  chooseView?: ViewChooser<E>;
   handler: RouteHandler<E, C>;
 };
 
@@ -167,26 +200,77 @@ function isLadder(
   return Array.isArray(view);
 }
 
+/** A view de uma resposta, já resolvida para o ator que está sendo servido. */
+type ViewFor<E extends RouteDefinition> = (actor: RouteActor<E>) => z.ZodType;
+
 /**
- * As views de sucesso, por status, lidas da entrada. A forma que o registrador
- * ainda não sabe registrar — a view em escada — falha **no registro**, na carga
- * do módulo e não no primeiro request, com o par método + path na mensagem.
+ * Como chegar à view de cada status de sucesso, lido da entrada. Um status sem
+ * `viewFor` é resposta sem corpo (204); com ele, é a função que dá a view
+ * daquele ator — a mesma para todos quando a entrada declara uma view só, o
+ * degrau escolhido quando ela declara a escada.
+ *
+ * Os dois desencontros entre a entrada e o registro — escada sem `chooseView`,
+ * `chooseView` sem escada — falham **no registro**, na carga do módulo e não no
+ * primeiro request, com o par método + path na mensagem.
  */
-function viewsOf(entry: RouteDefinition, where: string) {
-  const views = new Map<number, z.ZodType | undefined>();
+function viewsOf<E extends RouteDefinition>(
+  entry: E,
+  where: string,
+  chooseView?: ViewChooser<E>,
+) {
+  const views = new Map<number, ViewFor<E> | undefined>();
+  let hasLadder = false;
 
   for (const key of Object.keys(entry.responses)) {
     const status = Number(key);
     const view = entry.responses[status]?.view;
 
     if (isLadder(view)) {
-      throw new Error(
-        `${where}: a view desta entrada é a escada de capability, e escolher o ` +
-          `degrau ainda não tem dono (issue 17 de .scratch/fase-12-module-depth/).`,
-      );
+      hasLadder = true;
+
+      if (!chooseView) {
+        throw new Error(
+          `${where}: a view desta entrada é a escada de capability, e o ` +
+            `registro não diz qual degrau cada ator recebe. Passe \`chooseView\` ` +
+            `— adivinhar o degrau aqui é vazar campo.`,
+        );
+      }
+
+      views.set(status, (actor) => {
+        const step = chooseView(actor);
+
+        // O degrau tem de ser um dos declarados: uma view de fora da escada
+        // seria uma resposta que o contrato não descreve, e o cliente a
+        // receberia como se descrevesse. O `LadderStep` já barra isso em
+        // compilação; esta é a rede para o que o tipo não alcança — duas views
+        // **estruturalmente iguais** são o mesmo tipo para o TS, e a
+        // comparação aqui é por identidade. É por identidade de propósito: o
+        // módulo tem de devolver o **mesmo objeto** que a tabela declara, e
+        // reembrulhar a view (um `.clone()`, um `.extend()`) deixa de ser algo
+        // que passa despercebido.
+        if (!view.includes(step)) {
+          throw createPresentationError({
+            context: {
+              route: where,
+              reason: "A view escolhida não é um degrau da escada declarada",
+            },
+          });
+        }
+
+        return step;
+      });
+
+      continue;
     }
 
-    views.set(status, view);
+    views.set(status, view ? () => view : undefined);
+  }
+
+  if (chooseView && !hasLadder) {
+    throw new Error(
+      `${where}: o registro traz \`chooseView\`, mas esta entrada declara uma ` +
+        `view só — não há degrau a escolher.`,
+    );
   }
 
   return views;
@@ -200,7 +284,7 @@ function viewsOf(entry: RouteDefinition, where: string) {
  */
 function outcomeOf(
   result: unknown,
-  views: Map<number, z.ZodType | undefined>,
+  views: ReadonlyMap<number, unknown>,
   where: string,
 ): { status: number; body: unknown } {
   const outcome = result as { status?: unknown; body?: unknown } | null;
@@ -225,12 +309,12 @@ function outcomeOf(
 export function registerRoute<E extends RouteDefinition, C = NoModuleContext>(
   router: Router,
   entry: E,
-  { before = [], context, handler }: RouteRegistration<E, C>,
+  { before = [], context, chooseView, handler }: RouteRegistration<E, C>,
 ): void {
   // O par método + path, montado uma vez: nomeia a rota tanto na recusa do
   // registro quanto no contexto do erro de apresentação.
   const where = `${entry.method} ${entry.path}`;
-  const views = viewsOf(entry, where);
+  const views = viewsOf(entry, where, chooseView);
   const [onlyStatus] = views.keys();
   const single = views.size === 1 && onlyStatus !== undefined;
 
@@ -247,7 +331,12 @@ export function registerRoute<E extends RouteDefinition, C = NoModuleContext>(
           })
         : {};
 
-      const actor = entry.auth === "bearer" ? getAuthUser(req) : req.user;
+      // O ator, na forma que a entrada promete: `AuthUser` onde ela diz
+      // `bearer` (chegar sem `req.user` ali é 401, e o handler não roda),
+      // possivelmente ausente onde ela diz `public`.
+      const actor = (
+        entry.auth === "bearer" ? getAuthUser(req) : req.user
+      ) as RouteActor<E>;
 
       const result = await handler({
         // O contexto do módulo vem primeiro: o que a tabela declara vence uma
@@ -261,14 +350,16 @@ export function registerRoute<E extends RouteDefinition, C = NoModuleContext>(
         ? { status: onlyStatus, body: result }
         : outcomeOf(result, views, where);
 
-      const view = views.get(status);
+      const viewFor = views.get(status);
 
-      if (!view) {
+      if (!viewFor) {
         res.status(status).send();
         return;
       }
 
-      res.status(status).json(presentWith(view, body, { route: where }));
+      res
+        .status(status)
+        .json(presentWith(viewFor(actor), body, { route: where }));
     } catch (error) {
       next(error);
     }

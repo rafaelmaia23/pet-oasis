@@ -67,8 +67,8 @@ v1Router.use("/products", optionalAuthenticate, productRouter);
 // `src/modules/role/role.routes.ts`. Consequência decidida em
 // `../../docs/adr/0203-authenticate-desce-do-grupo-para-rota-404-vence-401.md`.
 v1Router.use(meRouter);
-v1Router.use("/users", authenticate, userRouter);
-v1Router.use("/users/:userId", authenticate, userProfileRouter);
+v1Router.use(userRouter);
+v1Router.use(userProfileRouter);
 v1Router.use(permissionRouter);
 // Pet (9.4): coleção aninhada no cliente, recurso plano no item. As duas
 // exigem token — a vitrine pública é do catálogo, não da ficha do pet.

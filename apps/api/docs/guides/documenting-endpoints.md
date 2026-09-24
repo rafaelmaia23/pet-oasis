@@ -128,9 +128,27 @@ registerRoute(authRouter, routes.auth.login, {
   `POST /auth/signup`, 201/202 —, ele devolve `{ status, body }`, com o corpo exigido
   exatamente nos status que têm view. Status que a entrada não declara é erro de apresentação
   (500), não 422: o request estava certo.
+- **Escada de capability** — quando a entrada declara a escada (`view` é o array dos degraus),
+  o registro diz **qual degrau cada ator recebe**, por `chooseView`. A tabela declara a escada;
+  quem decide continua sendo a API, e um degrau de fora da escada declarada é 500, não resposta
+  silenciosamente diferente.
 
-Uma forma de entrada o registrador ainda recusa, no registro e com o par método + path na
-mensagem: a `view` em escada.
+```ts
+registerRoute(userRouter, routes.user.get, {
+  before: [authenticate, canAccess("read:user")],
+  chooseView: chooseUserView,   // (actor) => a view daquele ator
+  handler: getUserById,
+});
+```
+
+O tipo de retorno do `chooseView` é a **união dos degraus que aquela entrada declara** — devolver
+outra view não compila, e `chooseView` numa entrada sem escada também não. O que o tipo não
+alcança (duas views estruturalmente iguais são o mesmo tipo para o TS) é barrado em runtime, por
+identidade: o módulo devolve o **mesmo objeto** que a tabela declara.
+
+Dois desencontros entre a entrada e o registro o registrador recusa, no registro e com o par
+método + path na mensagem: escada sem `chooseView` e `chooseView` onde a entrada declara uma
+view só.
 
 > **Migração em curso (Fase 12).** O `registerRoute` convive com a forma antiga
 > (`modRouter.get("/", middleware, controller)` + montagem com prefixo) até o último grupo de

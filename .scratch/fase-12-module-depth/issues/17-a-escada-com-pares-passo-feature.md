@@ -15,6 +15,13 @@ futuro precisa achar o porquê de a fronteira ter se movido um passo.
 
 **Blocked by:** 02 (a contenção da escada é um dos invariantes provados lá).
 
+**Antes de começar, leia a seção "Uma terceira consequência, descoberta na issue 11" da
+`spec.md`.** A escada já tem um ponto de leitura só por rota — o `chooseView` do registro
+(`apps/api/src/lib/registerRoute.ts`) —, e quem o preenche hoje é uma função por módulo
+(`chooseUserView` em `apps/api/src/modules/user/user.view-resolver.ts`, e o equivalente em
+produto e variante). O que esta issue colapsa são **essas funções**, sobre os pares (passo,
+feature) declarados; o seam em si já existe e não precisa ser desenhado de novo.
+
 **Status:** ready-for-agent
 
 - [ ] ADR novo na API registrando a mudança de fronteira, com a linha no índice, **antes** do código

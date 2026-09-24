@@ -1,10 +1,7 @@
-import { removePermissionParamsSchema } from "@pet-oasis/api-contracts/permission";
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
 import * as permissionService from "@/modules/permission/permission.service";
-import { getAuthUser } from "@/utils/getAuthUser";
 
 export const getUserFeatures: RouteHandler<
   typeof routes.permission.listFeatures
@@ -54,19 +51,13 @@ export const upsertUserFeature: RouteHandler<
     body.granted,
   );
 
-export const removeUserFeature = async (req: Request, res: Response) => {
-  const { params } = removePermissionParamsSchema.parse({
-    params: req.params,
-  });
-
-  const requesterId = getAuthUser(req).id;
-
+export const removeUserFeature: RouteHandler<
+  typeof routes.permission.removeOverride
+> = async ({ params, actor }) => {
   await permissionService.removeUserFeature(
-    requesterId,
+    actor.id,
     params.userId,
     params.roleId,
     params.featureId,
   );
-
-  res.status(204).send();
 };

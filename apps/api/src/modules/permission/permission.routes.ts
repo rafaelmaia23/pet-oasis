@@ -6,11 +6,9 @@ import { canAccess } from "@/middlewares/canAccess.middleware";
 import * as permissionController from "./permission.controller";
 
 // Montado **sem prefixo** em `src/routes/index.ts`: o path inteiro vem da
-// tabela. Por isso o `mergeParams` saiu — ele existia para que `:userId` do
+// tabela. Por isso não há `mergeParams` — ele existia para que o `:userId` do
 // prefixo `/users/:userId` chegasse ao handler, e agora o parâmetro é da
-// própria rota. Enquanto a issue 09 migra uma rota por commit, o que ainda
-// está na forma antiga soletra o path inteiro e carrega o `authenticate` que
-// antes vinha do prefixo.
+// própria rota.
 const permissionRouter = Router();
 
 registerRoute(permissionRouter, routes.permission.listFeatures, {
@@ -45,11 +43,9 @@ registerRoute(permissionRouter, routes.permission.upsertOverride, {
   handler: permissionController.upsertUserFeature,
 });
 
-permissionRouter.delete(
-  "/users/:userId/roles/:roleId/features/:featureId",
-  authenticate,
-  canAccess("manage:permission"),
-  permissionController.removeUserFeature,
-);
+registerRoute(permissionRouter, routes.permission.removeOverride, {
+  before: [authenticate, canAccess("manage:permission")],
+  handler: permissionController.removeUserFeature,
+});
 
 export default permissionRouter;

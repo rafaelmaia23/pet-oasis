@@ -1,3 +1,4 @@
+import { routes } from "@pet-oasis/api-contracts/routes";
 import { Router } from "express";
 import {
   emailIpLimiter,
@@ -8,31 +9,45 @@ import {
   signupIpLimiter,
   tokenIpLimiter,
 } from "@/lib/rateLimit";
+import { registerRoute } from "@/lib/registerRoute";
 import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
 import * as authController from "./auth.controller";
 
+/**
+ * O router **sem prefixo**: as rotas já declaradas num lugar só, com o path
+ * inteiro vindo da entrada da tabela. Enquanto a migração corre (issue 10 de
+ * `.scratch/fase-12-module-depth/`), ele convive com o `legacyAuthRouter`
+ * abaixo, que ainda é montado em `/auth`. Os dois nunca disputam um path: uma
+ * rota está num ou no outro.
+ */
 const authRouter = Router();
 
-authRouter.post(
+registerRoute(authRouter, routes.auth.verifyEmail, {
+  handler: authController.verifyEmail,
+});
+
+/** A forma antiga, com o path partido entre o prefixo e a chamada. */
+export const legacyAuthRouter = Router();
+
+legacyAuthRouter.post(
   "/signup",
   rateLimitByIp(signupIpLimiter, "signup"),
   authController.signup,
 );
-authRouter.post(
+legacyAuthRouter.post(
   "/login",
   rateLimitByIp(loginIpLimiter, "login"),
   authController.login,
 );
-authRouter.post("/refresh", authController.refresh);
-authRouter.post("/verify-email", authController.verifyEmail);
-authRouter.post(
+legacyAuthRouter.post("/refresh", authController.refresh);
+legacyAuthRouter.post(
   "/verify-email/resend",
   rateLimitByIp(emailIpLimiter, "verify-email-resend"),
   rateLimitByEmailTarget(emailTargetLimiter, "verify-email-resend"),
   authController.resendVerification,
 );
-authRouter.post(
+legacyAuthRouter.post(
   "/forgot-password",
   rateLimitByIp(emailIpLimiter, "forgot-password"),
   rateLimitByEmailTarget(emailTargetLimiter, "forgot-password"),
@@ -40,47 +55,47 @@ authRouter.post(
 );
 // As três rotas públicas de token dividem um balde por IP (K26): são anônimas,
 // consomem credencial opaca e não têm outro freio na frente.
-authRouter.post(
+legacyAuthRouter.post(
   "/reset-password",
   rateLimitByIp(tokenIpLimiter, "reset-password"),
   authController.resetPassword,
 );
-authRouter.post(
+legacyAuthRouter.post(
   "/change-password",
   authenticate,
   authController.changePassword,
 );
-authRouter.post(
+legacyAuthRouter.post(
   "/change-email",
   authenticate,
   canAccess("update:user"),
   authController.changeEmail,
 );
-authRouter.post(
+legacyAuthRouter.post(
   "/confirm-email-change",
   rateLimitByIp(tokenIpLimiter, "confirm-email-change"),
   authController.confirmEmailChange,
 );
 // Pública: o token é a credencial — quem confirma é o dono de um `User` morto,
 // que por definição não tem sessão nem consegue autenticar.
-authRouter.post(
+legacyAuthRouter.post(
   "/confirm-account-reactivation",
   rateLimitByIp(tokenIpLimiter, "confirm-account-reactivation"),
   authController.confirmAccountReactivation,
 );
-authRouter.post(
+legacyAuthRouter.post(
   "/logout",
   authenticate,
   canAccess("manage:session"),
   authController.logout,
 );
-authRouter.get(
+legacyAuthRouter.get(
   "/sessions",
   authenticate,
   canAccess("read:session"),
   authController.listSessions,
 );
-authRouter.delete(
+legacyAuthRouter.delete(
   "/sessions/:id",
   authenticate,
   canAccess("manage:session"),

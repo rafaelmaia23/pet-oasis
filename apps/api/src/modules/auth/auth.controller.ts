@@ -9,11 +9,12 @@ import {
   resetPasswordSchema,
   sessionParamsSchema,
   signupSchema,
-  verifyEmailSchema,
 } from "@pet-oasis/api-contracts/auth";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { ACCESS_TOKEN_TTL_SECONDS } from "@/lib/accessToken";
 import { listEnvelope } from "@/lib/pagination";
+import type { RouteHandler } from "@/lib/registerRoute";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user/user.presenter";
 import * as accountReactivationService from "./accountReactivation.service";
@@ -63,12 +64,10 @@ export const confirmAccountReactivation = async (
   res.status(204).send();
 };
 
-export const verifyEmail = async (req: Request, res: Response) => {
-  const { body } = verifyEmailSchema.parse({ body: req.body });
-
+export const verifyEmail: RouteHandler<
+  typeof routes.auth.verifyEmail
+> = async ({ body }) => {
   await verificationService.verifyEmail(body.token);
-
-  res.status(204).send();
 };
 
 export const resendVerification = async (req: Request, res: Response) => {

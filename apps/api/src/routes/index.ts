@@ -13,7 +13,7 @@ import {
   optionalAuthenticate,
 } from "@/middlewares/authenticate.middleware";
 import auditLogRouter from "@/modules/audit-log/audit-log.routes";
-import authRouter from "@/modules/auth/auth.routes";
+import authRouter, { legacyAuthRouter } from "@/modules/auth/auth.routes";
 import brandRouter from "@/modules/brand/brand.routes";
 import breedRouter from "@/modules/breed/breed.routes";
 import categoryRouter from "@/modules/category/category.routes";
@@ -40,7 +40,8 @@ const v1Router = Router();
 // o duplicaria. Enquanto a migração corre (issues 08–15 de
 // `.scratch/fase-12-module-depth/`), as duas formas convivem aqui.
 v1Router.use(statusRouter);
-v1Router.use("/auth", authRouter);
+v1Router.use(authRouter);
+v1Router.use("/auth", legacyAuthRouter);
 // Vitrine do catálogo (9.1): responde sem token porque o e-commerce vive de
 // quem chega pelo Google sem usuário. `/breeds` fica aqui, seco: é só leitura, não
 // tem escrita nem view por feature efetiva, então não precisa nem identificar o ator.

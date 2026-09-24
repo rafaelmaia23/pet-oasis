@@ -13,6 +13,7 @@ import { registerRoute } from "@/lib/registerRoute";
 import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
 import * as authController from "./auth.controller";
+import { authTransport } from "./auth.transport";
 
 /**
  * O router **sem prefixo**: as rotas já declaradas num lugar só, com o path
@@ -72,6 +73,12 @@ registerRoute(authRouter, routes.auth.changeEmail, {
   handler: authController.changeEmail,
 });
 
+registerRoute(authRouter, routes.auth.logout, {
+  before: [authenticate, canAccess("manage:session")],
+  context: authTransport,
+  handler: authController.logout,
+});
+
 /** A forma antiga, com o path partido entre o prefixo e a chamada. */
 export const legacyAuthRouter = Router();
 
@@ -86,12 +93,6 @@ legacyAuthRouter.post(
   authController.login,
 );
 legacyAuthRouter.post("/refresh", authController.refresh);
-legacyAuthRouter.post(
-  "/logout",
-  authenticate,
-  canAccess("manage:session"),
-  authController.logout,
-);
 legacyAuthRouter.get(
   "/sessions",
   authenticate,

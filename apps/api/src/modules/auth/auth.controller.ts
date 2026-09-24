@@ -12,12 +12,9 @@ import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user/user.presenter";
 import * as accountReactivationService from "./accountReactivation.service";
 import { accessTokenPresenter, sessionPresenter } from "./auth.presenter";
-import {
-  clearRefreshCookie,
-  readRefreshCookie,
-  setRefreshCookie,
-} from "./auth.refreshCookie";
+import { readRefreshCookie, setRefreshCookie } from "./auth.refreshCookie";
 import * as authService from "./auth.service";
+import type { AuthTransport } from "./auth.transport";
 import * as emailChangeService from "./emailChange.service";
 import * as passwordService from "./password.service";
 import * as verificationService from "./verification.service";
@@ -152,13 +149,13 @@ export const refresh = async (req: Request, res: Response) => {
   res.status(200).json(presentAccessToken(accessToken));
 };
 
-export const logout = async (req: Request, res: Response) => {
-  const refreshToken = readRefreshCookie(req);
+export const logout: RouteHandler<
+  typeof routes.auth.logout,
+  AuthTransport
+> = async ({ actor, presentedRefreshToken, clearRefreshToken }) => {
+  await authService.logout(presentedRefreshToken, actor.id);
 
-  await authService.logout(refreshToken, getAuthUser(req).id);
-
-  clearRefreshCookie(res);
-  res.status(204).send();
+  clearRefreshToken();
 };
 
 export const listSessions = async (req: Request, res: Response) => {

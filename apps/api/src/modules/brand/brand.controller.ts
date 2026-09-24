@@ -28,12 +28,10 @@ export const updateBrandLogo: RouteHandler<
   { file: Buffer }
 > = ({ params, file }) => brandService.setBrandLogo(params.brandId, file);
 
-export const deleteBrandLogo = async (req: Request, res: Response) => {
-  const { params } = brandParamsSchema.parse({ params: req.params });
-
+export const deleteBrandLogo: RouteHandler<
+  typeof routes.brand.deleteLogo
+> = async ({ params }) => {
   await brandService.removeBrandLogo(params.brandId);
-
-  return res.status(204).send();
 };
 
 export const deleteBrand = async (req: Request, res: Response) => {

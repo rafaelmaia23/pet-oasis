@@ -81,9 +81,12 @@ describe("GET /openapi.json", () => {
 
     // `meta.search` só existe nesta listagem (9.9/Z15): documentar o envelope
     // genérico aqui faria o Scalar prometer o campo em toda lista paginada.
+    // A resposta é uma escada de três envelopes (issue 14 de
+    // `.scratch/fase-12-module-depth/`, `productListLadder`) — os três
+    // compartilham o mesmo `meta`, então o primeiro degrau do `anyOf` basta.
     const meta =
       body.paths["/products"].get.responses["200"].content["application/json"]
-        .schema.properties.meta;
+        .schema.anyOf[0].properties.meta;
     expect(meta.$ref).toBe("#/components/schemas/ProductListMeta");
     expect(
       body.components.schemas.ProductListMeta.properties.search,

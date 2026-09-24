@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { FeatureName } from "../feature/feature.names";
 import { featureNameSchema } from "../feature/feature.names";
 
 // Views de resposta do usuário, resolvidas na API pela feature efetiva do viewer.
@@ -76,15 +77,30 @@ const adminView = ownerView
   });
 
 /**
- * A escada de quem lê um usuário, em ordem: `owner` é o que o dono vê de si;
- * quem tem `read:user:others` recebe `admin`, que acrescenta roles e
- * overrides. A view é escolhida pelo **ator**, não pela rota, então toda
+ * A escada de quem lê um usuário, em ordem: `owner` é o degrau base — o que o
+ * dono vê de si, e o que qualquer ator recebe por padrão (`feature: null`) —,
+ * e `admin` é o que `read:user:others` destrava por cima, acrescentando roles
+ * e overrides. A view é escolhida pelo **ator**, não pela rota, então toda
  * resposta que devolve um usuário declara as duas.
  *
  * `default` fica de fora: é a visão mínima que aparece *dentro* de outra view
  * (id + nome), nunca como resposta de uma rota.
+ *
+ * O par (degrau, feature) é o que a API lê para escolher — `chooseView` em
+ * `apps/api/src/lib/viewLadder.ts` — e o mesmo par é o que prova, em
+ * `packages/api-contracts/tests/route-table.test.ts`, que a escada está
+ * contida (`apps/api/docs/adr/0204-escada-declara-par-passo-feature-contrato-continua-so-declarando.md`).
  */
-export const userViewLadder = [ownerView, adminView] as const;
+export const userViewLadder = [
+  { view: ownerView, feature: null },
+  { view: adminView, feature: "read:user:others" },
+] as const satisfies readonly {
+  view: z.ZodType;
+  feature: FeatureName | null;
+}[];
+
+/** Só os schemas, na mesma ordem — a forma que a tabela de rotas declara. */
+export const userViewSchemas = userViewLadder.map((rung) => rung.view);
 
 export const userViews = {
   default: defaultView,

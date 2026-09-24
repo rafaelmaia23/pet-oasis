@@ -8,7 +8,7 @@ import {
   updateUserSchema,
   userParamsSchema,
 } from "../user/user.schema";
-import { userViewLadder, userViews } from "../user/user.views";
+import { userViewSchemas, userViews } from "../user/user.views";
 import { errorResponses, noContent } from "./responses";
 import type { RouteGroup } from "./route.types";
 
@@ -20,7 +20,9 @@ export const userRoutes = {
     auth: "bearer",
     summary: "Cria um usuário (employee) — exige create:user",
     request: createEmployeeSchema,
-    responses: { 201: { description: "Usuário criado", view: userViewLadder } },
+    responses: {
+      201: { description: "Usuário criado", view: userViewSchemas },
+    },
     errors: {
       401: errorResponses[401],
       403: errorResponses[403],
@@ -58,7 +60,7 @@ export const userRoutes = {
     summary: "Busca um usuário por id (view resolvida pela feature efetiva)",
     request: userParamsSchema,
     responses: {
-      200: { description: "Usuário encontrado", view: userViewLadder },
+      200: { description: "Usuário encontrado", view: userViewSchemas },
     },
     errors: {
       401: errorResponses[401],
@@ -74,7 +76,7 @@ export const userRoutes = {
     summary: "Atualiza campos do usuário (apenas name)",
     request: updateUserSchema,
     responses: {
-      200: { description: "Usuário atualizado", view: userViewLadder },
+      200: { description: "Usuário atualizado", view: userViewSchemas },
     },
     errors: {
       401: errorResponses[401],

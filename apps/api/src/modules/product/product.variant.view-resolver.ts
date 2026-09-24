@@ -1,19 +1,12 @@
-import { variantViews } from "@pet-oasis/api-contracts/catalog";
+import { variantWriteLadder } from "@pet-oasis/api-contracts/catalog";
 import type { AuthUser } from "@/lib/authorization";
-import * as variantService from "./product.variant.service";
+import { chooseView } from "@/lib/viewLadder";
 
 /**
  * O equivalente, para variante, de `chooseProductWriteView`
- * (`product.view-resolver.ts`): a tabela declara `variantWriteLadder`
- * (`internal`/`cost`, sem o degrau público — quem escreve já tem
- * `manage:product`), e esta função traduz a decisão do service
- * (`variantService.viewFor`) no schema que o `chooseView` do registro precisa
- * devolver.
+ * (`product.view-resolver.ts`): sobre os mesmos pares (degrau, feature), agora
+ * de `variantWriteLadder`.
  */
-export function chooseVariantWriteView(
-  actor: AuthUser,
-): typeof variantViews.internal | typeof variantViews.cost {
-  return variantService.viewFor(actor) === "cost"
-    ? variantViews.cost
-    : variantViews.internal;
+export function chooseVariantWriteView(actor: AuthUser) {
+  return chooseView(variantWriteLadder, actor);
 }

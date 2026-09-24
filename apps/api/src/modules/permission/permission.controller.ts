@@ -1,118 +1,63 @@
-import {
-  deleteUserRoleParamsSchema,
-  getPermissionParamsSchema,
-  getUserPermissionsParamsSchema,
-  getUserRolesParamsSchema,
-  postUserRoleParamsSchema,
-  removePermissionParamsSchema,
-  upsertPermissionParamsSchema,
-} from "@pet-oasis/api-contracts/permission";
-import type { Request, Response } from "express";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import { listEnvelope } from "@/lib/pagination";
+import type { RouteHandler } from "@/lib/registerRoute";
 import * as permissionService from "@/modules/permission/permission.service";
-import { rolePresenter } from "@/modules/role/role.presenter";
-import { getAuthUser } from "@/utils/getAuthUser";
-import {
-  effectiveFeaturesPresenter,
-  userFeaturePresenter,
-} from "./permission.presenter";
 
-export const getUserFeatures = async (req: Request, res: Response) => {
-  const { params } = getPermissionParamsSchema.parse({ params: req.params });
-
+export const getUserFeatures: RouteHandler<
+  typeof routes.permission.listFeatures
+> = async ({ params }) => {
+  // Sem paginação, como as demais listas de autorização
+  // (docs/adr/0004-pagination.md).
   const features = await permissionService.getUserFeatures(params.userId);
 
-  res
-    .status(200)
-    .json(listEnvelope(userFeaturePresenter.presentMany(features, "default")));
+  return listEnvelope(features);
 };
 
-export const getUserRoles = async (req: Request, res: Response) => {
-  const { params } = getUserRolesParamsSchema.parse({
-    params: req.params,
-  });
-
+export const getUserRoles: RouteHandler<
+  typeof routes.permission.listRoles
+> = async ({ params }) => {
   const roles = await permissionService.getUserRoles(params.userId);
 
-  res
-    .status(200)
-    .json(listEnvelope(rolePresenter.presentMany(roles, "default")));
+  return listEnvelope(roles);
 };
 
-export const getUserPermissions = async (req: Request, res: Response) => {
-  const { params } = getUserPermissionsParamsSchema.parse({
-    params: req.params,
-  });
+export const getUserPermissions: RouteHandler<
+  typeof routes.permission.listEffectiveFeatures
+> = async ({ params }) => permissionService.getUserPermissions(params.userId);
 
-  const features = await permissionService.getUserPermissions(params.userId);
+export const addUserRole: RouteHandler<
+  typeof routes.permission.assignRole
+> = async ({ params, actor }) =>
+  permissionService.addUserRole(actor.id, params.userId, params.roleId);
 
-  res.status(200).json(effectiveFeaturesPresenter.present(features, "default"));
-};
-
-export const addUserRole = async (req: Request, res: Response) => {
-  const { params } = postUserRoleParamsSchema.parse({
-    params: req.params,
-  });
-
-  const requestingUser = getAuthUser(req);
-
-  const role = await permissionService.addUserRole(
-    requestingUser.id,
-    params.userId,
-    params.roleId,
-  );
-
-  res.status(201).json(rolePresenter.present(role, "default"));
-};
-
-export const removeUserRole = async (req: Request, res: Response) => {
-  const { params } = deleteUserRoleParamsSchema.parse({
-    params: req.params,
-  });
-
-  const requestingUser = getAuthUser(req);
-
+export const removeUserRole: RouteHandler<
+  typeof routes.permission.revokeRole
+> = async ({ params, actor }) => {
   await permissionService.removeUserRole(
-    requestingUser.id,
+    actor.id,
     params.userId,
     params.roleId,
   );
-
-  res.status(204).send();
 };
 
-export const upsertUserFeature = async (req: Request, res: Response) => {
-  const { params, body } = upsertPermissionParamsSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
-  const requestingUser = getAuthUser(req);
-
-  const userFeature = await permissionService.upsertUserFeature(
-    requestingUser.id,
+export const upsertUserFeature: RouteHandler<
+  typeof routes.permission.upsertOverride
+> = async ({ params, body, actor }) =>
+  permissionService.upsertUserFeature(
+    actor.id,
     params.userId,
     params.roleId,
     params.featureId,
     body.granted,
   );
 
-  res.status(200).json(userFeaturePresenter.present(userFeature, "default"));
-};
-
-export const removeUserFeature = async (req: Request, res: Response) => {
-  const { params } = removePermissionParamsSchema.parse({
-    params: req.params,
-  });
-
-  const requesterId = getAuthUser(req).id;
-
+export const removeUserFeature: RouteHandler<
+  typeof routes.permission.removeOverride
+> = async ({ params, actor }) => {
   await permissionService.removeUserFeature(
-    requesterId,
+    actor.id,
     params.userId,
     params.roleId,
     params.featureId,
   );
-
-  res.status(204).send();
 };

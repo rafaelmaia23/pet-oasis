@@ -231,6 +231,16 @@ seguintes as encontram.
   nada — está em
   `apps/api/docs/adr/0203-authenticate-desce-do-grupo-para-rota-404-vence-401.md`. Nenhuma issue
   de rota precisa reabrir isto.
+
+  **A condição é mais estreita do que este parágrafo e o ADR 0203 dizem — medido na issue 09, e
+  a decisão não muda.** `authenticate` (`apps/api/src/middlewares/authenticate.middleware.ts`) só
+  responde 401 quando o token é **inválido**; requisição **sem** header `Authorization` ele trata
+  como anônima e passa adiante, e o 401 de "sem token" vem do `canAccess`, que é da rota. Logo,
+  método inexistente sob um prefixo autenticado **já respondia 404** quando não havia header —
+  antes e depois da migração. O que de fato muda de 401 para 404 é o mesmo request **com um token
+  inválido**: medido em `POST /roles` e `POST /features`, 401 na `fase-12-module-depth` e 404 com o
+  grupo migrado. Nenhum teste da suíte alcançava o caso, o que explica ele não ter aparecido na
+  issue 08. Para as issues 10–15 isso significa: a mudança existe, é essa, e é só essa.
 - **Presenter que fica sem chamador sai.** O *Out of Scope* abaixo diz que os 13 `*.presenter.ts`
   não são tocados, e o que ele protege é o **mecanismo** de whitelist que o
   `apps/api/docs/adr/0199-schemas-de-request-e-views-sao-codigo-do-contrato.md` fixou — esse

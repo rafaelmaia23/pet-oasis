@@ -61,20 +61,23 @@ v1Router.use("/tags", optionalAuthenticate, tagRouter);
 v1Router.use("/products", optionalAuthenticate, productRouter);
 
 // PROTEGIDAS — com authenticate
+//
+// Nos routers secos o `authenticate` não está aqui: ele desceu do prefixo para
+// o `before` de cada rota, onde a entrada da tabela o exige — ver
+// `src/modules/role/role.routes.ts`. Consequência decidida em
+// `../../docs/adr/0203-authenticate-desce-do-grupo-para-rota-404-vence-401.md`.
 v1Router.use(meRouter);
 v1Router.use("/users", authenticate, userRouter);
 v1Router.use("/users/:userId", authenticate, userProfileRouter);
-v1Router.use("/users/:userId", authenticate, permissionRouter);
+v1Router.use(permissionRouter);
 // Pet (9.4): coleção aninhada no cliente, recurso plano no item. As duas
 // exigem token — a vitrine pública é do catálogo, não da ficha do pet.
 v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);
 v1Router.use("/pets", authenticate, petRouter);
 v1Router.use("/variants", authenticate, variantRouter);
-v1Router.use("/features", authenticate, featureRouter);
-v1Router.use("/roles", authenticate, roleRouter);
+v1Router.use(featureRouter);
+v1Router.use(roleRouter);
 v1Router.use(auditLogRouter);
-// Já sob o `registerRoute`: o `authenticate` desceu do prefixo para o `before`
-// da rota, onde a tabela o exige — ver `src/modules/log/log.routes.ts`.
 v1Router.use(logRouter);
 
 export const router = Router();

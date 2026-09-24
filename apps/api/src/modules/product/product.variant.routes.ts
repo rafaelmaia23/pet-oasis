@@ -19,8 +19,7 @@ import { chooseVariantWriteView } from "./product.variant.view-resolver";
  *
  * Montado **sem prefixo** em `src/routes/index.ts`: o path inteiro vem da
  * tabela, e o `authenticate` que ficava no prefixo desceu para o `before` de
- * cada rota (issue 14 de `.scratch/fase-12-module-depth/`). O que falta fica
- * no `variantLegacyRouter` abaixo, ainda montado sob `/variants`.
+ * cada rota (issue 14 de `.scratch/fase-12-module-depth/`).
  */
 const variantRouter = Router();
 
@@ -30,13 +29,9 @@ registerRoute(variantRouter, routes.variant.update, {
   handler: variantController.updateVariant,
 });
 
-/** O que ainda está na forma antiga — sai quando a última rota migrar. */
-export const variantLegacyRouter = Router();
-
-variantLegacyRouter.delete(
-  "/:variantId",
-  canAccess("manage:product"),
-  variantController.deleteVariant,
-);
+registerRoute(variantRouter, routes.variant.delete, {
+  before: [authenticate, canAccess("manage:product")],
+  handler: variantController.deleteVariant,
+});
 
 export default variantRouter;

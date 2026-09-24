@@ -24,9 +24,7 @@ import permissionRouter from "@/modules/permission/permission.routes";
 import petCustomerRouter from "@/modules/pet/pet.customer.routes";
 import petRouter from "@/modules/pet/pet.routes";
 import productRouter from "@/modules/product/product.routes";
-import variantRouter, {
-  variantLegacyRouter,
-} from "@/modules/product/product.variant.routes";
+import variantRouter from "@/modules/product/product.variant.routes";
 import roleRouter from "@/modules/role/role.routes";
 import statusRouter from "@/modules/status/status.routes";
 import tagRouter from "@/modules/tag/tag.routes";
@@ -77,7 +75,6 @@ v1Router.use(permissionRouter);
 v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);
 v1Router.use("/pets", authenticate, petRouter);
 v1Router.use(variantRouter);
-v1Router.use("/variants", authenticate, variantLegacyRouter);
 v1Router.use(featureRouter);
 v1Router.use(roleRouter);
 v1Router.use(auditLogRouter);

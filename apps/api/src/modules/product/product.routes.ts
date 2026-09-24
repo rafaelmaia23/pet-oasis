@@ -12,6 +12,7 @@ import { canAccess } from "@/middlewares/canAccess.middleware";
 import { uploadSingleImage } from "@/middlewares/upload.middleware";
 import * as productController from "./product.controller";
 import * as productImageController from "./product.image.controller";
+import { productTransport } from "./product.transport";
 import * as variantController from "./product.variant.controller";
 import {
   chooseProductListView,
@@ -82,9 +83,6 @@ registerRoute(productRouter, routes.product.delete, {
   handler: productController.deleteProduct,
 });
 
-/** O que ainda está na forma antiga — sai quando a última rota migrar. */
-export const productLegacyRouter = Router();
-
 /**
  * Imagens (9.10). O item é **aninhado** (`/products/:productId/images/:imageId`)
  * e não plano como a variante: `/images/:id` reservaria um substantivo genérico
@@ -95,15 +93,23 @@ export const productLegacyRouter = Router();
  * A ordem dos middlewares é deliberada: `canAccess` **antes** do limiter, para
  * que quem não pode subir imagem receba 401/403 sem consumir cota de balde
  * nenhum; e o limiter antes do multer, para que a cota seja cobrada antes de o
- * corpo inteiro ser lido para a memória.
+ * corpo inteiro ser lido para a memória. `context: productTransport` é onde o
+ * buffer do multer (`req.file`) entra no handler — é o que o transporte sabe e
+ * a tabela não descreve.
  */
-productLegacyRouter.post(
-  "/:productId/images",
-  canAccess("manage:product"),
-  rateLimitByUser(uploadUserLimiter, "image-upload"),
-  uploadSingleImage,
-  productImageController.uploadProductImage,
-);
+registerRoute(productRouter, routes.product.addImage, {
+  before: [
+    optionalAuthenticate,
+    canAccess("manage:product"),
+    rateLimitByUser(uploadUserLimiter, "image-upload"),
+    uploadSingleImage,
+  ],
+  context: productTransport,
+  handler: productImageController.uploadProductImage,
+});
+
+/** O que ainda está na forma antiga — sai quando a última rota migrar. */
+export const productLegacyRouter = Router();
 
 // Antes do item: `:imageId` casaria com o literal `order` se viessem na ordem
 // inversa — mas são métodos diferentes, então isto é higiene, não necessidade.

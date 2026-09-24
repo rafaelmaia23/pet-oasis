@@ -76,8 +76,9 @@ O que de fato ficou pronto — onde divergiu do plano, o porquê está ao lado:
 - **Método inexistente sob um prefixo autenticado passa de 401 para 404.** O `authenticate` estava
   montado no prefixo (`v1Router.use("/me", authenticate, meRouter)`) e autenticava tudo que caísse
   ali, inclusive o que não é rota; agora só a rota declarada autentica. Vale para `/me`, `/logs` e
-  `/audit-logs`. Nenhum teste cobria o caso, e 404 é o que o Express já responde a qualquer outro
-  path desconhecido.
+  `/audit-logs`, e valerá para todo prefixo conforme ele migrar. Levantado aqui, **decidido pelo
+  dono do projeto em 2026-09-23** — fica o 404 —, e registrado como decisão permanente em
+  `apps/api/docs/adr/0203-authenticate-desce-do-grupo-para-rota-404-vence-401.md`.
 - **`GET /status` sem a versão do banco passa de 200 incompleto para 500.** A rota não tinha
   presenter, então um `SHOW server_version` sem linha saía como resposta sem o campo; com a view
   aplicada isso vira 500 de qualquer jeito, e o `firstRow` só dá ao 500 uma mensagem que nomeia o

@@ -218,18 +218,19 @@ registerRoute(router, routes.user.unban, {
 ### Duas consequências do registrador, descobertas na issue 08 e válidas para as issues 09–15
 
 Anotadas aqui, e não na issue 08 que as descobriu, porque é aqui que as seis issues de rota
-seguintes as encontram. **As duas pedem confirmação do dono do projeto** — a primeira mexe em
-status HTTP, que esta spec não decide sozinha.
+seguintes as encontram.
 
-- **O `authenticate` desce do prefixo para a rota, e com ele um 401 vira 404.** Hoje
-  `v1Router.use("/me", authenticate, meRouter)` autentica tudo que cai sob o prefixo, inclusive o
-  que não é rota: um método inexistente sob `/me` responde 401. Com o registrador, o router é
-  montado sem prefixo (o path inteiro vem da tabela) e só a rota declarada autentica — o mesmo
-  request passa a responder 404. Nenhum teste cobre o caso, e 404 é o que o Express já responde a
-  qualquer path desconhecido, mas **isto contradiz o "comportamento externo não muda" desta
-  spec** e vai se repetir em todo prefixo autenticado (`/users`, `/pets`, `/variants`, `/features`,
-  `/roles`, `/customers/:customerId`). Se a resposta do dono for "tem de continuar 401", a saída é
-  um `use` de prefixo só com o `authenticate`, e as issues 09–15 param até isso ser decidido.
+- **O `authenticate` desce do prefixo para a rota, e com ele um 401 vira 404 — decidido, siga.**
+  Antes, `v1Router.use("/me", authenticate, meRouter)` autenticava tudo que caísse sob o prefixo,
+  inclusive o que não é rota: um método inexistente sob `/me` respondia 401. Com o registrador, o
+  router é montado sem prefixo (o path inteiro vem da tabela) e só a rota declarada autentica — o
+  mesmo request responde 404. **É a única exceção ao "comportamento externo não muda" que esta
+  spec não previa**, e vale para todo prefixo conforme ele migra (`/users`, `/pets`, `/variants`,
+  `/features`, `/roles`, `/customers/:customerId`). O dono do projeto decidiu pelo 404 em
+  2026-09-23; o porquê — a lista de rotas já é pública no `/openapi.json`, então o 404 não revela
+  nada — está em
+  `apps/api/docs/adr/0203-authenticate-desce-do-grupo-para-rota-404-vence-401.md`. Nenhuma issue
+  de rota precisa reabrir isto.
 - **Presenter que fica sem chamador sai.** O *Out of Scope* abaixo diz que os 13 `*.presenter.ts`
   não são tocados, e o que ele protege é o **mecanismo** de whitelist que o
   `apps/api/docs/adr/0199-schemas-de-request-e-views-sao-codigo-do-contrato.md` fixou — esse

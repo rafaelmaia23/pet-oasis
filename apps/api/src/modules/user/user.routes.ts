@@ -55,6 +55,12 @@ registerRoute(userRouter, routes.user.get, {
   handler: userController.getUserById,
 });
 
+registerRoute(userRouter, routes.user.update, {
+  before: [authenticate, canAccess("update:user")],
+  chooseView: chooseUserView,
+  handler: userController.updateUser,
+});
+
 /** O que ainda está na forma antiga — sai quando a última rota migrar. */
 export const userLegacyRouter = Router();
 
@@ -62,11 +68,6 @@ userLegacyRouter.post(
   "/",
   canAccess("create:user"),
   userController.createEmployee,
-);
-userLegacyRouter.patch(
-  "/:id",
-  canAccess("update:user"),
-  userController.updateUser,
 );
 
 export default userRouter;

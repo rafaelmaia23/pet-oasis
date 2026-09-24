@@ -1,8 +1,5 @@
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import {
-  createEmployeeSchema,
-  updateUserSchema,
-} from "@pet-oasis/api-contracts/user";
+import { createEmployeeSchema } from "@pet-oasis/api-contracts/user";
 import type { Request, Response } from "express";
 import { offsetEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
@@ -34,18 +31,11 @@ export const getUserById: RouteHandler<typeof routes.user.get> = async ({
   actor,
 }) => userService.getUserById(actor, params.id);
 
-export const updateUser = async (req: Request, res: Response) => {
-  const { params, body } = updateUserSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
-  const user = await userService.updateUser(getAuthUser(req), params.id, body);
-
-  return res
-    .status(200)
-    .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
-};
+export const updateUser: RouteHandler<typeof routes.user.update> = async ({
+  params,
+  body,
+  actor,
+}) => userService.updateUser(actor, params.id, body);
 
 export const deleteUser: RouteHandler<typeof routes.user.delete> = async ({
   params,

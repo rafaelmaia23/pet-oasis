@@ -33,6 +33,11 @@ e uma rota que não precise delas se registra exatamente como antes.
   embrulha os quatro em `src/modules/auth/auth.transport.ts`, e o handler vê só
   `presentedRefreshToken`, `issueRefreshToken`, `clearRefreshToken` e `client` — nunca `res`. Esse
   é o **único** ponto do caminho da rota que alcança `auth.refreshCookie.ts`.
+
+`login` declara o transporte por causa do `client` e do `issueRefreshToken`; o
+`presentedRefreshToken` fica sem uso ali, e lê-lo é um `typeof` sobre um objeto já parseado pelo
+`cookie-parser` — a spec põe otimização fora do escopo, e partir a interface em duas para poupar
+isso custaria mais do que paga.
 - **O desfecho etiquetado**, que a issue 08 deixou em aberto ("quem escolhe entre eles é o handler,
   e isso ainda não tem forma"). Onde a entrada declara um status só, nada muda. Onde declara mais
   de um, o handler devolve `{ status, body }`, com o corpo exigido exatamente nos status que têm
@@ -72,9 +77,12 @@ por-rota, nunca esteve no prefixo, então a consequência que a spec anotou para
 autenticados não alcança este grupo. `/auth` deixou de ser prefixo de montagem quando a última
 rota migrou.
 
-**Testes acrescentados, nenhum apagado:** 8 casos no registrador (4 do desfecho etiquetado, 4 do
-`context`) e 8 em `tests/unit/modules/auth/auth.transport.test.ts`, contra `req`/`res` falsos. A
-prova de não-regressão é a suíte de integração de auth intacta.
+**Testes:** 9 casos novos no registrador (4 do desfecho etiquetado, 5 do `context`) e 8 em
+`tests/unit/modules/auth/auth.transport.test.ts`, contra `req`/`res` falsos. Um caso unitário
+**saiu** — o que afirmava a recusa de registro de mais de um status de sucesso, que é exatamente a
+recusa que esta issue tinha a tarefa de remover; os 4 do desfecho etiquetado o substituem. A regra
+dura da spec ("nenhum teste de integração é apagado") continua intacta: a prova de não-regressão é
+`tests/integration/v1/auth.test.ts`, 163 casos, arquivo não tocado.
 
 A documentação acompanhou: `apps/api/docs/guides/documenting-endpoints.md` §3 ganhou o `context` e
 o desfecho etiquetado, e o `apps/api/CLAUDE.md` passou a nomear o `context` na descrição da camada

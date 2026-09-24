@@ -99,9 +99,10 @@ registerRoute(modRouter, routes.mod.get, {
 - **A forma da resposta é da tabela; a decisão de quem vê o quê é da API.** O mascaramento de IP
   do audit log é o exemplo vivo: a view vem da entrada, o `maskIp` fica no módulo.
 - **O que o transporte sabe e a tabela não descreve entra por `context`** — o cookie de sessão,
-  o user agent, o IP de quem chamou. É uma **função nomeada do módulo** (não um arrow inline:
-  esse é *context-sensitive* e o handler receberia o contexto vazio), que recebe `req`/`res` e
-  devolve a interface que o handler vê. O registrador não conhece nenhuma dessas coisas — ele
+  o user agent, o IP de quem chamou. É uma função que recebe `req`/`res` e devolve a interface
+  que o handler vê — **com os parâmetros tipados**, seja uma função nomeada do módulo, seja um
+  arrow anotado: um arrow que dependesse do registrador para tipá-los é *context-sensitive*, e o
+  handler receberia o contexto vazio. O registrador não conhece nenhuma dessas coisas — ele
   chama a função, depois do `before` e do parse, e espalha o retorno no contexto. O que a
   tabela declara vence uma chave de mesmo nome.
 

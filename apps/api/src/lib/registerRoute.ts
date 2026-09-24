@@ -138,10 +138,11 @@ export type RouteRegistration<E extends RouteDefinition, C> = {
    * retorno no contexto do handler. Quem recebe `req`/`res` é o módulo, que os
    * embrulha na interface que quiser; o handler continua sem tocar `res`.
    *
-   * É uma **função nomeada do módulo** (`auth.transport.ts` é a primeira), e
-   * não um arrow inline: um arrow cujos parâmetros o registrador teria de
-   * tipar é *context-sensitive*, e o TypeScript só o resolve depois de já ter
-   * fixado o contexto do handler — o handler receberia o contexto vazio.
+   * Os parâmetros precisam ter **tipo escrito** — uma função nomeada do módulo
+   * (`auth.transport.ts` é a primeira) ou um arrow anotado. Um arrow que
+   * dependesse do registrador para tipar `req`/`res` é *context-sensitive*, e o
+   * TypeScript só o resolve depois de já ter fixado o contexto do handler: o
+   * handler receberia o contexto vazio.
    */
   context?: (req: Request, res: Response) => C;
   handler: RouteHandler<E, C>;
@@ -203,9 +204,10 @@ function outcomeOf(
   where: string,
 ): { status: number; body: unknown } {
   const outcome = result as { status?: unknown; body?: unknown } | null;
-  const status = typeof outcome?.status === "number" ? outcome.status : NaN;
+  const status =
+    typeof outcome?.status === "number" ? outcome.status : undefined;
 
-  if (!views.has(status)) {
+  if (status === undefined || !views.has(status)) {
     throw createPresentationError({
       context: {
         route: where,

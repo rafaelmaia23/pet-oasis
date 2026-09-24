@@ -34,6 +34,17 @@ registerRoute(authRouter, routes.auth.signup, {
   handler: authController.signup,
 });
 
+registerRoute(authRouter, routes.auth.login, {
+  before: [rateLimitByIp(loginIpLimiter, "login")],
+  context: authTransport,
+  handler: authController.login,
+});
+
+registerRoute(authRouter, routes.auth.refresh, {
+  context: authTransport,
+  handler: authController.refresh,
+});
+
 registerRoute(authRouter, routes.auth.verifyEmail, {
   handler: authController.verifyEmail,
 });
@@ -61,6 +72,16 @@ registerRoute(authRouter, routes.auth.resetPassword, {
   handler: authController.resetPassword,
 });
 
+registerRoute(authRouter, routes.auth.changePassword, {
+  before: [authenticate],
+  handler: authController.changePassword,
+});
+
+registerRoute(authRouter, routes.auth.changeEmail, {
+  before: [authenticate, canAccess("update:user")],
+  handler: authController.changeEmail,
+});
+
 registerRoute(authRouter, routes.auth.confirmEmailChange, {
   before: [rateLimitByIp(tokenIpLimiter, "confirm-email-change")],
   handler: authController.confirmEmailChange,
@@ -71,16 +92,6 @@ registerRoute(authRouter, routes.auth.confirmEmailChange, {
 registerRoute(authRouter, routes.auth.confirmAccountReactivation, {
   before: [rateLimitByIp(tokenIpLimiter, "confirm-account-reactivation")],
   handler: authController.confirmAccountReactivation,
-});
-
-registerRoute(authRouter, routes.auth.changePassword, {
-  before: [authenticate],
-  handler: authController.changePassword,
-});
-
-registerRoute(authRouter, routes.auth.changeEmail, {
-  before: [authenticate, canAccess("update:user")],
-  handler: authController.changeEmail,
 });
 
 registerRoute(authRouter, routes.auth.logout, {
@@ -98,17 +109,6 @@ registerRoute(authRouter, routes.auth.listSessions, {
 registerRoute(authRouter, routes.auth.revokeSession, {
   before: [authenticate, canAccess("manage:session")],
   handler: authController.revokeSession,
-});
-
-registerRoute(authRouter, routes.auth.login, {
-  before: [rateLimitByIp(loginIpLimiter, "login")],
-  context: authTransport,
-  handler: authController.login,
-});
-
-registerRoute(authRouter, routes.auth.refresh, {
-  context: authTransport,
-  handler: authController.refresh,
 });
 
 export default authRouter;

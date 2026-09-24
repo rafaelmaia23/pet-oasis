@@ -239,6 +239,25 @@ seguintes as encontram.
   view passa a vir da tabela, e apagá-lo é consequência da migração, não refactor do mecanismo. O
   que **não** sai é o que decide conteúdo em vez de forma: o `maskIp` do audit log é o caso vivo.
 
+### Duas formas que o registrador ganhou na issue 10, válidas das issues 11 em diante
+
+Anotadas aqui, e não na issue 10 que as escreveu, porque é aqui que as issues de rota seguintes
+as encontram. A interface fixada acima continua valendo — as duas são **acréscimos opcionais**, e
+uma rota que não precise delas se registra exatamente como antes.
+
+- **`context`: o que o transporte sabe e a tabela não descreve.** Uma função nomeada do módulo,
+  `(req, res) => C`, cujo retorno o registrador espalha no contexto do handler. O registrador não
+  aprende o que é cookie, user agent nem IP; o handler continua sem tocar `res`. A primeira é
+  `apps/api/src/modules/auth/auth.transport.ts`. Quem for migrar upload de imagem (issues 14–15)
+  tem aqui o lugar do `req.file`. **Não é um arrow inline**: um arrow cujos parâmetros o
+  registrador teria de tipar é *context-sensitive*, e o TypeScript o resolve tarde demais — o
+  handler receberia o contexto vazio.
+- **O desfecho etiquetado, onde a entrada declara mais de um status de sucesso.** O handler
+  devolve `{ status, body }` em vez do corpo, com o corpo exigido exatamente nos status que têm
+  view; um status que a entrada não declara é 500 de apresentação. É `POST /auth/signup` (201/202)
+  e, até onde a tabela mostra hoje, só ele. A recusa no registro que a issue 08 deixou para mais
+  de um status **saiu**; a da view em escada continua, até a issue 17.
+
 ### Erro
 
 - `AppError.code` passa a ser o `ErrorCode` do contrato, e as 12 classes tiram o code de lá. O 409

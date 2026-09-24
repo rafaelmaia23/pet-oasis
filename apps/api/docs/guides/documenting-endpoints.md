@@ -98,9 +98,38 @@ registerRoute(modRouter, routes.mod.get, {
   prefixo desce para o `before` da rota.
 - **A forma da resposta é da tabela; a decisão de quem vê o quê é da API.** O mascaramento de IP
   do audit log é o exemplo vivo: a view vem da entrada, o `maskIp` fica no módulo.
+- **O que o transporte sabe e a tabela não descreve entra por `context`** — o cookie de sessão,
+  o user agent, o IP de quem chamou. É uma **função nomeada do módulo** (não um arrow inline:
+  esse é *context-sensitive* e o handler receberia o contexto vazio), que recebe `req`/`res` e
+  devolve a interface que o handler vê. O registrador não conhece nenhuma dessas coisas — ele
+  chama a função, depois do `before` e do parse, e espalha o retorno no contexto. O que a
+  tabela declara vence uma chave de mesmo nome.
 
-Duas formas de entrada o registrador ainda recusa, no registro e com o par método + path na
-mensagem: mais de um status de sucesso e a `view` em escada.
+```ts
+// src/modules/auth/auth.transport.ts — o módulo embrulha o transporte…
+export const authTransport = (req: Request, res: Response): AuthTransport => ({
+  presentedRefreshToken: readRefreshCookie(req),
+  issueRefreshToken: (token) => setRefreshCookie(res, token),
+  clearRefreshToken: () => clearRefreshCookie(res),
+  client: { userAgent: req.headers["user-agent"], ipAddress: req.ip },
+});
+
+// …e o handler vê só isso, nunca `res`
+registerRoute(authRouter, routes.auth.login, {
+  before: [rateLimitByIp(loginIpLimiter, "login")],
+  context: authTransport,
+  handler: login, // RouteHandler<typeof routes.auth.login, AuthTransport>
+});
+```
+
+- **Dois status de sucesso: o handler etiqueta o desfecho.** Onde a entrada declara um status
+  só, o handler devolve o corpo (ou nada, no 204). Onde declara mais de um — hoje só
+  `POST /auth/signup`, 201/202 —, ele devolve `{ status, body }`, com o corpo exigido
+  exatamente nos status que têm view. Status que a entrada não declara é erro de apresentação
+  (500), não 422: o request estava certo.
+
+Uma forma de entrada o registrador ainda recusa, no registro e com o par método + path na
+mensagem: a `view` em escada.
 
 > **Migração em curso (Fase 12).** O `registerRoute` convive com a forma antiga
 > (`modRouter.get("/", middleware, controller)` + montagem com prefixo) até o último grupo de

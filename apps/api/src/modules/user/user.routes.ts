@@ -28,6 +28,11 @@ registerRoute(userRouter, routes.user.ban, {
   handler: userController.banUser,
 });
 
+registerRoute(userRouter, routes.user.unban, {
+  before: [authenticate, canAccess("manage:user:status")],
+  handler: userController.unbanUser,
+});
+
 /** O que ainda está na forma antiga — sai quando a última rota migrar. */
 export const userLegacyRouter = Router();
 
@@ -45,11 +50,6 @@ userLegacyRouter.patch(
   "/:id",
   canAccess("update:user"),
   userController.updateUser,
-);
-userLegacyRouter.delete(
-  "/:id/ban",
-  canAccess("manage:user:status"),
-  userController.unbanUser,
 );
 userLegacyRouter.delete(
   "/:id/lock",

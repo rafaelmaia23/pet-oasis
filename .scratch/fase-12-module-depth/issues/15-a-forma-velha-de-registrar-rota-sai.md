@@ -16,4 +16,11 @@ vigiada por monkey-patch do router do Express.
 - [ ] Se algo do teste de paridade ainda é a única prova de algo, isso é dito em voz alta e migra
       para o teste do registrador ou para os invariantes da tabela (issue 02) — nunca se perde em
       silêncio
+- [ ] `apps/api/CLAUDE.md` deixa de descrever a camada pela forma antiga. Duas frases ficaram
+      falsas conforme as rotas migraram, e só aqui elas passam a ser falsas para **todas**: a
+      "Organização de módulos" lista `*.presenter.ts` como parte de todo módulo (já saíram cinco,
+      e sobram os que decidem conteúdo, como o `maskIp` do audit log), e a seção Validação diz
+      "sintática (Zod, sem banco) **no controller**", quando quem parseia o envelope é o
+      registrador. Levantado pela revisão da issue 09
+      (`.scratch/fase-12-module-depth/issues/09-rotas-de-role-feature-e-permission.md`)
 - [ ] Suíte, `typecheck`, `lint` e `docs:check` verdes

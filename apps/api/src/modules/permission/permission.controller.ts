@@ -6,8 +6,8 @@ import * as permissionService from "@/modules/permission/permission.service";
 export const getUserFeatures: RouteHandler<
   typeof routes.permission.listFeatures
 > = async ({ params }) => {
-  // Sem paginação: são os overrides de um usuário, coleção pequena por
-  // construção (docs/adr/0004-pagination.md).
+  // Sem paginação, como as demais listas de autorização
+  // (docs/adr/0004-pagination.md).
   const features = await permissionService.getUserFeatures(params.userId);
 
   return listEnvelope(features);

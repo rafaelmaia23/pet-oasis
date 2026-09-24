@@ -140,6 +140,18 @@ cliente quem o lê), o tipo da API vira alias do tipo do contrato — uma linha,
 barril `apps/api/src/errors/index.ts`, não no arquivo das classes. Se não for, vale um comentário
 dizendo por que os dois existem, para o próximo leitor não "consertar" a duplicação.
 
+### A tripla `(user, role, feature)` do override viaja como três strings — **P**
+
+**Problema:** a identidade de um override de feature é a tripla `(user, role, feature)` — o comentário de `apps/api/src/modules/permission/permission.routes.ts` a nomeia assim, e é ela que justifica os três `:param` no path. No código ela não existe como coisa: `upsertUserFeature` e `removeUserFeature` recebem `actor.id, params.userId, params.roleId, params.featureId` como quatro strings posicionais, em `permission.controller.ts`, `permission.service.ts` e `permission.repository.ts`. Trocar duas de lugar compila. Levantado pela revisão da issue 09 de `fase-12-module-depth` (`.scratch/fase-12-module-depth/issues/09-rotas-de-role-feature-e-permission.md`), que migrou as sete rotas de permission sem mexer no serviço.
+
+**Decisão a tomar:** se a tripla ganha um tipo (`OverrideRef`), onde ele mora — é vocabulário de domínio da API, não forma de resposta, então seria `src/modules/permission/`, não o contrato — e se o `actor` entra nele ou continua parâmetro separado (ele não é parte da identidade do override; é quem age sobre ela). Ganha: a ordem dos três deixa de ser posicional em três camadas. Perde: um tipo novo numa área estável, cujos únicos callers são os sete handlers.
+
+### `getUserPermissions` devolve features efetivas — **P**
+
+**Problema:** a operação se chama `listEffectiveFeatures` na tabela de rotas do contrato e `getUserPermissions` no controller, no serviço e no schema (`getUserPermissionsParamsSchema`). O que ela devolve são as **features efetivas** de um usuário — `effectiveFeaturesViews.default` —, e "permissions" no nome sugere a outra coisa que o módulo tem (os overrides, que são `listFeatures`). Enquanto a rota não tinha nome próprio, o descompasso não tinha como aparecer; agora a tabela nomeia a operação e os dois nomes ficam lado a lado. Levantado pela revisão da issue 09 de `fase-12-module-depth`.
+
+**Decisão a tomar:** renomear alinha o código ao vocabulário de `apps/api/CONTEXT.md` (onde "feature efetiva" é termo e "permission" é o módulo), mas atravessa controller, serviço, repositório e o nome de um schema **do contrato** — e schema do contrato é fronteira, não renomeação local. Não vale de passagem numa issue de migração de rota.
+
 ---
 
 ## Produto e domínio

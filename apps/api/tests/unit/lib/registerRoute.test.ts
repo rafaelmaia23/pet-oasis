@@ -70,8 +70,23 @@ const publicThing = {
   errors: {},
 } as const satisfies RouteDefinition;
 
+/**
+ * A **escada de capability**: o degrau de baixo é o que todo mundo vê, o de
+ * cima acrescenta campo. Duas views de verdade (e não a mesma repetida) porque
+ * o que está sob teste é justamente *qual* das duas saiu.
+ */
+const thingStepView = thingView.extend({ cost: z.number() });
+
+const readLadderThing = {
+  ...readThing,
+  responses: {
+    200: { description: "a coisa", view: [thingView, thingStepView] },
+  },
+} as const satisfies RouteDefinition;
+
 const ID = "11111111-1111-4111-8111-111111111111";
 const THING = { id: ID, name: "coisa" };
+const THING_WITH_COST = { ...THING, cost: 10 };
 
 /**
  * Uma aplicação mínima: o router registrado, o mesmo error handler da API e —
@@ -356,20 +371,74 @@ describe("registerRoute", () => {
       ).toThrow(/POST \/things/);
     });
 
-    it("recusa no registro a entrada cuja view é uma escada", () => {
-      const ladder = {
-        ...readThing,
-        responses: {
-          200: { description: "a coisa", view: [thingView, thingView] },
-        },
-      } as const satisfies RouteDefinition;
-
+    it("recusa no registro a escada sem quem escolha o degrau", () => {
       expect(() =>
-        // O tipo do handler cai em `unknown` aqui: enquanto a escada não tem
-        // dono (issue 17), o registrador não sabe dizer qual degrau devolver —
-        // e é por isso que ele recusa a entrada em vez de adivinhar.
-        registerRoute(Router(), ladder, { handler: async () => THING }),
+        // Sem `chooseView` o registrador teria de adivinhar qual degrau
+        // devolver — e adivinhar aqui é vazar campo.
+        registerRoute(Router(), readLadderThing, {
+          handler: async () => THING,
+        }),
       ).toThrow(/GET \/things\/:id/);
+    });
+
+    it("recusa no registro o `chooseView` onde a entrada declara uma view só", () => {
+      expect(() =>
+        registerRoute(Router(), readThing, {
+          chooseView: () => thingView,
+          handler: async () => THING,
+        }),
+      ).toThrow(/GET \/things\/:id/);
+    });
+  });
+
+  describe("escada de views", () => {
+    const app = (chooseView: (actor: AuthUser) => z.ZodType, actor: AuthUser) =>
+      makeApp(
+        (router) =>
+          registerRoute(router, readLadderThing, {
+            chooseView,
+            handler: async () => THING_WITH_COST,
+          }),
+        actor,
+      );
+
+    it("aplica o degrau que o `chooseView` escolhe para aquele ator", async () => {
+      const chooseView = (actor: AuthUser) =>
+        actor.features.has("read:user:others") ? thingStepView : thingView;
+
+      const privileged = await request(
+        app(chooseView, makeAuthUser(["read:user:others"])),
+      ).get(`/things/${ID}`);
+      const plain = await request(app(chooseView, makeAuthUser([]))).get(
+        `/things/${ID}`,
+      );
+
+      expect(privileged.body).toEqual(THING_WITH_COST);
+      // O degrau de baixo é whitelist: o campo que ele não declara não sai.
+      expect(plain.body).toEqual(THING);
+    });
+
+    it("recebe o ator da requisição, e não o da montagem", async () => {
+      const chooseView = vi.fn(() => thingView);
+      const actor = makeAuthUser(["read:user"]);
+
+      await request(app(chooseView, actor)).get(`/things/${ID}`);
+
+      expect(chooseView).toHaveBeenCalledWith(
+        expect.objectContaining({ id: actor.id }),
+      );
+    });
+
+    it("responde 500 quando o degrau escolhido não é da escada declarada", async () => {
+      const foreign = z.object({ id: z.uuid(), secret: z.string() });
+
+      const response = await request(
+        app(() => foreign, makeAuthUser(["read:user"])),
+      ).get(`/things/${ID}`);
+
+      // Erro de apresentação, não 422: o request estava certo; quem desmentiu
+      // o contrato foi o registro.
+      expect(response.status).toBe(500);
     });
   });
 });

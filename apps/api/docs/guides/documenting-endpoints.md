@@ -99,8 +99,22 @@ registerRoute(modRouter, routes.mod.get, {
 - **A forma da resposta é da tabela; a decisão de quem vê o quê é da API.** O mascaramento de IP
   do audit log é o exemplo vivo: a view vem da entrada, o `maskIp` fica no módulo.
 
-Duas formas de entrada o registrador ainda recusa, no registro e com o par método + path na
-mensagem: mais de um status de sucesso e a `view` em escada.
+- **Escada de capability** — quando a entrada declara a escada (`view` é o array dos degraus),
+  o registro diz **qual degrau cada ator recebe**, por `chooseView`. A tabela declara a escada;
+  quem decide continua sendo a API, e um degrau de fora da escada declarada é 500, não resposta
+  silenciosamente diferente.
+
+```ts
+registerRoute(userRouter, routes.user.get, {
+  before: [authenticate, canAccess("read:user")],
+  chooseView: chooseUserView,   // (actor) => a view daquele ator
+  handler: getUserById,
+});
+```
+
+Três desencontros o registrador recusa, no registro e com o par método + path na mensagem: mais
+de um status de sucesso (ainda sem forma), escada sem `chooseView` e `chooseView` onde a entrada
+declara uma view só.
 
 > **Migração em curso (Fase 12).** O `registerRoute` convive com a forma antiga
 > (`modRouter.get("/", middleware, controller)` + montagem com prefixo) até o último grupo de

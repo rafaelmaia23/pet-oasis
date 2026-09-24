@@ -239,6 +239,29 @@ seguintes as encontram.
   view passa a vir da tabela, e apagá-lo é consequência da migração, não refactor do mecanismo. O
   que **não** sai é o que decide conteúdo em vez de forma: o `maskIp` do audit log é o caso vivo.
 
+### Uma terceira consequência, descoberta na issue 11 e válida para as issues 12–14 e 17
+
+O registrador **recusava** a entrada cuja `view` é a escada de capability, porque "qual degrau
+este viewer recebe" não tinha dono (issue 17). Cinco das catorze rotas da issue 11 respondem com
+`userViewLadder`, então a recusa era o bloqueio da issue inteira — e as rotas de produto e
+variante (issue 14) têm o mesmo problema, com `productReadLadder`, `productWriteLadder` e
+`variantWriteLadder`.
+
+O registro ganhou uma terceira chave, `chooseView`: a entrada **declara** a escada e o registro
+diz **qual degrau cada ator recebe**. A fronteira do
+`apps/api/docs/adr/0199-schemas-de-request-e-views-sao-codigo-do-contrato.md` não se move — o
+contrato continua só declarando, a API continua decidindo —, e o *Out of Scope* desta spec
+("mover a decisão de view para o contrato") continua respeitado. O tipo de retorno é a união dos
+degraus que aquela entrada declara, então uma view de fora não compila; o que o typecheck não
+alcança (duas views estruturalmente iguais são o mesmo tipo) é barrado por identidade em runtime.
+
+**Isto é uma extensão da única interface que esta spec tinha fixado**, feita dentro de uma issue
+de migração e sem ADR. Está anotada aqui, e não só no fecho da issue 11, porque é aqui que as
+issues 12–14 a encontram. **A issue 17 continua sendo quem dá um dono à correspondência degrau →
+feature**: hoje cada módulo escreve a sua (`chooseUserView` em `src/modules/user/user.view-resolver.ts`,
+e o equivalente em produto e variante), e o que a issue 17 encontra é um ponto de leitura só, em
+vez de quatro camadas diferentes.
+
 ### Erro
 
 - `AppError.code` passa a ser o `ErrorCode` do contrato, e as 12 classes tiram o code de lá. O 409

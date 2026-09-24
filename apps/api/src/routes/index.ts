@@ -8,7 +8,6 @@ import {
   scalarBundleFile,
   scalarBundleRoot,
 } from "@/docs/reference";
-import { optionalAuthenticate } from "@/middlewares/authenticate.middleware";
 import auditLogRouter from "@/modules/audit-log/audit-log.routes";
 import authRouter from "@/modules/auth/auth.routes";
 import brandRouter from "@/modules/brand/brand.routes";
@@ -41,15 +40,22 @@ v1Router.use(authRouter);
 // quem chega pelo Google sem usuário. `/breeds` fica aqui, seco: é só leitura, não
 // tem escrita nem view por feature efetiva, então não precisa nem identificar o ator.
 v1Router.use(breedRouter);
+// Marca (issue 13 de `.scratch/fase-12-module-depth/`): já sai do
+// `registerRoute` — a leitura não precisa de ator (nenhuma view por feature
+// efetiva), e a escrita carrega `authenticate` no próprio `before`, então o
+// router não precisa mais de `optionalAuthenticate` no prefixo.
+v1Router.use(brandRouter);
+// Categoria (issue 13): mesmo desenho de marca — leitura sem ator, escrita com
+// `authenticate` no próprio `before`.
+v1Router.use(categoryRouter);
+// Tag (issue 13): mesmo desenho de marca e categoria.
+v1Router.use(tagRouter);
 
 // PÚBLICAS COM AUTENTICAÇÃO OPCIONAL (9.6) — leem sem token, escrevem com
 // feature. O middleware identifica o ator quando o `Bearer` vem e segue anônimo
 // quando não vem (ou quando o token é ruim), sem nunca responder 401; quem
 // exige identidade é o `canAccess` das rotas de escrita, dentro de cada router.
 // A 9.8 depende do mesmo middleware para escolher a view de `/products`.
-v1Router.use("/brands", optionalAuthenticate, brandRouter);
-v1Router.use("/categories", optionalAuthenticate, categoryRouter);
-v1Router.use("/tags", optionalAuthenticate, tagRouter);
 // Produto (e a criação de variante, aninhada nele) já sai inteiro pelo
 // `registerRoute` (issue 14) — `optionalAuthenticate` desceu para o `before`
 // de cada rota que precisa dele. `/variants` fica do lado protegido —

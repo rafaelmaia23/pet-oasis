@@ -88,6 +88,21 @@ export type RouteHandler<E extends RouteDefinition> =
     : (context: RouteHandlerContext<E>) => Promise<void> | void;
 
 /**
+/**
+ * Os degraus que **esta entrada** declara. A tabela é escrita com `as const`,
+ * então a tupla sobrevive ao typecheck e o degrau devolvido pode ser conferido
+ * em compilação em vez de só em runtime. Numa entrada que declara uma view só,
+ * isto é `never` — e é o que faz `chooseView` ali ser recusado pelo compilador,
+ * antes mesmo da recusa no registro.
+ */
+type LadderStep<E extends RouteDefinition> =
+  E["responses"][SuccessStatus<E>] extends { view: infer V }
+    ? V extends readonly (infer Step)[]
+      ? Step
+      : never
+    : never;
+
+/**
  * Qual degrau da escada de capability este ator recebe.
  *
  * A entrada da tabela **declara** a escada; quem **decide** continua sendo a
@@ -99,7 +114,7 @@ export type RouteHandler<E extends RouteDefinition> =
  */
 export type ViewChooser<E extends RouteDefinition> = (
   actor: RouteActor<E>,
-) => z.ZodType;
+) => LadderStep<E>;
 
 export type RouteRegistration<E extends RouteDefinition> = {
   /** Middleware de servidor, na ordem em que roda. */
@@ -176,7 +191,13 @@ function successOf<E extends RouteDefinition>(
 
         // O degrau tem de ser um dos declarados: uma view de fora da escada
         // seria uma resposta que o contrato não descreve, e o cliente a
-        // receberia como se descrevesse.
+        // receberia como se descrevesse. O `LadderStep` já barra isso em
+        // compilação; esta é a rede para o que o tipo não alcança — duas views
+        // **estruturalmente iguais** são o mesmo tipo para o TS, e a
+        // comparação aqui é por identidade. É por identidade de propósito: o
+        // módulo tem de devolver o **mesmo objeto** que a tabela declara, e
+        // reembrulhar a view (um `.clone()`, um `.extend()`) deixa de ser algo
+        // que passa despercebido.
         if (!view.includes(step)) {
           throw createPresentationError({
             context: {

@@ -5,7 +5,11 @@ import request from "supertest";
 import { describe, expect, it, type Mock, vi } from "vitest";
 import { z } from "zod";
 import type { AuthUser } from "@/lib/authorization";
-import { type RouteHandlerContext, registerRoute } from "@/lib/registerRoute";
+import {
+  type RouteHandlerContext,
+  registerRoute,
+  type ViewChooser,
+} from "@/lib/registerRoute";
 import { errorHandler } from "@/middlewares/error-handler.middleware";
 
 /**
@@ -384,6 +388,10 @@ describe("registerRoute", () => {
     it("recusa no registro o `chooseView` onde a entrada declara uma view só", () => {
       expect(() =>
         registerRoute(Router(), readThing, {
+          // O compilador já recusa aqui — `LadderStep` de uma entrada sem
+          // escada é `never`. A recusa em runtime é a rede para quem chegar
+          // sem o typecheck (um `as`, um chamador em JS).
+          // @ts-expect-error
           chooseView: () => thingView,
           handler: async () => THING,
         }),
@@ -392,7 +400,10 @@ describe("registerRoute", () => {
   });
 
   describe("escada de views", () => {
-    const app = (chooseView: (actor: AuthUser) => z.ZodType, actor: AuthUser) =>
+    const app = (
+      chooseView: ViewChooser<typeof readLadderThing>,
+      actor: AuthUser,
+    ) =>
       makeApp(
         (router) =>
           registerRoute(router, readLadderThing, {
@@ -430,10 +441,13 @@ describe("registerRoute", () => {
     });
 
     it("responde 500 quando o degrau escolhido não é da escada declarada", async () => {
-      const foreign = z.object({ id: z.uuid(), secret: z.string() });
+      // Um gêmeo **estrutural** do degrau de baixo: para o TS é o mesmo tipo,
+      // então é justamente o que `LadderStep` não alcança. Quem o barra é a
+      // comparação por identidade, e ela existe para isto.
+      const twin = z.object({ id: z.uuid(), name: z.string() });
 
       const response = await request(
-        app(() => foreign, makeAuthUser(["read:user"])),
+        app(() => twin, makeAuthUser(["read:user"])),
       ).get(`/things/${ID}`);
 
       // Erro de apresentação, não 422: o request estava certo; quem desmentiu

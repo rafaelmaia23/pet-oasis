@@ -1,5 +1,4 @@
 import { userViews } from "@pet-oasis/api-contracts/user";
-import type { z } from "zod";
 import type { AuthUser } from "@/lib/authorization";
 import { hasFeature } from "@/lib/authorization";
 
@@ -15,7 +14,7 @@ import { hasFeature } from "@/lib/authorization";
  * linha, e o equivalente dela em produto e variante — é a issue 17 de
  * `.scratch/fase-12-module-depth/`.
  */
-export function chooseUserView(viewer: AuthUser): z.ZodType {
+export function chooseUserView(viewer: AuthUser) {
   return hasFeature(viewer, "read:user:others")
     ? userViews.admin
     : userViews.owner;

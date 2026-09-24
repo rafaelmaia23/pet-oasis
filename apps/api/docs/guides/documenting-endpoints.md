@@ -112,6 +112,11 @@ registerRoute(userRouter, routes.user.get, {
 });
 ```
 
+O tipo de retorno do `chooseView` é a **união dos degraus que aquela entrada declara** — devolver
+outra view não compila, e `chooseView` numa entrada sem escada também não. O que o tipo não
+alcança (duas views estruturalmente iguais são o mesmo tipo para o TS) é barrado em runtime, por
+identidade: o módulo devolve o **mesmo objeto** que a tabela declara.
+
 Três desencontros o registrador recusa, no registro e com o par método + path na mensagem: mais
 de um status de sucesso (ainda sem forma), escada sem `chooseView` e `chooseView` onde a entrada
 declara uma view só.

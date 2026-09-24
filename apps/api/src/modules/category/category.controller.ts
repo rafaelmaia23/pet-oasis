@@ -3,19 +3,21 @@ import {
   createCategorySchema,
   updateCategorySchema,
 } from "@pet-oasis/api-contracts/catalog";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
+import type { RouteHandler } from "@/lib/registerRoute";
 import { categoryPresenter } from "./category.presenter";
 import * as categoryService from "./category.service";
 
-export const listCategories = async (_req: Request, res: Response) => {
-  const tree = await categoryService.getCategoryTree();
-
+export const listCategories: RouteHandler<
+  typeof routes.category.list
+> = async () => {
   // Sem paginação (9.6/W7): árvore não é paginável — cortar no meio devolveria
   // filhos sem pai. `data` traz as raízes, com as filhas aninhadas.
-  res
-    .status(200)
-    .json(listEnvelope(categoryPresenter.presentMany(tree, "default")));
+  const tree = await categoryService.getCategoryTree();
+
+  return listEnvelope(tree);
 };
 
 export const createCategory = async (req: Request, res: Response) => {

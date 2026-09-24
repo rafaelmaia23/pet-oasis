@@ -50,13 +50,15 @@ v1Router.use(breedRouter);
 // efetiva), e a escrita carrega `authenticate` no próprio `before`, então o
 // router não precisa mais de `optionalAuthenticate` no prefixo.
 v1Router.use(brandRouter);
+// Categoria (issue 13): mesmo desenho de marca — leitura sem ator, escrita com
+// `authenticate` no próprio `before`.
+v1Router.use(categoryRouter);
 
 // PÚBLICAS COM AUTENTICAÇÃO OPCIONAL (9.6) — leem sem token, escrevem com
 // feature. O middleware identifica o ator quando o `Bearer` vem e segue anônimo
 // quando não vem (ou quando o token é ruim), sem nunca responder 401; quem
 // exige identidade é o `canAccess` das rotas de escrita, dentro de cada router.
 // A 9.8 depende do mesmo middleware para escolher a view de `/products`.
-v1Router.use("/categories", optionalAuthenticate, categoryRouter);
 v1Router.use("/tags", optionalAuthenticate, tagRouter);
 // Produto entra aqui já na 9.7, que só tem escrita: a vitrine da 9.8 acrescenta
 // o `GET` sem remontar o router, e o 401 da escrita continua vindo do

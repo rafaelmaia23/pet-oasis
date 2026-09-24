@@ -22,12 +22,10 @@ registerRoute(categoryRouter, routes.category.create, {
   handler: categoryController.createCategory,
 });
 
-categoryRouter.patch(
-  "/categories/:categoryId",
-  authenticate,
-  canAccess("manage:catalog-structure"),
-  categoryController.updateCategory,
-);
+registerRoute(categoryRouter, routes.category.update, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: categoryController.updateCategory,
+});
 
 categoryRouter.delete(
   "/categories/:categoryId",

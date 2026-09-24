@@ -1,12 +1,8 @@
-import {
-  categoryParamsSchema,
-  updateCategorySchema,
-} from "@pet-oasis/api-contracts/catalog";
+import { categoryParamsSchema } from "@pet-oasis/api-contracts/catalog";
 import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
-import { categoryPresenter } from "./category.presenter";
 import * as categoryService from "./category.service";
 
 export const listCategories: RouteHandler<
@@ -28,12 +24,9 @@ export const createCategory: RouteHandler<
   return { ...category, children: [] };
 };
 
-export const updateCategory = async (req: Request, res: Response) => {
-  const { params, body } = updateCategorySchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
+export const updateCategory: RouteHandler<
+  typeof routes.category.update
+> = async ({ params, body }) => {
   const category = await categoryService.updateCategory(
     params.categoryId,
     body,
@@ -41,9 +34,7 @@ export const updateCategory = async (req: Request, res: Response) => {
 
   // O `PATCH` responde o nó, não a subárvore: quem quiser a árvore atualizada
   // relê `GET /categories`, que é a rota que a monta.
-  return res
-    .status(200)
-    .json(categoryPresenter.present({ ...category, children: [] }, "default"));
+  return { ...category, children: [] };
 };
 
 export const deleteCategory = async (req: Request, res: Response) => {

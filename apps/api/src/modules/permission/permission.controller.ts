@@ -1,6 +1,5 @@
 import {
   deleteUserRoleParamsSchema,
-  getUserPermissionsParamsSchema,
   postUserRoleParamsSchema,
   removePermissionParamsSchema,
   upsertPermissionParamsSchema,
@@ -12,10 +11,7 @@ import type { RouteHandler } from "@/lib/registerRoute";
 import * as permissionService from "@/modules/permission/permission.service";
 import { rolePresenter } from "@/modules/role/role.presenter";
 import { getAuthUser } from "@/utils/getAuthUser";
-import {
-  effectiveFeaturesPresenter,
-  userFeaturePresenter,
-} from "./permission.presenter";
+import { userFeaturePresenter } from "./permission.presenter";
 
 export const getUserFeatures: RouteHandler<
   typeof routes.permission.listFeatures
@@ -35,15 +31,9 @@ export const getUserRoles: RouteHandler<
   return listEnvelope(roles);
 };
 
-export const getUserPermissions = async (req: Request, res: Response) => {
-  const { params } = getUserPermissionsParamsSchema.parse({
-    params: req.params,
-  });
-
-  const features = await permissionService.getUserPermissions(params.userId);
-
-  res.status(200).json(effectiveFeaturesPresenter.present(features, "default"));
-};
+export const getUserPermissions: RouteHandler<
+  typeof routes.permission.listEffectiveFeatures
+> = async ({ params }) => permissionService.getUserPermissions(params.userId);
 
 export const addUserRole = async (req: Request, res: Response) => {
   const { params } = postUserRoleParamsSchema.parse({

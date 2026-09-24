@@ -23,12 +23,10 @@ registerRoute(permissionRouter, routes.permission.listRoles, {
   handler: permissionController.getUserRoles,
 });
 
-permissionRouter.get(
-  "/users/:userId/permissions",
-  authenticate,
-  canAccess("read:permission"),
-  permissionController.getUserPermissions,
-);
+registerRoute(permissionRouter, routes.permission.listEffectiveFeatures, {
+  before: [authenticate, canAccess("read:permission")],
+  handler: permissionController.getUserPermissions,
+});
 
 permissionRouter.post(
   "/users/:userId/roles/:roleId",

@@ -30,10 +30,9 @@ const v1Router = Router();
 
 // PÚBLICAS — sem authenticate
 //
-// Os routers **sem prefixo** são os que já passaram pelo `registerRoute`: o
-// path inteiro vem da entrada da tabela de rotas, então montá-los num prefixo
-// o duplicaria. Enquanto a migração corre (issues 08–15 de
-// `.scratch/fase-12-module-depth/`), as duas formas convivem aqui.
+// Todo router aqui já sai do `registerRoute` (issues 08–15 de
+// `.scratch/fase-12-module-depth/`): o path inteiro vem da entrada da tabela
+// de rotas, então nenhum é montado com prefixo — montá-lo duplicaria o path.
 v1Router.use(statusRouter);
 v1Router.use(authRouter);
 // Vitrine do catálogo (9.1): responde sem token porque o e-commerce vive de
@@ -83,7 +82,13 @@ v1Router.use(logRouter);
 
 export const router = Router();
 
-// Documentação — pública, fora dos grupos protegidos por `authenticate`
+// Documentação — pública, fora dos grupos protegidos por `authenticate`.
+// Únicas rotas do servidor que não vêm da tabela de rotas do contrato (não há
+// operação de domínio para `/openapi.json` ou o bundle do Scalar) — a
+// existência e o conteúdo de cada uma têm teste próprio
+// (`tests/integration/v1/openapi.test.ts`, `tests/integration/v1/reference.test.ts`),
+// já que não sobrou paridade estrutural nem monkey-patch do router para
+// prová-las (issue 15 de `.scratch/fase-12-module-depth/`).
 router.get("/openapi.json", (_req, res) => {
   res.json(buildOpenApiDocument());
 });

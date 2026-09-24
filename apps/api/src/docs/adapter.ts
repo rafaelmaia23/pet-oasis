@@ -33,9 +33,10 @@ import { imageUploadBody } from "./components";
  * o corpo casasse com exatamente um deles — um produto com custo casaria com
  * dois, e a spec passaria a acusar como inválido o que a API realmente devolve.
  *
- * Quem prova que a tabela não divergiu do router é
- * `tests/unit/contracts/routeParity.test.ts`; quem prova que o documento
- * continua o mesmo é `tests/integration/v1/openapi.test.ts`.
+ * A tabela não pode mais divergir do router: toda rota de domínio nasce do
+ * `registerRoute`, que lê método e path direto da entrada (issue 15 de
+ * `.scratch/fase-12-module-depth/`) — não sobra comparação a rodar. Quem prova
+ * que o documento continua o mesmo é `tests/integration/v1/openapi.test.ts`.
  */
 
 function toPathTemplate(expressPath: string): string {

@@ -83,10 +83,9 @@ Duas coisas que a tabela **não** faz, de propósito:
 - **Falar de multipart.** Uma rota de upload traz só `upload: "image"`. O formato aceito e o
   teto de tamanho são do servidor (vêm de env var) e vivem na API.
 
-O path fica na forma do **Express** (`:id`) porque é assim que ele é comparado com o router:
-`apps/api/tests/unit/contracts/routeParity.test.ts` bate o conjunto `método + path` dos dois
-lados, e rota sem entrada — ou entrada sem rota — é vermelho. O template `{id}` do OpenAPI sai
-do adaptador. Quando a forma da resposta muda com a feature efetiva de quem chama, `view` é a
+O path fica na forma do **Express** (`:id`) porque é assim que o `registerRoute` monta a rota
+direto da entrada — o router não tem como divergir da tabela, já que ele é construído a partir
+dela. O template `{id}` do OpenAPI sai do adaptador. Quando a forma da resposta muda com a feature efetiva de quem chama, `view` é a
 **escada de capability** em ordem (`[público, interno, custo]`), e o adaptador a publica como
 união. O racional está em
 [`docs/adr/0003`](../../docs/adr/0003-route-table-is-contract-openapi-is-derived.md).

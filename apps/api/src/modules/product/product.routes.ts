@@ -117,14 +117,13 @@ registerRoute(productRouter, routes.product.reorderImages, {
   handler: productImageController.reorderProductImages,
 });
 
+registerRoute(productRouter, routes.product.deleteImage, {
+  before: [optionalAuthenticate, canAccess("manage:product")],
+  handler: productImageController.deleteProductImage,
+});
+
 /** O que ainda está na forma antiga — sai quando a última rota migrar. */
 export const productLegacyRouter = Router();
-
-productLegacyRouter.delete(
-  "/:productId/images/:imageId",
-  canAccess("manage:product"),
-  productImageController.deleteProductImage,
-);
 
 // Coleção aninhada: criar variante precisa do produto na URL. O item é plano
 // (`/variants/:variantId`), mesmo racional dos pets — o id é global.

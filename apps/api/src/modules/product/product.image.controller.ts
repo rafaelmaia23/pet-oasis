@@ -1,6 +1,4 @@
-import { productImageParamsSchema } from "@pet-oasis/api-contracts/catalog";
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import type { Request, Response } from "express";
 import type { RouteHandler } from "@/lib/registerRoute";
 import * as imageService from "./product.image.service";
 import type { ProductTransport } from "./product.transport";
@@ -15,12 +13,10 @@ export const uploadProductImage: RouteHandler<
   ProductTransport
 > = async ({ params, file }) => imageService.addImage(params.productId, file);
 
-export const deleteProductImage = async (req: Request, res: Response) => {
-  const { params } = productImageParamsSchema.parse({ params: req.params });
-
+export const deleteProductImage: RouteHandler<
+  typeof routes.product.deleteImage
+> = async ({ params }) => {
   await imageService.removeImage(params.productId, params.imageId);
-
-  return res.status(204).send();
 };
 
 /**

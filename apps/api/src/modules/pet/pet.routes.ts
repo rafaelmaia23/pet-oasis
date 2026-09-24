@@ -57,6 +57,11 @@ registerRoute(petRouter, routes.pet.markDeceased, {
   handler: petController.markPetDeceased,
 });
 
+registerRoute(petRouter, routes.pet.unmarkDeceased, {
+  before: [authenticate, canAccess("manage:pet")],
+  handler: petController.unmarkPetDeceased,
+});
+
 /**
  * A forma antiga, com o path partido entre o prefixo e a chamada.
  *
@@ -93,12 +98,6 @@ legacyPetRouter.delete(
   "/:petId/photo",
   canAccess("manage:pet"),
   petController.deletePetPhoto,
-);
-
-legacyPetRouter.delete(
-  "/:petId/deceased",
-  canAccess("manage:pet"),
-  petController.unmarkPetDeceased,
 );
 
 export default petRouter;

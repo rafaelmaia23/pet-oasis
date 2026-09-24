@@ -77,10 +77,8 @@ export const markPetDeceased: RouteHandler<
   await petService.markPetDeceased(actor, params.petId);
 };
 
-export const unmarkPetDeceased = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  await petService.unmarkPetDeceased(getAuthUser(req), params.petId);
-
-  return res.status(204).send();
+export const unmarkPetDeceased: RouteHandler<
+  typeof routes.pet.unmarkDeceased
+> = async ({ params, actor }) => {
+  await petService.unmarkPetDeceased(actor, params.petId);
 };

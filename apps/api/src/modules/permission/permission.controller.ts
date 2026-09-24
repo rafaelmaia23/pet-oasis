@@ -1,7 +1,6 @@
 import {
   deleteUserRoleParamsSchema,
   getUserPermissionsParamsSchema,
-  getUserRolesParamsSchema,
   postUserRoleParamsSchema,
   removePermissionParamsSchema,
   upsertPermissionParamsSchema,
@@ -28,16 +27,12 @@ export const getUserFeatures: RouteHandler<
   return listEnvelope(features);
 };
 
-export const getUserRoles = async (req: Request, res: Response) => {
-  const { params } = getUserRolesParamsSchema.parse({
-    params: req.params,
-  });
-
+export const getUserRoles: RouteHandler<
+  typeof routes.permission.listRoles
+> = async ({ params }) => {
   const roles = await permissionService.getUserRoles(params.userId);
 
-  res
-    .status(200)
-    .json(listEnvelope(rolePresenter.presentMany(roles, "default")));
+  return listEnvelope(roles);
 };
 
 export const getUserPermissions = async (req: Request, res: Response) => {

@@ -28,16 +28,14 @@ e uma rota que não precise delas se registra exatamente como antes.
 - **`context`, o seam do transporte.** Quatro das catorze rotas precisam de coisas que a tabela não
   descreve e que o handler não pode ir buscar: o refresh token apresentado, o poder de emitir e de
   limpar o dele, o user agent e o IP de quem chamou. O registrador ganhou **um campo opcional** —
-  uma função nomeada do módulo, `(req, res) => C`, cujo retorno ele espalha no contexto do handler.
+  uma função `(req, res) => C` do próprio módulo, cujo retorno ele espalha no contexto do handler.
   Ele não aprendeu o que é cookie, user agent nem IP: carrega um `C` opaco. O módulo de auth
   embrulha os quatro em `src/modules/auth/auth.transport.ts`, e o handler vê só
   `presentedRefreshToken`, `issueRefreshToken`, `clearRefreshToken` e `client` — nunca `res`. Esse
-  é o **único** ponto do caminho da rota que alcança `auth.refreshCookie.ts`.
-
-`login` declara o transporte por causa do `client` e do `issueRefreshToken`; o
-`presentedRefreshToken` fica sem uso ali, e lê-lo é um `typeof` sobre um objeto já parseado pelo
-`cookie-parser` — a spec põe otimização fora do escopo, e partir a interface em duas para poupar
-isso custaria mais do que paga.
+  é o **único** ponto do caminho da rota que alcança `auth.refreshCookie.ts`. O `login` declara o
+  transporte pelo `client` e pelo `issueRefreshToken`; o `presentedRefreshToken` fica sem uso ali,
+  e lê-lo é um `typeof` sobre um objeto que o `cookie-parser` já montou — partir a interface em
+  duas para poupar isso custaria mais do que paga.
 - **O desfecho etiquetado**, que a issue 08 deixou em aberto ("quem escolhe entre eles é o handler,
   e isso ainda não tem forma"). Onde a entrada declara um status só, nada muda. Onde declara mais
   de um, o handler devolve `{ status, body }`, com o corpo exigido exatamente nos status que têm
@@ -53,11 +51,12 @@ whitelist da view impedindo-o de sair na resposta. A terceira, partir `signup` e
 tabela, mudaria o `/openapi.json` e quebraria a paridade de rotas — duas entradas para o mesmo
 método + path.
 
-**O `context` é uma função nomeada, não um arrow inline.** Um arrow cujos parâmetros o registrador
-teria de tipar é *context-sensitive*, e o TypeScript só o resolve depois de já ter fixado o contexto
-do handler: o handler receberia o contexto vazio, com erro de compilação no destructuring. Está
-registrado no JSDoc de `RouteRegistration.context` e no guia, porque é o tipo de coisa que custa
-meia hora a quem tropeça nela.
+**Os parâmetros do `context` precisam ter tipo escrito** — uma função nomeada do módulo ou um arrow
+anotado. Um arrow que dependesse do registrador para tipar `req`/`res` é *context-sensitive*, e o
+TypeScript só o resolve depois de já ter fixado o contexto do handler: o handler receberia o
+contexto vazio, com erro de compilação no destructuring. Está registrado no JSDoc de
+`RouteRegistration.context` e no guia, porque é o tipo de coisa que custa meia hora a quem tropeça
+nela.
 
 **A ordem em que o registrador chama o `context`** é depois do `before` e depois do parse do
 envelope — um 422 ou um 429 não constrói o transporte, e portanto não toca o jar de cookies. Dois

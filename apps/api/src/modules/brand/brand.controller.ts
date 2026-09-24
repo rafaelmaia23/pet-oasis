@@ -3,21 +3,21 @@ import {
   createBrandSchema,
   updateBrandSchema,
 } from "@pet-oasis/api-contracts/catalog";
+import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
+import type { RouteHandler } from "@/lib/registerRoute";
 import { uploadedFile } from "@/middlewares/upload.middleware";
 import { brandPresenter } from "./brand.presenter";
 import * as brandService from "./brand.service";
 
-export const listBrands = async (_req: Request, res: Response) => {
-  const brands = await brandService.getBrands();
-
+export const listBrands: RouteHandler<typeof routes.brand.list> = async () => {
   // Sem paginação (9.6/W7): conjunto pequeno e estável, mesma classe de
   // `GET /breeds`. O envelope existe mesmo assim para que paginar amanhã seja
   // aditivo, não breaking.
-  res
-    .status(200)
-    .json(listEnvelope(brandPresenter.presentMany(brands, "default")));
+  const brands = await brandService.getBrands();
+
+  return listEnvelope(brands);
 };
 
 export const createBrand = async (req: Request, res: Response) => {

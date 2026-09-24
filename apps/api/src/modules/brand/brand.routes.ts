@@ -1,3 +1,4 @@
+import { routes } from "@pet-oasis/api-contracts/routes";
 import { Router } from "express";
 import {
   catalogIpLimiter,
@@ -5,36 +6,39 @@ import {
   rateLimitByUser,
   uploadUserLimiter,
 } from "@/lib/rateLimit";
+import { registerRoute } from "@/lib/registerRoute";
+import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
 import { uploadSingleImage } from "@/middlewares/upload.middleware";
 import * as brandController from "./brand.controller";
 
 /**
- * Primeiro módulo do projeto com leitura **pública** e escrita protegida no
- * mesmo router (9.6). É por isso que a montagem usa `optionalAuthenticate` em
- * vez de `authenticate` (ver `src/routes/index.ts`): o `GET` precisa responder
- * ao visitante sem usuário, e quem exige identidade no resto é o `canAccess`, que
- * já devolve 401 sozinho quando `req.user` falta.
+ * Montado **sem prefixo** em `src/routes/index.ts` (issue 13 de
+ * `.scratch/fase-12-module-depth/`): o path inteiro vem da tabela, e cada rota
+ * declara o que precisa do servidor no próprio `before` — `authenticate` nas
+ * de escrita, nada na de leitura (não há ator para identificar: taxonomia não
+ * tem view por feature efetiva).
  *
  * A escrita não leva limiter próprio: ela já é estreita por definição — exige
  * `manage:catalog-structure`, que só duas roles têm.
  */
 const brandRouter = Router();
 
-brandRouter.get(
-  "/",
-  rateLimitByIp(catalogIpLimiter, "catalog-read"),
-  brandController.listBrands,
-);
+registerRoute(brandRouter, routes.brand.list, {
+  before: [rateLimitByIp(catalogIpLimiter, "catalog-read")],
+  handler: brandController.listBrands,
+});
 
 brandRouter.post(
-  "/",
+  "/brands",
+  authenticate,
   canAccess("manage:catalog-structure"),
   brandController.createBrand,
 );
 
 brandRouter.patch(
-  "/:brandId",
+  "/brands/:brandId",
+  authenticate,
   canAccess("manage:catalog-structure"),
   brandController.updateBrand,
 );
@@ -44,7 +48,8 @@ brandRouter.patch(
  * Não existe cargo que renomeie a marca mas não possa trocar o logo dela.
  */
 brandRouter.put(
-  "/:brandId/logo",
+  "/brands/:brandId/logo",
+  authenticate,
   canAccess("manage:catalog-structure"),
   rateLimitByUser(uploadUserLimiter, "image-upload"),
   uploadSingleImage,
@@ -52,13 +57,15 @@ brandRouter.put(
 );
 
 brandRouter.delete(
-  "/:brandId/logo",
+  "/brands/:brandId/logo",
+  authenticate,
   canAccess("manage:catalog-structure"),
   brandController.deleteBrandLogo,
 );
 
 brandRouter.delete(
-  "/:brandId",
+  "/brands/:brandId",
+  authenticate,
   canAccess("manage:catalog-structure"),
   brandController.deleteBrand,
 );

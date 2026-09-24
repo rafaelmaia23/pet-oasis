@@ -2,7 +2,6 @@ import type { routes } from "@pet-oasis/api-contracts/routes";
 import {
   createEmployeeSchema,
   updateUserSchema,
-  userParamsSchema,
 } from "@pet-oasis/api-contracts/user";
 import type { Request, Response } from "express";
 import { offsetEnvelope } from "@/lib/pagination";
@@ -30,17 +29,10 @@ export const getAllUsers: RouteHandler<typeof routes.user.list> = async ({
   return offsetEnvelope(users, query, total);
 };
 
-export const getUserById = async (req: Request, res: Response) => {
-  const { params } = userParamsSchema.parse({ params: req.params });
-
-  const authUser = getAuthUser(req);
-
-  const user = await userService.getUserById(authUser, params.id);
-
-  return res
-    .status(200)
-    .json(userPresenter.present(user, resolveUserView(authUser)));
-};
+export const getUserById: RouteHandler<typeof routes.user.get> = async ({
+  params,
+  actor,
+}) => userService.getUserById(actor, params.id);
 
 export const updateUser = async (req: Request, res: Response) => {
   const { params, body } = updateUserSchema.parse({

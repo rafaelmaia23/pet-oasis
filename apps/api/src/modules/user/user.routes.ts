@@ -4,6 +4,7 @@ import { registerRoute } from "@/lib/registerRoute";
 import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
 import * as userController from "./user.controller";
+import { chooseUserView } from "./user.view-resolver";
 
 /**
  * As rotas de usuário já sob o `registerRoute`: montadas **sem prefixo**, com o
@@ -48,6 +49,12 @@ registerRoute(userRouter, routes.user.forcePasswordReset, {
   handler: userController.forcePasswordReset,
 });
 
+registerRoute(userRouter, routes.user.get, {
+  before: [authenticate, canAccess("read:user")],
+  chooseView: chooseUserView,
+  handler: userController.getUserById,
+});
+
 /** O que ainda está na forma antiga — sai quando a última rota migrar. */
 export const userLegacyRouter = Router();
 
@@ -55,11 +62,6 @@ userLegacyRouter.post(
   "/",
   canAccess("create:user"),
   userController.createEmployee,
-);
-userLegacyRouter.get(
-  "/:id",
-  canAccess("read:user"),
-  userController.getUserById,
 );
 userLegacyRouter.patch(
   "/:id",

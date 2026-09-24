@@ -79,12 +79,11 @@ export const unbanUser: RouteHandler<typeof routes.user.unban> = async ({
   await userService.unbanUser(actor.id, params.id);
 };
 
-export const unlockAccount = async (req: Request, res: Response) => {
-  const { params } = userParamsSchema.parse({ params: req.params });
-
-  await userService.unlockAccount(getAuthUser(req).id, params.id);
-
-  return res.status(204).send();
+export const unlockAccount: RouteHandler<typeof routes.user.unlock> = async ({
+  params,
+  actor,
+}) => {
+  await userService.unlockAccount(actor.id, params.id);
 };
 
 export const reactivateAccount = async (req: Request, res: Response) => {

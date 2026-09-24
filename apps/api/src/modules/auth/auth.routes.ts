@@ -16,13 +16,23 @@ import * as authController from "./auth.controller";
 import { authTransport } from "./auth.transport";
 
 /**
- * O router **sem prefixo**: as rotas já declaradas num lugar só, com o path
- * inteiro vindo da entrada da tabela. Enquanto a migração corre (issue 10 de
- * `.scratch/fase-12-module-depth/`), ele convive com o `legacyAuthRouter`
- * abaixo, que ainda é montado em `/auth`. Os dois nunca disputam um path: uma
- * rota está num ou no outro.
+ * As catorze rotas de autenticação, cada uma declarada **num lugar só**: a
+ * entrada da tabela do contrato dá método, path, schema de request, status de
+ * sucesso e view; aqui ficam o que é do servidor (`before`) e o que é do
+ * transporte (`context`), que a tabela não conhece.
+ *
+ * O router é montado **sem prefixo** — o path inteiro vem da entrada.
  */
 const authRouter = Router();
+
+// O único par de status de sucesso da API: 201 quando a conta nasce, 202
+// quando o email pertencia a um usuário soft-deletado e o que saiu foi um
+// email de reativação. Quem sabe qual dos dois aconteceu é o caso de uso, e é
+// por isso que o handler devolve o desfecho etiquetado.
+registerRoute(authRouter, routes.auth.signup, {
+  before: [rateLimitByIp(signupIpLimiter, "signup")],
+  handler: authController.signup,
+});
 
 registerRoute(authRouter, routes.auth.verifyEmail, {
   handler: authController.verifyEmail,
@@ -100,14 +110,5 @@ registerRoute(authRouter, routes.auth.refresh, {
   context: authTransport,
   handler: authController.refresh,
 });
-
-/** A forma antiga, com o path partido entre o prefixo e a chamada. */
-export const legacyAuthRouter = Router();
-
-legacyAuthRouter.post(
-  "/signup",
-  rateLimitByIp(signupIpLimiter, "signup"),
-  authController.signup,
-);
 
 export default authRouter;

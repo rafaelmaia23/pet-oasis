@@ -1,10 +1,7 @@
-import { signupSchema } from "@pet-oasis/api-contracts/auth";
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import type { Request, Response } from "express";
 import { ACCESS_TOKEN_TTL_SECONDS } from "@/lib/accessToken";
 import { listEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
-import { userPresenter } from "../user/user.presenter";
 import * as accountReactivationService from "./accountReactivation.service";
 import * as authService from "./auth.service";
 import type { AuthTransport } from "./auth.transport";
@@ -12,9 +9,9 @@ import * as emailChangeService from "./emailChange.service";
 import * as passwordService from "./password.service";
 import * as verificationService from "./verification.service";
 
-export const signup = async (req: Request, res: Response) => {
-  const { body } = signupSchema.parse({ body: req.body });
-
+export const signup: RouteHandler<typeof routes.auth.signup> = async ({
+  body,
+}) => {
   const result = await authService.signup(body);
 
   // Nada foi criado: o email pertencia a um usuário soft-deletado, o cpf bateu, e
@@ -22,14 +19,16 @@ export const signup = async (req: Request, res: Response) => {
   // fora da request (K18). A mensagem é condicional para não confirmar que a
   // usuário existe.
   if (!result) {
-    res.status(202).json({
-      message:
-        "Se houver uma conta correspondente, um email com instruções de reativação foi enviado",
-    });
-    return;
+    return {
+      status: 202,
+      body: {
+        message:
+          "Se houver uma conta correspondente, um email com instruções de reativação foi enviado",
+      },
+    };
   }
 
-  res.status(201).json(userPresenter.present(result, "owner"));
+  return { status: 201, body: result };
 };
 
 export const confirmAccountReactivation: RouteHandler<

@@ -23,10 +23,20 @@ O `/openapi.json` passa a ser **derivado**: `apps/api/src/docs/adapter.ts` conve
 `{id}`, envelope → `parameters`/`requestBody`, escada de views → união e
 `<domínio>.<operação>` → `operationId`. Na API sobra só o que é do servidor — o corpo
 multipart dos uploads e o teto de tamanho, os security schemes, os `servers`, a prosa do
-documento e o bundle do Scalar. Quem prova que a tabela e o router não divergiram é
-`apps/api/tests/unit/contracts/routeParity.test.ts`, que compara os pares `método + path` dos
-dois lados; quem prova que o documento não mudou de forma é o `openapi.test.ts`, que passa sem
-edição.
+documento e o bundle do Scalar. Quem prova que o documento não mudou de forma é o
+`openapi.test.ts`, que passa sem edição.
+
+**Atualização (Fase 12, issue 15).** A paridade tabela × router deixou de precisar de teste: com
+as 79 rotas de domínio migradas para o `registerRoute` (`apps/api/src/lib/registerRoute.ts`), o
+router do Express é *construído* a partir da entrada da tabela, não mais escrito à mão ao lado
+dela — a concordância virou estrutural. O antigo
+`apps/api/tests/unit/contracts/routeParity.test.ts` (que comparava os dois lados via
+monkey-patch do `Router.prototype.use` do Express) saiu; o único invariante dele que não tinha
+outra prova — o par `método + path` não se repetir dentro da própria tabela — migrou para
+`packages/api-contracts/tests/route-table.test.ts`. As duas rotas de documentação que ficam fora
+da tabela (`/openapi.json`, o bundle do Scalar) não têm mais comparação automática contra "tudo
+fora de `/api/v1`"; cada uma prova a própria existência em seu teste de integração
+(`openapi.test.ts`, `reference.test.ts`).
 
 **O path fica na forma do Express, e não no template do OpenAPI**, porque é o router que é
 comparado com a tabela: normalizar de um lado só esconderia justamente o erro de digitação que

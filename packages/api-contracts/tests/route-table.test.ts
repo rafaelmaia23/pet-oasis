@@ -127,7 +127,22 @@ const ladders = entries.flatMap(({ id, route }) =>
   ),
 );
 
+const routePairs = entries.map(({ route }) => `${route.method} ${route.path}`);
+
 describe("tabela de rotas", () => {
+  it("não repete o par método + path na tabela", () => {
+    // Migrado do antigo `apps/api/tests/unit/contracts/routeParity.test.ts`
+    // (issue 15 de `.scratch/fase-12-module-depth/`): com as 79 rotas sob o
+    // `registerRoute`, o router do Express não tem mais como divergir da
+    // tabela — mas um par duplicado **dentro** da própria tabela continua
+    // possível, e nada além deste teste prova a ausência dele.
+    const duplicated = routePairs.filter(
+      (pair, index) => routePairs.indexOf(pair) !== index,
+    );
+
+    expect(duplicated).toEqual([]);
+  });
+
   it("não deixa domínio sem operação", () => {
     // Um grupo vazio é um domínio que existe no índice e não endereça nada —
     // some do documento sem ninguém perceber.

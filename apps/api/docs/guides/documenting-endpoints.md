@@ -150,11 +150,6 @@ Dois desencontros entre a entrada e o registro o registrador recusa, no registro
 método + path na mensagem: escada sem `chooseView` e `chooseView` onde a entrada declara uma
 view só.
 
-> **Migração em curso (Fase 12).** O `registerRoute` convive com a forma antiga
-> (`modRouter.get("/", middleware, controller)` + montagem com prefixo) até o último grupo de
-> rotas migrar — ver `.scratch/fase-12-module-depth/issues/08-o-registrador-de-rota-e-o-grupo-piloto.md`.
-> Rota nova nasce no registrador.
-
 ## 4. Se for um MÓDULO novo — ligar nas duas pontas
 
 1. Criar `packages/api-contracts/src/routes/<mod>.routes.ts` exportando `<mod>Routes` e
@@ -166,10 +161,9 @@ view só.
    contrato, a prosa é do documento, e o `Record<RouteTag, string>` não compila se um dos dois
    faltar. **Os paths não são tocados**: `buildPathsFromRouteTable()` já os monta da tabela
    inteira.
-3. Montar o router do Express no `src/routes/index.ts` da API — **sem prefixo**, se o módulo
-   usa o `registerRoute` (§3). O `tests/unit/contracts/routeParity.test.ts` fica vermelho até os
-   dois lados casarem — é ele que garante que o documento não descreve rota que não existe, nem
-   esquece rota que existe.
+3. Montar o router do Express no `src/routes/index.ts` da API — **sem prefixo**: o `registerRoute`
+   (§3) monta a rota direto da entrada da tabela, então o router não tem como divergir do
+   documento nem esquecer uma rota que existe.
 
 ## 5. Bruno (`api-collection/`) — manual
 
@@ -189,7 +183,7 @@ view só.
 ## 6. Fechar
 
 - Atualizar o índice interno **`docs/reference/endpoints.md`** (1 linha por rota — não é OpenAPI, é o mapa rápido).
-- `pnpm run typecheck` + `pnpm run lint` verdes. O `routeParity.test.ts` falha se a tabela e o router divergirem, e o `openapi.test.ts` falha se a doc vazar campo sensível ou se um path sumir — rodar a suíte.
+- `pnpm run typecheck` + `pnpm run lint` verdes. O `openapi.test.ts` falha se a doc vazar campo sensível ou se um path sumir — rodar a suíte.
 - Conferir no ar (opcional): `pnpm run dev` → `GET /openapi.json` e `/reference` mostram a rota nova; validar o `.bru` com `@usebruno/cli` se quiser.
 
 ---

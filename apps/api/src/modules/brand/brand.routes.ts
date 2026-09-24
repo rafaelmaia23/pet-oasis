@@ -71,11 +71,9 @@ registerRoute(brandRouter, routes.brand.deleteLogo, {
   handler: brandController.deleteBrandLogo,
 });
 
-brandRouter.delete(
-  "/brands/:brandId",
-  authenticate,
-  canAccess("manage:catalog-structure"),
-  brandController.deleteBrand,
-);
+registerRoute(brandRouter, routes.brand.delete, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: brandController.deleteBrand,
+});
 
 export default brandRouter;

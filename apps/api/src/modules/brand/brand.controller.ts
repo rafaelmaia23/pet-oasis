@@ -1,6 +1,4 @@
-import { brandParamsSchema } from "@pet-oasis/api-contracts/catalog";
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
 import * as brandService from "./brand.service";
@@ -34,10 +32,8 @@ export const deleteBrandLogo: RouteHandler<
   await brandService.removeBrandLogo(params.brandId);
 };
 
-export const deleteBrand = async (req: Request, res: Response) => {
-  const { params } = brandParamsSchema.parse({ params: req.params });
-
+export const deleteBrand: RouteHandler<typeof routes.brand.delete> = async ({
+  params,
+}) => {
   await brandService.deleteBrand(params.brandId);
-
-  return res.status(204).send();
 };

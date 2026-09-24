@@ -55,6 +55,13 @@ registerRoute(authRouter, routes.auth.confirmEmailChange, {
   handler: authController.confirmEmailChange,
 });
 
+// Pública: o token é a credencial — quem confirma é o dono de um `User` morto,
+// que por definição não tem sessão nem consegue autenticar.
+registerRoute(authRouter, routes.auth.confirmAccountReactivation, {
+  before: [rateLimitByIp(tokenIpLimiter, "confirm-account-reactivation")],
+  handler: authController.confirmAccountReactivation,
+});
+
 /** A forma antiga, com o path partido entre o prefixo e a chamada. */
 export const legacyAuthRouter = Router();
 
@@ -79,13 +86,6 @@ legacyAuthRouter.post(
   authenticate,
   canAccess("update:user"),
   authController.changeEmail,
-);
-// Pública: o token é a credencial — quem confirma é o dono de um `User` morto,
-// que por definição não tem sessão nem consegue autenticar.
-legacyAuthRouter.post(
-  "/confirm-account-reactivation",
-  rateLimitByIp(tokenIpLimiter, "confirm-account-reactivation"),
-  authController.confirmAccountReactivation,
 );
 legacyAuthRouter.post(
   "/logout",

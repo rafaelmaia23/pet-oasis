@@ -1,7 +1,6 @@
 import {
   changeEmailSchema,
   changePasswordSchema,
-  confirmAccountReactivationSchema,
   loginSchema,
   sessionParamsSchema,
   signupSchema,
@@ -45,19 +44,14 @@ export const signup = async (req: Request, res: Response) => {
   res.status(201).json(userPresenter.present(result, "owner"));
 };
 
-export const confirmAccountReactivation = async (
-  req: Request,
-  res: Response,
-) => {
-  const { body } = confirmAccountReactivationSchema.parse({ body: req.body });
-
+export const confirmAccountReactivation: RouteHandler<
+  typeof routes.auth.confirmAccountReactivation
+> = async ({ body }) => {
   await accountReactivationService.confirmAccountReactivation(
     body.token,
     body.newPassword,
     body.phone,
   );
-
-  res.status(204).send();
 };
 
 export const verifyEmail: RouteHandler<

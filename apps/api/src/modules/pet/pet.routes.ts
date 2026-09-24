@@ -49,6 +49,14 @@ registerRoute(petRouter, routes.pet.delete, {
   handler: petController.deletePet,
 });
 
+// Falecimento tem rota própria, no idioma de `POST`/`DELETE /users/:id/ban`:
+// é transição de estado com significado (e ação de audit) próprios, não um
+// campo de update. Feature: `manage:pet` comum — `deceasedAt` não destrói nada.
+registerRoute(petRouter, routes.pet.markDeceased, {
+  before: [authenticate, canAccess("manage:pet")],
+  handler: petController.markPetDeceased,
+});
+
 /**
  * A forma antiga, com o path partido entre o prefixo e a chamada.
  *
@@ -85,15 +93,6 @@ legacyPetRouter.delete(
   "/:petId/photo",
   canAccess("manage:pet"),
   petController.deletePetPhoto,
-);
-
-// Falecimento tem rota própria, no idioma de `POST`/`DELETE /users/:id/ban`:
-// é transição de estado com significado (e ação de audit) próprios, não um
-// campo de update. Feature: `manage:pet` comum — `deceasedAt` não destrói nada.
-legacyPetRouter.post(
-  "/:petId/deceased",
-  canAccess("manage:pet"),
-  petController.markPetDeceased,
 );
 
 legacyPetRouter.delete(

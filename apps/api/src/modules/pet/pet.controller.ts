@@ -71,12 +71,10 @@ export const deletePetPhoto = async (req: Request, res: Response) => {
   return res.status(204).send();
 };
 
-export const markPetDeceased = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  await petService.markPetDeceased(getAuthUser(req), params.petId);
-
-  return res.status(204).send();
+export const markPetDeceased: RouteHandler<
+  typeof routes.pet.markDeceased
+> = async ({ params, actor }) => {
+  await petService.markPetDeceased(actor, params.petId);
 };
 
 export const unmarkPetDeceased = async (req: Request, res: Response) => {

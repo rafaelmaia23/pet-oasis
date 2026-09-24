@@ -12,7 +12,14 @@ TypeScript (tsconfig strict: `exactOptionalPropertyTypes`, `noUncheckedIndexedAc
 
 ## Arquitetura — camadas
 
-Fluxo rígido: **route → controller (Zod parse) → service (regras de negócio) → repository (Prisma)**. Cada camada só fala com a adjacente. Repository é a ÚNICA que toca o Prisma. Controller só faz parse + chama service + responde. Service tem as regras e orquestra. Nunca pule camadas.
+Fluxo rígido: **route → controller → service (regras de negócio) → repository (Prisma)**. Cada camada só fala com a adjacente. Repository é a ÚNICA que toca o Prisma. Service tem as regras e orquestra. Nunca pule camadas.
+
+**A rota é declarada num lugar só: a entrada da tabela do contrato.** `registerRoute`
+(`src/lib/registerRoute.ts`) deriva dela tudo que a rota promete, e o controller é o **handler**:
+recebe o envelope já validado e devolve o que a view descreve, sem `req`, sem `res`, sem `.parse()`
+e sem status escrito à mão. A migração das 79 rotas corre na Fase 12
+(`.scratch/fase-12-module-depth/`), então a forma antiga ainda convive — **rota nova nasce no
+registrador**. Como se escreve uma: `docs/guides/documenting-endpoints.md` §3.
 
 ## Organização de módulos
 

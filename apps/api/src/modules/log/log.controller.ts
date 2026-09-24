@@ -1,11 +1,7 @@
-import { listRecentLogsSchema } from "@pet-oasis/api-contracts/log";
-import type { Request, Response } from "express";
+import type { routes } from "@pet-oasis/api-contracts/routes";
+import type { RouteHandler } from "@/lib/registerRoute";
 import * as logService from "./log.service";
 
-export const getRecentLogs = (req: Request, res: Response) => {
-  const { query } = listRecentLogsSchema.parse({ query: req.query });
-
-  const { data, meta } = logService.listRecentLogs(query);
-
-  return res.status(200).json({ data, meta });
-};
+export const getRecentLogs: RouteHandler<typeof routes.log.listRecent> = ({
+  query,
+}) => logService.listRecentLogs(query);

@@ -34,12 +34,17 @@ import userRouter from "@/modules/user/user.routes";
 const v1Router = Router();
 
 // PÚBLICAS — sem authenticate
-v1Router.use("/status", statusRouter);
+//
+// Os routers **sem prefixo** são os que já passaram pelo `registerRoute`: o
+// path inteiro vem da entrada da tabela de rotas, então montá-los num prefixo
+// o duplicaria. Enquanto a migração corre (issues 08–15 de
+// `.scratch/fase-12-module-depth/`), as duas formas convivem aqui.
+v1Router.use(statusRouter);
 v1Router.use("/auth", authRouter);
 // Vitrine do catálogo (9.1): responde sem token porque o e-commerce vive de
 // quem chega pelo Google sem usuário. `/breeds` fica aqui, seco: é só leitura, não
 // tem escrita nem view por feature efetiva, então não precisa nem identificar o ator.
-v1Router.use("/breeds", breedRouter);
+v1Router.use(breedRouter);
 
 // PÚBLICAS COM AUTENTICAÇÃO OPCIONAL (9.6) — leem sem token, escrevem com
 // feature. O middleware identifica o ator quando o `Bearer` vem e segue anônimo
@@ -56,7 +61,7 @@ v1Router.use("/tags", optionalAuthenticate, tagRouter);
 v1Router.use("/products", optionalAuthenticate, productRouter);
 
 // PROTEGIDAS — com authenticate
-v1Router.use("/me", authenticate, meRouter);
+v1Router.use(meRouter);
 v1Router.use("/users", authenticate, userRouter);
 v1Router.use("/users/:userId", authenticate, userProfileRouter);
 v1Router.use("/users/:userId", authenticate, permissionRouter);
@@ -67,8 +72,10 @@ v1Router.use("/pets", authenticate, petRouter);
 v1Router.use("/variants", authenticate, variantRouter);
 v1Router.use("/features", authenticate, featureRouter);
 v1Router.use("/roles", authenticate, roleRouter);
-v1Router.use("/audit-logs", authenticate, auditLogRouter);
-v1Router.use("/logs", authenticate, logRouter);
+v1Router.use(auditLogRouter);
+// Já sob o `registerRoute`: o `authenticate` desceu do prefixo para o `before`
+// da rota, onde a tabela o exige — ver `src/modules/log/log.routes.ts`.
+v1Router.use(logRouter);
 
 export const router = Router();
 

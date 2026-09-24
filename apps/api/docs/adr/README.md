@@ -245,6 +245,7 @@ perfil o user continua existindo, só o `Customer`/`Employee` é soft-deletado.
 
 - [`0096`](0096-authenticate-saiu-app-ts-global-foi-grupo-rota.md) `authenticate` saiu do `app.ts` (global) e foi para o grupo de rota
 - [`0097`](0097-optionalauthenticate-terceiro-modo-vitrine-publica.md) `optionalAuthenticate` — o terceiro modo, para a vitrine pública (9.6)
+- [`0203`](0203-authenticate-desce-do-grupo-para-rota-404-vence-401.md) `authenticate` desce do grupo para a rota, e o 404 passa a vencer o 401 (12.08)
 
 #### Onde cada coisa vive
 

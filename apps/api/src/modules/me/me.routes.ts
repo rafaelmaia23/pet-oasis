@@ -1,9 +1,15 @@
+import { routes } from "@pet-oasis/api-contracts/routes";
 import { Router } from "express";
+import { registerRoute } from "@/lib/registerRoute";
+import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
-import * as meController from "./me.controller";
+import { getMe } from "./me.controller";
 
 const meRouter = Router();
 
-meRouter.get("/", canAccess("read:user"), meController.getMe);
+registerRoute(meRouter, routes.me.get, {
+  before: [authenticate, canAccess("read:user")],
+  handler: getMe,
+});
 
 export default meRouter;

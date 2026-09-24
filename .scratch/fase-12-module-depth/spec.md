@@ -215,6 +215,30 @@ registerRoute(router, routes.user.unban, {
 - `buildPath` **não** se move para o contrato — decisão do 0003, preservada. O que muda é só o
   **tipo** de `path`: `as const` nos 18 grupos o torna literal.
 
+### Duas consequências do registrador, descobertas na issue 08 e válidas para as issues 09–15
+
+Anotadas aqui, e não na issue 08 que as descobriu, porque é aqui que as seis issues de rota
+seguintes as encontram.
+
+- **O `authenticate` desce do prefixo para a rota, e com ele um 401 vira 404 — decidido, siga.**
+  Antes, `v1Router.use("/me", authenticate, meRouter)` autenticava tudo que caísse sob o prefixo,
+  inclusive o que não é rota: um método inexistente sob `/me` respondia 401. Com o registrador, o
+  router é montado sem prefixo (o path inteiro vem da tabela) e só a rota declarada autentica — o
+  mesmo request responde 404. **É a única exceção ao "comportamento externo não muda" que esta
+  spec não previa**, e vale para todo prefixo conforme ele migra (`/users`, `/pets`, `/variants`,
+  `/features`, `/roles`, `/customers/:customerId`). O dono do projeto decidiu pelo 404 em
+  2026-09-23; o porquê — a lista de rotas já é pública no `/openapi.json`, então o 404 não revela
+  nada — está em
+  `apps/api/docs/adr/0203-authenticate-desce-do-grupo-para-rota-404-vence-401.md`. Nenhuma issue
+  de rota precisa reabrir isto.
+- **Presenter que fica sem chamador sai.** O *Out of Scope* abaixo diz que os 13 `*.presenter.ts`
+  não são tocados, e o que ele protege é o **mecanismo** de whitelist que o
+  `apps/api/docs/adr/0199-schemas-de-request-e-views-sao-codigo-do-contrato.md` fixou — esse
+  sobrevive inteiro, agora em `presentWith` (`apps/api/src/utils/presenter.ts`), com dois
+  chamadores. Um `*.presenter.ts` que era só `createPresenter(views)` fica sem chamador quando a
+  view passa a vir da tabela, e apagá-lo é consequência da migração, não refactor do mecanismo. O
+  que **não** sai é o que decide conteúdo em vez de forma: o `maskIp` do audit log é o caso vivo.
+
 ### Erro
 
 - `AppError.code` passa a ser o `ErrorCode` do contrato, e as 12 classes tiram o code de lá. O 409

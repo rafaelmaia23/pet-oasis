@@ -1,6 +1,8 @@
+import { routes } from "@pet-oasis/api-contracts/routes";
 import { Router } from "express";
 import { catalogIpLimiter, rateLimitByIp } from "@/lib/rateLimit";
-import * as breedController from "./breed.controller";
+import { registerRoute } from "@/lib/registerRoute";
+import { listBreeds } from "./breed.controller";
 
 const breedRouter = Router();
 
@@ -11,10 +13,9 @@ const breedRouter = Router();
 // O limiter por IP entrou na 9.6, junto com as demais rotas de catálogo: esta
 // subiu na 9.3 descoberta (risco baixo e assumido — lista estática e pequena),
 // e o balde é compartilhado com elas de propósito.
-breedRouter.get(
-  "/",
-  rateLimitByIp(catalogIpLimiter, "catalog-read"),
-  breedController.listBreeds,
-);
+registerRoute(breedRouter, routes.breed.list, {
+  before: [rateLimitByIp(catalogIpLimiter, "catalog-read")],
+  handler: listBreeds,
+});
 
 export default breedRouter;

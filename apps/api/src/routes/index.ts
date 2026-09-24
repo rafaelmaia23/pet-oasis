@@ -29,7 +29,7 @@ import roleRouter from "@/modules/role/role.routes";
 import statusRouter from "@/modules/status/status.routes";
 import tagRouter from "@/modules/tag/tag.routes";
 import userProfileRouter from "@/modules/user/profile/user.profile.routes";
-import userRouter from "@/modules/user/user.routes";
+import userRouter, { userLegacyRouter } from "@/modules/user/user.routes";
 
 const v1Router = Router();
 
@@ -62,7 +62,8 @@ v1Router.use("/products", optionalAuthenticate, productRouter);
 
 // PROTEGIDAS — com authenticate
 v1Router.use(meRouter);
-v1Router.use("/users", authenticate, userRouter);
+v1Router.use(userRouter);
+v1Router.use("/users", authenticate, userLegacyRouter);
 v1Router.use("/users/:userId", authenticate, userProfileRouter);
 v1Router.use("/users/:userId", authenticate, permissionRouter);
 // Pet (9.4): coleção aninhada no cliente, recurso plano no item. As duas

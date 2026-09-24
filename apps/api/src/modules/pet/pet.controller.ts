@@ -3,10 +3,9 @@ import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
-import { uploadedFile } from "@/middlewares/upload.middleware";
 import { getAuthUser } from "@/utils/getAuthUser";
-import { petPresenter } from "./pet.presenter";
 import * as petService from "./pet.service";
+import type { PetPhotoTransport } from "./pet.transport";
 
 export const createPet: RouteHandler<typeof routes.pet.create> = async ({
   params,
@@ -51,17 +50,11 @@ export const deletePet: RouteHandler<typeof routes.pet.delete> = async ({
   await petService.deletePet(actor, params.petId);
 };
 
-export const updatePetPhoto = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  const pet = await petService.setPetPhoto(
-    getAuthUser(req),
-    params.petId,
-    uploadedFile(req),
-  );
-
-  return res.status(200).json(petPresenter.present(pet, "default"));
-};
+export const updatePetPhoto: RouteHandler<
+  typeof routes.pet.setPhoto,
+  PetPhotoTransport
+> = async ({ params, actor, file }) =>
+  petService.setPetPhoto(actor, params.petId, file);
 
 export const deletePetPhoto = async (req: Request, res: Response) => {
   const { params } = petParamsSchema.parse({ params: req.params });

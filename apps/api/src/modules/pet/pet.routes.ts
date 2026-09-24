@@ -6,6 +6,7 @@ import { authenticate } from "@/middlewares/authenticate.middleware";
 import { canAccess } from "@/middlewares/canAccess.middleware";
 import { uploadSingleImage } from "@/middlewares/upload.middleware";
 import * as petController from "./pet.controller";
+import { petPhotoTransport } from "./pet.transport";
 
 /**
  * O router **sem prefixo**: as rotas já declaradas num lugar só, com o path
@@ -63,6 +64,27 @@ registerRoute(petRouter, routes.pet.unmarkDeceased, {
 });
 
 /**
+ * Foto (9.10). Valor **único** num endereço fixo, então `PUT` substitui e
+ * `DELETE` limpa — não existe recurso "foto de pet" endereçável, e por isso a
+ * resposta do `PUT` é a ficha do pet, não um objeto de imagem.
+ *
+ * Feature: `manage:pet` comum, na forma base (o `pet.service` separa dono de
+ * staff). Não existe cargo que edite a ficha do pet mas não possa trocar a foto
+ * — que é o critério de granularidade firmado na 9.1. Ordem do `before`
+ * preservada: `canAccess` antes do limite por usuário, antes do `multer`.
+ */
+registerRoute(petRouter, routes.pet.setPhoto, {
+  before: [
+    authenticate,
+    canAccess("manage:pet"),
+    rateLimitByUser(uploadUserLimiter, "image-upload"),
+    uploadSingleImage,
+  ],
+  context: petPhotoTransport,
+  handler: petController.updatePetPhoto,
+});
+
+/**
  * A forma antiga, com o path partido entre o prefixo e a chamada.
  *
  * Recurso **plano** (`/pets/:petId`) — a coleção aninhada
@@ -76,23 +98,6 @@ registerRoute(petRouter, routes.pet.unmarkDeceased, {
  * sufixo `:others`, e quem separa dono de staff é o `pet.service`.
  */
 export const legacyPetRouter = Router();
-
-/**
- * Foto (9.10). Valor **único** num endereço fixo, então `PUT` substitui e
- * `DELETE` limpa — não existe recurso "foto de pet" endereçável, e por isso a
- * resposta do `PUT` é a ficha do pet, não um objeto de imagem.
- *
- * Feature: `manage:pet` comum, na forma base (o `pet.service` separa dono de
- * staff). Não existe cargo que edite a ficha do pet mas não possa trocar a foto
- * — que é o critério de granularidade firmado na 9.1.
- */
-legacyPetRouter.put(
-  "/:petId/photo",
-  canAccess("manage:pet"),
-  rateLimitByUser(uploadUserLimiter, "image-upload"),
-  uploadSingleImage,
-  petController.updatePetPhoto,
-);
 
 legacyPetRouter.delete(
   "/:petId/photo",

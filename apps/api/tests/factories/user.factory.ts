@@ -24,6 +24,7 @@ import {
   DEFAULT_CUSTOMER_ROLES,
   DEFAULT_EMPLOYEE_ROLES,
 } from "@/modules/user/user.service";
+import { fixtureAudit } from "../helpers/audit";
 import { makePassword } from "../helpers/primitives";
 
 /**
@@ -119,11 +120,18 @@ export async function buildCustomer(overrides?: {
 
   const passwordHash = await hashPassword(password);
 
-  const user = await createCustomer({
-    ...userData,
-    passwordHash,
-    roleNames: overrides?.roleNames ?? DEFAULT_CUSTOMER_ROLES,
-  });
+  const user = await createCustomer(
+    {
+      ...userData,
+      passwordHash,
+      roleNames: overrides?.roleNames ?? DEFAULT_CUSTOMER_ROLES,
+    },
+    fixtureAudit({
+      action: "USER_CREATED",
+      targetType: "User",
+      metadata: { source: "ADMIN" },
+    }),
+  );
 
   await prisma.user.update({
     where: { id: user.id },
@@ -160,11 +168,18 @@ export async function buildEmployee(overrides?: {
 
   const passwordHash = await hashPassword(password);
 
-  const user = await createEmployee({
-    ...userData,
-    passwordHash,
-    roleNames: overrides?.roleNames ?? DEFAULT_EMPLOYEE_ROLES,
-  });
+  const user = await createEmployee(
+    {
+      ...userData,
+      passwordHash,
+      roleNames: overrides?.roleNames ?? DEFAULT_EMPLOYEE_ROLES,
+    },
+    fixtureAudit({
+      action: "USER_CREATED",
+      targetType: "User",
+      metadata: { source: "ADMIN" },
+    }),
+  );
 
   await prisma.user.update({
     where: { id: user.id },
@@ -210,10 +225,18 @@ export async function buildHybrid(overrides?: {
     overrides?.customerRoles ?? DEFAULT_CUSTOMER_ROLES,
   );
 
+  const customerRoleIds = customerRoles.map((role) => role.id);
+
   await createCustomerProfile(
     employee.id,
     { phone: faker.phone.number({ style: "international" }) },
-    customerRoles.map((role) => role.id),
+    customerRoleIds,
+    fixtureAudit({
+      action: "USER_PROFILE_CREATED",
+      targetType: "User",
+      targetId: employee.id,
+      metadata: { profileKind: "CUSTOMER", roles: customerRoleIds.length },
+    }),
   );
 
   const userInDb = await findUserById(employee.id);

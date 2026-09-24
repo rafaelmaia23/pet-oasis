@@ -17,6 +17,10 @@ import {
 import { fakeImageBuffer } from "./fakeImages.constants";
 import { seededFaker } from "./seedFaker";
 
+// Sem FK (idioma de AuditLog.actorId) — não há um ator humano real por trás de
+// uma escrita feita pelo seed.
+const SEED_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
+
 export type SeedFakeCatalogResult = {
   brandsCreated: number;
   categoriesCreated: number;
@@ -164,11 +168,14 @@ export async function seedFakeCatalog(
       continue;
     }
 
-    const brand = await brandRepository.createBrand({
-      name: definition.name,
-      slug: definition.slug,
-      description: definition.description,
-    });
+    const brand = await brandRepository.createBrand(
+      {
+        name: definition.name,
+        slug: definition.slug,
+        description: definition.description,
+      },
+      { action: "BRAND_CREATED", targetType: "Brand", actorId: SEED_ACTOR_ID },
+    );
 
     brandIds.set(definition.slug, brand.id);
     result.brandsCreated++;
@@ -180,7 +187,12 @@ export async function seedFakeCatalog(
         buffer: fakeImageBuffer(definition.logo),
       });
 
-      await brandRepository.setBrandLogoPath(brand.id, logoPath);
+      await brandRepository.setBrandLogoPath(brand.id, logoPath, {
+        action: "BRAND_LOGO_UPDATED",
+        targetType: "Brand",
+        targetId: brand.id,
+        actorId: SEED_ACTOR_ID,
+      });
       result.imagesStored++;
     }
   }
@@ -208,12 +220,20 @@ export async function seedFakeCatalog(
       );
     }
 
-    const category = await categoryRepository.createCategory({
-      name: definition.name,
-      slug: definition.slug,
-      parentId,
-      position: definition.position,
-    });
+    const category = await categoryRepository.createCategory(
+      {
+        name: definition.name,
+        slug: definition.slug,
+        parentId,
+        position: definition.position,
+      },
+      {
+        action: "CATEGORY_CREATED",
+        targetType: "Category",
+        actorId: SEED_ACTOR_ID,
+        ...(parentId !== null && { metadata: { parentId } }),
+      },
+    );
 
     categoryIds.set(definition.slug, category.id);
     result.categoriesCreated++;
@@ -231,10 +251,10 @@ export async function seedFakeCatalog(
       continue;
     }
 
-    const tag = await tagRepository.createTag({
-      name: definition.name,
-      slug: definition.slug,
-    });
+    const tag = await tagRepository.createTag(
+      { name: definition.name, slug: definition.slug },
+      { action: "TAG_CREATED", targetType: "Tag", actorId: SEED_ACTOR_ID },
+    );
 
     tagIds.set(definition.slug, tag.id);
     result.tagsCreated++;
@@ -300,10 +320,11 @@ export async function seedFakeCatalog(
     const { categories, tags, variants, slug, status, targetSpecies, ...rest } =
       body;
 
-    // Pelo repositório, não pelo service: o service pede um ator autorizado e
-    // gravaria linha de audit por produto. O que ele **não** pode pular é
-    // `withResolvedDefault` — "exatamente uma variante default" é invariante de
-    // domínio (9.7/X5), não detalhe do endpoint.
+    // Pelo repositório, não pelo service: o service pede um ator autorizado
+    // (mesmo corte dos demais recursos), mas a escrita audita do mesmo jeito.
+    // O que ele **não** pode pular é `withResolvedDefault` — "exatamente uma
+    // variante default" é invariante de domínio (9.7/X5), não detalhe do
+    // endpoint.
     const product = await productRepository.createProduct(
       {
         ...rest,
@@ -313,6 +334,11 @@ export async function seedFakeCatalog(
       },
       withResolvedDefault(variants),
       { categoryIds: categories, tagIds: tags ?? [] },
+      {
+        action: "PRODUCT_CREATED",
+        targetType: "Product",
+        actorId: SEED_ACTOR_ID,
+      },
     );
 
     result.productsCreated++;

@@ -1,6 +1,6 @@
 import type { UpdateTagInput } from "@pet-oasis/api-contracts/catalog";
 import type { Prisma } from "@/generated/prisma/client";
-import { type AuditDescriptor, record } from "@/lib/auditLog";
+import { type AuditDescriptor, writeAudited } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import { definedOnly } from "@/utils/definedOnly";
 
@@ -33,47 +33,28 @@ export async function findExistingTagIds(ids: string[]) {
 
 export async function createTag(
   data: Prisma.TagUncheckedCreateInput,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  const args = { data };
-
-  if (!audit) return prisma.tag.create(args);
-
-  return prisma.$transaction(async (tx) => {
-    const tag = await tx.tag.create(args);
-
-    await record({ ...audit, targetId: tag.id }, tx);
-
-    return tag;
-  });
+  return writeAudited(
+    (tag: { id: string }) => ({ ...audit, targetId: tag.id }),
+    (tx) => tx.tag.create({ data }),
+  );
 }
 
 export async function updateTag(
   id: string,
   data: UpdateTagInput,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  const args = { where: { id }, data: definedOnly(data) };
-
-  if (!audit) return prisma.tag.update(args);
-
-  return prisma.$transaction(async (tx) => {
-    const tag = await tx.tag.update(args);
-
-    await record(audit, tx);
-
-    return tag;
-  });
+  return writeAudited(audit, (tx) =>
+    tx.tag.update({ where: { id }, data: definedOnly(data) }),
+  );
 }
 
 /**
- * Hard delete (9.6/W5). O audit grava na mesma transação e é o **único** registro
- * de que a tag existiu — daí ele não ser opcional aqui como nos outros deletes.
+ * Hard delete (9.6/W5). O audit grava na mesma transação e é o único registro
+ * de que a tag existiu.
  */
 export async function deleteTag(id: string, audit: AuditDescriptor) {
-  return prisma.$transaction(async (tx) => {
-    await tx.tag.delete({ where: { id } });
-
-    await record(audit, tx);
-  });
+  await writeAudited(audit, (tx) => tx.tag.delete({ where: { id } }));
 }

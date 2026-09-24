@@ -1,5 +1,5 @@
 import type { ProfileKind } from "@/generated/prisma/enums";
-import { type AuditDescriptor, record } from "@/lib/auditLog";
+import { type AuditDescriptor, writeAudited } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import {
   type CascadeCounts,
@@ -38,9 +38,9 @@ export async function createCustomerProfile(
   userId: string,
   data: createCustomerProfileData,
   roleIds: string[],
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return writeAudited(audit, async (tx) => {
     await tx.customer.create({
       data: {
         userId,
@@ -52,8 +52,6 @@ export async function createCustomerProfile(
 
     await grantRolesToUser(tx, userId, roleIds);
 
-    if (audit) await record(audit, tx);
-
     return tx.user.findUniqueOrThrow({
       where: { id: userId, deletedAt: null },
       include: userInclude,
@@ -64,14 +62,12 @@ export async function createCustomerProfile(
 export async function createEmployeeProfile(
   userId: string,
   roleIds: string[],
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return writeAudited(audit, async (tx) => {
     await tx.employee.create({ data: { userId } });
 
     await grantRolesToUser(tx, userId, roleIds);
-
-    if (audit) await record(audit, tx);
 
     return tx.user.findUniqueOrThrow({
       where: { id: userId, deletedAt: null },
@@ -101,44 +97,46 @@ export async function reactivateProfile(
   userId: string,
   kind: ProfileKind,
   options: { roleIds?: string[]; phone?: string },
-  describeAudit?: (counts: {
+  describeAudit: (counts: {
     restoredRoles: number;
     restoredPets: number;
   }) => AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
-    const restored = await restoreProfile(tx, userId, kind, {
-      ...(options.roleIds && { roleIds: options.roleIds }),
-    });
-
-    if (options.roleIds) {
-      await grantRolesToUser(tx, userId, options.roleIds);
-    }
-
-    // O `POST` é o único caminho que grava `Customer.phone`, então na
-    // reativação ele atualiza em vez de ser ignorado.
-    if (kind === "CUSTOMER" && options.phone) {
-      await tx.customer.update({
-        where: { userId },
-        data: { phone: options.phone },
+  const { user } = await writeAudited(
+    (result: { restoredRoles: number; restoredPets: number }) =>
+      describeAudit(result),
+    async (tx) => {
+      const restored = await restoreProfile(tx, userId, kind, {
+        ...(options.roleIds && { roleIds: options.roleIds }),
       });
-    }
 
-    if (describeAudit) {
-      await record(
-        describeAudit({
-          restoredRoles: restored?.roles ?? 0,
-          restoredPets: restored?.pets ?? 0,
-        }),
-        tx,
-      );
-    }
+      if (options.roleIds) {
+        await grantRolesToUser(tx, userId, options.roleIds);
+      }
 
-    return tx.user.findUniqueOrThrow({
-      where: { id: userId, deletedAt: null },
-      include: userInclude,
-    });
-  });
+      // O `POST` é o único caminho que grava `Customer.phone`, então na
+      // reativação ele atualiza em vez de ser ignorado.
+      if (kind === "CUSTOMER" && options.phone) {
+        await tx.customer.update({
+          where: { userId },
+          data: { phone: options.phone },
+        });
+      }
+
+      const user = await tx.user.findUniqueOrThrow({
+        where: { id: userId, deletedAt: null },
+        include: userInclude,
+      });
+
+      return {
+        user,
+        restoredRoles: restored?.roles ?? 0,
+        restoredPets: restored?.pets ?? 0,
+      };
+    },
+  );
+
+  return user;
 }
 
 /**
@@ -149,29 +147,25 @@ export async function reactivateProfile(
 function deleteProfile(
   userId: string,
   kind: ProfileKind,
-  describeAudit?: (counts: CascadeCounts) => AuditDescriptor,
+  describeAudit: (counts: CascadeCounts) => AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
+  return writeAudited(describeAudit, (tx) => {
     const deletedAt = new Date();
 
-    const counts = await cascadeDeleteProfile(tx, userId, kind, deletedAt);
-
-    if (describeAudit) await record(describeAudit(counts), tx);
-
-    return counts;
+    return cascadeDeleteProfile(tx, userId, kind, deletedAt);
   });
 }
 
 export function deleteCustomerProfile(
   userId: string,
-  describeAudit?: (counts: CascadeCounts) => AuditDescriptor,
+  describeAudit: (counts: CascadeCounts) => AuditDescriptor,
 ) {
   return deleteProfile(userId, "CUSTOMER", describeAudit);
 }
 
 export function deleteEmployeeProfile(
   userId: string,
-  describeAudit?: (counts: CascadeCounts) => AuditDescriptor,
+  describeAudit: (counts: CascadeCounts) => AuditDescriptor,
 ) {
   return deleteProfile(userId, "EMPLOYEE", describeAudit);
 }

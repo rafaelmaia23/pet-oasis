@@ -70,3 +70,28 @@ export async function record(
     );
   }
 }
+
+/**
+ * Roda `work` numa `$transaction` e grava o audit nela — o braço de dois
+ * caminhos ("sem transação quando não audita" / "com transação quando
+ * audita") que treze repositórios repetiam desaparece porque deixa de existir
+ * um call site que legitimamente não audita (docs/adr/0205). `audit` aceita
+ * um descritor pronto ou um builder do resultado, para o `targetId` gerado
+ * pelo banco ou uma contagem só conhecida dentro da transação.
+ *
+ * Não é para toda escrita transacional com audit — só para a de uma ação
+ * única e sempre-auditada. `verificationToken.repository.ts` continua fora:
+ * atende quatro purposes e só três têm ação na taxonomia.
+ */
+export async function writeAudited<T>(
+  audit: AuditDescriptor | ((result: T) => AuditDescriptor),
+  work: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    const result = await work(tx);
+
+    await record(typeof audit === "function" ? audit(result) : audit, tx);
+
+    return result;
+  });
+}

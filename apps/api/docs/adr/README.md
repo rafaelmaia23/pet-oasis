@@ -253,6 +253,7 @@ perfil o user continua existindo, só o `Customer`/`Employee` é soft-deletado.
 - [`0098`](0098-gravacao-transacional-audit-vive-repository-service.md) A gravação transacional do audit vive no repository; o service passa o descritor
 - [`0099`](0099-record-lib-observabilidade-nao-repository.md) `record` é lib de observabilidade, não repository
 - [`0100`](0100-src-lib-nao-conhece-modulo-nenhum.md) `src/lib/` não conhece módulo nenhum
+- [`0205`](0205-writeaudited-colapsa-escrita-auditada-descritor-obrigatorio.md) `writeAudited` colapsa a escrita transacional do audit; o descritor deixa de ser opcional (12.18)
 - [`0101`](0101-src-scripts-codigo-infra-agendamento.md) `src/scripts/` é código; `infra/` é agendamento
 - [`0102`](0102-sql-cru-vive-exclusivamente-repository.md) SQL cru vive exclusivamente no repository
 - [`0103`](0103-tsconfig-biome-api-estendem-presets-workspace.md) O tsconfig e o Biome da API estendem presets do workspace (11.3)

@@ -183,6 +183,11 @@ describe("o consumo de um token de verificação contra o banco", () => {
     const user = await buildCustomer();
     const { rawToken } = await issueFor(user.id);
 
+    // `buildCustomer` também audita a própria criação (docs/adr/0205) — a
+    // contagem "nem rastro" é sobre o que este consumo escreveria, não sobre a
+    // tabela inteira.
+    const auditRowsBefore = await prisma.auditLog.count();
+
     await expect(
       consumeVerificationToken({
         rawToken,
@@ -212,7 +217,7 @@ describe("o consumo de um token de verificação contra o banco", () => {
     expect(
       (await prisma.user.findUnique({ where: { id: user.id } }))?.pendingEmail,
     ).toBeNull();
-    expect(await prisma.auditLog.count()).toBe(0);
+    expect(await prisma.auditLog.count()).toBe(auditRowsBefore);
   });
 
   it("recusa o token já usado — e a recusa é a mesma do desconhecido", async () => {

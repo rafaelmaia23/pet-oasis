@@ -1,5 +1,5 @@
 import type { ProfileKind } from "@/generated/prisma/enums";
-import { type AuditDescriptor, record } from "@/lib/auditLog";
+import { type AuditDescriptor, writeAudited } from "@/lib/auditLog";
 import { prisma } from "@/lib/prisma";
 import {
   invalidateSessionsOfUser,
@@ -276,15 +276,14 @@ export function applyAccountReactivation(
 export async function updatePasswordAndInvalidateSessions(
   userId: string,
   passwordHash: string,
-  audit?: AuditDescriptor,
+  audit: AuditDescriptor,
 ) {
-  return prisma.$transaction(async (tx) => {
+  await writeAudited(audit, async (tx) => {
     await tx.user.update({
       where: { id: userId },
       data: { passwordHash },
     });
     await invalidateSessionsOfUser(tx, userId, new Date());
-    if (audit) await record(audit, tx);
   });
 }
 

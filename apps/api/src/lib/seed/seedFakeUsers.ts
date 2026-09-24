@@ -33,27 +33,43 @@ async function createBaseUser(def: FakeUserDefinition): Promise<string> {
   const passwordHash = await hashPassword(env.SEED_FAKE_USER_PASSWORD);
 
   if (def.kind === "EMPLOYEE") {
-    const user = await userRepository.createEmployee({
-      name: def.name,
-      email: def.email,
-      cpf: cpf.generate(),
-      passwordHash,
-      roleNames: def.roleNames,
-    });
+    const user = await userRepository.createEmployee(
+      {
+        name: def.name,
+        email: def.email,
+        cpf: cpf.generate(),
+        passwordHash,
+        roleNames: def.roleNames,
+      },
+      {
+        action: "USER_CREATED",
+        targetType: "User",
+        actorId: SEED_ACTOR_ID,
+        metadata: { source: "SEED" },
+      },
+    );
     return user.id;
   }
 
   // CUSTOMER e HYBRID nascem como customer; o HYBRID ganha o perfil de
   // employee depois, via o mesmo serviço do endpoint real de "adicionar
   // perfil" (Fase 2).
-  const user = await userRepository.createCustomer({
-    name: def.name,
-    email: def.email,
-    cpf: cpf.generate(),
-    phone: def.phone,
-    passwordHash,
-    roleNames: ["customer"],
-  });
+  const user = await userRepository.createCustomer(
+    {
+      name: def.name,
+      email: def.email,
+      cpf: cpf.generate(),
+      phone: def.phone,
+      passwordHash,
+      roleNames: ["customer"],
+    },
+    {
+      action: "USER_CREATED",
+      targetType: "User",
+      actorId: SEED_ACTOR_ID,
+      metadata: { source: "SEED" },
+    },
+  );
   return user.id;
 }
 
@@ -77,6 +93,13 @@ async function applyTrait(userId: string, trait: FakeUserTrait): Promise<void> {
         userId,
         SEED_ACTOR_ID,
         "Conta de demonstração — banida pelo seed de dados fake",
+        {
+          action: "USER_BANNED",
+          targetType: "User",
+          targetId: userId,
+          actorId: SEED_ACTOR_ID,
+          metadata: { reasonProvided: true },
+        },
       );
       return;
     case "DELETED_USER":
@@ -84,7 +107,21 @@ async function applyTrait(userId: string, trait: FakeUserTrait): Promise<void> {
         where: { id: userId },
         data: { status: "ACTIVE" },
       });
-      await userRepository.softDeleteUserAndInvalidateSessions(userId);
+      await userRepository.softDeleteUserAndInvalidateSessions(
+        userId,
+        (counts) => ({
+          action: "USER_DELETED",
+          targetType: "User",
+          targetId: userId,
+          actorId: SEED_ACTOR_ID,
+          metadata: {
+            cascadedProfiles: counts.profiles,
+            cascadedRoles: counts.roles,
+            cascadedOverrides: counts.overrides,
+            cascadedPets: counts.pets,
+          },
+        }),
+      );
       return;
     case "DELETED_EMPLOYEE_PROFILE":
       await prisma.user.update({
@@ -126,11 +163,15 @@ export async function seedFakeUsers(): Promise<SeedFakeUsersResult> {
       // infraestrutura. Mesmo corte que já se faz com `userRepository.create*`
       // para não disparar email de verificação.
       const roles = await getRolesByNames(def.employeeRoleNames);
+      const roleIds = roles.map((role) => role.id);
 
-      await userProfileRepository.createEmployeeProfile(
-        userId,
-        roles.map((role) => role.id),
-      );
+      await userProfileRepository.createEmployeeProfile(userId, roleIds, {
+        action: "USER_PROFILE_CREATED",
+        targetType: "User",
+        targetId: userId,
+        actorId: SEED_ACTOR_ID,
+        metadata: { profileKind: "EMPLOYEE", roles: roleIds.length },
+      });
     }
 
     await applyTrait(userId, def.trait);

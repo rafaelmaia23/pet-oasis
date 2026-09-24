@@ -27,11 +27,9 @@ registerRoute(categoryRouter, routes.category.update, {
   handler: categoryController.updateCategory,
 });
 
-categoryRouter.delete(
-  "/categories/:categoryId",
-  authenticate,
-  canAccess("manage:catalog-structure"),
-  categoryController.deleteCategory,
-);
+registerRoute(categoryRouter, routes.category.delete, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: categoryController.deleteCategory,
+});
 
 export default categoryRouter;

@@ -1,6 +1,4 @@
-import { categoryParamsSchema } from "@pet-oasis/api-contracts/catalog";
 import type { routes } from "@pet-oasis/api-contracts/routes";
-import type { Request, Response } from "express";
 import { listEnvelope } from "@/lib/pagination";
 import type { RouteHandler } from "@/lib/registerRoute";
 import * as categoryService from "./category.service";
@@ -37,10 +35,8 @@ export const updateCategory: RouteHandler<
   return { ...category, children: [] };
 };
 
-export const deleteCategory = async (req: Request, res: Response) => {
-  const { params } = categoryParamsSchema.parse({ params: req.params });
-
+export const deleteCategory: RouteHandler<
+  typeof routes.category.delete
+> = async ({ params }) => {
   await categoryService.deleteCategory(params.categoryId);
-
-  return res.status(204).send();
 };

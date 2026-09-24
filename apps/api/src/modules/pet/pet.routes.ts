@@ -44,6 +44,11 @@ registerRoute(petRouter, routes.pet.update, {
   handler: petController.updatePet,
 });
 
+registerRoute(petRouter, routes.pet.delete, {
+  before: [authenticate, canAccess("manage:pet")],
+  handler: petController.deletePet,
+});
+
 /**
  * A forma antiga, com o path partido entre o prefixo e a chamada.
  *
@@ -58,12 +63,6 @@ registerRoute(petRouter, routes.pet.update, {
  * sufixo `:others`, e quem separa dono de staff é o `pet.service`.
  */
 export const legacyPetRouter = Router();
-
-legacyPetRouter.delete(
-  "/:petId",
-  canAccess("manage:pet"),
-  petController.deletePet,
-);
 
 /**
  * Foto (9.10). Valor **único** num endereço fixo, então `PUT` substitui e

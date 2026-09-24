@@ -44,12 +44,11 @@ export const updatePet: RouteHandler<typeof routes.pet.update> = async ({
   actor,
 }) => petService.updatePet(actor, params.petId, body);
 
-export const deletePet = async (req: Request, res: Response) => {
-  const { params } = petParamsSchema.parse({ params: req.params });
-
-  await petService.deletePet(getAuthUser(req), params.petId);
-
-  return res.status(204).send();
+export const deletePet: RouteHandler<typeof routes.pet.delete> = async ({
+  params,
+  actor,
+}) => {
+  await petService.deletePet(actor, params.petId);
 };
 
 export const updatePetPhoto = async (req: Request, res: Response) => {

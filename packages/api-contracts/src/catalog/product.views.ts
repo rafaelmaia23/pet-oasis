@@ -265,10 +265,31 @@ export const productImageListSchema = z.object({
  * listagem, com o eco da busca — e é justamente por isso que ele mora aqui, ao
  * lado das views, e não montado na entrada da tabela de rotas.
  *
- * A listagem não tem escada: o degrau é escolhido uma vez para a página
- * inteira, e uma união de três envelopes esconderia o `meta` de quem lê a spec.
+ * **A listagem tem escada, apesar do custo de legibilidade no `/openapi.json`.**
+ * A leitura original desta função dizia que a listagem "não tem escada": o
+ * degrau seria escolhido uma vez para a página inteira, e uma união de três
+ * envelopes esconderia o `meta` de quem lê a spec. Isso ficou desatualizado —
+ * o controller sempre variou a view por item conforme a feature efetiva do
+ * ator (9.8/Y9), e a issue 14 de `.scratch/fase-12-module-depth/` migrou a
+ * rota para o registrador sem poder mudar esse comportamento. Como o
+ * `chooseView` do registrador escolhe **um** schema por status a partir de uma
+ * escada declarada na entrada da tabela, a escada teve de subir para o nível
+ * do envelope inteiro — item por item continuaria escondendo a variação do
+ * corpo do registrador. `productListSchemaFor` é o envelope parametrizado pela
+ * view do item; `productListLadder` é a escada dos três, na mesma ordem de
+ * `productReadLadder`.
  */
-export const productListSchema = z.object({
-  data: z.array(publicListView),
-  meta: productListMetaSchema,
-});
+export const productListSchemaFor = (itemView: z.ZodType) =>
+  z.object({
+    data: z.array(itemView),
+    meta: productListMetaSchema,
+  });
+
+export const productListLadder = [
+  productListSchemaFor(publicListView),
+  productListSchemaFor(internalListView),
+  productListSchemaFor(costListView),
+] as const;
+
+/** Alias do primeiro degrau — mantido para quem ainda importa o envelope público sozinho. */
+export const productListSchema = productListLadder[0];

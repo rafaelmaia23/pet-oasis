@@ -54,11 +54,11 @@ v1Router.use(breedRouter);
 v1Router.use("/brands", optionalAuthenticate, brandRouter);
 v1Router.use("/categories", optionalAuthenticate, categoryRouter);
 v1Router.use("/tags", optionalAuthenticate, tagRouter);
-// Produto entra aqui já na 9.7, que só tem escrita: a vitrine da 9.8 acrescenta
-// o `GET` sem remontar o router, e o 401 da escrita continua vindo do
-// `canAccess`. `/variants` fica do lado protegido — variante não tem leitura
-// pública própria, ela aparece dentro do produto.
-v1Router.use("/products", optionalAuthenticate, productRouter);
+// Produto (e a criação de variante, aninhada nele) já sai inteiro pelo
+// `registerRoute` (issue 14) — `optionalAuthenticate` desceu para o `before`
+// de cada rota que precisa dele. `/variants` fica do lado protegido —
+// variante não tem leitura pública própria, ela aparece dentro do produto.
+v1Router.use(productRouter);
 
 // PROTEGIDAS — com authenticate
 //
@@ -74,7 +74,7 @@ v1Router.use(permissionRouter);
 // exigem token — a vitrine pública é do catálogo, não da ficha do pet.
 v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);
 v1Router.use("/pets", authenticate, petRouter);
-v1Router.use("/variants", authenticate, variantRouter);
+v1Router.use(variantRouter);
 v1Router.use(featureRouter);
 v1Router.use(roleRouter);
 v1Router.use(auditLogRouter);

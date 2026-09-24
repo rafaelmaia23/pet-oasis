@@ -11,10 +11,8 @@ import * as petController from "./pet.controller";
  * O router **sem prefixo**: as rotas já declaradas num lugar só, com o path
  * inteiro vindo da entrada da tabela (`packages/api-contracts/src/routes/pet.routes.ts`).
  * Enquanto a migração corre (issue 12 de `.scratch/fase-12-module-depth/`), ele
- * convive com o `legacyPetRouter` abaixo (ainda montado em `/pets`) e com o
- * `petCustomerRouter` de `pet.customer.routes.ts` (ainda montado em
- * `/customers/:customerId`). Os três nunca disputam um path: uma rota está
- * numa forma ou na outra.
+ * convive com o `legacyPetRouter` abaixo, ainda montado em `/pets`. Os dois
+ * nunca disputam um path: uma rota está numa forma ou na outra.
  */
 const petRouter = Router();
 
@@ -23,14 +21,20 @@ registerRoute(petRouter, routes.pet.create, {
   handler: petController.createPet,
 });
 
+registerRoute(petRouter, routes.pet.listByCustomer, {
+  before: [authenticate, canAccess("read:pet")],
+  handler: petController.listCustomerPets,
+});
+
 /**
  * A forma antiga, com o path partido entre o prefixo e a chamada.
  *
- * Recurso **plano** (`/pets/:petId`), coleção aninhada
- * (`/customers/:customerId/pets`, ver `pet.customer.routes.ts`): `petId` é UUID
- * global, então repetir o `customerId` no item seria redundante — e redundante
- * significa que pode **discordar** do dono real, obrigando a inventar uma regra
- * para um caso que só existe porque a rota o criou.
+ * Recurso **plano** (`/pets/:petId`) — a coleção aninhada
+ * (`/customers/:customerId/pets`) já saiu daqui, para o `petRouter` acima.
+ * `petId` é UUID global, então repetir o `customerId` no item seria
+ * redundante — e redundante significa que pode **discordar** do dono real,
+ * obrigando a inventar uma regra para um caso que só existe porque a rota o
+ * criou.
  *
  * As features vão na forma base (`read:pet`/`manage:pet`): `can()` já admite o
  * sufixo `:others`, e quem separa dono de staff é o `pet.service`. A exceção é a

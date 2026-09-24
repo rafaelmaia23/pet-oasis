@@ -1,5 +1,4 @@
 import {
-  listCustomerPetsSchema,
   listPetsSchema,
   petParamsSchema,
   updatePetSchema,
@@ -19,18 +18,15 @@ export const createPet: RouteHandler<typeof routes.pet.create> = async ({
   actor,
 }) => petService.createPet(actor, params.customerId, body);
 
-export const listCustomerPets = async (req: Request, res: Response) => {
-  const { params } = listCustomerPetsSchema.parse({ params: req.params });
-
-  const pets = await petService.getCustomerPets(
-    getAuthUser(req),
-    params.customerId,
-  );
+export const listCustomerPets: RouteHandler<
+  typeof routes.pet.listByCustomer
+> = async ({ params, actor }) => {
+  const pets = await petService.getCustomerPets(actor, params.customerId);
 
   // Sem paginação: a coleção é limitada pelo dono (mesma classe de
   // `GET /users/:userId/roles`). O envelope existe mesmo assim para que
   // paginar amanhã seja aditivo, não breaking.
-  res.status(200).json(listEnvelope(petPresenter.presentMany(pets, "default")));
+  return listEnvelope(pets);
 };
 
 export const listPets = async (req: Request, res: Response) => {

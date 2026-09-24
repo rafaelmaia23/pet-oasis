@@ -21,7 +21,6 @@ import featureRouter from "@/modules/feature/feature.routes";
 import logRouter from "@/modules/log/log.routes";
 import meRouter from "@/modules/me/me.routes";
 import permissionRouter from "@/modules/permission/permission.routes";
-import petCustomerRouter from "@/modules/pet/pet.customer.routes";
 import petRouter, { legacyPetRouter } from "@/modules/pet/pet.routes";
 import productRouter from "@/modules/product/product.routes";
 import variantRouter from "@/modules/product/product.variant.routes";
@@ -73,10 +72,9 @@ v1Router.use(permissionRouter);
 // Pet (9.4): coleção aninhada no cliente, recurso plano no item. As duas
 // exigem token — a vitrine pública é do catálogo, não da ficha do pet. `petRouter`
 // é o que já passou pelo `registerRoute` (issue 12 de
-// `.scratch/fase-12-module-depth/`); `petCustomerRouter`/`legacyPetRouter` são
-// a forma antiga, ainda mantendo os prefixos, enquanto a migração corre.
+// `.scratch/fase-12-module-depth/`); `legacyPetRouter` é a forma antiga, ainda
+// montada no prefixo, enquanto a migração corre.
 v1Router.use(petRouter);
-v1Router.use("/customers/:customerId", authenticate, petCustomerRouter);
 v1Router.use("/pets", authenticate, legacyPetRouter);
 v1Router.use("/variants", authenticate, variantRouter);
 v1Router.use(featureRouter);

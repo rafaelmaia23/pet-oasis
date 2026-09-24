@@ -71,14 +71,14 @@ registerRoute(productRouter, routes.product.create, {
   handler: productController.createProduct,
 });
 
+registerRoute(productRouter, routes.product.update, {
+  before: [optionalAuthenticate, canAccess("manage:product")],
+  chooseView: chooseProductWriteView,
+  handler: productController.updateProduct,
+});
+
 /** O que ainda está na forma antiga — sai quando a última rota migrar. */
 export const productLegacyRouter = Router();
-
-productLegacyRouter.patch(
-  "/:productId",
-  canAccess("manage:product"),
-  productController.updateProduct,
-);
 
 productLegacyRouter.delete(
   "/:productId",

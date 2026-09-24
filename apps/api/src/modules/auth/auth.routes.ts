@@ -43,6 +43,13 @@ registerRoute(authRouter, routes.auth.forgotPassword, {
   handler: authController.forgotPassword,
 });
 
+// As três rotas públicas de token dividem um balde por IP (K26): são anônimas,
+// consomem credencial opaca e não têm outro freio na frente.
+registerRoute(authRouter, routes.auth.resetPassword, {
+  before: [rateLimitByIp(tokenIpLimiter, "reset-password")],
+  handler: authController.resetPassword,
+});
+
 /** A forma antiga, com o path partido entre o prefixo e a chamada. */
 export const legacyAuthRouter = Router();
 
@@ -57,13 +64,6 @@ legacyAuthRouter.post(
   authController.login,
 );
 legacyAuthRouter.post("/refresh", authController.refresh);
-// As três rotas públicas de token dividem um balde por IP (K26): são anônimas,
-// consomem credencial opaca e não têm outro freio na frente.
-legacyAuthRouter.post(
-  "/reset-password",
-  rateLimitByIp(tokenIpLimiter, "reset-password"),
-  authController.resetPassword,
-);
 legacyAuthRouter.post(
   "/change-password",
   authenticate,

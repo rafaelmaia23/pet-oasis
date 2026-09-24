@@ -4,7 +4,6 @@ import {
   confirmAccountReactivationSchema,
   confirmEmailChangeSchema,
   loginSchema,
-  resetPasswordSchema,
   sessionParamsSchema,
   signupSchema,
 } from "@pet-oasis/api-contracts/auth";
@@ -90,12 +89,10 @@ export const forgotPassword: RouteHandler<
   };
 };
 
-export const resetPassword = async (req: Request, res: Response) => {
-  const { body } = resetPasswordSchema.parse({ body: req.body });
-
+export const resetPassword: RouteHandler<
+  typeof routes.auth.resetPassword
+> = async ({ body }) => {
   await passwordService.resetPassword(body.token, body.newPassword);
-
-  res.status(204).send();
 };
 
 export const changePassword = async (req: Request, res: Response) => {

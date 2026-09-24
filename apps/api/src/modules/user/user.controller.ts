@@ -1,6 +1,5 @@
 import type { routes } from "@pet-oasis/api-contracts/routes";
 import {
-  banUserSchema,
   createEmployeeSchema,
   forcePasswordResetSchema,
   reactivateAccountSchema,
@@ -65,15 +64,12 @@ export const deleteUser: RouteHandler<typeof routes.user.delete> = async ({
   await userService.deleteUser(actor, params.id);
 };
 
-export const banUser = async (req: Request, res: Response) => {
-  const { params, body } = banUserSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
-  await userService.banUser(getAuthUser(req).id, params.id, body.reason);
-
-  return res.status(204).send();
+export const banUser: RouteHandler<typeof routes.user.ban> = async ({
+  params,
+  body,
+  actor,
+}) => {
+  await userService.banUser(actor.id, params.id, body.reason);
 };
 
 export const unbanUser = async (req: Request, res: Response) => {

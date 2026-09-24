@@ -7,10 +7,9 @@ import { chooseUserView } from "../user.view-resolver";
 import * as userProfileController from "./user.profile.controller";
 
 /**
- * As rotas de perfil já sob o `registerRoute`: montadas **sem prefixo**, com o
- * path inteiro vindo da entrada da tabela. Enquanto a migração da issue 11 de
- * `.scratch/fase-12-module-depth/` corre, o que falta fica no
- * `userProfileLegacyRouter` abaixo, ainda montado sob `/users/:userId`.
+ * As rotas de perfil, montadas **sem prefixo**: o path inteiro vem da entrada
+ * da tabela, e o `authenticate` que ficava no prefixo desceu para o `before` de
+ * cada uma. O `mergeParams` saiu junto — o `:userId` já está no path declarado.
  */
 const userProfileRouter = Router();
 
@@ -37,13 +36,13 @@ registerRoute(userProfileRouter, routes.profile.createCustomer, {
   handler: userProfileController.createCustomerProfile,
 });
 
-/** O que ainda está na forma antiga — sai quando a última rota migrar. */
-export const userProfileLegacyRouter = Router({ mergeParams: true });
-
-userProfileLegacyRouter.post(
-  "/employee",
-  canAccess(["create:employee-profile", "reactivate:employee-profile"]),
-  userProfileController.createEmployeeProfile,
-);
+registerRoute(userProfileRouter, routes.profile.createEmployee, {
+  before: [
+    authenticate,
+    canAccess(["create:employee-profile", "reactivate:employee-profile"]),
+  ],
+  chooseView: chooseUserView,
+  handler: userProfileController.createEmployeeProfile,
+});
 
 export default userProfileRouter;

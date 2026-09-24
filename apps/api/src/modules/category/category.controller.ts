@@ -1,6 +1,5 @@
 import {
   categoryParamsSchema,
-  createCategorySchema,
   updateCategorySchema,
 } from "@pet-oasis/api-contracts/catalog";
 import type { routes } from "@pet-oasis/api-contracts/routes";
@@ -20,15 +19,13 @@ export const listCategories: RouteHandler<
   return listEnvelope(tree);
 };
 
-export const createCategory = async (req: Request, res: Response) => {
-  const { body } = createCategorySchema.parse({ body: req.body });
-
+export const createCategory: RouteHandler<
+  typeof routes.category.create
+> = async ({ body }) => {
   const category = await categoryService.createCategory(body);
 
   // O recurso recém-criado é sempre folha, então `children` sai vazio.
-  return res
-    .status(201)
-    .json(categoryPresenter.present({ ...category, children: [] }, "default"));
+  return { ...category, children: [] };
 };
 
 export const updateCategory = async (req: Request, res: Response) => {

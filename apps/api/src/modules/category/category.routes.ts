@@ -17,12 +17,10 @@ registerRoute(categoryRouter, routes.category.list, {
   handler: categoryController.listCategories,
 });
 
-categoryRouter.post(
-  "/categories",
-  authenticate,
-  canAccess("manage:catalog-structure"),
-  categoryController.createCategory,
-);
+registerRoute(categoryRouter, routes.category.create, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: categoryController.createCategory,
+});
 
 categoryRouter.patch(
   "/categories/:categoryId",

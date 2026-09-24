@@ -17,12 +17,10 @@ registerRoute(tagRouter, routes.tag.list, {
   handler: tagController.listTags,
 });
 
-tagRouter.post(
-  "/tags",
-  authenticate,
-  canAccess("manage:catalog-structure"),
-  tagController.createTag,
-);
+registerRoute(tagRouter, routes.tag.create, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: tagController.createTag,
+});
 
 tagRouter.patch(
   "/tags/:tagId",

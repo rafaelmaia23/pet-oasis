@@ -1,5 +1,4 @@
 import {
-  createTagSchema,
   tagParamsSchema,
   updateTagSchema,
 } from "@pet-oasis/api-contracts/catalog";
@@ -16,13 +15,8 @@ export const listTags: RouteHandler<typeof routes.tag.list> = async () => {
   return listEnvelope(tags);
 };
 
-export const createTag = async (req: Request, res: Response) => {
-  const { body } = createTagSchema.parse({ body: req.body });
-
-  const tag = await tagService.createTag(body);
-
-  return res.status(201).json(tagPresenter.present(tag, "default"));
-};
+export const createTag: RouteHandler<typeof routes.tag.create> = ({ body }) =>
+  tagService.createTag(body);
 
 export const updateTag = async (req: Request, res: Response) => {
   const { params, body } = updateTagSchema.parse({

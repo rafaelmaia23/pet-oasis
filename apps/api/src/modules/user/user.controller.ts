@@ -58,12 +58,11 @@ export const updateUser = async (req: Request, res: Response) => {
     .json(userPresenter.present(user, resolveUserView(getAuthUser(req))));
 };
 
-export const deleteUser = async (req: Request, res: Response) => {
-  const { params } = userParamsSchema.parse({ params: req.params });
-
-  await userService.deleteUser(getAuthUser(req), params.id);
-
-  return res.status(204).send();
+export const deleteUser: RouteHandler<typeof routes.user.delete> = async ({
+  params,
+  actor,
+}) => {
+  await userService.deleteUser(actor, params.id);
 };
 
 export const banUser = async (req: Request, res: Response) => {

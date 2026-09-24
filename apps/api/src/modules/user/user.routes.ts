@@ -18,6 +18,11 @@ registerRoute(userRouter, routes.user.list, {
   handler: userController.getAllUsers,
 });
 
+registerRoute(userRouter, routes.user.delete, {
+  before: [authenticate, canAccess("delete:user")],
+  handler: userController.deleteUser,
+});
+
 /** O que ainda está na forma antiga — sai quando a última rota migrar. */
 export const userLegacyRouter = Router();
 
@@ -35,11 +40,6 @@ userLegacyRouter.patch(
   "/:id",
   canAccess("update:user"),
   userController.updateUser,
-);
-userLegacyRouter.delete(
-  "/:id",
-  canAccess("delete:user"),
-  userController.deleteUser,
 );
 userLegacyRouter.post(
   "/:id/ban",

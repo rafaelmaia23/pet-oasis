@@ -2,7 +2,6 @@ import {
   changeEmailSchema,
   changePasswordSchema,
   confirmAccountReactivationSchema,
-  confirmEmailChangeSchema,
   loginSchema,
   sessionParamsSchema,
   signupSchema,
@@ -119,12 +118,10 @@ export const changeEmail = async (req: Request, res: Response) => {
   res.status(204).send();
 };
 
-export const confirmEmailChange = async (req: Request, res: Response) => {
-  const { body } = confirmEmailChangeSchema.parse({ body: req.body });
-
+export const confirmEmailChange: RouteHandler<
+  typeof routes.auth.confirmEmailChange
+> = async ({ body }) => {
   await emailChangeService.confirmEmailChange(body.token);
-
-  res.status(204).send();
 };
 
 /**

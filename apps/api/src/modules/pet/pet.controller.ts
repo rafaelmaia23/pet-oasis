@@ -1,4 +1,4 @@
-import { petParamsSchema, updatePetSchema } from "@pet-oasis/api-contracts/pet";
+import { petParamsSchema } from "@pet-oasis/api-contracts/pet";
 import type { routes } from "@pet-oasis/api-contracts/routes";
 import type { Request, Response } from "express";
 import { listEnvelope, offsetEnvelope } from "@/lib/pagination";
@@ -38,16 +38,11 @@ export const getPetById: RouteHandler<typeof routes.pet.get> = async ({
   actor,
 }) => petService.getPetById(actor, params.petId);
 
-export const updatePet = async (req: Request, res: Response) => {
-  const { params, body } = updatePetSchema.parse({
-    params: req.params,
-    body: req.body,
-  });
-
-  const pet = await petService.updatePet(getAuthUser(req), params.petId, body);
-
-  return res.status(200).json(petPresenter.present(pet, "default"));
-};
+export const updatePet: RouteHandler<typeof routes.pet.update> = async ({
+  params,
+  body,
+  actor,
+}) => petService.updatePet(actor, params.petId, body);
 
 export const deletePet = async (req: Request, res: Response) => {
   const { params } = petParamsSchema.parse({ params: req.params });

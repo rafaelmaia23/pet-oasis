@@ -39,6 +39,11 @@ registerRoute(petRouter, routes.pet.get, {
   handler: petController.getPetById,
 });
 
+registerRoute(petRouter, routes.pet.update, {
+  before: [authenticate, canAccess("manage:pet")],
+  handler: petController.updatePet,
+});
+
 /**
  * A forma antiga, com o path partido entre o prefixo e a chamada.
  *
@@ -53,12 +58,6 @@ registerRoute(petRouter, routes.pet.get, {
  * sufixo `:others`, e quem separa dono de staff é o `pet.service`.
  */
 export const legacyPetRouter = Router();
-
-legacyPetRouter.patch(
-  "/:petId",
-  canAccess("manage:pet"),
-  petController.updatePet,
-);
 
 legacyPetRouter.delete(
   "/:petId",

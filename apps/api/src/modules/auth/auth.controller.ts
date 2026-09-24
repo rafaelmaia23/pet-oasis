@@ -11,7 +11,7 @@ import type { RouteHandler } from "@/lib/registerRoute";
 import { getAuthUser } from "@/utils/getAuthUser";
 import { userPresenter } from "../user/user.presenter";
 import * as accountReactivationService from "./accountReactivation.service";
-import { accessTokenPresenter, sessionPresenter } from "./auth.presenter";
+import { accessTokenPresenter } from "./auth.presenter";
 import { readRefreshCookie, setRefreshCookie } from "./auth.refreshCookie";
 import * as authService from "./auth.service";
 import type { AuthTransport } from "./auth.transport";
@@ -158,17 +158,16 @@ export const logout: RouteHandler<
   clearRefreshToken();
 };
 
-export const listSessions = async (req: Request, res: Response) => {
-  const currentRefreshToken = readRefreshCookie(req);
-
+export const listSessions: RouteHandler<
+  typeof routes.auth.listSessions,
+  AuthTransport
+> = async ({ actor, presentedRefreshToken }) => {
   const sessions = await authService.listSessions(
-    getAuthUser(req).id,
-    currentRefreshToken,
+    actor.id,
+    presentedRefreshToken,
   );
 
-  res
-    .status(200)
-    .json(listEnvelope(sessionPresenter.presentMany(sessions, "default")));
+  return listEnvelope(sessions);
 };
 
 export const revokeSession = async (req: Request, res: Response) => {

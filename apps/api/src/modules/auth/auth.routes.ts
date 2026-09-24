@@ -79,6 +79,12 @@ registerRoute(authRouter, routes.auth.logout, {
   handler: authController.logout,
 });
 
+registerRoute(authRouter, routes.auth.listSessions, {
+  before: [authenticate, canAccess("read:session")],
+  context: authTransport,
+  handler: authController.listSessions,
+});
+
 /** A forma antiga, com o path partido entre o prefixo e a chamada. */
 export const legacyAuthRouter = Router();
 
@@ -93,12 +99,6 @@ legacyAuthRouter.post(
   authController.login,
 );
 legacyAuthRouter.post("/refresh", authController.refresh);
-legacyAuthRouter.get(
-  "/sessions",
-  authenticate,
-  canAccess("read:session"),
-  authController.listSessions,
-);
 legacyAuthRouter.delete(
   "/sessions/:id",
   authenticate,

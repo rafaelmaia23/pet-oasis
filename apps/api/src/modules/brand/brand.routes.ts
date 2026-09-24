@@ -29,12 +29,10 @@ registerRoute(brandRouter, routes.brand.list, {
   handler: brandController.listBrands,
 });
 
-brandRouter.post(
-  "/brands",
-  authenticate,
-  canAccess("manage:catalog-structure"),
-  brandController.createBrand,
-);
+registerRoute(brandRouter, routes.brand.create, {
+  before: [authenticate, canAccess("manage:catalog-structure")],
+  handler: brandController.createBrand,
+});
 
 brandRouter.patch(
   "/brands/:brandId",
